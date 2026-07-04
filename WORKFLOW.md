@@ -60,7 +60,41 @@ Performance (effort-ordered):
 Optional upgrades: environment map for the voxel pass · `NearestFilter` for pixel-true voxel
 textures · MapControls for plan scenes · AgX tone mapping (already in r160).
 
+## Run 2 additions — rendering, optimization, and field-proven techniques
+
+Evidence: Blocks 13-19 (rendering methods, optimization II, 18 external case studies, MapLibre,
+post-processing, asset pipeline). Techniques worth adopting, effort-ordered:
+
+Quick wins:
+- [ ] On-demand rendering while idle (render on `controls change` + resize; stay continuous
+      only during damping/autoRotate/fan animation). [B13 §13.2]
+- [ ] Selective bloom on HMI screens/LEDs — the truthful version of today's faked
+      PointLight/emissive glow; composes with on-demand rendering. [B18 §18.2]
+- [ ] Texture/material variant switcher (a `<select>` swapping palette entries — insulation/
+      paint finishes). [B15 §15.2 d23]
+
+Structural upgrades:
+- [ ] Voxel-as-far-LOD: `lod.addLevel(realistic, 0)` + `lod.addLevel(voxel, far)` — the two-pass
+      workflow already produces both detail levels; facility scenes get LOD for free. [B17 §17.2]
+- [ ] Parametric configurator: sliders (Tweakpane) → regenerate procedural geometry — MUST pair
+      with `dispose()` of replaced geometry or GPU memory leaks per drag. [B14 §14.3, B17 §17.5]
+- [ ] OutlinePass component highlighting (click → outline a part; pairs with raycast
+      `instanceId` picking). [B18 §18.3]
+- [ ] Data-driven instanced grids: bind InstancedMesh instances to live sensor streams
+      (fan arrays, coil temperature grids). [B15 §15.2 d37]
+- [ ] GPU particle flow for refrigerant/airflow through ductwork. [B15 §15.2 d26/d33]
+
+Publish stage (new, optional third pass):
+- [ ] `GLTFExporter` (.glb) per prototype — unlocks: georeferenced equipment on MapLibre site
+      maps, an auto-framing catalog viewer, DCC round-trips, path-traced marketing stills.
+      Gotcha: `onlyVisible: true` default drops hidden LOD levels. [B19, B16 §16.3]
+
+Platform decisions (deliberate, not drop-in): WebGPU/TSL pass (field-confirmed wave — 4/8
+demos + half the dasprinzip series), MapLibre site maps (leaves the self-contained-HTML
+constraint), path tracing. [B13 §13.4, B14 §14.2, B16]
+
 ## Corpus map
 
-`INDEX.md` → 12 blocks (`threejs-block*.md`) + `CATALOG.md` + `RESEARCH-STATE.md`.
+`INDEX.md` → 19 blocks (`threejs-block*.md`) + `CATALOG.md` + `RESEARCH-STATE.md` +
+`sources/web-snapshots/` (27 preserved external sources).
 Research method: Research-SDD (`/home/cristian/investigacion/sdd-investigacion/research-sdd`).
