@@ -106,7 +106,7 @@ This index guides through the **25 blocks** of this research. Each block is an i
 - [x] G23 — Product-lighting design + RectAreaLight → [Block 23]
 - [x] G24 — Cheap visual wins (matcap, baked AO, blob shadows) → [Block 24]
 - [x] G25 — gltf-transform optimization pipeline → [Block 25]
-- [ ] (high, run 4) G26 — DYNAMIC: live profiling baseline (browser MCP)
+- [x] G26 — DYNAMIC baseline → [Block 26]
 - [ ] (high, run 4) G27 — Performance budgets per device class
 - [ ] (medium, run 4) G28 — Blender round-trip
 - [ ] (run 5, queued) G29 — HVAC equipment visualization domain

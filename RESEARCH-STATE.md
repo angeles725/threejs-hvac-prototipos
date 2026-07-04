@@ -10,8 +10,8 @@
 
 ## Coverage
 
-- **Covered blocks**: 25 (B1-B25)
-- **Coverage metric**: 25 / 32 closed (runs 4-5 opened 11 new gaps)
+- **Covered blocks**: 26 (B1-B26)
+- **Coverage metric**: 26 / 32 closed (runs 4-5 opened 11 new gaps)
 - **RUN 4 (REOPEN §8, 2026-07-04, AUTO/orchestrated)**: 3D-design craft + optimization (G22-G28). **RUN 5 queued**: HVAC-domain design (G29-G32). User authorized auto-chaining incl. emergent gaps. Hard-stops: failed self-report, cap, exhaustion, destructive step.
 - **RUN 3 (REOPEN §8, 2026-07-04)**: user supplied a 3rd batch — 11 showcase URLs + 6 forum threads (discourse/reddit) for problems & solutions. Runs 1-2 history preserved above.
 - **Last iteration**: 2026-07-04 — **RUN 2 (REOPEN, §8)**: user expanded scope — rendering deep-dive, optimization methods, external case studies (20 URLs), MapLibre. G11/G13 back in scope.
@@ -39,7 +39,7 @@
 | high | G23 — Product-lighting design: 3-point/studio theory for industrial product shots + RectAreaLight (softbox) contract & caveats (run 4) | context7 + web | **covered → [Block 23]** |
 | high | G24 — Cheap visual wins catalog: matcap materials, baked AO, blob/contact shadows, vertex colors, gradient backgrounds, AA tradeoffs (run 4) | context7 | **covered → [Block 24]** |
 | high | G25 — Asset optimization pipeline: gltf-transform / gltfpack CLI (Draco+meshopt+KTX2+dedup), install & recipes (run 4) | web + tool docs | **covered → [Block 25]** |
-| high | G26 — DYNAMIC PHASE (§12): live profiling of representative prototypes via chrome-devtools MCP — FPS, draw-call counts (GL-call hooks via initScript), performance traces; [CERT-hw] baseline (run 4) | local prototypes + browser MCP | pending |
+| high | G26 — DYNAMIC PHASE (§12): live profiling of representative prototypes — draw-call/triangle counts via GL hooks; [CERT-hw] baseline (run 4) | local prototypes + Puppeteer/browser | **covered → [Block 26]** (driver-supervised; FPS deferred to real hardware in G27) |
 | high | G27 — Performance budgets per device class, derived from G26 measurements + web guidance (run 4) | G26 data + web | pending |
 | medium | G28 — Blender ↔ three.js round-trip: modeling/UV/baking → glTF export settings (run 4) | official Blender/three docs | pending |
 | high | G29 — HVAC/industrial equipment visualization domain: digital-twin viewer patterns, exploded views, status overlays (run 5) | web + case refs | queued (run 5) |
@@ -82,6 +82,7 @@
 | 23 | 2026-07-04 | G23 product lighting + RectAreaLight (run 4) | B23 | yes · sonnet (full iteration) | 0 |
 | 24 | 2026-07-04 | G24 cheap visual wins (run 4) | B24 | yes · sonnet (full iteration) | 0 |
 | 25 | 2026-07-04 | G25 gltf-transform pipeline (run 4) | B25 | yes · sonnet (full iteration) | 0 |
+| 26 | 2026-07-04 | G26 DYNAMIC baseline (run 4) | B26 | no · driver-supervised (§12) + Puppeteer probes | 0 |
 
 ## Blocked gaps (each tagged with what it needs)
 

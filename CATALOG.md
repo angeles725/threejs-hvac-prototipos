@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **25 blocks**
+Total: **26 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -31,3 +31,4 @@ Total: **25 blocks**
 | 23 | [threejs-block23.md](threejs-block23.md) | Product-lighting design for industrial equipment shots + RectAreaLight |
 | 24 | [threejs-block24.md](threejs-block24.md) | Cheap visual wins: the maximum-visual-return-per-cost catalog |
 | 25 | [threejs-block25.md](threejs-block25.md) | The optimization pipeline: glTF-Transform and gltfpack between export and consumption |
+| 26 | [threejs-block26.md](threejs-block26.md) | DYNAMIC PHASE: measured baseline of the prototypes (live browser probes) |
