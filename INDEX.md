@@ -23,7 +23,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | Layer | Topic area | Blocks | Status | One-line summary |
 |---|---|---|---|---|
 | 1 | Corpus baseline & library fundamentals | 1 | active | How the prototypes use three.js today |
-| 2 | Voxel stage (instancing, isometric look) | 2 | active | The voxel-art first-pass techniques |
+| 2 | Voxel stage (instancing, isometric look) | 2, 7 | active | The voxel-art first-pass techniques |
 | 3 | Realistic stage (PBR, IBL, shadows, color) | 3-6 | active | The realistic second-pass techniques |
 | 4 | Cross-cutting (perf, migration, upgrade paths) | — | planned | Versioning, performance, postprocessing |
 | 5 | Synthesis: team workflow | — | planned | Voxel-first → realistic-second pipeline doc (G14, terminal) |
@@ -43,6 +43,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | # | Block | File | Key topics |
 |---|--------|---------|------------|
 | 2 | InstancedMesh and voxel-scale rendering | [block2](threejs-block2.md) | InstancedMesh API contract, needsUpdate/bounding caveats, setColorAt, vs mergeGeometries, legacy anti-pattern, BatchedMesh (new gap) |
+| 7 | Cameras and controls | [block7](threejs-block7.md) | fake-isometric low-FOV histogram, OrthographicCamera alternative, OrbitControls update() contract, MapControls option |
 
 ### Layer 3 — Realistic stage
 
@@ -65,7 +66,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [x] G4 — Lighting & environment (IBL) → [Block 4]
 - [x] G5 — Shadows → [Block 5]
 - [x] G6 — Color management & tone mapping → [Block 6]
-- [ ] (medium) G7 — Cameras & controls
+- [x] G7 — Cameras & controls → [Block 7]
 - [ ] (medium) G8 — Geometry toolkit for realistic modeling
 - [ ] (medium) G9 — Procedural texturing
 - [ ] (medium) G10 — Migration & versioning
@@ -81,4 +82,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-6/15 gaps closed — B1-B6; cameras/controls next.
+7/15 gaps closed — B1-B7; geometry toolkit next.

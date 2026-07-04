@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **6 blocks**
+Total: **7 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -12,3 +12,4 @@ Total: **6 blocks**
 | 4 | [threejs-block4.md](threejs-block4.md) | Lighting and environment: the 3-light rig + RoomEnvironment IBL |
 | 5 | [threejs-block5.md](threejs-block5.md) | Shadows: algorithms, shadow-camera tuning, and the corpus's perf evolution |
 | 6 | [threejs-block6.md](threejs-block6.md) | Color management and tone mapping |
+| 7 | [threejs-block7.md](threejs-block7.md) | Cameras and controls: the fake-isometric look and OrbitControls |
