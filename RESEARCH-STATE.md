@@ -10,15 +10,15 @@
 
 ## Coverage
 
-- **Covered blocks**: 0
-- **Coverage metric**: 0 / 14 closed
-- **Last iteration**: — (bootstrap 2026-07-04)
+- **Covered blocks**: 1 (B1)
+- **Coverage metric**: 1 / 14 closed
+- **Last iteration**: 2026-07-04 — G1 baseline corpus usage closed (B1)
 
 ## Gap-backlog (prioritized)
 
 | Priority | Gap | Artifact type / source | Status |
 |---|---|---|---|
-| high | G1 — Baseline: how the prototype corpus uses three.js (versions, load styles, shared scaffolding) | local HTML prototypes + context7 | pending |
+| high | G1 — Baseline: how the prototype corpus uses three.js (versions, load styles, shared scaffolding) | local HTML prototypes + context7 | **covered → [Block 1]** |
 | high | G2 — InstancedMesh & voxel-scale rendering: API contract, limits, vs merged geometry | context7 + web + prototypes | pending |
 | high | G3 — PBR material system: MeshStandardMaterial vs MeshPhysicalMaterial, param semantics | context7 + prototypes | pending |
 | high | G4 — Lighting & environment: light types, IBL via PMREMGenerator+RoomEnvironment vs HDR files | context7 + prototypes | pending |
@@ -37,6 +37,7 @@
 
 | # | Date | Gap closed | Block | Delegated? · model tier | New gaps uncovered |
 |---|---|---|---|---|---|
+| 1 | 2026-07-04 | G1 baseline corpus usage | B1 | yes · sonnet (Explore sweep) + inline write | 0 |
 
 ## Blocked gaps (each tagged with what it needs)
 
@@ -44,7 +45,7 @@
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 14
+- **Open gaps — read-only investigable**: 13
 - **Open gaps — requires-execution**: 0
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2

@@ -22,7 +22,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 | Layer | Topic area | Blocks | Status | One-line summary |
 |---|---|---|---|---|
-| 1 | Corpus baseline & library fundamentals | — | active | How the prototypes use three.js today |
+| 1 | Corpus baseline & library fundamentals | 1 | active | How the prototypes use three.js today |
 | 2 | Voxel stage (instancing, isometric look) | — | planned | The voxel-art first-pass techniques |
 | 3 | Realistic stage (PBR, IBL, shadows, color) | — | planned | The realistic second-pass techniques |
 | 4 | Cross-cutting (perf, migration, upgrade paths) | — | planned | Versioning, performance, postprocessing |
@@ -36,6 +36,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 | # | Block | File | Key topics |
 |---|--------|---------|------------|
+| 1 | Corpus baseline: how the HVAC prototypes use Three.js | [block1](threejs-block1.md) | versions (r160/r128), importmap/CDN, shared scaffolding, voxel-vs-realistic split, outliers |
 
 ---
 
@@ -43,7 +44,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 > Readable mirror of `RESEARCH-STATE.md`. Consumed by the loop to pick the next gap.
 
-- [ ] (high) G1 — Baseline: how the prototype corpus uses three.js
+- [x] G1 — Baseline: how the prototype corpus uses three.js → [Block 1]
 - [ ] (high) G2 — InstancedMesh & voxel-scale rendering
 - [ ] (high) G3 — PBR material system
 - [ ] (high) G4 — Lighting & environment (IBL)
@@ -64,4 +65,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-0/14 gaps closed — bootstrap complete, loop starting.
+1/14 gaps closed — Layer 1 baseline established (B1); subsystem deep-dives next.
