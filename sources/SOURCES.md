@@ -42,3 +42,24 @@ possible preserved from, threejs.org (fetch-doc.sh → web-snapshots/).
 | web-snapshots/journey.prateekm.dev_.md | web-snapshot | https://journey.prateekm.dev/ | 2026-07-04T20:39:19Z | 0e5dce9e79a15946… | |
 | web-snapshots/su-z2.vercel.app_.md | web-snapshot | https://su-z2.vercel.app/ | 2026-07-04T20:39:21Z | b31b1c375f00e5cb… | |
 | web-snapshots/maplibre.org_maplibre-gl-js_docs_examples_add-a-3d-model-using-threejs_.md | web-snapshot | https://maplibre.org/maplibre-gl-js/docs/examples/add-a-3d-model-using-threejs/ | 2026-07-04T20:41:14Z | 42425a45ab15620e… | |
+| web-snapshots/knowtheuniverse.com_.md | web-snapshot | https://knowtheuniverse.com/ | 2026-07-04T21:34:30Z | cf5ccc1277a3877c… | |
+| web-snapshots/feed-panda.vercel.app_.md | web-snapshot | https://feed-panda.vercel.app/ | 2026-07-04T21:34:31Z | f42ab12d350e4aa1… | |
+| web-snapshots/madebyevan.com_webgl-water_.md | web-snapshot | https://madebyevan.com/webgl-water/ | 2026-07-04T21:34:31Z | 21af04f4f83f1e99… | |
+| web-snapshots/heartbeat-solana.vercel.app_.md | web-snapshot | https://heartbeat-solana.vercel.app/ | 2026-07-04T21:34:31Z | f179f9c9097c83e5… | |
+| web-snapshots/atlas3d.space_model_9.md | web-snapshot | https://atlas3d.space/model/9 | 2026-07-04T21:34:32Z | c9e48ef6eb5c3694… | |
+| web-snapshots/atlas3d.space_model_12.md | web-snapshot | https://atlas3d.space/model/12 | 2026-07-04T21:34:33Z | c9e48ef6eb5c3694… | |
+| web-snapshots/shader-studio-teal.vercel.app_.md | web-snapshot | https://shader-studio-teal.vercel.app/ | 2026-07-04T21:34:33Z | 747556ca8c18afcb… | |
+| web-snapshots/laubsauger.github.io_mesh-test_.md | web-snapshot | https://laubsauger.github.io/mesh-test/ | 2026-07-04T21:34:33Z | 5e4b71813d803c1d… | |
+| web-snapshots/fractalworlds.io__formula_Straebathan.md | web-snapshot | https://fractalworlds.io/?formula=Straebathan | 2026-07-04T21:34:34Z | 2de9d8e7db6eb220… | |
+| web-snapshots/lazykitty.itch.io_ex-nihilo.md | web-snapshot | https://lazykitty.itch.io/ex-nihilo | 2026-07-04T21:34:34Z | 388df577fc2b4e87… | |
+| web-snapshots/www.reddit.com_r_threejs_comments_1ujp6bb_threejs_animation_laggy_on_iphone_17_p.md | web-snapshot | https://www.reddit.com/r/threejs/comments/1ujp6bb/threejs_animation_laggy_on_iphone_17_pro_and/ | 2026-07-04T21:34:35Z | 8995fa95e78bd539… | |
+| web-snapshots/discourse.threejs.org_t_three-slugtext-gpu-text-renderer_90599.md | web-snapshot | https://discourse.threejs.org/t/three-slugtext-gpu-text-renderer/90599 | 2026-07-04T21:34:37Z | c425de710783abbf… | |
+| web-snapshots/discourse.threejs.org_t_sacred-pearl-underwater-warmness_91641.md | web-snapshot | https://discourse.threejs.org/t/sacred-pearl-underwater-warmness/91641 | 2026-07-04T21:34:38Z | 3b4031a92a8876d6… | |
+| web-snapshots/discourse.threejs.org_t_volumetric-lighting-in-webgpu_87959.md | web-snapshot | https://discourse.threejs.org/t/volumetric-lighting-in-webgpu/87959 | 2026-07-04T21:34:40Z | f8d70ca8cb4448ab… | |
+| web-snapshots/discourse.threejs.org_t_browser-based-3d-texture-painter-pbr-material-editor-bui.md | web-snapshot | https://discourse.threejs.org/t/browser-based-3d-texture-painter-pbr-material-editor-built-with-three-js/92552 | 2026-07-04T21:34:41Z | ce06db44b37a1fd5… | |
+| web-snapshots/raw.githubusercontent.com_matsuoka-601_Splash_main_README.md.md | web-snapshot | https://raw.githubusercontent.com/matsuoka-601/Splash/main/README.md | 2026-07-04T21:34:41Z | 9c6e09cb809f6376… | |
+| web-snapshots/raw.githubusercontent.com_void032_shader-studio_main_README.md.md | web-snapshot | https://raw.githubusercontent.com/void032/shader-studio/main/README.md | 2026-07-04T21:34:41Z | 38713a00c33183d4… | |
+| web-snapshots/raw.githubusercontent.com_laubsauger_mesh-test_main_README.md.md | web-snapshot | https://raw.githubusercontent.com/laubsauger/mesh-test/main/README.md | 2026-07-04T21:34:41Z | 500f365f1cb1e8f6… | |
+| web-snapshots/discourse.threejs.org_t_houdini-vertex-animation-textures-vat-3-0-for-wgsl_92245.md | web-snapshot | https://discourse.threejs.org/t/houdini-vertex-animation-textures-vat-3-0-for-wgsl/92245 | 2026-07-04T21:34:42Z | 8950f2c1ba2e7456… | |
+| web-snapshots/discourse.threejs.org_.md | web-snapshot | https://discourse.threejs.org/ | 2026-07-04T21:34:43Z | cf463118f76885ba… | |
+| old.reddit.com_r_threejs_comments_1ujp6bb_threejs_animation_laggy_on_iphone_17_p.md | web-snapshot | https://old.reddit.com/r/threejs/comments/1ujp6bb/threejs_animation_laggy_on_iphone_17_pro_and/ | 2026-07-04T21:35:19Z | 9592426d5207cf00… | (fallback: www.reddit.com blocked by bot-protection, got only SVG shell; old.reddit.com succeeded) |

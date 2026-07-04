@@ -69,6 +69,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | 17 | Optimization compendium II | [block17](threejs-block17.md) | LOD + hysteresis (voxel-as-far-LOD idea), frustumCulled semantics, KTX2/Basis compressed textures, disposal contract + ResourceTracker |
 | 18 | Post-processing | [block18](threejs-block18.md) | EffectComposer chain + OutputPass, selective bloom (real glow for HMI/LEDs), OutlinePass component highlighting, SSAO/GTAO toggle, AA caveats, on-demand compatible |
 | 19 | The asset pipeline: glTF in, glTF out | [block19](threejs-block19.md) | GLTFLoader + Draco/KTX2 legs, auto-framing viewer recipe, GLTFExporter (.glb) as the bridge to map/viewer/DCC, onlyVisible LOD gotcha |
+| 20 | Forum intelligence | [block20](threejs-block20.md) | iOS FloatType+LinearFilter gotcha (HalfFloatType fix), 120Hz ProMotion budgets, VAT+instancing, SlugText GPU labels, volumetric 3D-LUT lesson, discourse as ongoing source |
 
 ### Layer 5 — Synthesis
 
@@ -96,7 +97,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [x] G12 — Performance → [Block 11]
 - [x] G13 — Asset pipeline → [Block 19]
 - [ ] (high) G20 — Case studies III, 11 showcase URLs (run 3, sweep delegated)
-- [ ] (high) G21 — Forum intelligence, discourse+reddit threads (run 3, sweep delegated)
+- [x] G21 — Forum intelligence → [Block 20]
 - [x] G16 — Rendering methods deep-dive → [Block 13]
 - [x] G17 — Optimization compendium → [Block 17]
 - [x] G18 — External case studies → [Block 14] + [Block 15]
@@ -110,4 +111,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-19/21 — RUN 3 reopen (2026-07-04): case studies III + forum intelligence. Cap +3 (B20-B22).
+20/21 — RUN 3: B20 (forums) done; G20 showcase sweep in flight (B21).
