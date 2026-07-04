@@ -24,7 +24,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 |---|---|---|---|---|
 | 1 | Corpus baseline & library fundamentals | 1 | active | How the prototypes use three.js today |
 | 2 | Voxel stage (instancing, isometric look) | 2 | active | The voxel-art first-pass techniques |
-| 3 | Realistic stage (PBR, IBL, shadows, color) | — | planned | The realistic second-pass techniques |
+| 3 | Realistic stage (PBR, IBL, shadows, color) | 3 | active | The realistic second-pass techniques |
 | 4 | Cross-cutting (perf, migration, upgrade paths) | — | planned | Versioning, performance, postprocessing |
 | 5 | Synthesis: team workflow | — | planned | Voxel-first → realistic-second pipeline doc (G14, terminal) |
 
@@ -44,6 +44,12 @@ This index guides through the **0 blocks** of this research. Each block is an in
 |---|--------|---------|------------|
 | 2 | InstancedMesh and voxel-scale rendering | [block2](threejs-block2.md) | InstancedMesh API contract, needsUpdate/bounding caveats, setColorAt, vs mergeGeometries, legacy anti-pattern, BatchedMesh (new gap) |
 
+### Layer 3 — Realistic stage
+
+| # | Block | File | Key topics |
+|---|--------|---------|------------|
+| 3 | The PBR material system | [block3](threejs-block3.md) | metallic-roughness workflow, MeshPhysicalMaterial extensions, house material palette, glass transmission-vs-opacity divergence, r163 envMapIntensity change |
+
 ---
 
 ## Pending (gap-backlog)
@@ -52,7 +58,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 - [x] G1 — Baseline: how the prototype corpus uses three.js → [Block 1]
 - [x] G2 — InstancedMesh & voxel-scale rendering → [Block 2]
-- [ ] (high) G3 — PBR material system
+- [x] G3 — PBR material system → [Block 3]
 - [ ] (high) G4 — Lighting & environment (IBL)
 - [ ] (high) G5 — Shadows
 - [ ] (medium) G6 — Color management & tone mapping
@@ -72,4 +78,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-2/15 gaps closed — baseline (B1) + voxel instancing (B2); PBR materials next.
+3/15 gaps closed — baseline, voxel instancing, PBR materials; lighting/IBL next.

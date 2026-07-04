@@ -10,9 +10,9 @@
 
 ## Coverage
 
-- **Covered blocks**: 2 (B1-B2)
-- **Coverage metric**: 2 / 15 closed
-- **Last iteration**: 2026-07-04 — G2 InstancedMesh/voxel rendering closed (B2)
+- **Covered blocks**: 3 (B1-B3)
+- **Coverage metric**: 3 / 15 closed
+- **Last iteration**: 2026-07-04 — G3 PBR material system closed (B3)
 
 ## Gap-backlog (prioritized)
 
@@ -20,7 +20,7 @@
 |---|---|---|---|
 | high | G1 — Baseline: how the prototype corpus uses three.js (versions, load styles, shared scaffolding) | local HTML prototypes + context7 | **covered → [Block 1]** |
 | high | G2 — InstancedMesh & voxel-scale rendering: API contract, limits, vs merged geometry | context7 + web + prototypes | **covered → [Block 2]** |
-| high | G3 — PBR material system: MeshStandardMaterial vs MeshPhysicalMaterial, param semantics | context7 + prototypes | pending |
+| high | G3 — PBR material system: MeshStandardMaterial vs MeshPhysicalMaterial, param semantics | context7 + prototypes | **covered → [Block 3]** |
 | high | G4 — Lighting & environment: light types, IBL via PMREMGenerator+RoomEnvironment vs HDR files | context7 + prototypes | pending |
 | high | G5 — Shadows: map types, shadow-camera tuning, cost model, artifacts (acne/bias) | context7 + prototypes | pending |
 | medium | G6 — Color management & tone mapping: SRGBColorSpace, ACESFilmic, r152 migration | context7 + web | pending |
@@ -40,6 +40,7 @@
 |---|---|---|---|---|---|
 | 1 | 2026-07-04 | G1 baseline corpus usage | B1 | yes · sonnet (Explore sweep) + inline write | 0 |
 | 2 | 2026-07-04 | G2 InstancedMesh/voxel rendering | B2 | no · inline (context7 queries) | 1 (G15 BatchedMesh) |
+| 3 | 2026-07-04 | G3 PBR material system | B3 | no · inline (context7 queries) | 0 |
 
 ## Blocked gaps (each tagged with what it needs)
 
@@ -47,7 +48,7 @@
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 13
+- **Open gaps — read-only investigable**: 12
 - **Open gaps — requires-execution**: 0
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2

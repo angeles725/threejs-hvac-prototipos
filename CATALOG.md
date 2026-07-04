@@ -2,9 +2,10 @@
 
 # Block catalog — threejs
 
-Total: **2 blocks**
+Total: **3 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
 | 1 | [threejs-block1.md](threejs-block1.md) | Corpus baseline: how the HVAC prototypes use Three.js |
 | 2 | [threejs-block2.md](threejs-block2.md) | InstancedMesh and voxel-scale rendering |
+| 3 | [threejs-block3.md](threejs-block3.md) | The PBR material system (MeshStandardMaterial / MeshPhysicalMaterial) |
