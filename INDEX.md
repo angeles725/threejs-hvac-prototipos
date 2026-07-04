@@ -25,7 +25,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | 1 | Corpus baseline & library fundamentals | 1 | active | How the prototypes use three.js today |
 | 2 | Voxel stage (instancing, isometric look) | 2, 7 | active | The voxel-art first-pass techniques |
 | 3 | Realistic stage (PBR, IBL, shadows, color) | 3-6, 8-9 | active | The realistic second-pass techniques |
-| 4 | Cross-cutting (perf, migration, upgrade paths) | 10 | active | Versioning, performance, postprocessing |
+| 4 | Cross-cutting (perf, migration, upgrade paths) | 10-11 | active | Versioning, performance, postprocessing |
 | 5 | Synthesis: team workflow | — | planned | Voxel-first → realistic-second pipeline doc (G14, terminal) |
 
 ---
@@ -61,6 +61,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | # | Block | File | Key topics |
 |---|--------|---------|------------|
 | 10 | Migration and versioning | [block10](threejs-block10.md) | migration ledger r147-r163, r148 examples/js removal, r161 UMD removal (r160 = last UMD release), legacy upgrade recipe, CDN strategies |
+| 11 | Performance: budgets, levers, and BatchedMesh | [block11](threejs-block11.md) | perf inventory, draw-call levers, shadow baking backport, BatchedMesh r160-proven + API + per-palette batching (closes G15) |
 
 ---
 
@@ -79,9 +80,9 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [x] G9 — Procedural texturing → [Block 9]
 - [x] G10 — Migration & versioning → [Block 10]
 - [ ] (low) G11 — Post-processing upgrade path
-- [ ] (low) G12 — Performance
+- [x] G12 — Performance → [Block 11]
 - [ ] (low) G13 — Asset pipeline beyond procedural
-- [ ] (low) G15 — BatchedMesh evaluation (NEW, from B2)
+- [x] G15 — BatchedMesh evaluation → closed by remittance, [Block 11] §11.3
 - [ ] (high, TERMINAL) G14 — SYNTHESIS: team workflow doc (voxel → realistic)
 
 ## Non-investigable gaps (without lab / hardware / NDA)
@@ -90,4 +91,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-10/15 gaps closed — B1-B10; performance block next (may close G15 by remittance).
+12/15 gaps closed — B1-B11; G14 workflow synthesis next (final block of the 12-block cap; G11/G13 remain open).

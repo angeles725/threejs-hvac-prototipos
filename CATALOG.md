@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **10 blocks**
+Total: **11 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -16,3 +16,4 @@ Total: **10 blocks**
 | 8 | [threejs-block8.md](threejs-block8.md) | The geometry toolkit of the realistic stage |
 | 9 | [threejs-block9.md](threejs-block9.md) | Procedural texturing with CanvasTexture |
 | 10 | [threejs-block10.md](threejs-block10.md) | Migration and versioning: r128 → r160 → current |
+| 11 | [threejs-block11.md](threejs-block11.md) | Performance: budgets, levers, and BatchedMesh |
