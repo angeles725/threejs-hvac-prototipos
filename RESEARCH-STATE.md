@@ -10,8 +10,8 @@
 
 ## Coverage
 
-- **Covered blocks**: 16 (B1-B16)
-- **Coverage metric**: 16 / 19 closed (run 2)
+- **Covered blocks**: 17 (B1-B17)
+- **Coverage metric**: 17 / 19 closed (run 2)
 - **Last iteration**: 2026-07-04 — **RUN 2 (REOPEN, §8)**: user expanded scope — rendering deep-dive, optimization methods, external case studies (20 URLs), MapLibre. G11/G13 back in scope.
 
 ## Gap-backlog (prioritized)
@@ -32,7 +32,7 @@
 | low | G12 — Performance: draw calls, renderer.info, instancing benchmarks, pixel-ratio caps | context7 + web | **covered → [Block 11]** |
 | low | G13 — Asset pipeline beyond procedural: GLTF import/export, DCC handoff | context7 + web | pending (run 2) |
 | high | G16 — Rendering methods deep-dive: render loop styles, on-demand rendering, render targets, WebGPURenderer/TSL status, alt renderers, path tracing (NEW, run 2) | context7 + web | **covered → [Block 13]** (path tracing deferred to G18 case block) |
-| high | G17 — Optimization compendium beyond B11: LOD, BVH, culling, KTX2, disposal/memory (NEW, run 2) | context7 + web | pending |
+| high | G17 — Optimization compendium beyond B11: LOD, BVH, culling, KTX2, disposal/memory (NEW, run 2) | context7 + web | **covered → [Block 17]** |
 | high | G18 — External case studies: 18 showcase pages — techniques + applicability (NEW, run 2) | web sweeps (preserved) | **covered → [Block 14] + [Block 15]** |
 | medium | G19 — MapLibre GL JS: what it is, three.js custom-layer interop, site-map use cases (NEW, run 2) | web (official docs/repo) | **covered → [Block 16]** |
 | low | G15 — BatchedMesh: availability in r160, API, fit for multi-geometry realistic scenes (NEW, from B2) | context7 + web | **closed by remittance → [Block 11] §11.3** (availability r160 proven at cuarto-3d.html:103, API + fit covered; no new substance) |
@@ -58,6 +58,7 @@
 | 14 | 2026-07-04 | G18 part I (8 standalone demos) | B14 | yes · sonnet (web sweep + preservation) | 0 |
 | 15 | 2026-07-04 | G18 part II (dasprinzip series) | B15 | yes · sonnet (web sweep + preservation) | 0 |
 | 16 | 2026-07-04 | G19 MapLibre interop | B16 | yes · sonnet (web sweep + preservation) | 0 |
+| 17 | 2026-07-04 | G17 optimization compendium II | B17 | no · inline (context7 queries) | 0 |
 
 ## Blocked gaps (each tagged with what it needs)
 
@@ -65,7 +66,7 @@
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 3 — G11, G13, G17. Run-2 cap remaining: B17-B19 → exactly fits.
+- **Open gaps — read-only investigable**: 2 — G11, G13. Run-2 cap remaining: B18-B19 → exactly fits.
 - **Open gaps — requires-execution**: 0
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2
