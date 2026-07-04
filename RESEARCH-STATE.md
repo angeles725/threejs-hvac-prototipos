@@ -10,8 +10,8 @@
 
 ## Coverage
 
-- **Covered blocks**: 17 (B1-B17)
-- **Coverage metric**: 17 / 19 closed (run 2)
+- **Covered blocks**: 18 (B1-B18)
+- **Coverage metric**: 18 / 19 closed (run 2)
 - **Last iteration**: 2026-07-04 — **RUN 2 (REOPEN, §8)**: user expanded scope — rendering deep-dive, optimization methods, external case studies (20 URLs), MapLibre. G11/G13 back in scope.
 
 ## Gap-backlog (prioritized)
@@ -28,7 +28,7 @@
 | medium | G8 — Geometry toolkit for realistic modeling: Cylinder/Torus/Extrude/Lathe, BufferGeometry | context7 + prototypes | **covered → [Block 8]** |
 | medium | G9 — Procedural texturing: CanvasTexture technique, texture settings, vs image textures | context7 + prototypes | **covered → [Block 9]** |
 | medium | G10 — Migration & versioning: r128→r160 breaking changes, CDN strategies, legacy upgrade path | web (migration guide) + prototypes | **covered → [Block 10]** |
-| low | G11 — Post-processing upgrade path: EffectComposer, bloom, SSAO (absent today) | context7 | pending |
+| low | G11 — Post-processing upgrade path: EffectComposer, bloom, SSAO (absent today) | context7 | **covered → [Block 18]** |
 | low | G12 — Performance: draw calls, renderer.info, instancing benchmarks, pixel-ratio caps | context7 + web | **covered → [Block 11]** |
 | low | G13 — Asset pipeline beyond procedural: GLTF import/export, DCC handoff | context7 + web | pending (run 2) |
 | high | G16 — Rendering methods deep-dive: render loop styles, on-demand rendering, render targets, WebGPURenderer/TSL status, alt renderers, path tracing (NEW, run 2) | context7 + web | **covered → [Block 13]** (path tracing deferred to G18 case block) |
@@ -59,6 +59,7 @@
 | 15 | 2026-07-04 | G18 part II (dasprinzip series) | B15 | yes · sonnet (web sweep + preservation) | 0 |
 | 16 | 2026-07-04 | G19 MapLibre interop | B16 | yes · sonnet (web sweep + preservation) | 0 |
 | 17 | 2026-07-04 | G17 optimization compendium II | B17 | no · inline (context7 queries) | 0 |
+| 18 | 2026-07-04 | G11 post-processing | B18 | no · inline (context7 queries) | 0 |
 
 ## Blocked gaps (each tagged with what it needs)
 
@@ -66,7 +67,7 @@
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 2 — G11, G13. Run-2 cap remaining: B18-B19 → exactly fits.
+- **Open gaps — read-only investigable**: 1 — G13. Final block B19 next → investigable will hit 0.
 - **Open gaps — requires-execution**: 0
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2

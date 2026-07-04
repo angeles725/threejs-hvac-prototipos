@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **17 blocks**
+Total: **18 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -23,3 +23,4 @@ Total: **17 blocks**
 | 15 | [threejs-block15.md](threejs-block15.md) | Case studies II: the dasprinzip "tinker" series (10 daily experiments) |
 | 16 | [threejs-block16.md](threejs-block16.md) | MapLibre GL JS and the three.js custom-layer interop |
 | 17 | [threejs-block17.md](threejs-block17.md) | Optimization compendium II: LOD, culling, compressed textures, disposal |
+| 18 | [threejs-block18.md](threejs-block18.md) | Post-processing: the EffectComposer chain (bloom, outline, AO) |

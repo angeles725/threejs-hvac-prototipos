@@ -67,6 +67,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | 15 | Case studies II: dasprinzip tinker series | [block15](threejs-block15.md) | WebGL r169 vs TSL/WebGPU r171-185 split, data-driven instanced grids, GPU particle flow, texture-swap UI, Tweakpane, fullscreen-quad TSL shading |
 | 16 | MapLibre GL JS interop | [block16](threejs-block16.md) | BSD-3 map renderer, CustomLayerInterface onAdd/render, shared GL context + MercatorCoordinate, georeferenced equipment use cases |
 | 17 | Optimization compendium II | [block17](threejs-block17.md) | LOD + hysteresis (voxel-as-far-LOD idea), frustumCulled semantics, KTX2/Basis compressed textures, disposal contract + ResourceTracker |
+| 18 | Post-processing | [block18](threejs-block18.md) | EffectComposer chain + OutputPass, selective bloom (real glow for HMI/LEDs), OutlinePass component highlighting, SSAO/GTAO toggle, AA caveats, on-demand compatible |
 
 ### Layer 5 — Synthesis
 
@@ -90,7 +91,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [x] G8 — Geometry toolkit for realistic modeling → [Block 8]
 - [x] G9 — Procedural texturing → [Block 9]
 - [x] G10 — Migration & versioning → [Block 10]
-- [ ] (low) G11 — Post-processing upgrade path
+- [x] G11 — Post-processing upgrade path → [Block 18]
 - [x] G12 — Performance → [Block 11]
 - [ ] (low) G13 — Asset pipeline beyond procedural (run 2)
 - [x] G16 — Rendering methods deep-dive → [Block 13]
@@ -106,4 +107,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-17/19 — RUN 2: B13-B17 done. Remaining: G11 post-processing (B18), G13 assets (B19).
+18/19 — RUN 2: B13-B18 done. Remaining: G13 assets (B19, final).
