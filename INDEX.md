@@ -25,7 +25,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | 1 | Corpus baseline & library fundamentals | 1 | active | How the prototypes use three.js today |
 | 2 | Voxel stage (instancing, isometric look) | 2, 7 | active | The voxel-art first-pass techniques |
 | 3 | Realistic stage (PBR, IBL, shadows, color) | 3-6, 8-9 | active | The realistic second-pass techniques |
-| 4 | Cross-cutting (perf, migration, upgrade paths) | — | planned | Versioning, performance, postprocessing |
+| 4 | Cross-cutting (perf, migration, upgrade paths) | 10 | active | Versioning, performance, postprocessing |
 | 5 | Synthesis: team workflow | — | planned | Voxel-first → realistic-second pipeline doc (G14, terminal) |
 
 ---
@@ -56,6 +56,12 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | 8 | The geometry toolkit of the realistic stage | [block8](threejs-block8.md) | geometry census (Cylinder 54), constructor contracts, bevelEnabled footgun, curved Shape extrude, procedural Lathe, direct vertex editing |
 | 9 | Procedural texturing with CanvasTexture | [block9](threejs-block9.md) | draw-don't-download strategy, fin/nameplate implementations, texture colorSpace contract, missing-SRGBColorSpace divergence, NearestFilter voxel option |
 
+### Layer 4 — Cross-cutting
+
+| # | Block | File | Key topics |
+|---|--------|---------|------------|
+| 10 | Migration and versioning | [block10](threejs-block10.md) | migration ledger r147-r163, r148 examples/js removal, r161 UMD removal (r160 = last UMD release), legacy upgrade recipe, CDN strategies |
+
 ---
 
 ## Pending (gap-backlog)
@@ -71,7 +77,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [x] G7 — Cameras & controls → [Block 7]
 - [x] G8 — Geometry toolkit for realistic modeling → [Block 8]
 - [x] G9 — Procedural texturing → [Block 9]
-- [ ] (medium) G10 — Migration & versioning
+- [x] G10 — Migration & versioning → [Block 10]
 - [ ] (low) G11 — Post-processing upgrade path
 - [ ] (low) G12 — Performance
 - [ ] (low) G13 — Asset pipeline beyond procedural
@@ -84,4 +90,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-9/15 gaps closed — B1-B9; migration & versioning next.
+10/15 gaps closed — B1-B10; performance block next (may close G15 by remittance).

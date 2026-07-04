@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **9 blocks**
+Total: **10 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -15,3 +15,4 @@ Total: **9 blocks**
 | 7 | [threejs-block7.md](threejs-block7.md) | Cameras and controls: the fake-isometric look and OrbitControls |
 | 8 | [threejs-block8.md](threejs-block8.md) | The geometry toolkit of the realistic stage |
 | 9 | [threejs-block9.md](threejs-block9.md) | Procedural texturing with CanvasTexture |
+| 10 | [threejs-block10.md](threejs-block10.md) | Migration and versioning: r128 → r160 → current |
