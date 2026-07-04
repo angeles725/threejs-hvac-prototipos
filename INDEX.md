@@ -23,7 +23,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | Layer | Topic area | Blocks | Status | One-line summary |
 |---|---|---|---|---|
 | 1 | Corpus baseline & library fundamentals | 1 | active | How the prototypes use three.js today |
-| 2 | Voxel stage (instancing, isometric look) | — | planned | The voxel-art first-pass techniques |
+| 2 | Voxel stage (instancing, isometric look) | 2 | active | The voxel-art first-pass techniques |
 | 3 | Realistic stage (PBR, IBL, shadows, color) | — | planned | The realistic second-pass techniques |
 | 4 | Cross-cutting (perf, migration, upgrade paths) | — | planned | Versioning, performance, postprocessing |
 | 5 | Synthesis: team workflow | — | planned | Voxel-first → realistic-second pipeline doc (G14, terminal) |
@@ -38,6 +38,12 @@ This index guides through the **0 blocks** of this research. Each block is an in
 |---|--------|---------|------------|
 | 1 | Corpus baseline: how the HVAC prototypes use Three.js | [block1](threejs-block1.md) | versions (r160/r128), importmap/CDN, shared scaffolding, voxel-vs-realistic split, outliers |
 
+### Layer 2 — Voxel stage
+
+| # | Block | File | Key topics |
+|---|--------|---------|------------|
+| 2 | InstancedMesh and voxel-scale rendering | [block2](threejs-block2.md) | InstancedMesh API contract, needsUpdate/bounding caveats, setColorAt, vs mergeGeometries, legacy anti-pattern, BatchedMesh (new gap) |
+
 ---
 
 ## Pending (gap-backlog)
@@ -45,7 +51,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 > Readable mirror of `RESEARCH-STATE.md`. Consumed by the loop to pick the next gap.
 
 - [x] G1 — Baseline: how the prototype corpus uses three.js → [Block 1]
-- [ ] (high) G2 — InstancedMesh & voxel-scale rendering
+- [x] G2 — InstancedMesh & voxel-scale rendering → [Block 2]
 - [ ] (high) G3 — PBR material system
 - [ ] (high) G4 — Lighting & environment (IBL)
 - [ ] (high) G5 — Shadows
@@ -57,6 +63,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [ ] (low) G11 — Post-processing upgrade path
 - [ ] (low) G12 — Performance
 - [ ] (low) G13 — Asset pipeline beyond procedural
+- [ ] (low) G15 — BatchedMesh evaluation (NEW, from B2)
 - [ ] (high, TERMINAL) G14 — SYNTHESIS: team workflow doc (voxel → realistic)
 
 ## Non-investigable gaps (without lab / hardware / NDA)
@@ -65,4 +72,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-1/14 gaps closed — Layer 1 baseline established (B1); subsystem deep-dives next.
+2/15 gaps closed — baseline (B1) + voxel instancing (B2); PBR materials next.

@@ -10,16 +10,16 @@
 
 ## Coverage
 
-- **Covered blocks**: 1 (B1)
-- **Coverage metric**: 1 / 14 closed
-- **Last iteration**: 2026-07-04 — G1 baseline corpus usage closed (B1)
+- **Covered blocks**: 2 (B1-B2)
+- **Coverage metric**: 2 / 15 closed
+- **Last iteration**: 2026-07-04 — G2 InstancedMesh/voxel rendering closed (B2)
 
 ## Gap-backlog (prioritized)
 
 | Priority | Gap | Artifact type / source | Status |
 |---|---|---|---|
 | high | G1 — Baseline: how the prototype corpus uses three.js (versions, load styles, shared scaffolding) | local HTML prototypes + context7 | **covered → [Block 1]** |
-| high | G2 — InstancedMesh & voxel-scale rendering: API contract, limits, vs merged geometry | context7 + web + prototypes | pending |
+| high | G2 — InstancedMesh & voxel-scale rendering: API contract, limits, vs merged geometry | context7 + web + prototypes | **covered → [Block 2]** |
 | high | G3 — PBR material system: MeshStandardMaterial vs MeshPhysicalMaterial, param semantics | context7 + prototypes | pending |
 | high | G4 — Lighting & environment: light types, IBL via PMREMGenerator+RoomEnvironment vs HDR files | context7 + prototypes | pending |
 | high | G5 — Shadows: map types, shadow-camera tuning, cost model, artifacts (acne/bias) | context7 + prototypes | pending |
@@ -31,6 +31,7 @@
 | low | G11 — Post-processing upgrade path: EffectComposer, bloom, SSAO (absent today) | context7 | pending |
 | low | G12 — Performance: draw calls, renderer.info, instancing benchmarks, pixel-ratio caps | context7 + web | pending |
 | low | G13 — Asset pipeline beyond procedural: GLTF import/export, DCC handoff | context7 + web | pending |
+| low | G15 — BatchedMesh: availability in r160, API, fit for multi-geometry realistic scenes (NEW, from B2) | context7 + web | pending |
 | high (terminal) | G14 — SYNTHESIS: team workflow doc — voxel-first → realistic-second pipeline | corpus blocks + prototypes | pending (write LAST, after research) |
 
 ## Iteration history
@@ -38,6 +39,7 @@
 | # | Date | Gap closed | Block | Delegated? · model tier | New gaps uncovered |
 |---|---|---|---|---|---|
 | 1 | 2026-07-04 | G1 baseline corpus usage | B1 | yes · sonnet (Explore sweep) + inline write | 0 |
+| 2 | 2026-07-04 | G2 InstancedMesh/voxel rendering | B2 | no · inline (context7 queries) | 1 (G15 BatchedMesh) |
 
 ## Blocked gaps (each tagged with what it needs)
 

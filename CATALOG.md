@@ -2,8 +2,9 @@
 
 # Block catalog — threejs
 
-Total: **1 blocks**
+Total: **2 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
 | 1 | [threejs-block1.md](threejs-block1.md) | Corpus baseline: how the HVAC prototypes use Three.js |
+| 2 | [threejs-block2.md](threejs-block2.md) | InstancedMesh and voxel-scale rendering |
