@@ -81,3 +81,5 @@ possible preserved from, threejs.org (fetch-doc.sh → web-snapshots/).
 | web-snapshots/discourse.threejs.org_t_x-ray-effect-for-transparent-meshes_24417.md | web-snapshot | https://discourse.threejs.org/t/x-ray-effect-for-transparent-meshes/24417 | 2026-07-04T23:47:41Z | eab157121efc9671… | |
 | web-snapshots/discourse.threejs.org_t_xray-function-implementation_65465.md | web-snapshot | https://discourse.threejs.org/t/xray-function-implementation/65465 | 2026-07-04T23:47:41Z | cef9259b6cc14a23… | |
 | web-snapshots/www.tetranyde.com_blog_hotspot-threejs_.md | web-snapshot | https://www.tetranyde.com/blog/hotspot-threejs/ | 2026-07-04T23:48:16Z | cf7dd7a39070c1d4… | |
+| web-snapshots/github.com_leeoniya_uPlot.md | web-snapshot | https://github.com/leeoniya/uPlot | 2026-07-04T23:52:49Z | c18c042845d63305… | |
+| manuals/bas-graphics-standard-monash-v1.4.pdf | doc | https://www.monash.edu/__data/assets/pdf_file/0008/3884633/BAS-Graphics-Standard-V1.4.pdf | 2026-07-04T23:53:11Z | a4aaf621206ce496… | |

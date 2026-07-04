@@ -10,9 +10,9 @@
 
 ## Coverage
 
-- **Covered blocks**: 29 (B1-B29)
-- **Coverage metric**: 29 / 32 closed (runs 4-5 opened 11 new gaps)
-- **RUN 5 (2026-07-04, AUTO/orchestrated)**: HVAC-domain design (G29-G32) — opened with G29 (HVAC/industrial equipment visualization domain, B29) covered. 3 gaps remain (G30-G32). User authorized auto-chaining incl. emergent gaps; RUN 5 auto-continues. Hard-stops: failed self-report, cap, exhaustion, destructive step.
+- **Covered blocks**: 30 (B1-B30)
+- **Coverage metric**: 30 / 32 closed (runs 4-5 opened 11 new gaps)
+- **RUN 5 (2026-07-04, AUTO/orchestrated)**: HVAC-domain design (G29-G32) — G29 (HVAC/industrial equipment visualization domain, B29) and G30 (dashboards & telemetry, B30) covered. 2 gaps remain (G31-G32). User authorized auto-chaining incl. emergent gaps; RUN 5 auto-continues. Hard-stops: failed self-report, cap, exhaustion, destructive step.
 - **RUN 4 (REOPEN §8, 2026-07-04, AUTO/orchestrated)**: 3D-design craft + optimization (G22-G28) — **RUN 4 COMPLETE**, all 7 gaps covered (B22-B28).
 - **RUN 3 (REOPEN §8, 2026-07-04)**: user supplied a 3rd batch — 11 showcase URLs + 6 forum threads (discourse/reddit) for problems & solutions. Runs 1-2 history preserved above.
 - **Last iteration**: 2026-07-04 — **RUN 2 (REOPEN, §8)**: user expanded scope — rendering deep-dive, optimization methods, external case studies (20 URLs), MapLibre. G11/G13 back in scope.
@@ -44,7 +44,7 @@
 | high | G27 — Performance budgets per device class, derived from G26 measurements + web guidance (run 4) | G26 data + web | **covered → [Block 27]** |
 | medium | G28 — Blender ↔ three.js round-trip: modeling/UV/baking → glTF export settings (run 4) | official Blender/three docs | **covered → [Block 28]** |
 | high | G29 — HVAC/industrial equipment visualization domain: digital-twin viewer patterns, exploded views, status overlays (run 5) | web + case refs | **covered → [Block 29]** |
-| high | G30 — Dashboards: three.js + telemetry/data binding, HTML/CSS2D overlays, charts integration (run 5) | context7 + web | queued (run 5) |
+| high | G30 — Dashboards: three.js + telemetry/data binding, HTML/CSS2D overlays, charts integration (run 5) | context7 + web | **covered → [Block 30]** |
 | medium | G31 — Terrain/relief: heightmap displacement, DEM data sources, MapLibre terrain tie-in (run 5) | context7 + web + B16 | queued (run 5) |
 | medium | G32 — Buildings/BIM: IFC pipeline (web-ifc), floor-plan-to-3D, building shells for site context (run 5) | web + tool docs | queued (run 5) |
 | high | G16 — Rendering methods deep-dive: render loop styles, on-demand rendering, render targets, WebGPURenderer/TSL status, alt renderers, path tracing (NEW, run 2) | context7 + web | **covered → [Block 13]** (path tracing deferred to G18 case block) |
@@ -87,10 +87,11 @@
 | 27 | 2026-07-04 | G27 performance budgets (run 4) | B27 | yes · sonnet (full iteration) | 0 |
 | 28 | 2026-07-04 | G28 Blender round-trip (run-4 final) | B28 | yes · sonnet (full iteration) | 0 |
 | 29 | 2026-07-04 | G29 HVAC viz domain (run 5) | B29 | yes · sonnet (full iteration) | 0 |
+| 30 | 2026-07-04 | G30 dashboards & telemetry (run 5) | B30 | yes · sonnet (full iteration) | 0 |
 
 **RUN 4 gaps complete** (G22-G28, all covered). RUN 5 (G29-G32 — HVAC domain, dashboards, terrain,
-BIM) opened with G29 covered (B29); auto-continues per user authorization (see stop-control line
-below).
+BIM) opened with G29 covered (B29); G30 (dashboards, B30) now also covered; auto-continues per
+user authorization (see stop-control line below).
 
 ## Blocked gaps (each tagged with what it needs)
 
@@ -98,7 +99,7 @@ below).
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 3 (G30-G32; G29 now closed, run 5 opened). Budget cap runs 4-5: +14 blocks (B22-B35). Execution: ORCHESTRATED-AUTO (one fresh sub-agent per iteration; driver gatekeeps via §11 self-reports).
+- **Open gaps — read-only investigable**: 2 (G31-G32; G29/G30 now closed, run 5 opened). Budget cap runs 4-5: +14 blocks (B22-B35). Execution: ORCHESTRATED-AUTO (one fresh sub-agent per iteration; driver gatekeeps via §11 self-reports).
 - **Open gaps — requires-execution**: 0
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2

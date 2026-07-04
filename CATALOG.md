@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **29 blocks**
+Total: **30 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -35,3 +35,4 @@ Total: **29 blocks**
 | 27 | [threejs-block27.md](threejs-block27.md) | Performance budgets per device class |
 | 28 | [threejs-block28.md](threejs-block28.md) | Blender ↔ three.js round-trip for organic/baked HVAC parts |
 | 29 | [threejs-block29.md](threejs-block29.md) | HVAC/industrial equipment visualization domain (run 5 opener) |
+| 30 | [threejs-block30.md](threejs-block30.md) | Dashboards: 3D scene + telemetry/data binding + charts |
