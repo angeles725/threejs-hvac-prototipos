@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **4 blocks**
+Total: **5 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -10,3 +10,4 @@ Total: **4 blocks**
 | 2 | [threejs-block2.md](threejs-block2.md) | InstancedMesh and voxel-scale rendering |
 | 3 | [threejs-block3.md](threejs-block3.md) | The PBR material system (MeshStandardMaterial / MeshPhysicalMaterial) |
 | 4 | [threejs-block4.md](threejs-block4.md) | Lighting and environment: the 3-light rig + RoomEnvironment IBL |
+| 5 | [threejs-block5.md](threejs-block5.md) | Shadows: algorithms, shadow-camera tuning, and the corpus's perf evolution |
