@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **8 blocks**
+Total: **9 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -14,3 +14,4 @@ Total: **8 blocks**
 | 6 | [threejs-block6.md](threejs-block6.md) | Color management and tone mapping |
 | 7 | [threejs-block7.md](threejs-block7.md) | Cameras and controls: the fake-isometric look and OrbitControls |
 | 8 | [threejs-block8.md](threejs-block8.md) | The geometry toolkit of the realistic stage |
+| 9 | [threejs-block9.md](threejs-block9.md) | Procedural texturing with CanvasTexture |

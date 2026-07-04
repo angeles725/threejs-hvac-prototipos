@@ -24,7 +24,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 |---|---|---|---|---|
 | 1 | Corpus baseline & library fundamentals | 1 | active | How the prototypes use three.js today |
 | 2 | Voxel stage (instancing, isometric look) | 2, 7 | active | The voxel-art first-pass techniques |
-| 3 | Realistic stage (PBR, IBL, shadows, color) | 3-6, 8 | active | The realistic second-pass techniques |
+| 3 | Realistic stage (PBR, IBL, shadows, color) | 3-6, 8-9 | active | The realistic second-pass techniques |
 | 4 | Cross-cutting (perf, migration, upgrade paths) | — | planned | Versioning, performance, postprocessing |
 | 5 | Synthesis: team workflow | — | planned | Voxel-first → realistic-second pipeline doc (G14, terminal) |
 
@@ -54,6 +54,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | 5 | Shadows | [block5](threejs-block5.md) | shadow map types, ortho frustum fitting, bias/normalBias, mapSize ladder, castShadow opt-outs, cuarto-3d baked-shadows evolution |
 | 6 | Color management and tone mapping | [block6](threejs-block6.md) | r152 color management, working space, rename map, tone-mapping menu (AgX in r160), ACESFilmic exposure calibration, legacy color hole |
 | 8 | The geometry toolkit of the realistic stage | [block8](threejs-block8.md) | geometry census (Cylinder 54), constructor contracts, bevelEnabled footgun, curved Shape extrude, procedural Lathe, direct vertex editing |
+| 9 | Procedural texturing with CanvasTexture | [block9](threejs-block9.md) | draw-don't-download strategy, fin/nameplate implementations, texture colorSpace contract, missing-SRGBColorSpace divergence, NearestFilter voxel option |
 
 ---
 
@@ -69,7 +70,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [x] G6 — Color management & tone mapping → [Block 6]
 - [x] G7 — Cameras & controls → [Block 7]
 - [x] G8 — Geometry toolkit for realistic modeling → [Block 8]
-- [ ] (medium) G9 — Procedural texturing
+- [x] G9 — Procedural texturing → [Block 9]
 - [ ] (medium) G10 — Migration & versioning
 - [ ] (low) G11 — Post-processing upgrade path
 - [ ] (low) G12 — Performance
@@ -83,4 +84,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-8/15 gaps closed — B1-B8; procedural texturing next.
+9/15 gaps closed — B1-B9; migration & versioning next.

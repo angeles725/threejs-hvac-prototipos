@@ -10,9 +10,9 @@
 
 ## Coverage
 
-- **Covered blocks**: 8 (B1-B8)
-- **Coverage metric**: 8 / 15 closed
-- **Last iteration**: 2026-07-04 — G8 geometry toolkit closed (B8)
+- **Covered blocks**: 9 (B1-B9)
+- **Coverage metric**: 9 / 15 closed
+- **Last iteration**: 2026-07-04 — G9 procedural texturing closed (B9)
 
 ## Gap-backlog (prioritized)
 
@@ -26,7 +26,7 @@
 | medium | G6 — Color management & tone mapping: SRGBColorSpace, ACESFilmic, r152 migration | context7 + web | **covered → [Block 6]** |
 | medium | G7 — Cameras & controls: fake-isometric low-FOV vs true OrthographicCamera; OrbitControls | context7 + prototypes | **covered → [Block 7]** |
 | medium | G8 — Geometry toolkit for realistic modeling: Cylinder/Torus/Extrude/Lathe, BufferGeometry | context7 + prototypes | **covered → [Block 8]** |
-| medium | G9 — Procedural texturing: CanvasTexture technique, texture settings, vs image textures | context7 + prototypes | pending |
+| medium | G9 — Procedural texturing: CanvasTexture technique, texture settings, vs image textures | context7 + prototypes | **covered → [Block 9]** |
 | medium | G10 — Migration & versioning: r128→r160 breaking changes, CDN strategies, legacy upgrade path | web (migration guide) + prototypes | pending |
 | low | G11 — Post-processing upgrade path: EffectComposer, bloom, SSAO (absent today) | context7 | pending |
 | low | G12 — Performance: draw calls, renderer.info, instancing benchmarks, pixel-ratio caps | context7 + web | pending |
@@ -46,6 +46,7 @@
 | 6 | 2026-07-04 | G6 color management & tone mapping | B6 | no · inline (context7 queries) | 0 |
 | 7 | 2026-07-04 | G7 cameras & controls | B7 | no · inline (context7 queries) | 0 |
 | 8 | 2026-07-04 | G8 geometry toolkit | B8 | no · inline (context7 queries) | 0 |
+| 9 | 2026-07-04 | G9 procedural texturing | B9 | no · inline (context7 queries) | 0 |
 
 ## Blocked gaps (each tagged with what it needs)
 
@@ -53,7 +54,7 @@
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 7
+- **Open gaps — read-only investigable**: 6
 - **Open gaps — requires-execution**: 0
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2
