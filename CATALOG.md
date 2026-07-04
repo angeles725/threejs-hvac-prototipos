@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **27 blocks**
+Total: **28 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -33,3 +33,4 @@ Total: **27 blocks**
 | 25 | [threejs-block25.md](threejs-block25.md) | The optimization pipeline: glTF-Transform and gltfpack between export and consumption |
 | 26 | [threejs-block26.md](threejs-block26.md) | DYNAMIC PHASE: measured baseline of the prototypes (live browser probes) |
 | 27 | [threejs-block27.md](threejs-block27.md) | Performance budgets per device class |
+| 28 | [threejs-block28.md](threejs-block28.md) | Blender ↔ three.js round-trip for organic/baked HVAC parts |

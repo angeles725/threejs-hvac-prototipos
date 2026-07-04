@@ -74,3 +74,5 @@ possible preserved from, threejs.org (fetch-doc.sh → web-snapshots/).
 | web-snapshots/developer.mozilla.org_en-US_docs_Web_API_WebGL_API_WebGL_best_practices.md | web-snapshot | https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices | 2026-07-04T23:34:59Z | 23d38584ef1d3e1d… | |
 | web-snapshots/docs.unity3d.com_Manual_webgl-performance.html.md | web-snapshot | https://docs.unity3d.com/Manual/webgl-performance.html | 2026-07-04T23:35:00Z | c967ab354e8e0e72… | |
 | web-snapshots/threejsroadmap.com_blog_draw-calls-the-silent-killer.md | web-snapshot | https://threejsroadmap.com/blog/draw-calls-the-silent-killer | 2026-07-04T23:35:17Z | 35e3b2cf3337b80d… | |
+| web-snapshots/docs.blender.org_manual_en_latest_addons_import_export_scene_gltf2.html.md | web-snapshot | https://docs.blender.org/manual/en/latest/addons/import_export/scene_gltf2.html | 2026-07-04T23:38:35Z | 35c79daa60bcbd4b… | |
+| web-snapshots/docs.blender.org_manual_en_latest_render_cycles_baking.html.md | web-snapshot | https://docs.blender.org/manual/en/latest/render/cycles/baking.html | 2026-07-04T23:38:41Z | 6fa7ee0d7987f954… | |

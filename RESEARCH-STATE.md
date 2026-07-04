@@ -10,9 +10,9 @@
 
 ## Coverage
 
-- **Covered blocks**: 27 (B1-B27)
-- **Coverage metric**: 27 / 32 closed (runs 4-5 opened 11 new gaps)
-- **RUN 4 (REOPEN §8, 2026-07-04, AUTO/orchestrated)**: 3D-design craft + optimization (G22-G28). **RUN 5 queued**: HVAC-domain design (G29-G32). User authorized auto-chaining incl. emergent gaps. Hard-stops: failed self-report, cap, exhaustion, destructive step.
+- **Covered blocks**: 28 (B1-B28)
+- **Coverage metric**: 28 / 32 closed (runs 4-5 opened 11 new gaps)
+- **RUN 4 (REOPEN §8, 2026-07-04, AUTO/orchestrated)**: 3D-design craft + optimization (G22-G28) — **RUN 4 COMPLETE**, all 7 gaps covered (B22-B28). **RUN 5 queued**: HVAC-domain design (G29-G32). User authorized auto-chaining incl. emergent gaps; RUN 5 auto-continues. Hard-stops: failed self-report, cap, exhaustion, destructive step.
 - **RUN 3 (REOPEN §8, 2026-07-04)**: user supplied a 3rd batch — 11 showcase URLs + 6 forum threads (discourse/reddit) for problems & solutions. Runs 1-2 history preserved above.
 - **Last iteration**: 2026-07-04 — **RUN 2 (REOPEN, §8)**: user expanded scope — rendering deep-dive, optimization methods, external case studies (20 URLs), MapLibre. G11/G13 back in scope.
 
@@ -41,7 +41,7 @@
 | high | G25 — Asset optimization pipeline: gltf-transform / gltfpack CLI (Draco+meshopt+KTX2+dedup), install & recipes (run 4) | web + tool docs | **covered → [Block 25]** |
 | high | G26 — DYNAMIC PHASE (§12): live profiling of representative prototypes — draw-call/triangle counts via GL hooks; [CERT-hw] baseline (run 4) | local prototypes + Puppeteer/browser | **covered → [Block 26]** (driver-supervised; FPS deferred to real hardware in G27) |
 | high | G27 — Performance budgets per device class, derived from G26 measurements + web guidance (run 4) | G26 data + web | **covered → [Block 27]** |
-| medium | G28 — Blender ↔ three.js round-trip: modeling/UV/baking → glTF export settings (run 4) | official Blender/three docs | pending |
+| medium | G28 — Blender ↔ three.js round-trip: modeling/UV/baking → glTF export settings (run 4) | official Blender/three docs | **covered → [Block 28]** |
 | high | G29 — HVAC/industrial equipment visualization domain: digital-twin viewer patterns, exploded views, status overlays (run 5) | web + case refs | queued (run 5) |
 | high | G30 — Dashboards: three.js + telemetry/data binding, HTML/CSS2D overlays, charts integration (run 5) | context7 + web | queued (run 5) |
 | medium | G31 — Terrain/relief: heightmap displacement, DEM data sources, MapLibre terrain tie-in (run 5) | context7 + web + B16 | queued (run 5) |
@@ -84,6 +84,10 @@
 | 25 | 2026-07-04 | G25 gltf-transform pipeline (run 4) | B25 | yes · sonnet (full iteration) | 0 |
 | 26 | 2026-07-04 | G26 DYNAMIC baseline (run 4) | B26 | no · driver-supervised (§12) + Puppeteer probes | 0 |
 | 27 | 2026-07-04 | G27 performance budgets (run 4) | B27 | yes · sonnet (full iteration) | 0 |
+| 28 | 2026-07-04 | G28 Blender round-trip (run-4 final) | B28 | yes · sonnet (full iteration) | 0 |
+
+**RUN 4 gaps complete** (G22-G28, all covered). RUN 5 (G29-G32 — HVAC domain, dashboards, terrain,
+BIM) auto-continues per user authorization (see stop-control line below).
 
 ## Blocked gaps (each tagged with what it needs)
 
@@ -91,7 +95,7 @@
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 6 (G28-G32, G27 now closed). Budget cap runs 4-5: +14 blocks (B22-B35). Execution: ORCHESTRATED-AUTO (one fresh sub-agent per iteration; driver gatekeeps via §11 self-reports).
+- **Open gaps — read-only investigable**: 4 (G29-G32; G28 now closed, run 4 complete). Budget cap runs 4-5: +14 blocks (B22-B35). Execution: ORCHESTRATED-AUTO (one fresh sub-agent per iteration; driver gatekeeps via §11 self-reports).
 - **Open gaps — requires-execution**: 0
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2

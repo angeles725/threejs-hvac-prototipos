@@ -7,7 +7,7 @@ HVAC equipment prototype corpus in this directory (25 standalone HTML files: 7 r
 context7 MCP (`/mrdoob/three.js`), WebSearch/WebFetch over threejs.org + official wiki,
 fetch-doc.sh for preservation. Block style and markers: see `research-sdd/METHODOLOGY.md`.
 
-This index guides through the **27 blocks** of this research. Each block is an independent
+This index guides through the **28 blocks** of this research. Each block is an independent
 `.md`, linked to the rest with `[Block K]`. The auto-generated flat catalog lives in
 [CATALOG.md](CATALOG.md) (regenerate with `python3 tools/gen-catalog.py`).
 
@@ -25,7 +25,7 @@ This index guides through the **27 blocks** of this research. Each block is an i
 | 1 | Corpus baseline & library fundamentals | 1 | active | How the prototypes use three.js today |
 | 2 | Voxel stage (instancing, isometric look) | 2, 7 | active | The voxel-art first-pass techniques |
 | 3 | Realistic stage (PBR, IBL, shadows, color) | 3-6, 8-9 | active | The realistic second-pass techniques |
-| 4 | Cross-cutting (perf, migration, upgrade paths) | 10-11, 13, 22-25 | active | Versioning, performance, postprocessing, PBR value references, product lighting, cheap visual wins, asset optimization pipeline |
+| 4 | Cross-cutting (perf, migration, upgrade paths) | 10-11, 13, 22-25, 28 | active | Versioning, performance, postprocessing, PBR value references, product lighting, cheap visual wins, asset optimization pipeline, Blender round-trip |
 | 5 | Synthesis: team workflow | 12 | done | Voxel-first → realistic-second pipeline doc (B12 + WORKFLOW.md) |
 | 6 | Dynamic phase & performance budgets (run 4) | 26-27 | active | Live-measured baseline (draws/triangles) + device-class budget tables derived from it |
 
@@ -76,6 +76,7 @@ This index guides through the **27 blocks** of this research. Each block is an i
 | 23 | Product-lighting design + RectAreaLight | [block23](threejs-block23.md) | key/fill/rim theory + fill ratios, why reflective metal wants large soft sources, RectAreaLight constructor/init/limitations (no shadows, PBR-only), RectAreaLightHelper, house-rig-to-theory mapping, HVAC studio recipe table |
 | 24 | Cheap visual wins catalog | [block24](threejs-block24.md) | MeshMatcapMaterial (no-lights fake studio finish), baked aoMap/lightMap (uv2 contract), ShadowMaterial + official blurred-depth contact-shadow technique, vertex colors via setColorAt, gradient/env backgrounds + backgroundBlurriness, FXAA/SMAA/SSAA cost ladder, ranked cost→beauty tables (voxel + realistic) |
 | 25 | Asset optimization pipeline: glTF-Transform + gltfpack | [block25](threejs-block25.md) | glTF-Transform CLI `optimize` + à-la-carte commands (draco/meshopt/etc1s/uastc/resize/dedup/prune/weld/simplify), JS API, MIT license, gltfpack meshopt-first single binary, runtime pairing to [Block 19] loader legs (r111+/r122+ floors), recipes for web-viewer/marketing/MapLibre .glb profiles, local capability check (both CLIs confirmed runnable) |
+| 28 | Blender ↔ three.js round-trip for organic/baked HVAC parts | [block28](threejs-block28.md) | official glTF 2.0 add-on export contract (+Y up, Apply Modifiers, Draco, GPU-instancing), Principled BSDF → glTF PBR channel mapping (base color/metallic-roughness packing/baked-AO node group/normal/emissive), Cycles bake workflow (AO/Normal bake types, Selected-to-Active, Margin) as the authoring answer to [Block 24]'s uv2 requirement, round-trip recipe (procedural → export → Blender touch-ups/bake → optimize → load), when to author from Blender vs procedural code |
 
 ### Layer 5 — Synthesis
 
@@ -116,7 +117,7 @@ This index guides through the **27 blocks** of this research. Each block is an i
 - [x] G25 — gltf-transform optimization pipeline → [Block 25]
 - [x] G26 — DYNAMIC baseline → [Block 26]
 - [x] G27 — Performance budgets per device class → [Block 27]
-- [ ] (medium, run 4) G28 — Blender round-trip
+- [x] G28 — Blender round-trip (medium, run 4) → [Block 28]
 - [ ] (run 5, queued) G29 — HVAC equipment visualization domain
 - [ ] (run 5, queued) G30 — Dashboards & telemetry
 - [ ] (run 5, queued) G31 — Terrain/relief
@@ -135,4 +136,4 @@ This index guides through the **27 blocks** of this research. Each block is an i
 
 ## Estimated coverage
 
-27/32 — RUNS 4-5 open (design craft + optimization, then HVAC domain). Auto mode, cap B22-B35.
+28/32 — RUN 4 complete (design craft + optimization, G22-G28 all covered). RUN 5 open (HVAC domain, G29-G32). Auto mode, cap B22-B35.
