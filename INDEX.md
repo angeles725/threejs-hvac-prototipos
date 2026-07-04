@@ -63,6 +63,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | 10 | Migration and versioning | [block10](threejs-block10.md) | migration ledger r147-r163, r148 examples/js removal, r161 UMD removal (r160 = last UMD release), legacy upgrade recipe, CDN strategies |
 | 11 | Performance: budgets, levers, and BatchedMesh | [block11](threejs-block11.md) | perf inventory, draw-call levers, shadow baking backport, BatchedMesh r160-proven + API + per-palette batching (closes G15) |
 | 13 | Rendering methods | [block13](threejs-block13.md) | rAF vs setAnimationLoop vs on-demand rendering, render targets, WebGPURenderer + TSL track, setNodesHandler migration bridge |
+| 14 | Case studies I: eight standalone demos | [block14](threejs-block14.md) | silhouette-POM/TSL, WebGPU path tracer, landscape generator, parametric creature configurator, GRAVEBOUND, WebGPU wave, borrow-list for HVAC |
 
 ### Layer 5 — Synthesis
 
@@ -91,7 +92,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [ ] (low) G13 — Asset pipeline beyond procedural (run 2)
 - [x] G16 — Rendering methods deep-dive → [Block 13]
 - [ ] (high) G17 — Optimization compendium (run 2)
-- [ ] (high) G18 — External case studies, 18 URLs (run 2, sweeps delegated)
+- [~] G18 — External case studies → part I [Block 14]; part II (dasprinzip) next
 - [ ] (medium) G19 — MapLibre GL JS interop (run 2, sweep delegated)
 - [x] G15 — BatchedMesh evaluation → closed by remittance, [Block 11] §11.3
 - [x] G14 — SYNTHESIS → [Block 12] + WORKFLOW.md

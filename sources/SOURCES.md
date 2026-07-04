@@ -41,3 +41,4 @@ possible preserved from, threejs.org (fetch-doc.sh → web-snapshots/).
 | web-snapshots/jeonghopark.de_collectivetrajectories_.md | web-snapshot | https://jeonghopark.de/collectivetrajectories/ | 2026-07-04T20:39:17Z | 01ba4719c80b6fe9… | |
 | web-snapshots/journey.prateekm.dev_.md | web-snapshot | https://journey.prateekm.dev/ | 2026-07-04T20:39:19Z | 0e5dce9e79a15946… | |
 | web-snapshots/su-z2.vercel.app_.md | web-snapshot | https://su-z2.vercel.app/ | 2026-07-04T20:39:21Z | b31b1c375f00e5cb… | |
+| web-snapshots/maplibre.org_maplibre-gl-js_docs_examples_add-a-3d-model-using-threejs_.md | web-snapshot | https://maplibre.org/maplibre-gl-js/docs/examples/add-a-3d-model-using-threejs/ | 2026-07-04T20:41:14Z | 42425a45ab15620e… | |

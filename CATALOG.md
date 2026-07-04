@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **13 blocks**
+Total: **14 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -19,3 +19,4 @@ Total: **13 blocks**
 | 11 | [threejs-block11.md](threejs-block11.md) | Performance: budgets, levers, and BatchedMesh |
 | 12 | [threejs-block12.md](threejs-block12.md) | SYNTHESIS: the voxel-first → realistic-second workflow |
 | 13 | [threejs-block13.md](threejs-block13.md) | Rendering methods: loop styles, on-demand rendering, render targets, WebGPU/TSL |
+| 14 | [threejs-block14.md](threejs-block14.md) | Case studies I: eight standalone Three.js demos in the wild |
