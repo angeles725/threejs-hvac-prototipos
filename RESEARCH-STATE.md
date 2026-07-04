@@ -96,7 +96,7 @@
 
 ## Pre-flight source existence (BOOTSTRAP e2)
 
-- Local prototypes: 8 realistic HTML at root + 15 voxel HTML in `voxel/` — confirmed present (ls 2026-07-04). `[CERT]`
+- Local prototypes: **25 HTML — 7 realistic at root + 18 voxel in `voxel/`** (recount 2026-07-04, §14 correction of the bootstrap's 8+15 miscount). `[CERT]`
 - context7 `/mrdoob/three.js` — resolved 2026-07-04, 21,432 snippets, High reputation. `[CERT-web]`
 - threejs.org docs/manual + migration guide (GitHub wiki) — web access permitted by user this run.
 - All 14 gaps have confirmed reachable sources → investigable.

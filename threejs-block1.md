@@ -21,10 +21,16 @@
 
 23 standalone HTML prototypes of HVAC equipment, in two families (ls 2026-07-04):
 
+> **Corrected in B24's audit (2026-07-04, §14)**: the true count is **25 files — 7 realistic +
+> 18 voxel** (recount verified by the driver: `ls *.html | grep -v Zone` = 7;
+> `ls voxel/*.html | grep -v Zone` = 18). The original 8+15=23 was a bootstrap miscount. The
+> family split, pairing evidence, and every per-file citation in this block remain valid;
+> only the totals change. Blocks that echo "23 files" inherit this correction.
+
 | Family | Location | Count | Examples |
 |---|---|---|---|
-| Realistic | repo root | 8 | `trane-rtu-realistic-v10.html`, `chiller-aircooled-realistic (7).html`, `carcamo-agua-3d (1).html`, `cuarto-3d.html` |
-| Voxel | `voxel/` | 15 | `voxel/liebert-split-voxel.html`, `voxel/trane-rtu-voxel__6_ (3).html`, `voxel/cooling-tower-voxel (1).html` |
+| Realistic | repo root | ~~8~~ **7** (corrected) | `trane-rtu-realistic-v10.html`, `chiller-aircooled-realistic (7).html`, `carcamo-agua-3d (1).html`, `cuarto-3d.html` |
+| Voxel | `voxel/` | ~~15~~ **18** (corrected) | `voxel/liebert-split-voxel.html`, `voxel/trane-rtu-voxel__6_ (3).html`, `voxel/cooling-tower-voxel (1).html` |
 
 Several equipment types exist in BOTH families (trane-rtu, liebert-split, split-system,
 chiller-aircooled, cuarto-frio) — e.g. `trane-rtu-realistic-v10.html` vs

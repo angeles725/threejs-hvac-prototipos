@@ -2,7 +2,7 @@
 
 **Updated**: 2026-07-04
 **Analyzed system**: Three.js JavaScript 3D library (r160 primary, r128 legacy) as used by the
-HVAC equipment prototype corpus in this directory (8 realistic + 15 voxel standalone HTML files).
+HVAC equipment prototype corpus in this directory (25 standalone HTML files: 7 realistic + 18 voxel — corrected per B24/§14; earlier blocks citing 23 inherit the correction).
 **Method**: Empirical READ-ONLY research (Research-SDD). Tools: direct reading of prototypes,
 context7 MCP (`/mrdoob/three.js`), WebSearch/WebFetch over threejs.org + official wiki,
 fetch-doc.sh for preservation. Block style and markers: see `research-sdd/METHODOLOGY.md`.
