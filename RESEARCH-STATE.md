@@ -11,8 +11,8 @@
 ## Coverage
 
 - **Covered blocks**: 21 (B1-B21)
-- **Coverage metric**: 21 / 21 closed
-- **RUN 3 STOPPED 2026-07-04: read-only-investigable = 0 (genuine exhaustion).**
+- **Coverage metric**: 21 / 32 closed (runs 4-5 opened 11 new gaps)
+- **RUN 4 (REOPEN §8, 2026-07-04, AUTO/orchestrated)**: 3D-design craft + optimization (G22-G28). **RUN 5 queued**: HVAC-domain design (G29-G32). User authorized auto-chaining incl. emergent gaps. Hard-stops: failed self-report, cap, exhaustion, destructive step.
 - **RUN 3 (REOPEN §8, 2026-07-04)**: user supplied a 3rd batch — 11 showcase URLs + 6 forum threads (discourse/reddit) for problems & solutions. Runs 1-2 history preserved above.
 - **Last iteration**: 2026-07-04 — **RUN 2 (REOPEN, §8)**: user expanded scope — rendering deep-dive, optimization methods, external case studies (20 URLs), MapLibre. G11/G13 back in scope.
 
@@ -35,6 +35,17 @@
 | low | G13 — Asset pipeline beyond procedural: GLTF import/export, DCC handoff | context7 + web | **covered → [Block 19]** |
 | high | G20 — Case studies III: 11 showcase URLs (NEW, run 3) | web sweep (preserved) | **covered → [Block 21]** (3 honest negatives + 1 slug-reuse flag included) |
 | high | G21 — Forum intelligence: discourse.threejs.org + 6 threads (mobile perf, GPU text, underwater, volumetric WebGPU, texture painter, Houdini VAT) — problems & solutions (NEW, run 3) | web sweep (preserved) | **covered → [Block 20]** |
+| high | G22 — Physically plausible PBR value references: measured albedo/metalness/roughness charts for real materials (galvanized, copper, insulation, painted steel) (run 4) | context7 + web (official charts) | pending |
+| high | G23 — Product-lighting design: 3-point/studio theory for industrial product shots + RectAreaLight (softbox) contract & caveats (run 4) | context7 + web | pending |
+| high | G24 — Cheap visual wins catalog: matcap materials, baked AO, blob/contact shadows, vertex colors, gradient backgrounds, AA tradeoffs (run 4) | context7 | pending |
+| high | G25 — Asset optimization pipeline: gltf-transform / gltfpack CLI (Draco+meshopt+KTX2+dedup), install & recipes (run 4) | web + tool docs | pending |
+| high | G26 — DYNAMIC PHASE (§12): live profiling of representative prototypes via chrome-devtools MCP — FPS, draw-call counts (GL-call hooks via initScript), performance traces; [CERT-hw] baseline (run 4) | local prototypes + browser MCP | pending |
+| high | G27 — Performance budgets per device class, derived from G26 measurements + web guidance (run 4) | G26 data + web | pending |
+| medium | G28 — Blender ↔ three.js round-trip: modeling/UV/baking → glTF export settings (run 4) | official Blender/three docs | pending |
+| high | G29 — HVAC/industrial equipment visualization domain: digital-twin viewer patterns, exploded views, status overlays (run 5) | web + case refs | queued (run 5) |
+| high | G30 — Dashboards: three.js + telemetry/data binding, HTML/CSS2D overlays, charts integration (run 5) | context7 + web | queued (run 5) |
+| medium | G31 — Terrain/relief: heightmap displacement, DEM data sources, MapLibre terrain tie-in (run 5) | context7 + web + B16 | queued (run 5) |
+| medium | G32 — Buildings/BIM: IFC pipeline (web-ifc), floor-plan-to-3D, building shells for site context (run 5) | web + tool docs | queued (run 5) |
 | high | G16 — Rendering methods deep-dive: render loop styles, on-demand rendering, render targets, WebGPURenderer/TSL status, alt renderers, path tracing (NEW, run 2) | context7 + web | **covered → [Block 13]** (path tracing deferred to G18 case block) |
 | high | G17 — Optimization compendium beyond B11: LOD, BVH, culling, KTX2, disposal/memory (NEW, run 2) | context7 + web | **covered → [Block 17]** |
 | high | G18 — External case studies: 18 showcase pages — techniques + applicability (NEW, run 2) | web sweeps (preserved) | **covered → [Block 14] + [Block 15]** |
@@ -74,7 +85,7 @@
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 0 — **RUN 3 STOP (primary criterion; cap slot B22 unused)**
+- **Open gaps — read-only investigable**: 11 (G22-G32). Budget cap runs 4-5: +14 blocks (B22-B35). Execution: ORCHESTRATED-AUTO (one fresh sub-agent per iteration; driver gatekeeps via §11 self-reports).
 - **Open gaps — requires-execution**: 0
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2

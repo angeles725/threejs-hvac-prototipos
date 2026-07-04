@@ -98,6 +98,17 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [x] G12 — Performance → [Block 11]
 - [x] G13 — Asset pipeline → [Block 19]
 - [x] G20 — Case studies III → [Block 21]
+- [ ] (high, run 4) G22 — PBR value references
+- [ ] (high, run 4) G23 — Product-lighting design + RectAreaLight
+- [ ] (high, run 4) G24 — Cheap visual wins (matcap, baked AO, blob shadows)
+- [ ] (high, run 4) G25 — gltf-transform optimization pipeline
+- [ ] (high, run 4) G26 — DYNAMIC: live profiling baseline (browser MCP)
+- [ ] (high, run 4) G27 — Performance budgets per device class
+- [ ] (medium, run 4) G28 — Blender round-trip
+- [ ] (run 5, queued) G29 — HVAC equipment visualization domain
+- [ ] (run 5, queued) G30 — Dashboards & telemetry
+- [ ] (run 5, queued) G31 — Terrain/relief
+- [ ] (run 5, queued) G32 — Buildings/BIM
 - [x] G21 — Forum intelligence → [Block 20]
 - [x] G16 — Rendering methods deep-dive → [Block 13]
 - [x] G17 — Optimization compendium → [Block 17]
@@ -112,4 +123,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-21/21 — ALL GAPS CLOSED across 3 runs. Corpus: 21 blocks + WORKFLOW.md + 40+ preserved sources.
+21/32 — RUNS 4-5 open (design craft + optimization, then HVAC domain). Auto mode, cap B22-B35.
