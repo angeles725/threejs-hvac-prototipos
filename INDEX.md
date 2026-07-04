@@ -7,7 +7,7 @@ HVAC equipment prototype corpus in this directory (25 standalone HTML files: 7 r
 context7 MCP (`/mrdoob/three.js`), WebSearch/WebFetch over threejs.org + official wiki,
 fetch-doc.sh for preservation. Block style and markers: see `research-sdd/METHODOLOGY.md`.
 
-This index guides through the **28 blocks** of this research. Each block is an independent
+This index guides through the **29 blocks** of this research. Each block is an independent
 `.md`, linked to the rest with `[Block K]`. The auto-generated flat catalog lives in
 [CATALOG.md](CATALOG.md) (regenerate with `python3 tools/gen-catalog.py`).
 
@@ -28,6 +28,7 @@ This index guides through the **28 blocks** of this research. Each block is an i
 | 4 | Cross-cutting (perf, migration, upgrade paths) | 10-11, 13, 22-25, 28 | active | Versioning, performance, postprocessing, PBR value references, product lighting, cheap visual wins, asset optimization pipeline, Blender round-trip |
 | 5 | Synthesis: team workflow | 12 | done | Voxel-first → realistic-second pipeline doc (B12 + WORKFLOW.md) |
 | 6 | Dynamic phase & performance budgets (run 4) | 26-27 | active | Live-measured baseline (draws/triangles) + device-class budget tables derived from it |
+| 7 | HVAC domain (run 5) | 29 | active | Digital-twin/equipment-viewer conventions applied to this corpus |
 
 ---
 
@@ -91,6 +92,12 @@ This index guides through the **28 blocks** of this research. Each block is an i
 | 26 | DYNAMIC PHASE: measured baseline of the prototypes | [block26](threejs-block26.md) | live Puppeteer/SwiftShader probes, draw-call/triangle counts per prototype, shadow-pass double-draw mechanism, environment caveats (software GPU → FPS excluded) |
 | 27 | Performance budgets per device class | [block27](threejs-block27.md) | frame-time math (16.6/8.3 ms), MDN/Unity/community draw-call guidance, adaptive-quality ladder (DPR/quality-toggle/shadow-size), device-class budget tables gap-checked against B26's measured numbers, real-hardware measurement protocol |
 
+### Layer 7 — HVAC domain (run 5)
+
+| # | Block | File | Key topics |
+|---|--------|---------|------------|
+| 29 | HVAC/industrial equipment visualization domain | [block29](threejs-block29.md) | exploded-view technique (forum consensus + CAD-viewer explosion-value convention), X-ray/ghost mode (depthWrite/renderOrder/fresnel), ISA-101 status-color convention (neutral-default, color-on-abnormal), Blender-empty hotspot pattern (CSS2DObject), Viewer3D vanilla-three.js warehouse-SCADA precedent (InstancedMesh pools + baked vertex colors + render-on-demand), ranked HVAC-viewer feature checklist |
+
 ---
 
 ## Pending (gap-backlog)
@@ -118,7 +125,7 @@ This index guides through the **28 blocks** of this research. Each block is an i
 - [x] G26 — DYNAMIC baseline → [Block 26]
 - [x] G27 — Performance budgets per device class → [Block 27]
 - [x] G28 — Blender round-trip (medium, run 4) → [Block 28]
-- [ ] (run 5, queued) G29 — HVAC equipment visualization domain
+- [x] G29 — HVAC equipment visualization domain → [Block 29]
 - [ ] (run 5, queued) G30 — Dashboards & telemetry
 - [ ] (run 5, queued) G31 — Terrain/relief
 - [ ] (run 5, queued) G32 — Buildings/BIM
@@ -136,4 +143,4 @@ This index guides through the **28 blocks** of this research. Each block is an i
 
 ## Estimated coverage
 
-28/32 — RUN 4 complete (design craft + optimization, G22-G28 all covered). RUN 5 open (HVAC domain, G29-G32). Auto mode, cap B22-B35.
+29/32 — RUN 4 complete (design craft + optimization, G22-G28 all covered). RUN 5 open, G29 covered (dashboards/terrain/BIM — G30-G32 — remain). Auto mode, cap B22-B35.

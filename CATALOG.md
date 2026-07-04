@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **28 blocks**
+Total: **29 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -34,3 +34,4 @@ Total: **28 blocks**
 | 26 | [threejs-block26.md](threejs-block26.md) | DYNAMIC PHASE: measured baseline of the prototypes (live browser probes) |
 | 27 | [threejs-block27.md](threejs-block27.md) | Performance budgets per device class |
 | 28 | [threejs-block28.md](threejs-block28.md) | Blender ↔ three.js round-trip for organic/baked HVAC parts |
+| 29 | [threejs-block29.md](threejs-block29.md) | HVAC/industrial equipment visualization domain (run 5 opener) |
