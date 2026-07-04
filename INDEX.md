@@ -24,7 +24,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 |---|---|---|---|---|
 | 1 | Corpus baseline & library fundamentals | 1 | active | How the prototypes use three.js today |
 | 2 | Voxel stage (instancing, isometric look) | 2 | active | The voxel-art first-pass techniques |
-| 3 | Realistic stage (PBR, IBL, shadows, color) | 3-5 | active | The realistic second-pass techniques |
+| 3 | Realistic stage (PBR, IBL, shadows, color) | 3-6 | active | The realistic second-pass techniques |
 | 4 | Cross-cutting (perf, migration, upgrade paths) | — | planned | Versioning, performance, postprocessing |
 | 5 | Synthesis: team workflow | — | planned | Voxel-first → realistic-second pipeline doc (G14, terminal) |
 
@@ -51,6 +51,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | 3 | The PBR material system | [block3](threejs-block3.md) | metallic-roughness workflow, MeshPhysicalMaterial extensions, house material palette, glass transmission-vs-opacity divergence, r163 envMapIntensity change |
 | 4 | Lighting and environment | [block4](threejs-block4.md) | RoomEnvironment+PMREM IBL pipeline, house 3-light rig, physically-correct lighting era (r147/r151/r155), candela/decay semantics |
 | 5 | Shadows | [block5](threejs-block5.md) | shadow map types, ortho frustum fitting, bias/normalBias, mapSize ladder, castShadow opt-outs, cuarto-3d baked-shadows evolution |
+| 6 | Color management and tone mapping | [block6](threejs-block6.md) | r152 color management, working space, rename map, tone-mapping menu (AgX in r160), ACESFilmic exposure calibration, legacy color hole |
 
 ---
 
@@ -63,7 +64,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [x] G3 — PBR material system → [Block 3]
 - [x] G4 — Lighting & environment (IBL) → [Block 4]
 - [x] G5 — Shadows → [Block 5]
-- [ ] (medium) G6 — Color management & tone mapping
+- [x] G6 — Color management & tone mapping → [Block 6]
 - [ ] (medium) G7 — Cameras & controls
 - [ ] (medium) G8 — Geometry toolkit for realistic modeling
 - [ ] (medium) G9 — Procedural texturing
@@ -80,4 +81,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-5/15 gaps closed — all high-priority evidence gaps done (B1-B5); medium tier next (color mgmt).
+6/15 gaps closed — B1-B6; cameras/controls next.

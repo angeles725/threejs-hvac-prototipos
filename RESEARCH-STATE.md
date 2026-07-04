@@ -10,9 +10,9 @@
 
 ## Coverage
 
-- **Covered blocks**: 5 (B1-B5)
-- **Coverage metric**: 5 / 15 closed
-- **Last iteration**: 2026-07-04 — G5 shadows closed (B5)
+- **Covered blocks**: 6 (B1-B6)
+- **Coverage metric**: 6 / 15 closed
+- **Last iteration**: 2026-07-04 — G6 color management & tone mapping closed (B6)
 
 ## Gap-backlog (prioritized)
 
@@ -23,7 +23,7 @@
 | high | G3 — PBR material system: MeshStandardMaterial vs MeshPhysicalMaterial, param semantics | context7 + prototypes | **covered → [Block 3]** |
 | high | G4 — Lighting & environment: light types, IBL via PMREMGenerator+RoomEnvironment vs HDR files | context7 + prototypes | **covered → [Block 4]** |
 | high | G5 — Shadows: map types, shadow-camera tuning, cost model, artifacts (acne/bias) | context7 + prototypes | **covered → [Block 5]** |
-| medium | G6 — Color management & tone mapping: SRGBColorSpace, ACESFilmic, r152 migration | context7 + web | pending |
+| medium | G6 — Color management & tone mapping: SRGBColorSpace, ACESFilmic, r152 migration | context7 + web | **covered → [Block 6]** |
 | medium | G7 — Cameras & controls: fake-isometric low-FOV vs true OrthographicCamera; OrbitControls | context7 + prototypes | pending |
 | medium | G8 — Geometry toolkit for realistic modeling: Cylinder/Torus/Extrude/Lathe, BufferGeometry | context7 + prototypes | pending |
 | medium | G9 — Procedural texturing: CanvasTexture technique, texture settings, vs image textures | context7 + prototypes | pending |
@@ -43,6 +43,7 @@
 | 3 | 2026-07-04 | G3 PBR material system | B3 | no · inline (context7 queries) | 0 |
 | 4 | 2026-07-04 | G4 lighting & environment | B4 | no · inline (context7 queries) | 0 |
 | 5 | 2026-07-04 | G5 shadows | B5 | no · inline (context7 queries) | 0 |
+| 6 | 2026-07-04 | G6 color management & tone mapping | B6 | no · inline (context7 queries) | 0 |
 
 ## Blocked gaps (each tagged with what it needs)
 
@@ -50,7 +51,7 @@
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 10
+- **Open gaps — read-only investigable**: 9
 - **Open gaps — requires-execution**: 0
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2
