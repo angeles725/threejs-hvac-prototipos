@@ -1,4 +1,4 @@
-<!-- review-status: pending -->
+<!-- review-status: applied 2026-07-04 · kit f19a1c6 -->
 # Retro — three.js · voxel→realistic HVAC pipeline (RUN 3, §8 second reopen) · 2026-07-04 · Research-SDD self-retrospective
 
 > Run reviewed: RUN 3 only — reopen commit `98c9f2e` through STOP commit `9339e42` + `d233f2b`
