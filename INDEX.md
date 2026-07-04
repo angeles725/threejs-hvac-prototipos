@@ -64,6 +64,8 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | 11 | Performance: budgets, levers, and BatchedMesh | [block11](threejs-block11.md) | perf inventory, draw-call levers, shadow baking backport, BatchedMesh r160-proven + API + per-palette batching (closes G15) |
 | 13 | Rendering methods | [block13](threejs-block13.md) | rAF vs setAnimationLoop vs on-demand rendering, render targets, WebGPURenderer + TSL track, setNodesHandler migration bridge |
 | 14 | Case studies I: eight standalone demos | [block14](threejs-block14.md) | silhouette-POM/TSL, WebGPU path tracer, landscape generator, parametric creature configurator, GRAVEBOUND, WebGPU wave, borrow-list for HVAC |
+| 15 | Case studies II: dasprinzip tinker series | [block15](threejs-block15.md) | WebGL r169 vs TSL/WebGPU r171-185 split, data-driven instanced grids, GPU particle flow, texture-swap UI, Tweakpane, fullscreen-quad TSL shading |
+| 16 | MapLibre GL JS interop | [block16](threejs-block16.md) | BSD-3 map renderer, CustomLayerInterface onAdd/render, shared GL context + MercatorCoordinate, georeferenced equipment use cases |
 
 ### Layer 5 — Synthesis
 
@@ -92,8 +94,8 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [ ] (low) G13 — Asset pipeline beyond procedural (run 2)
 - [x] G16 — Rendering methods deep-dive → [Block 13]
 - [ ] (high) G17 — Optimization compendium (run 2)
-- [~] G18 — External case studies → part I [Block 14]; part II (dasprinzip) next
-- [ ] (medium) G19 — MapLibre GL JS interop (run 2, sweep delegated)
+- [x] G18 — External case studies → [Block 14] + [Block 15]
+- [x] G19 — MapLibre GL JS interop → [Block 16]
 - [x] G15 — BatchedMesh evaluation → closed by remittance, [Block 11] §11.3
 - [x] G14 — SYNTHESIS → [Block 12] + WORKFLOW.md
 
@@ -103,4 +105,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-14/19 — RUN 2 in progress: B13 done; optimization compendium next; G18/G19 sweeps in flight.
+16/19 — RUN 2: B13-B16 done. Remaining: G17 optimization, G11 post-processing, G13 assets — fit exactly in B17-B19.

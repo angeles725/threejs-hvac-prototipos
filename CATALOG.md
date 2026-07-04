@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **14 blocks**
+Total: **16 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -20,3 +20,5 @@ Total: **14 blocks**
 | 12 | [threejs-block12.md](threejs-block12.md) | SYNTHESIS: the voxel-first → realistic-second workflow |
 | 13 | [threejs-block13.md](threejs-block13.md) | Rendering methods: loop styles, on-demand rendering, render targets, WebGPU/TSL |
 | 14 | [threejs-block14.md](threejs-block14.md) | Case studies I: eight standalone Three.js demos in the wild |
+| 15 | [threejs-block15.md](threejs-block15.md) | Case studies II: the dasprinzip "tinker" series (10 daily experiments) |
+| 16 | [threejs-block16.md](threejs-block16.md) | MapLibre GL JS and the three.js custom-layer interop |
