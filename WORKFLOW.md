@@ -93,6 +93,26 @@ Platform decisions (deliberate, not drop-in): WebGPU/TSL pass (field-confirmed w
 demos + half the dasprinzip series), MapLibre site maps (leaves the self-contained-HTML
 constraint), path tracing. [B13 §13.4, B14 §14.2, B16]
 
+## Run 3 additions — forum gotchas and batch-III techniques
+
+Mobile correctness (act on these BEFORE any iOS demo):
+- [ ] DataTextures needing linear filtering on iOS: use `HalfFloatType`, never `FloatType`
+      (or drop to `NearestFilter`) — field-verified failure + fix. [B20 §20.1]
+- [ ] Profile per-frame work against 120 Hz (ProMotion), not 60 Hz. [B20 §20.1]
+
+New techniques (constructor-level evidence):
+- [ ] `MeshSurfaceSampler` + `InstancedMesh` scattering — rivets/bolts/vents over a base mesh
+      (replaces hand-written positional loops). [B21 §21.1 Sacred Pearl]
+- [ ] Fat lines (`LineSegments2`/`LineMaterial`) for crisp duct/pipe outlines. [B21 §21.1]
+- [ ] VAT (baked per-instance animation textures) + InstancedMesh for animated fans/vibration
+      at scale — see `manthrax/three-vat`. [B20 §20.2]
+- [ ] Product reference: atlas3d.space — AI-labeled exploded/X-ray GLB inspection is the
+      closest analog to a "realistic-mode equipment UI". [B21 §21.1]
+
+Ongoing source: discourse.threejs.org (Questions = gotchas with maintainer replies; Resources =
+battle-tested techniques). Search: `site:discourse.threejs.org <topic>` or `/tag/<name>`.
+Fetch note: discourse serves crawler HTML directly; reddit needs old.reddit.com. [B20 §20.3]
+
 ## Corpus map
 
 `INDEX.md` → 19 blocks (`threejs-block*.md`) + `CATALOG.md` + `RESEARCH-STATE.md` +
