@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **22 blocks**
+Total: **23 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -28,3 +28,4 @@ Total: **22 blocks**
 | 20 | [threejs-block20.md](threejs-block20.md) | Forum intelligence: problems, solutions, and techniques from the community |
 | 21 | [threejs-block21.md](threejs-block21.md) | Case studies III: eleven more sites, with honest negatives |
 | 22 | [threejs-block22.md](threejs-block22.md) | Physically plausible PBR value references |
+| 23 | [threejs-block23.md](threejs-block23.md) | Product-lighting design for industrial equipment shots + RectAreaLight |
