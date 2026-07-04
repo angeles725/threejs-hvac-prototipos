@@ -24,7 +24,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 |---|---|---|---|---|
 | 1 | Corpus baseline & library fundamentals | 1 | active | How the prototypes use three.js today |
 | 2 | Voxel stage (instancing, isometric look) | 2 | active | The voxel-art first-pass techniques |
-| 3 | Realistic stage (PBR, IBL, shadows, color) | 3 | active | The realistic second-pass techniques |
+| 3 | Realistic stage (PBR, IBL, shadows, color) | 3-4 | active | The realistic second-pass techniques |
 | 4 | Cross-cutting (perf, migration, upgrade paths) | — | planned | Versioning, performance, postprocessing |
 | 5 | Synthesis: team workflow | — | planned | Voxel-first → realistic-second pipeline doc (G14, terminal) |
 
@@ -49,6 +49,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | # | Block | File | Key topics |
 |---|--------|---------|------------|
 | 3 | The PBR material system | [block3](threejs-block3.md) | metallic-roughness workflow, MeshPhysicalMaterial extensions, house material palette, glass transmission-vs-opacity divergence, r163 envMapIntensity change |
+| 4 | Lighting and environment | [block4](threejs-block4.md) | RoomEnvironment+PMREM IBL pipeline, house 3-light rig, physically-correct lighting era (r147/r151/r155), candela/decay semantics |
 
 ---
 
@@ -59,7 +60,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [x] G1 — Baseline: how the prototype corpus uses three.js → [Block 1]
 - [x] G2 — InstancedMesh & voxel-scale rendering → [Block 2]
 - [x] G3 — PBR material system → [Block 3]
-- [ ] (high) G4 — Lighting & environment (IBL)
+- [x] G4 — Lighting & environment (IBL) → [Block 4]
 - [ ] (high) G5 — Shadows
 - [ ] (medium) G6 — Color management & tone mapping
 - [ ] (medium) G7 — Cameras & controls
@@ -78,4 +79,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-3/15 gaps closed — baseline, voxel instancing, PBR materials; lighting/IBL next.
+4/15 gaps closed — baseline, voxel instancing, PBR materials, lighting/IBL; shadows next.
