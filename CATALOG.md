@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **20 blocks**
+Total: **21 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -26,3 +26,4 @@ Total: **20 blocks**
 | 18 | [threejs-block18.md](threejs-block18.md) | Post-processing: the EffectComposer chain (bloom, outline, AO) |
 | 19 | [threejs-block19.md](threejs-block19.md) | The asset pipeline: glTF in, glTF out |
 | 20 | [threejs-block20.md](threejs-block20.md) | Forum intelligence: problems, solutions, and techniques from the community |
+| 21 | [threejs-block21.md](threejs-block21.md) | Case studies III: eleven more sites, with honest negatives |
