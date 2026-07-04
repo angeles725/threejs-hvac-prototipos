@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **21 blocks**
+Total: **22 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -27,3 +27,4 @@ Total: **21 blocks**
 | 19 | [threejs-block19.md](threejs-block19.md) | The asset pipeline: glTF in, glTF out |
 | 20 | [threejs-block20.md](threejs-block20.md) | Forum intelligence: problems, solutions, and techniques from the community |
 | 21 | [threejs-block21.md](threejs-block21.md) | Case studies III: eleven more sites, with honest negatives |
+| 22 | [threejs-block22.md](threejs-block22.md) | Physically plausible PBR value references |

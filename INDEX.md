@@ -25,7 +25,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | 1 | Corpus baseline & library fundamentals | 1 | active | How the prototypes use three.js today |
 | 2 | Voxel stage (instancing, isometric look) | 2, 7 | active | The voxel-art first-pass techniques |
 | 3 | Realistic stage (PBR, IBL, shadows, color) | 3-6, 8-9 | active | The realistic second-pass techniques |
-| 4 | Cross-cutting (perf, migration, upgrade paths) | 10-11, 13 | active | Versioning, performance, postprocessing |
+| 4 | Cross-cutting (perf, migration, upgrade paths) | 10-11, 13, 22 | active | Versioning, performance, postprocessing, PBR value references |
 | 5 | Synthesis: team workflow | 12 | done | Voxel-first → realistic-second pipeline doc (B12 + WORKFLOW.md) |
 
 ---
@@ -71,6 +71,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | 19 | The asset pipeline: glTF in, glTF out | [block19](threejs-block19.md) | GLTFLoader + Draco/KTX2 legs, auto-framing viewer recipe, GLTFExporter (.glb) as the bridge to map/viewer/DCC, onlyVisible LOD gotcha |
 | 20 | Forum intelligence | [block20](threejs-block20.md) | iOS FloatType+LinearFilter gotcha (HalfFloatType fix), 120Hz ProMotion budgets, VAT+instancing, SlugText GPU labels, volumetric 3D-LUT lesson, discourse as ongoing source |
 | 21 | Case studies III | [block21](threejs-block21.md) | 7 three.js sites (r128-r185), MeshSurfaceSampler scattering + fat lines (full-source evidence), atlas3d AI-labeled exploded views, 3 honest negatives, cross-batch corroboration |
+| 22 | Physically plausible PBR value references | [block22](threejs-block22.md) | Filament metal F0 table + dielectric reflectance table, glTF metallic-binary rule corroboration, corpus palette audit (13/24 entries mid-metalness anti-pattern), corrected palette proposal |
 
 ### Layer 5 — Synthesis
 
@@ -98,7 +99,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [x] G12 — Performance → [Block 11]
 - [x] G13 — Asset pipeline → [Block 19]
 - [x] G20 — Case studies III → [Block 21]
-- [ ] (high, run 4) G22 — PBR value references
+- [x] G22 — PBR value references → [Block 22]
 - [ ] (high, run 4) G23 — Product-lighting design + RectAreaLight
 - [ ] (high, run 4) G24 — Cheap visual wins (matcap, baked AO, blob shadows)
 - [ ] (high, run 4) G25 — gltf-transform optimization pipeline
@@ -123,4 +124,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-21/32 — RUNS 4-5 open (design craft + optimization, then HVAC domain). Auto mode, cap B22-B35.
+22/32 — RUNS 4-5 open (design craft + optimization, then HVAC domain). Auto mode, cap B22-B35.
