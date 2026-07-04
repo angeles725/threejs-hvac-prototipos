@@ -25,7 +25,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | 1 | Corpus baseline & library fundamentals | 1 | active | How the prototypes use three.js today |
 | 2 | Voxel stage (instancing, isometric look) | 2, 7 | active | The voxel-art first-pass techniques |
 | 3 | Realistic stage (PBR, IBL, shadows, color) | 3-6, 8-9 | active | The realistic second-pass techniques |
-| 4 | Cross-cutting (perf, migration, upgrade paths) | 10-11 | active | Versioning, performance, postprocessing |
+| 4 | Cross-cutting (perf, migration, upgrade paths) | 10-11, 13 | active | Versioning, performance, postprocessing |
 | 5 | Synthesis: team workflow | 12 | done | Voxel-first → realistic-second pipeline doc (B12 + WORKFLOW.md) |
 
 ---
@@ -62,6 +62,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 |---|--------|---------|------------|
 | 10 | Migration and versioning | [block10](threejs-block10.md) | migration ledger r147-r163, r148 examples/js removal, r161 UMD removal (r160 = last UMD release), legacy upgrade recipe, CDN strategies |
 | 11 | Performance: budgets, levers, and BatchedMesh | [block11](threejs-block11.md) | perf inventory, draw-call levers, shadow baking backport, BatchedMesh r160-proven + API + per-palette batching (closes G15) |
+| 13 | Rendering methods | [block13](threejs-block13.md) | rAF vs setAnimationLoop vs on-demand rendering, render targets, WebGPURenderer + TSL track, setNodesHandler migration bridge |
 
 ### Layer 5 — Synthesis
 
@@ -88,7 +89,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [ ] (low) G11 — Post-processing upgrade path
 - [x] G12 — Performance → [Block 11]
 - [ ] (low) G13 — Asset pipeline beyond procedural (run 2)
-- [ ] (high) G16 — Rendering methods deep-dive (run 2)
+- [x] G16 — Rendering methods deep-dive → [Block 13]
 - [ ] (high) G17 — Optimization compendium (run 2)
 - [ ] (high) G18 — External case studies, 18 URLs (run 2, sweeps delegated)
 - [ ] (medium) G19 — MapLibre GL JS interop (run 2, sweep delegated)
@@ -101,4 +102,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-13/19 — RUN 2 (reopen 2026-07-04): rendering, optimization, case studies, MapLibre. Cap +7 blocks (B13-B19).
+14/19 — RUN 2 in progress: B13 done; optimization compendium next; G18/G19 sweeps in flight.
