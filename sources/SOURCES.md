@@ -69,3 +69,5 @@ possible preserved from, threejs.org (fetch-doc.sh → web-snapshots/).
 | web-snapshots/github.com_KhronosGroup_glTF_blob_main_specification_2.0_Specification.adoc.md | web-snapshot | https://github.com/KhronosGroup/glTF/blob/main/specification/2.0/Specification.adoc | 2026-07-04T23:06:13Z | 8101e4fea1861dcf… | |
 | web-snapshots/theslantedlens.com_lighting-techniques-for-product-photography-with-shiny-metal_.md | web-snapshot | https://theslantedlens.com/lighting-techniques-for-product-photography-with-shiny-metal/ | 2026-07-04T23:12:11Z | ec55842f84e4daa0… | |
 | web-snapshots/wolfcrow.com_what-is-three-point-lighting-and-why-do-we-use-it_.md | web-snapshot | https://wolfcrow.com/what-is-three-point-lighting-and-why-do-we-use-it/ | 2026-07-04T23:12:14Z | a0c32ab05d5052a6… | |
+| web-snapshots/gltf-transform.dev_cli.html.md | web-snapshot | https://gltf-transform.dev/cli.html | 2026-07-04T23:24:21Z | e6639ffd015f0a2c… | |
+| web-snapshots/raw.githubusercontent.com_zeux_meshoptimizer_master_gltf_README.md.md | web-snapshot | https://raw.githubusercontent.com/zeux/meshoptimizer/master/gltf/README.md | 2026-07-04T23:24:30Z | b93bd29b2adffd8e… | |

@@ -7,7 +7,7 @@ HVAC equipment prototype corpus in this directory (25 standalone HTML files: 7 r
 context7 MCP (`/mrdoob/three.js`), WebSearch/WebFetch over threejs.org + official wiki,
 fetch-doc.sh for preservation. Block style and markers: see `research-sdd/METHODOLOGY.md`.
 
-This index guides through the **24 blocks** of this research. Each block is an independent
+This index guides through the **25 blocks** of this research. Each block is an independent
 `.md`, linked to the rest with `[Block K]`. The auto-generated flat catalog lives in
 [CATALOG.md](CATALOG.md) (regenerate with `python3 tools/gen-catalog.py`).
 
@@ -25,7 +25,7 @@ This index guides through the **24 blocks** of this research. Each block is an i
 | 1 | Corpus baseline & library fundamentals | 1 | active | How the prototypes use three.js today |
 | 2 | Voxel stage (instancing, isometric look) | 2, 7 | active | The voxel-art first-pass techniques |
 | 3 | Realistic stage (PBR, IBL, shadows, color) | 3-6, 8-9 | active | The realistic second-pass techniques |
-| 4 | Cross-cutting (perf, migration, upgrade paths) | 10-11, 13, 22-24 | active | Versioning, performance, postprocessing, PBR value references, product lighting, cheap visual wins |
+| 4 | Cross-cutting (perf, migration, upgrade paths) | 10-11, 13, 22-25 | active | Versioning, performance, postprocessing, PBR value references, product lighting, cheap visual wins, asset optimization pipeline |
 | 5 | Synthesis: team workflow | 12 | done | Voxel-first → realistic-second pipeline doc (B12 + WORKFLOW.md) |
 
 ---
@@ -74,6 +74,7 @@ This index guides through the **24 blocks** of this research. Each block is an i
 | 22 | Physically plausible PBR value references | [block22](threejs-block22.md) | Filament metal F0 table + dielectric reflectance table, glTF metallic-binary rule corroboration, corpus palette audit (13/24 entries mid-metalness anti-pattern), corrected palette proposal |
 | 23 | Product-lighting design + RectAreaLight | [block23](threejs-block23.md) | key/fill/rim theory + fill ratios, why reflective metal wants large soft sources, RectAreaLight constructor/init/limitations (no shadows, PBR-only), RectAreaLightHelper, house-rig-to-theory mapping, HVAC studio recipe table |
 | 24 | Cheap visual wins catalog | [block24](threejs-block24.md) | MeshMatcapMaterial (no-lights fake studio finish), baked aoMap/lightMap (uv2 contract), ShadowMaterial + official blurred-depth contact-shadow technique, vertex colors via setColorAt, gradient/env backgrounds + backgroundBlurriness, FXAA/SMAA/SSAA cost ladder, ranked cost→beauty tables (voxel + realistic) |
+| 25 | Asset optimization pipeline: glTF-Transform + gltfpack | [block25](threejs-block25.md) | glTF-Transform CLI `optimize` + à-la-carte commands (draco/meshopt/etc1s/uastc/resize/dedup/prune/weld/simplify), JS API, MIT license, gltfpack meshopt-first single binary, runtime pairing to [Block 19] loader legs (r111+/r122+ floors), recipes for web-viewer/marketing/MapLibre .glb profiles, local capability check (both CLIs confirmed runnable) |
 
 ### Layer 5 — Synthesis
 
@@ -104,7 +105,7 @@ This index guides through the **24 blocks** of this research. Each block is an i
 - [x] G22 — PBR value references → [Block 22]
 - [x] G23 — Product-lighting design + RectAreaLight → [Block 23]
 - [x] G24 — Cheap visual wins (matcap, baked AO, blob shadows) → [Block 24]
-- [ ] (high, run 4) G25 — gltf-transform optimization pipeline
+- [x] G25 — gltf-transform optimization pipeline → [Block 25]
 - [ ] (high, run 4) G26 — DYNAMIC: live profiling baseline (browser MCP)
 - [ ] (high, run 4) G27 — Performance budgets per device class
 - [ ] (medium, run 4) G28 — Blender round-trip
@@ -126,4 +127,4 @@ This index guides through the **24 blocks** of this research. Each block is an i
 
 ## Estimated coverage
 
-24/32 — RUNS 4-5 open (design craft + optimization, then HVAC domain). Auto mode, cap B22-B35.
+25/32 — RUNS 4-5 open (design craft + optimization, then HVAC domain). Auto mode, cap B22-B35.

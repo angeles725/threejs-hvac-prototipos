@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **24 blocks**
+Total: **25 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -30,3 +30,4 @@ Total: **24 blocks**
 | 22 | [threejs-block22.md](threejs-block22.md) | Physically plausible PBR value references |
 | 23 | [threejs-block23.md](threejs-block23.md) | Product-lighting design for industrial equipment shots + RectAreaLight |
 | 24 | [threejs-block24.md](threejs-block24.md) | Cheap visual wins: the maximum-visual-return-per-cost catalog |
+| 25 | [threejs-block25.md](threejs-block25.md) | The optimization pipeline: glTF-Transform and gltfpack between export and consumption |
