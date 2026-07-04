@@ -68,6 +68,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | 16 | MapLibre GL JS interop | [block16](threejs-block16.md) | BSD-3 map renderer, CustomLayerInterface onAdd/render, shared GL context + MercatorCoordinate, georeferenced equipment use cases |
 | 17 | Optimization compendium II | [block17](threejs-block17.md) | LOD + hysteresis (voxel-as-far-LOD idea), frustumCulled semantics, KTX2/Basis compressed textures, disposal contract + ResourceTracker |
 | 18 | Post-processing | [block18](threejs-block18.md) | EffectComposer chain + OutputPass, selective bloom (real glow for HMI/LEDs), OutlinePass component highlighting, SSAO/GTAO toggle, AA caveats, on-demand compatible |
+| 19 | The asset pipeline: glTF in, glTF out | [block19](threejs-block19.md) | GLTFLoader + Draco/KTX2 legs, auto-framing viewer recipe, GLTFExporter (.glb) as the bridge to map/viewer/DCC, onlyVisible LOD gotcha |
 
 ### Layer 5 — Synthesis
 
@@ -93,7 +94,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [x] G10 — Migration & versioning → [Block 10]
 - [x] G11 — Post-processing upgrade path → [Block 18]
 - [x] G12 — Performance → [Block 11]
-- [ ] (low) G13 — Asset pipeline beyond procedural (run 2)
+- [x] G13 — Asset pipeline → [Block 19]
 - [x] G16 — Rendering methods deep-dive → [Block 13]
 - [x] G17 — Optimization compendium → [Block 17]
 - [x] G18 — External case studies → [Block 14] + [Block 15]
@@ -107,4 +108,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-18/19 — RUN 2: B13-B18 done. Remaining: G13 assets (B19, final).
+19/19 — ALL GAPS CLOSED. Run 2 stopped at investigable=0 (2026-07-04). Corpus: 19 blocks + WORKFLOW.md.
