@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **7 blocks**
+Total: **8 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -13,3 +13,4 @@ Total: **7 blocks**
 | 5 | [threejs-block5.md](threejs-block5.md) | Shadows: algorithms, shadow-camera tuning, and the corpus's perf evolution |
 | 6 | [threejs-block6.md](threejs-block6.md) | Color management and tone mapping |
 | 7 | [threejs-block7.md](threejs-block7.md) | Cameras and controls: the fake-isometric look and OrbitControls |
+| 8 | [threejs-block8.md](threejs-block8.md) | The geometry toolkit of the realistic stage |
