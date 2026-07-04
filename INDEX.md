@@ -95,6 +95,8 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [x] G11 — Post-processing upgrade path → [Block 18]
 - [x] G12 — Performance → [Block 11]
 - [x] G13 — Asset pipeline → [Block 19]
+- [ ] (high) G20 — Case studies III, 11 showcase URLs (run 3, sweep delegated)
+- [ ] (high) G21 — Forum intelligence, discourse+reddit threads (run 3, sweep delegated)
 - [x] G16 — Rendering methods deep-dive → [Block 13]
 - [x] G17 — Optimization compendium → [Block 17]
 - [x] G18 — External case studies → [Block 14] + [Block 15]
@@ -108,4 +110,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-19/19 — ALL GAPS CLOSED. Run 2 stopped at investigable=0 (2026-07-04). Corpus: 19 blocks + WORKFLOW.md.
+19/21 — RUN 3 reopen (2026-07-04): case studies III + forum intelligence. Cap +3 (B20-B22).

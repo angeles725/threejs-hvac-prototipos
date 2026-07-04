@@ -11,8 +11,8 @@
 ## Coverage
 
 - **Covered blocks**: 19 (B1-B19)
-- **Coverage metric**: 19 / 19 closed
-- **RUN 2 STOPPED 2026-07-04: read-only-investigable = 0 (genuine exhaustion — primary criterion, not cap).**
+- **Coverage metric**: 19 / 21 closed (run 3 opened 2 new gaps)
+- **RUN 3 (REOPEN §8, 2026-07-04)**: user supplied a 3rd batch — 11 showcase URLs + 6 forum threads (discourse/reddit) for problems & solutions. Runs 1-2 history preserved above.
 - **Last iteration**: 2026-07-04 — **RUN 2 (REOPEN, §8)**: user expanded scope — rendering deep-dive, optimization methods, external case studies (20 URLs), MapLibre. G11/G13 back in scope.
 
 ## Gap-backlog (prioritized)
@@ -32,6 +32,8 @@
 | low | G11 — Post-processing upgrade path: EffectComposer, bloom, SSAO (absent today) | context7 | **covered → [Block 18]** |
 | low | G12 — Performance: draw calls, renderer.info, instancing benchmarks, pixel-ratio caps | context7 + web | **covered → [Block 11]** |
 | low | G13 — Asset pipeline beyond procedural: GLTF import/export, DCC handoff | context7 + web | **covered → [Block 19]** |
+| high | G20 — Case studies III: 11 showcase URLs (knowtheuniverse, feed-panda, webgl-water/Splash, heartbeat, atlas3d ×2, shader-studio, mesh-test, fractalworlds, ex-nihilo, prisoner849 pen) (NEW, run 3) | web sweep (preserved) | pending — sweep delegated |
+| high | G21 — Forum intelligence: discourse.threejs.org + 6 threads (mobile perf, GPU text, underwater, volumetric WebGPU, texture painter, Houdini VAT) — problems & solutions (NEW, run 3) | web sweep (preserved) | pending — sweep delegated |
 | high | G16 — Rendering methods deep-dive: render loop styles, on-demand rendering, render targets, WebGPURenderer/TSL status, alt renderers, path tracing (NEW, run 2) | context7 + web | **covered → [Block 13]** (path tracing deferred to G18 case block) |
 | high | G17 — Optimization compendium beyond B11: LOD, BVH, culling, KTX2, disposal/memory (NEW, run 2) | context7 + web | **covered → [Block 17]** |
 | high | G18 — External case studies: 18 showcase pages — techniques + applicability (NEW, run 2) | web sweeps (preserved) | **covered → [Block 14] + [Block 15]** |
@@ -69,7 +71,7 @@
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 0 — **STOP (primary criterion fired)**
+- **Open gaps — read-only investigable**: 2 — G20, G21 (run 3). Budget cap run 3: +3 blocks (B20-B22).
 - **Open gaps — requires-execution**: 0
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2
