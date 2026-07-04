@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **23 blocks**
+Total: **24 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -29,3 +29,4 @@ Total: **23 blocks**
 | 21 | [threejs-block21.md](threejs-block21.md) | Case studies III: eleven more sites, with honest negatives |
 | 22 | [threejs-block22.md](threejs-block22.md) | Physically plausible PBR value references |
 | 23 | [threejs-block23.md](threejs-block23.md) | Product-lighting design for industrial equipment shots + RectAreaLight |
+| 24 | [threejs-block24.md](threejs-block24.md) | Cheap visual wins: the maximum-visual-return-per-cost catalog |
