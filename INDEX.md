@@ -7,7 +7,7 @@ HVAC equipment prototype corpus in this directory (25 standalone HTML files: 7 r
 context7 MCP (`/mrdoob/three.js`), WebSearch/WebFetch over threejs.org + official wiki,
 fetch-doc.sh for preservation. Block style and markers: see `research-sdd/METHODOLOGY.md`.
 
-This index guides through the **25 blocks** of this research. Each block is an independent
+This index guides through the **27 blocks** of this research. Each block is an independent
 `.md`, linked to the rest with `[Block K]`. The auto-generated flat catalog lives in
 [CATALOG.md](CATALOG.md) (regenerate with `python3 tools/gen-catalog.py`).
 
@@ -27,6 +27,7 @@ This index guides through the **25 blocks** of this research. Each block is an i
 | 3 | Realistic stage (PBR, IBL, shadows, color) | 3-6, 8-9 | active | The realistic second-pass techniques |
 | 4 | Cross-cutting (perf, migration, upgrade paths) | 10-11, 13, 22-25 | active | Versioning, performance, postprocessing, PBR value references, product lighting, cheap visual wins, asset optimization pipeline |
 | 5 | Synthesis: team workflow | 12 | done | Voxel-first → realistic-second pipeline doc (B12 + WORKFLOW.md) |
+| 6 | Dynamic phase & performance budgets (run 4) | 26-27 | active | Live-measured baseline (draws/triangles) + device-class budget tables derived from it |
 
 ---
 
@@ -82,6 +83,13 @@ This index guides through the **25 blocks** of this research. Each block is an i
 |---|--------|---------|------------|
 | 12 | SYNTHESIS: voxel-first → realistic-second workflow | [block12](threejs-block12.md) | two-pass pipeline evidence, stage roles, shared template economics, punch list; companion WORKFLOW.md |
 
+### Layer 6 — Dynamic phase & performance budgets (run 4)
+
+| # | Block | File | Key topics |
+|---|--------|---------|------------|
+| 26 | DYNAMIC PHASE: measured baseline of the prototypes | [block26](threejs-block26.md) | live Puppeteer/SwiftShader probes, draw-call/triangle counts per prototype, shadow-pass double-draw mechanism, environment caveats (software GPU → FPS excluded) |
+| 27 | Performance budgets per device class | [block27](threejs-block27.md) | frame-time math (16.6/8.3 ms), MDN/Unity/community draw-call guidance, adaptive-quality ladder (DPR/quality-toggle/shadow-size), device-class budget tables gap-checked against B26's measured numbers, real-hardware measurement protocol |
+
 ---
 
 ## Pending (gap-backlog)
@@ -107,7 +115,7 @@ This index guides through the **25 blocks** of this research. Each block is an i
 - [x] G24 — Cheap visual wins (matcap, baked AO, blob shadows) → [Block 24]
 - [x] G25 — gltf-transform optimization pipeline → [Block 25]
 - [x] G26 — DYNAMIC baseline → [Block 26]
-- [ ] (high, run 4) G27 — Performance budgets per device class
+- [x] G27 — Performance budgets per device class → [Block 27]
 - [ ] (medium, run 4) G28 — Blender round-trip
 - [ ] (run 5, queued) G29 — HVAC equipment visualization domain
 - [ ] (run 5, queued) G30 — Dashboards & telemetry
@@ -127,4 +135,4 @@ This index guides through the **25 blocks** of this research. Each block is an i
 
 ## Estimated coverage
 
-25/32 — RUNS 4-5 open (design craft + optimization, then HVAC domain). Auto mode, cap B22-B35.
+27/32 — RUNS 4-5 open (design craft + optimization, then HVAC domain). Auto mode, cap B22-B35.

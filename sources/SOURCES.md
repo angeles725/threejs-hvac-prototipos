@@ -71,3 +71,6 @@ possible preserved from, threejs.org (fetch-doc.sh → web-snapshots/).
 | web-snapshots/wolfcrow.com_what-is-three-point-lighting-and-why-do-we-use-it_.md | web-snapshot | https://wolfcrow.com/what-is-three-point-lighting-and-why-do-we-use-it/ | 2026-07-04T23:12:14Z | a0c32ab05d5052a6… | |
 | web-snapshots/gltf-transform.dev_cli.html.md | web-snapshot | https://gltf-transform.dev/cli.html | 2026-07-04T23:24:21Z | e6639ffd015f0a2c… | |
 | web-snapshots/raw.githubusercontent.com_zeux_meshoptimizer_master_gltf_README.md.md | web-snapshot | https://raw.githubusercontent.com/zeux/meshoptimizer/master/gltf/README.md | 2026-07-04T23:24:30Z | b93bd29b2adffd8e… | |
+| web-snapshots/developer.mozilla.org_en-US_docs_Web_API_WebGL_API_WebGL_best_practices.md | web-snapshot | https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices | 2026-07-04T23:34:59Z | 23d38584ef1d3e1d… | |
+| web-snapshots/docs.unity3d.com_Manual_webgl-performance.html.md | web-snapshot | https://docs.unity3d.com/Manual/webgl-performance.html | 2026-07-04T23:35:00Z | c967ab354e8e0e72… | |
+| web-snapshots/threejsroadmap.com_blog_draw-calls-the-silent-killer.md | web-snapshot | https://threejsroadmap.com/blog/draw-calls-the-silent-killer | 2026-07-04T23:35:17Z | 35e3b2cf3337b80d… | |
