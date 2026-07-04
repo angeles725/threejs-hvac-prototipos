@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **11 blocks**
+Total: **12 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -17,3 +17,4 @@ Total: **11 blocks**
 | 9 | [threejs-block9.md](threejs-block9.md) | Procedural texturing with CanvasTexture |
 | 10 | [threejs-block10.md](threejs-block10.md) | Migration and versioning: r128 → r160 → current |
 | 11 | [threejs-block11.md](threejs-block11.md) | Performance: budgets, levers, and BatchedMesh |
+| 12 | [threejs-block12.md](threejs-block12.md) | SYNTHESIS: the voxel-first → realistic-second workflow |

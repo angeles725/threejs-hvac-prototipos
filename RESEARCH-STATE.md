@@ -10,9 +10,9 @@
 
 ## Coverage
 
-- **Covered blocks**: 11 (B1-B11)
-- **Coverage metric**: 12 / 15 closed
-- **Last iteration**: 2026-07-04 — G12 performance closed (B11); G15 closed by remittance to B11 §11.3
+- **Covered blocks**: 12 (B1-B12)
+- **Coverage metric**: 13 / 15 closed
+- **Last iteration**: 2026-07-04 — G14 SYNTHESIS closed (B12 + WORKFLOW.md). **RUN STOPPED: 12-block budget cap reached.**
 
 ## Gap-backlog (prioritized)
 
@@ -32,7 +32,7 @@
 | low | G12 — Performance: draw calls, renderer.info, instancing benchmarks, pixel-ratio caps | context7 + web | **covered → [Block 11]** |
 | low | G13 — Asset pipeline beyond procedural: GLTF import/export, DCC handoff | context7 + web | pending |
 | low | G15 — BatchedMesh: availability in r160, API, fit for multi-geometry realistic scenes (NEW, from B2) | context7 + web | **closed by remittance → [Block 11] §11.3** (availability r160 proven at cuarto-3d.html:103, API + fit covered; no new substance) |
-| high (terminal) | G14 — SYNTHESIS: team workflow doc — voxel-first → realistic-second pipeline | corpus blocks + prototypes | pending (write LAST, after research) |
+| high (terminal) | G14 — SYNTHESIS: team workflow doc — voxel-first → realistic-second pipeline | corpus blocks + prototypes | **covered → [Block 12] + WORKFLOW.md** |
 
 ## Iteration history
 
@@ -49,6 +49,7 @@
 | 9 | 2026-07-04 | G9 procedural texturing | B9 | no · inline (context7 queries) | 0 |
 | 10 | 2026-07-04 | G10 migration & versioning | B10 | no · inline (context7 queries) | 0 |
 | 11 | 2026-07-04 | G12 performance (+G15 by remittance) | B11 | no · inline (context7 queries) | 0 |
+| 12 | 2026-07-04 | G14 SYNTHESIS (terminal) | B12 + WORKFLOW.md | no · inline (cross-block consolidation) | 0 |
 
 ## Blocked gaps (each tagged with what it needs)
 
@@ -56,11 +57,11 @@
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 3 (G11, G13, G14-terminal)
+- **Open gaps — read-only investigable**: 2 — G11 (post-processing upgrade path), G13 (GLTF/DCC asset pipeline). Both remain investigable (context7/web reachable); the run stopped on the BUDGET CAP, not on exhaustion. A future bounded reopen (METHODOLOGY §8) can close them.
 - **Open gaps — requires-execution**: 0
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2
-- Budget cap (safety net): max-blocks 12 this run (G14 synthesis included)
+- Budget cap (safety net): max-blocks 12 this run (G14 synthesis included) — **FIRED 2026-07-04 after B12**
 
 ## Pre-flight source existence (BOOTSTRAP e2)
 

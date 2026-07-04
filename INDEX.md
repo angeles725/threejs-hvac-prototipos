@@ -26,7 +26,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | 2 | Voxel stage (instancing, isometric look) | 2, 7 | active | The voxel-art first-pass techniques |
 | 3 | Realistic stage (PBR, IBL, shadows, color) | 3-6, 8-9 | active | The realistic second-pass techniques |
 | 4 | Cross-cutting (perf, migration, upgrade paths) | 10-11 | active | Versioning, performance, postprocessing |
-| 5 | Synthesis: team workflow | — | planned | Voxel-first → realistic-second pipeline doc (G14, terminal) |
+| 5 | Synthesis: team workflow | 12 | done | Voxel-first → realistic-second pipeline doc (B12 + WORKFLOW.md) |
 
 ---
 
@@ -63,6 +63,12 @@ This index guides through the **0 blocks** of this research. Each block is an in
 | 10 | Migration and versioning | [block10](threejs-block10.md) | migration ledger r147-r163, r148 examples/js removal, r161 UMD removal (r160 = last UMD release), legacy upgrade recipe, CDN strategies |
 | 11 | Performance: budgets, levers, and BatchedMesh | [block11](threejs-block11.md) | perf inventory, draw-call levers, shadow baking backport, BatchedMesh r160-proven + API + per-palette batching (closes G15) |
 
+### Layer 5 — Synthesis
+
+| # | Block | File | Key topics |
+|---|--------|---------|------------|
+| 12 | SYNTHESIS: voxel-first → realistic-second workflow | [block12](threejs-block12.md) | two-pass pipeline evidence, stage roles, shared template economics, punch list; companion WORKFLOW.md |
+
 ---
 
 ## Pending (gap-backlog)
@@ -83,7 +89,7 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [x] G12 — Performance → [Block 11]
 - [ ] (low) G13 — Asset pipeline beyond procedural
 - [x] G15 — BatchedMesh evaluation → closed by remittance, [Block 11] §11.3
-- [ ] (high, TERMINAL) G14 — SYNTHESIS: team workflow doc (voxel → realistic)
+- [x] G14 — SYNTHESIS → [Block 12] + WORKFLOW.md
 
 ## Non-investigable gaps (without lab / hardware / NDA)
 
@@ -91,4 +97,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-12/15 gaps closed — B1-B11; G14 workflow synthesis next (final block of the 12-block cap; G11/G13 remain open).
+13/15 gaps closed — RUN STOPPED at the 12-block budget cap (2026-07-04). Open: G11 (post-processing), G13 (GLTF/DCC) — investigable, awaiting a future reopen.
