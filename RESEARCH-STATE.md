@@ -11,8 +11,8 @@
 ## Coverage
 
 - **Covered blocks**: 12 (B1-B12)
-- **Coverage metric**: 13 / 15 closed
-- **Last iteration**: 2026-07-04 — G14 SYNTHESIS closed (B12 + WORKFLOW.md). **RUN STOPPED: 12-block budget cap reached.**
+- **Coverage metric**: 13 / 19 closed (run 2 opened 4 new gaps)
+- **Last iteration**: 2026-07-04 — **RUN 2 (REOPEN, §8)**: user expanded scope — rendering deep-dive, optimization methods, external case studies (20 URLs), MapLibre. G11/G13 back in scope.
 
 ## Gap-backlog (prioritized)
 
@@ -30,7 +30,11 @@
 | medium | G10 — Migration & versioning: r128→r160 breaking changes, CDN strategies, legacy upgrade path | web (migration guide) + prototypes | **covered → [Block 10]** |
 | low | G11 — Post-processing upgrade path: EffectComposer, bloom, SSAO (absent today) | context7 | pending |
 | low | G12 — Performance: draw calls, renderer.info, instancing benchmarks, pixel-ratio caps | context7 + web | **covered → [Block 11]** |
-| low | G13 — Asset pipeline beyond procedural: GLTF import/export, DCC handoff | context7 + web | pending |
+| low | G13 — Asset pipeline beyond procedural: GLTF import/export, DCC handoff | context7 + web | pending (run 2) |
+| high | G16 — Rendering methods deep-dive: render loop styles, on-demand rendering, render targets, WebGPURenderer/TSL status, alt renderers, path tracing (NEW, run 2) | context7 + web | pending |
+| high | G17 — Optimization compendium beyond B11: LOD, BVH, culling, KTX2, disposal/memory (NEW, run 2) | context7 + web | pending |
+| high | G18 — External case studies: 18 showcase pages (silhouette-POM, path tracer, landscapes, dasprinzip series, etc.) — techniques + applicability (NEW, run 2) | web sweeps (preserved) | pending — sweeps delegated |
+| medium | G19 — MapLibre GL JS: what it is, three.js custom-layer interop, site-map use cases (NEW, run 2) | web (official docs/repo) | pending — sweep delegated |
 | low | G15 — BatchedMesh: availability in r160, API, fit for multi-geometry realistic scenes (NEW, from B2) | context7 + web | **closed by remittance → [Block 11] §11.3** (availability r160 proven at cuarto-3d.html:103, API + fit covered; no new substance) |
 | high (terminal) | G14 — SYNTHESIS: team workflow doc — voxel-first → realistic-second pipeline | corpus blocks + prototypes | **covered → [Block 12] + WORKFLOW.md** |
 
@@ -57,11 +61,11 @@
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 2 — G11 (post-processing upgrade path), G13 (GLTF/DCC asset pipeline). Both remain investigable (context7/web reachable); the run stopped on the BUDGET CAP, not on exhaustion. A future bounded reopen (METHODOLOGY §8) can close them.
+- **Open gaps — read-only investigable**: 6 — G11, G13, G16, G17, G18, G19 (run 2 reopen).
 - **Open gaps — requires-execution**: 0
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2
-- Budget cap (safety net): max-blocks 12 this run (G14 synthesis included) — **FIRED 2026-07-04 after B12**
+- Budget cap (safety net): run 1 = 12 blocks (fired). **Run 2 (reopen): +7 blocks (B13-B19).**
 
 ## Pre-flight source existence (BOOTSTRAP e2)
 

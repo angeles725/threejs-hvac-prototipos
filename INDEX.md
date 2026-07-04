@@ -87,7 +87,11 @@ This index guides through the **0 blocks** of this research. Each block is an in
 - [x] G10 — Migration & versioning → [Block 10]
 - [ ] (low) G11 — Post-processing upgrade path
 - [x] G12 — Performance → [Block 11]
-- [ ] (low) G13 — Asset pipeline beyond procedural
+- [ ] (low) G13 — Asset pipeline beyond procedural (run 2)
+- [ ] (high) G16 — Rendering methods deep-dive (run 2)
+- [ ] (high) G17 — Optimization compendium (run 2)
+- [ ] (high) G18 — External case studies, 18 URLs (run 2, sweeps delegated)
+- [ ] (medium) G19 — MapLibre GL JS interop (run 2, sweep delegated)
 - [x] G15 — BatchedMesh evaluation → closed by remittance, [Block 11] §11.3
 - [x] G14 — SYNTHESIS → [Block 12] + WORKFLOW.md
 
@@ -97,4 +101,4 @@ This index guides through the **0 blocks** of this research. Each block is an in
 
 ## Estimated coverage
 
-13/15 gaps closed — RUN STOPPED at the 12-block budget cap (2026-07-04). Open: G11 (post-processing), G13 (GLTF/DCC) — investigable, awaiting a future reopen.
+13/19 — RUN 2 (reopen 2026-07-04): rendering, optimization, case studies, MapLibre. Cap +7 blocks (B13-B19).
