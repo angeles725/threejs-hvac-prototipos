@@ -35,13 +35,20 @@
   references (screen-space fluid rendering, raymarched shadows) that would need reimplementation
   on `WebGPURenderer`/TSL `[INFER]`.
 - **fractalworlds.io**: no three.js evidence in any statically-reachable chunk (no REVISION, no
-  WebGLRenderer, no three.module) — **inconclusive-but-leaning-not-three.js**; the renderer may
-  live in a dynamically-imported chunk a no-JS crawl can't reach. Honest verdict, not a proven
-  negative (the browser MCP can settle it in a future session).
-- **lazykitty.itch.io/ex-nihilo**: the URL serves a DIFFERENT game ("Might is Right", turn-based
-  tactics) — likely slug reuse. Its bundle does embed a genuine pre-r125-era three.js (verbatim
-  deprecation-warning strings; exact version unrecoverable). Low relevance; flagged as a
-  target-list data-quality finding.
+  WebGLRenderer, no three.module) — initially **inconclusive-but-leaning-not-three.js**.
+  **Corrected to CONFIRMED NEGATIVE (same day, live browser-MCP runtime probe)** `[CERT-hw]`
+  (empirical check against the live site): the main canvas holds a **raw WebGPU context**,
+  `window.THREE` is undefined, and the runtime loads exactly the three statically-seen chunks
+  (index / lil-gui / mobileFirstPerson) plus analytics — no dynamic three.js chunk exists.
+  It is a hand-rolled WebGPU raymarcher; `lil-gui` is a standalone GUI lib. Evidence:
+  `sources/web-snapshots/fractalworlds.io_runtime_screenshot.png` + probe output (2026-07-04).
+- **lazykitty.itch.io/ex-nihilo**: the URL serves a game titled "Might is Right" (turn-based
+  tactics). Initially read as slug reuse / wrong content. **Corrected (live browser-MCP probe of
+  the author's profile)** `[CERT-hw]`: LazyKitty publishes only two games ("Lonely",
+  "Might is Right"), and "Might is Right" LIVES at the `/ex-nihilo` slug — the project was
+  RENAMED, not swapped; the URL was correct all along. The bundle finding stands: it embeds a
+  genuine pre-r125-era three.js (verbatim deprecation-warning strings). Scope-clarification per
+  METHODOLOGY §14, not a refute of the sweep's content analysis.
 
 ## 21.3 — Cross-batch corroboration (batches I-III) `[CERT-a]` / `[INFER]`
 

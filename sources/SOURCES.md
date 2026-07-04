@@ -64,3 +64,4 @@ possible preserved from, threejs.org (fetch-doc.sh → web-snapshots/).
 | web-snapshots/discourse.threejs.org_.md | web-snapshot | https://discourse.threejs.org/ | 2026-07-04T21:34:43Z | cf463118f76885ba… | |
 | old.reddit.com_r_threejs_comments_1ujp6bb_threejs_animation_laggy_on_iphone_17_p.md | web-snapshot | https://old.reddit.com/r/threejs/comments/1ujp6bb/threejs_animation_laggy_on_iphone_17_pro_and/ | 2026-07-04T21:35:19Z | 9592426d5207cf00… | (fallback: www.reddit.com blocked by bot-protection, got only SVG shell; old.reddit.com succeeded) |
 | web-snapshots/codepen.io_prisoner849_pen_qEqOoPB.md | web-snapshot | https://codepen.io/prisoner849/pen/qEqOoPB | 2026-07-04T21:41:46Z | a28c3b9af49270fc… | |
+| web-snapshots/fractalworlds.io_runtime_screenshot.png | runtime-screenshot | https://fractalworlds.io/?formula=Straebathan | 2026-07-04T21:55:31Z | e2b055acfdcebabb… | [Block 21] §21.2 (browser-MCP probe: raw WebGPU, no three.js) |
