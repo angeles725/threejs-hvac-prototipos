@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CHILLER DE TORNILLO · CONDENSADO POR AGUA · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter:blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; color:#cfe0da; }
+  #legend i { width:12px; height:10px; display:inline-block; border-radius:2px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter:blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:64px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel button.mid { color:#06080d; border-color:#00d4aa; background:#00d4aa; box-shadow:0 0 12px #00d4aa55; }
+</style>
+<script>
+// Inyeccion dinamica de importmap: String.fromCharCode(64) evita el mangling de '@' (package@version) por Cloudflare.
+(function(){
+  var AT = String.fromCharCode(64);
+  var tag = document.createElement('script');
+  tag.type = 'importmap';
+  tag.textContent = JSON.stringify({ imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }});
+  document.head.appendChild(tag);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>CHILLER DE TORNILLO · CONDENSADO POR AGUA</b><br>
+  <span>≈380 TR · 4.5 × 1.8 × 2.2 m · 1 voxel = 0.1 m · <span id="vcount">—</span> voxeles</span>
+</div>
+<div id="legend">
+  <div><i style="background:#1f6dff"></i> Agua helada (salida/retorno)</div>
+  <div><i style="background:#d93b34"></i> Agua condensados (a torres)</div>
+  <div><i style="background:#c07a3c"></i> Refrigerante</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>COMPRESOR</label><button id="bComp" class="off">APAGADO</button></div>
+  <div class="row"><label>% CARGA</label><button id="bLoad" class="mid">50%</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 voxel = 0.1 m  ->  unidad = 45 x 18 x 22 voxeles = 4.5 m (largo) x 1.8 m (ancho) x 2.2 m (alto)
+// (las bocas de agua bridadas sobresalen ligeramente del envolvente, como las conexiones de campo reales)
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 160, 420);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 900);
+camera.position.set(48, 34, 46);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.7;
+controls.minDistance = 18;
+controls.maxDistance = 180;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(0, 10, 0);
+
+// ====== RIG DE LUCES ======
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(60, 90, 35);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -50; sun.shadow.camera.right = 50;
+sun.shadow.camera.top = 50; sun.shadow.camera.bottom = -50;
+sun.shadow.camera.near = 10; sun.shadow.camera.far = 250;
+sun.shadow.bias = -0.0004;
+scene.add(sun);
+
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-50, 40, -30);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rim.position.set(-30, 25, 55);
+scene.add(rim);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+// ====== PISO ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(320, 320),
+  new THREE.MeshStandardMaterial({ color:0x0a0d12, roughness:0.95, metalness:0.05 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(260, 65, 0x123f35, 0x0c1d1a);
+grid.position.y = 0.02;
+grid.material.transparent = true;
+grid.material.opacity = 0.35;
+scene.add(grid);
+
+// ====== PALETA / MATERIALES ======
+const MATS = {
+  GREEN:   { c:0x2e6b52, r:0.55, m:0.25 },  // barriles verde industrial (Trane/York)
+  GREEN_D: { c:0x224e3c, r:0.60, m:0.25 },
+  STEEL:   { c:0x9aa8b0, r:0.35, m:0.85 },  // compresor gris metalico
+  STEEL_D: { c:0x6b747e, r:0.40, m:0.80 },
+  FLANGE:  { c:0x8a949c, r:0.38, m:0.85 },
+  DARK:    { c:0x2b3036, r:0.70, m:0.40 },
+  BLACK:   { c:0x15181c, r:0.90, m:0.20 },
+  BLUE:    { c:0x1f6dff, r:0.45, m:0.30 },  // agua helada
+  RED:     { c:0xd93b34, r:0.45, m:0.30 },  // agua de condensados
+  COPPER:  { c:0xc07a3c, r:0.32, m:0.90 },  // refrigerante
+  YELLOW:  { c:0xffc22e, r:0.50, m:0.30 },
+  PANEL:   { c:0x3a4149, r:0.50, m:0.50 },
+  PANEL_D: { c:0x262c33, r:0.55, m:0.50 },
+  WHITE:   { c:0xe9eae4, r:0.40, m:0.10 }
+};
+
+// ====== SISTEMA DE VOXELES ======
+// Dos mapas: estatico (mundo) y compresor (ensamble vibrante). Map cell->color = 0 duplicados por construccion.
+const voxStatic = new Map();
+const voxComp   = new Map();
+const put = (m, x, y, z, c) => m.set(x + ',' + y + ',' + z, c);
+
+function box(m, x0, x1, y0, y1, z0, z1, c){
+  for (let x = x0; x <= x1; x++)
+    for (let y = y0; y <= y1; y++)
+      for (let z = z0; z <= z1; z++) put(m, x, y, z, c);
+}
+function discX(m, x, cy, cz, r, c, rin = 0){          // disco perpendicular al eje X
+  for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++)
+    for (let z = Math.floor(cz - r); z <= Math.ceil(cz + r); z++){
+      const dy = y + 0.5 - cy, dz = z + 0.5 - cz, d2 = dy*dy + dz*dz;
+      if (d2 <= r*r && d2 >= rin*rin) put(m, x, y, z, c);
+    }
+}
+function cylX(m, x0, x1, cy, cz, r, c){ for (let x = x0; x <= x1; x++) discX(m, x, cy, cz, r, c); }
+function discZ(m, z, cx, cy, r, c, rin = 0){          // disco perpendicular al eje Z
+  for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++)
+    for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++){
+      const dx = x + 0.5 - cx, dy = y + 0.5 - cy, d2 = dx*dx + dy*dy;
+      if (d2 <= r*r && d2 >= rin*rin) put(m, x, y, z, c);
+    }
+}
+function cylZ(m, z0, z1, cx, cy, r, c){ for (let z = z0; z <= z1; z++) discZ(m, z, cx, cy, r, c); }
+function discY(m, y, cx, cz, r, c, rin = 0){          // disco perpendicular al eje Y
+  for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++)
+    for (let z = Math.floor(cz - r); z <= Math.ceil(cz + r); z++){
+      const dx = x + 0.5 - cx, dz = z + 0.5 - cz, d2 = dx*dx + dz*dz;
+      if (d2 <= r*r && d2 >= rin*rin) put(m, x, y, z, c);
+    }
+}
+function cylY(m, y0, y1, cx, cz, r, c){ for (let y = y0; y <= y1; y++) discY(m, y, cx, cz, r, c); }
+function boltRingX(m, x, cy, cz, r, c, n){
+  for (let i = 0; i < n; i++){ const a = i / n * Math.PI * 2;
+    put(m, x, Math.floor(cy + Math.sin(a) * r), Math.floor(cz + Math.cos(a) * r), c); }
+}
+function boltRingZ(m, z, cx, cy, r, c, n){
+  for (let i = 0; i < n; i++){ const a = i / n * Math.PI * 2;
+    put(m, Math.floor(cx + Math.cos(a) * r), Math.floor(cy + Math.sin(a) * r), z, c); }
+}
+function boltRingY(m, y, cx, cz, r, c, n){
+  for (let i = 0; i < n; i++){ const a = i / n * Math.PI * 2;
+    put(m, Math.floor(cx + Math.cos(a) * r), y, Math.floor(cz + Math.sin(a) * r), c); }
+}
+
+// ====== GEOMETRIA DEL EQUIPO ======
+const V = voxStatic, C = voxComp;
+const ZC = 9.0;                                   // eje longitudinal de barriles
+const EV = { x0:3, x1:41, cy:8.0,  r:4.5 };       // EVAPORADOR (abajo)
+const CO = { x0:5, x1:39, cy:16.0, r:4.0 };       // CONDENSADOR (arriba)
+const CP = { cy:19.5, cz:12.5 };                  // eje compresor/motor (longitudinal, sobre los barriles)
+
+// ---- Aisladores de neopreno (y=0)
+for (const X of [1, 21, 41]) for (const Z of [3, 14]) box(V, X, X+1, 0, 0, Z, Z+1, 'BLACK');
+
+// ---- Skid / base estructural
+box(V, 1, 43, 1, 2, 3, 4, 'DARK');
+box(V, 1, 43, 1, 2, 14, 15, 'DARK');
+for (const X of [1, 21, 41]) box(V, X, X+1, 1, 2, 5, 13, 'DARK');
+for (let x = 1; x <= 43; x++) put(V, x, 2, 15, (x % 4 < 2) ? 'YELLOW' : 'BLACK');  // franja de peligro
+
+// ---- Monturas del evaporador y abrazaderas entre barriles (los barriles sobreescriben)
+for (const X of [6, 35]){
+  box(V, X, X+2, 2, 3, 5, 12, 'DARK');
+  for (const Z of [5, 12]) box(V, X, X+2, 4, 4, Z, Z, 'DARK');
+}
+for (const X of [9, 33]) for (const Z of [6, 11]) box(V, X, X+1, 11, 12, Z, Z, 'DARK');
+
+// ---- EVAPORADOR (barril inferior)
+cylX(V, EV.x0, EV.x1, EV.cy, ZC, EV.r, 'GREEN');
+for (const wx of [10, 17, 24, 31, 38]) discX(V, wx, EV.cy, ZC, EV.r, 'GREEN_D', EV.r - 1.1);  // cordones de soldadura
+discX(V, 2,  EV.cy, ZC, 5.0, 'FLANGE');   // bridas de tapa
+discX(V, 42, EV.cy, ZC, 5.0, 'FLANGE');
+discX(V, 1,  EV.cy, ZC, 4.0, 'GREEN');    // cabezales / cajas de agua
+discX(V, 43, EV.cy, ZC, 4.0, 'GREEN');
+discX(V, 0,  EV.cy, ZC, 2.8, 'GREEN_D');
+discX(V, 44, EV.cy, ZC, 2.8, 'GREEN_D');
+boltRingX(V, 1,  EV.cy, ZC, 4.6, 'BLACK', 12);  // pernos de tapa
+boltRingX(V, 43, EV.cy, ZC, 4.6, 'BLACK', 12);
+put(V, 20, 3, 8, 'DARK'); put(V, 20, 3, 9, 'DARK');  // tapon de drenaje
+
+// ---- CONDENSADOR (barril superior)
+cylX(V, CO.x0, CO.x1, CO.cy, ZC, CO.r, 'GREEN');
+for (const wx of [12, 20, 28, 33]) discX(V, wx, CO.cy, ZC, CO.r, 'GREEN_D', CO.r - 1.1);
+discX(V, 5,  CO.cy, ZC, 4.5, 'FLANGE');
+discX(V, 39, CO.cy, ZC, 4.5, 'FLANGE');
+discX(V, 4,  CO.cy, ZC, 3.5, 'GREEN');
+discX(V, 40, CO.cy, ZC, 3.5, 'GREEN');
+discX(V, 3,  CO.cy, ZC, 2.4, 'GREEN_D');
+discX(V, 41, CO.cy, ZC, 2.4, 'GREEN_D');
+boltRingX(V, 4,  CO.cy, ZC, 4.1, 'BLACK', 10);
+boltRingX(V, 40, CO.cy, ZC, 4.1, 'BLACK', 10);
+for (const X of [8, 35]) box(V, X, X+1, 20, 21, 9, 9, 'DARK');   // orejas de izaje
+put(V, 24, 20, 9, 'STEEL'); put(V, 24, 21, 9, 'YELLOW');          // valvula de alivio
+
+// ---- BOCAS DE AGUA · EVAPORADOR (AZUL, hacia -Z, bajan al piso a tuberia de campo)
+for (const cx of [6, 13]){
+  cylZ(V, 2, 5, cx, EV.cy, 2.0, 'BLUE');            // spool horizontal
+  cylZ(V, 0, 1, cx, EV.cy, 2.0, 'BLUE');            // codo
+  cylY(V, 2, 6, cx, 1.0, 2.0, 'BLUE');              // bajada vertical
+  discY(V, 1, cx, 1.0, 2.9, 'FLANGE');              // brida a piso
+  boltRingY(V, 0, cx, 1.0, 2.5, 'BLACK', 8);
+  discZ(V, 2, cx, EV.cy, 2.9, 'FLANGE');            // brida principal
+  boltRingZ(V, 1, cx, EV.cy, 2.5, 'BLACK', 8);
+  box(V, cx, cx, 10, 11, 3, 3, 'DARK');             // valvula de servicio (bonete)
+  put(V, cx, 12, 3, 'YELLOW'); put(V, cx-1, 12, 3, 'YELLOW'); put(V, cx+1, 12, 3, 'YELLOW');
+  put(V, cx, 12, 2, 'YELLOW'); put(V, cx, 12, 4, 'YELLOW');   // volante
+}
+put(V, 13, 10, 4, 'STEEL'); put(V, 13, 11, 4, 'DARK');        // pozo de temperatura (retorno)
+
+// ---- BOCAS DE AGUA · CONDENSADOR (ROJO, hacia -Z, suben a torres)
+for (const cx of [32, 37]){
+  cylZ(V, 2, 5, cx, CO.cy, 2.0, 'RED');
+  cylZ(V, 0, 1, cx, CO.cy, 2.0, 'RED');             // codo
+  cylY(V, 17, 20, cx, 1.0, 2.0, 'RED');             // subida vertical (a torres)
+  discY(V, 21, cx, 1.0, 2.9, 'FLANGE');             // brida superior
+  boltRingY(V, 20, cx, 1.0, 2.5, 'BLACK', 8);
+  discZ(V, 2, cx, CO.cy, 2.9, 'FLANGE');
+  boltRingZ(V, 1, cx, CO.cy, 2.5, 'BLACK', 8);
+  box(V, cx, cx, 18, 19, 3, 3, 'DARK');             // valvula de servicio
+  put(V, cx, 20, 3, 'YELLOW'); put(V, cx-1, 20, 3, 'YELLOW'); put(V, cx+1, 20, 3, 'YELLOW');
+  put(V, cx, 20, 2, 'YELLOW'); put(V, cx, 20, 4, 'YELLOW');
+}
+
+// ---- LINEA DE LIQUIDO (condensador -> valvula -> evaporador), lado +Z
+box(V, 7, 8, 14, 15, 13, 14, 'COPPER');   // salida del condensador
+box(V, 7, 8, 5, 15, 14, 15, 'COPPER');    // bajada vertical
+box(V, 7, 8, 5, 6, 12, 15, 'COPPER');     // entrada al evaporador
+put(V, 7, 7, 15, 'WHITE'); put(V, 8, 7, 15, 'WHITE');   // visor de liquido
+box(V, 7, 8, 10, 11, 16, 16, 'YELLOW');   // volante de valvula de servicio
+
+// ---- LINEA DE SUCCION (evaporador -> compresor), extremo posterior
+box(V, 42, 43, 13, 19, 8, 9, 'COPPER');   // subida sobre el cabezal
+box(V, 42, 43, 18, 19, 10, 13, 'COPPER'); // jog hacia el eje del compresor
+box(V, 38, 43, 18, 19, 12, 13, 'COPPER'); // tramo horizontal a la succion
+put(V, 42, 16, 7, 'DARK');                // valvula de servicio en succion
+put(V, 42, 16, 6, 'YELLOW'); put(V, 42, 15, 6, 'YELLOW'); put(V, 42, 17, 6, 'YELLOW');
+put(V, 41, 16, 6, 'YELLOW'); put(V, 43, 16, 6, 'YELLOW');
+
+// ---- LINEA DE DESCARGA (compresor -> condensador), extremo frontal
+box(V, 18, 19, 14, 16, 13, 13, 'COPPER');
+box(V, 18, 19, 14, 16, 12, 12, 'COPPER'); // penetracion al condensador
+
+// ---- GABINETE ELECTRICO / PANEL DE CONTROL (montado al costado, cara frontal +Z)
+box(V, 20, 34, 2, 17, 13, 15, 'PANEL');
+box(V, 20, 34, 17, 17, 13, 15, 'PANEL_D');                       // tapa
+for (let y = 3; y <= 16; y++) put(V, 27, y, 15, 'PANEL_D');      // union de puertas
+for (let x = 21; x <= 33; x += 2){ put(V, x, 3, 15, 'PANEL_D'); put(V, x, 4, 15, 'PANEL_D'); }  // rejillas
+box(V, 25, 25, 8, 10, 16, 16, 'STEEL');                          // manija
+box(V, 22, 31, 10, 15, 15, 15, 'BLACK');                         // bisel de pantalla
+put(V, 21, 12, 15, 'YELLOW'); put(V, 21, 13, 15, 'YELLOW');      // etiqueta de riesgo electrico
+for (let x = 13; x <= 19; x++) put(V, x, 16, 13, 'DARK');        // conduit hacia el motor
+put(V, 12, 16, 13, 'DARK'); put(V, 12, 16, 14, 'DARK');
+
+// ---- PLACA DE DATOS (costado +Z del evaporador)
+box(V, 36, 40, 7, 9, 13, 13, 'DARK');
+box(V, 37, 39, 8, 8, 13, 13, 'WHITE');
+
+// ====== ENSAMBLE COMPRESOR DE TORNILLO + MOTOR (voxComp: grupo vibrante) ======
+// ---- Motor electrico acoplado
+cylX(C, 6, 17, CP.cy, CP.cz, 2.98, 'STEEL_D');
+for (const fx of [8, 10, 12, 14, 16]) discX(C, fx, CP.cy, CP.cz, 2.98, 'STEEL', 1.9);  // aletas de enfriamiento
+discX(C, 5, CP.cy, CP.cz, 2.4, 'STEEL_D');   // campana trasera
+discX(C, 4, CP.cy, CP.cz, 1.5, 'DARK');      // rejilla del ventilador
+box(C, 10, 12, 16, 17, 15, 16, 'DARK');      // caja de conexiones
+
+// ---- Guarda del acople (media cana inferior, abierta arriba para ver el acople girar)
+for (let x = 18; x <= 20; x++)
+  for (let y = 16; y <= 20; y++)
+    for (let z = 9; z <= 16; z++){
+      const dy = y + 0.5 - CP.cy, dz = z + 0.5 - CP.cz, d2 = dy*dy + dz*dz;
+      if (d2 <= 2.6*2.6 && d2 >= 1.9*1.9 && dy <= 0.3) put(C, x, y, z, 'STEEL');
+    }
+
+// ---- Cuerpo del compresor de tornillo
+cylX(C, 21, 36, CP.cy, CP.cz, 2.5, 'STEEL');
+discX(C, 21, CP.cy, CP.cz, 2.9, 'FLANGE');                                  // brida de acople
+for (const rx of [25, 29, 33]) discX(C, rx, CP.cy, CP.cz, 2.5, 'STEEL_D', 1.5);  // costillas
+discX(C, 37, CP.cy, CP.cz, 2.0, 'STEEL_D');                                 // tapa de succion
+box(C, 26, 28, 18, 20, 15, 16, 'DARK');                                     // valvula deslizante (unloader)
+put(C, 27, 21, 15, 'YELLOW');                                               // solenoide
+box(C, 23, 25, 19, 20, 14, 14, 'WHITE');                                    // placa del compresor
+put(C, 31, 18, 14, 'YELLOW');                                               // mirilla de aceite
+
+// ---- Anti Z-fighting entre sistemas: el ensamble del compresor "carva" su hueco en el estatico
+let carved = 0;
+for (const k of voxComp.keys()) if (voxStatic.has(k)) { voxStatic.delete(k); carved++; }
+
+// ====== CONSTRUCCION DE INSTANCEDMESH POR COLOR ======
+const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+const rootAll = new THREE.Group();
+const staticGroup = new THREE.Group();
+const compGroup = new THREE.Group();
+rootAll.add(staticGroup, compGroup);
+rootAll.position.set(-22.5, 0, -7);
+scene.add(rootAll);
+
+function buildInstanced(map, parent){
+  const byColor = {};
+  for (const [k, c] of map) (byColor[c] ||= []).push(k);
+  const M = new THREE.Matrix4();
+  for (const key in byColor){
+    const cells = byColor[key];
+    const p = MATS[key];
+    const mat = new THREE.MeshStandardMaterial({ color:p.c, roughness:p.r, metalness:p.m });
+    const im = new THREE.InstancedMesh(cubeGeo, mat, cells.length);
+    for (let i = 0; i < cells.length; i++){
+      const [x, y, z] = cells[i].split(',').map(Number);
+      M.setPosition(x + 0.5, y + 0.5, z + 0.5);   // offset +0.5 = alineacion a la rejilla
+      im.setMatrixAt(i, M);
+    }
+    im.instanceMatrix.needsUpdate = true;
+    im.castShadow = true;
+    im.receiveShadow = true;
+    parent.add(im);
+  }
+}
+buildInstanced(voxStatic, staticGroup);
+buildInstanced(voxComp, compGroup);
+
+const totalVox = voxStatic.size + voxComp.size;
+document.getElementById('vcount').textContent = totalVox.toLocaleString('es-MX');
+console.log('[chiller-tornillo] voxeles:', totalVox, '| estatico:', voxStatic.size, '| compresor:', voxComp.size, '| celdas carvadas anti z-fight:', carved);
+
+// ====== PARTES ANIMADAS (Groups separados, fuera del InstancedMesh) ======
+// ---- Acople giratorio motor-compresor
+const spinner = new THREE.Group();
+spinner.position.set(19.5, CP.cy, CP.cz);
+const hubMat = new THREE.MeshStandardMaterial({ color:0x6b747e, roughness:0.4, metalness:0.8 });
+const spokeMat = new THREE.MeshStandardMaterial({ color:0xffc22e, roughness:0.5, metalness:0.3 });
+const hub = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.2, 1.2), hubMat);
+spinner.add(hub);
+for (let i = 0; i < 6; i++){
+  const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 2.9), spokeMat);
+  spoke.rotation.x = i * Math.PI / 3;
+  spoke.castShadow = true;
+  spinner.add(spoke);
+}
+compGroup.add(spinner);
+
+// ---- Pantalla del panel: matriz de LEDs (grafica de tendencia) + barra de % de carga
+const pxMat = new THREE.MeshStandardMaterial({ color:0x00d4aa, emissive:0x00d4aa, emissiveIntensity:0.3, roughness:0.4, metalness:0.1 });
+const screenGroup = new THREE.Group();
+const heights = [2, 3, 1, 4, 3, 2, 4, 3, 1, 3];
+for (let cI = 0; cI < 10; cI++)
+  for (let rI = 0; rI < heights[cI]; rI++){
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.3), pxMat);
+    p.position.set(22.7 + cI * 0.92, 12.3 + rI * 0.92, 16.2);
+    screenGroup.add(p);
+  }
+const segs = [];
+for (let i = 0; i < 4; i++){
+  const sMat = new THREE.MeshStandardMaterial({ color:0x11231d, emissive:0x061109, emissiveIntensity:0.05, roughness:0.4, metalness:0.1 });
+  const s = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.8, 0.3), sMat);
+  s.position.set(23.4 + i * 2.3, 11.0, 16.2);
+  segs.push(s);
+  screenGroup.add(s);
+}
+staticGroup.add(screenGroup);
+
+// ---- LED de estado (siempre emisivo: verde ENCENDIDO / rojo APAGADO iluminado)
+const ledMat = new THREE.MeshStandardMaterial({ color:0xff2233, emissive:0xff2233, emissiveIntensity:1.0, roughness:0.35, metalness:0.1 });
+const statusLED = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.5), ledMat);
+statusLED.position.set(23.0, 8.5, 16.15);
+staticGroup.add(statusLED);
+const statusLight = new THREE.PointLight(0xff2233, 1.0, 14);
+statusLight.position.set(23.0, 8.5, 18.2);
+staticGroup.add(statusLight);
+
+// ---- Baliza sobre el gabinete
+const beaconBase = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 1.4),
+  new THREE.MeshStandardMaterial({ color:0x2b3036, roughness:0.7, metalness:0.4 }));
+beaconBase.position.set(32.5, 18.25, 14.5);
+const beaconMat = new THREE.MeshStandardMaterial({ color:0xff2233, emissive:0xff2233, emissiveIntensity:0.12, roughness:0.3, metalness:0.1 });
+const beacon = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.0, 0.9), beaconMat);
+beacon.position.set(32.5, 19.0, 14.5);
+staticGroup.add(beaconBase, beacon);
+
+// ====== ESTADO / CONTROL DE EQUIPO ======
+const state = { comp:false, load:50, rot:true };
+const bComp = document.getElementById('bComp');
+const bLoad = document.getElementById('bLoad');
+const bRot  = document.getElementById('bRot');
+
+function applyState(){
+  const on = state.comp, k = state.load / 100;
+  ledMat.color.setHex(on ? 0x00ff66 : 0xff2233);
+  ledMat.emissive.setHex(on ? 0x00ff66 : 0xff2233);
+  ledMat.emissiveIntensity = on ? 1.4 : 1.0;
+  statusLight.color.setHex(on ? 0x00ff66 : 0xff2233);
+  statusLight.intensity = on ? 1.5 : 1.0;
+  pxMat.emissiveIntensity = on ? 0.35 + 1.15 * k : 0.12;   // intensidad segun % carga
+  segs.forEach((s, i) => {
+    const lit = (i + 1) <= state.load / 25;
+    s.material.color.setHex(lit ? 0x00ff66 : 0x11231d);
+    s.material.emissive.setHex(lit ? 0x00ff66 : 0x061109);
+    s.material.emissiveIntensity = lit ? (on ? 0.5 + 1.1 * k : 0.22) : 0.05;
+  });
+  bComp.textContent = on ? 'ENCENDIDO' : 'APAGADO';
+  bComp.className = on ? 'on' : 'off';
+  bLoad.textContent = state.load + '%';
+  bRot.textContent = state.rot ? 'ON' : 'OFF';
+  bRot.className = state.rot ? 'on' : 'off';
+}
+bComp.addEventListener('click', () => { state.comp = !state.comp; applyState(); });
+bLoad.addEventListener('click', () => { state.load = state.load >= 100 ? 25 : state.load + 25; applyState(); });
+bRot.addEventListener('click', () => { state.rot = !state.rot; applyState(); });
+applyState();
+
+// ====== LOOP DE ANIMACION ======
+const clock = new THREE.Clock();
+let spin = 0;
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+  if (state.comp){
+    spin += dt * (6 + state.load * 0.14);           // velocidad del acople segun carga
+    spinner.rotation.x = -spin;
+    const amp = 0.045 * (0.35 + 0.65 * state.load / 100);
+    compGroup.position.y = Math.sin(t * 30) * amp;   // vibracion sutil
+    compGroup.position.z = Math.cos(t * 22.7) * amp * 0.6;
+    beaconMat.emissiveIntensity = 0.55 + 0.45 * Math.sin(t * 5.5);
+  } else {
+    compGroup.position.y *= 0.9;
+    compGroup.position.z *= 0.9;
+    beaconMat.emissiveIntensity = 0.12;
+  }
+  controls.autoRotate = state.rot;
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>

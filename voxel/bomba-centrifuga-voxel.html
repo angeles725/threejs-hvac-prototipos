@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Bomba Centrífuga End-Suction · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:230px; font-size:11px; backdrop-filter: blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:54px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>BOMBA CENTRÍFUGA END-SUCTION</b><br>
+  <span>Cuarto de máquinas HVAC · Voxel Art · <span id="vcount"></span></span><br>
+  <span>1 voxel = 0.025 m · 1.4 × 0.6 × 0.8 m + tubería</span>
+</div>
+<div id="legend">
+  <div><i style="background:#7fd4ff"></i> Succión</div>
+  <div><i style="background:#2f7fe0"></i> Descarga</div>
+  <div><i style="background:#f2c230"></i> Sentido de giro</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>BOMBA</label><button id="bPump" class="off">OFF</button></div>
+  <div class="row"><label>VIBRACIÓN</label><button id="bVib" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ====== ESCALA ======
+// SCALE: 1 voxel = 0.025 m (micro-voxel; regla base de 0.1 m subdividida x4 para
+// alcanzar densidad de miles de cubos pequeños, respetando dimensiones reales)
+// Bomba: 1.4 m = 56 vx (X) · 0.6 m = 24 vx (Z) · 0.8 m = 32 vx (Y) + tubería
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 150, 520);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 1200);
+camera.position.set(88, 56, 88);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(17, 17, 12);
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.6;
+
+// ====== LIGHTS ======
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(90, 140, 70);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+const sc = sun.shadow.camera;
+sc.left=-100; sc.right=100; sc.top=100; sc.bottom=-100; sc.near=1; sc.far=420;
+sun.shadow.bias = -0.0003;
+sun.target.position.set(17, 8, 12);
+scene.add(sun); scene.add(sun.target);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-70, 60, -50);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rim.position.set(17, 30, -110);
+scene.add(rim);
+
+// ====== GROUND ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(900,900),
+  new THREE.MeshStandardMaterial({ color:0x0a0e16, roughness:0.92, metalness:0.05 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.position.set(17, 0, 12);
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(900, 150, 0x00d4aa, 0x142028);
+grid.material.opacity = 0.11;
+grid.material.transparent = true;
+grid.position.set(17, 0.01, 12);
+scene.add(grid);
+
+// ====== VOXEL BUILDER (dos almacenes: estático + conjunto motor-bomba) ======
+function makeStore() { return { data:{}, seen:new Set() }; }
+const stStatic   = makeStore();   // base, tubería, válvulas, guarda, manómetros
+const stAssembly = makeStore();   // motor + bomba (vibra como conjunto)
+
+function addVox(st, x, y, z, color) {
+  x = Math.round(x); y = Math.round(y); z = Math.round(z);
+  const key = x + ',' + y + ',' + z;
+  if (st.seen.has(key)) return;          // dedupe: sin z-fighting
+  st.seen.add(key);
+  const k = color.toString();
+  if (!st.data[k]) st.data[k] = { color, positions: [] };
+  st.data[k].positions.push([x,y,z]);
+}
+const S = (x,y,z,c) => addVox(stStatic,   x,y,z,c);
+const A = (x,y,z,c) => addVox(stAssembly, x,y,z,c);
+
+const COL = {
+  CONCRETE:  0x9c978b,
+  CONCRETE_D:0x87826f,
+  GROUT:     0x5f5b52,
+  VOLUTE:    0x2456a8,   // azul industrial
+  VOLUTE_D:  0x183d7c,
+  MOTOR:     0x3a3a40,   // gris oscuro
+  MOTOR_D:   0x2c2c32,
+  FIN:       0x4a4a52,
+  STEEL:     0x8a8a92,
+  STEEL_D:   0x62626a,
+  BAND:      0x2f6fb5,   // banda azul agua fría
+  FLANGE:    0x74747c,
+  BOLT:      0x1f1f24,
+  NUT:       0xb7b7bc,
+  SAFETY:    0xf2c230,   // amarillo seguridad
+  GRILLE:    0x1a1a1e,
+  RED:       0xc22a34,   // volantes rojos
+  BRASS:     0xb87333,
+  FACE_S:    0xcfe6ff,   // carátula succión
+  FACE_D:    0xffe9c2,   // carátula descarga
+  NEEDLE:    0xd0242e,
+  FRAME:     0x3a3a3e,
+  DARK:      0x24242a,
+  SHAFT:     0x9aa0a8,
+  PLATE:     0xd9d4c0,
+};
+
+// ====== GEOMETRÍA · EJE DE FLECHA: X · CENTERLINE y=14, z=12 ======
+const CY = 14, CZ = 12;
+
+// ---- Helpers ----
+function diskX(P, x, r, color, holeR=0, cy=CY, cz=CZ) {
+  for (let y=Math.floor(cy-r); y<=Math.ceil(cy+r); y++)
+    for (let z=Math.floor(cz-r); z<=Math.ceil(cz+r); z++) {
+      const d = Math.hypot(y-cy, z-cz);
+      if (d<=r && d>=holeR) P(x,y,z,color);
+    }
+}
+function diskY(P, y, r, color, holeR=0, cx=12, cz=CZ) {
+  for (let x=Math.floor(cx-r); x<=Math.ceil(cx+r); x++)
+    for (let z=Math.floor(cz-r); z<=Math.ceil(cz+r); z++) {
+      const d = Math.hypot(x-cx, z-cz);
+      if (d<=r && d>=holeR) P(x,y,z,color);
+    }
+}
+function tubeX(P, x0, x1, r, colorFn, cy=CY, cz=CZ) {
+  for (let x=x0; x<=x1; x++)
+    for (let y=Math.floor(cy-r); y<=Math.ceil(cy+r); y++)
+      for (let z=Math.floor(cz-r); z<=Math.ceil(cz+r); z++) {
+        const d = Math.hypot(y-cy, z-cz);
+        if (d<=r && d>=r-1.5) P(x,y,z,colorFn(x));
+      }
+}
+function tubeY(P, y0, y1, r, colorFn, cx=12, cz=CZ) {
+  for (let y=y0; y<=y1; y++)
+    for (let x=Math.floor(cx-r); x<=Math.ceil(cx+r); x++)
+      for (let z=Math.floor(cz-r); z<=Math.ceil(cz+r); z++) {
+        const d = Math.hypot(x-cx, z-cz);
+        if (d<=r && d>=r-1.5) P(x,y,z,colorFn(y));
+      }
+}
+function boltRingX(P, x, r, color, cy=CY, cz=CZ) {
+  for (let i=0; i<8; i++) {
+    const a = i/8*Math.PI*2 + Math.PI/8;
+    P(x, Math.round(cy+Math.sin(a)*r), Math.round(cz+Math.cos(a)*r), color);
+  }
+}
+function boltRingY(P, y, r, color, cx=12, cz=CZ) {
+  for (let i=0; i<8; i++) {
+    const a = i/8*Math.PI*2 + Math.PI/8;
+    P(Math.round(cx+Math.sin(a)*r), y, Math.round(cz+Math.cos(a)*r), color);
+  }
+}
+
+// ====== BASE DE CONCRETO CON PERNOS DE ANCLAJE ======
+for (let x=0; x<=61; x++)
+  for (let z=0; z<=23; z++) {
+    S(x, 0, z, COL.GROUT);
+    S(x, 1, z, COL.CONCRETE);
+    S(x, 2, z, COL.CONCRETE);
+    if (x>0 && x<61 && z>0 && z<23)   // chaflán perimetral
+      S(x, 3, z, ((x*13 + z*29) % 7 === 0) ? COL.CONCRETE_D : COL.CONCRETE);
+  }
+// Pernos de anclaje (columna + tuerca hexagonal)
+[[5,3],[5,20],[18,3],[18,20],[31,3],[31,20],[44,3],[44,20],[57,3],[57,20]].forEach(([bx,bz]) => {
+  S(bx, 3, bz, COL.BOLT);
+  S(bx, 4, bz, COL.BOLT);
+  S(bx, 5, bz, COL.NUT);
+});
+
+// ====== MOTOR ELÉCTRICO (conjunto vibrante) ======
+// Tapa frontal
+diskX(A, 34, 6, COL.MOTOR_D, 1.3);
+// Cuerpo con aletas de enfriamiento (anillos alternados)
+for (let x=35; x<=56; x++) {
+  const fin = (x % 2 === 1) && x>=37 && x<=55;
+  for (let y=CY-7; y<=CY+7; y++)
+    for (let z=CZ-7; z<=CZ+7; z++) {
+      const d2 = (y-CY)*(y-CY) + (z-CZ)*(z-CZ);
+      if (d2 <= 36 && d2 >= 21) A(x,y,z,COL.MOTOR);        // shell del cuerpo
+      else if (fin && d2 > 36 && d2 <= 49) A(x,y,z,COL.FIN); // aleta
+    }
+}
+// Campana trasera + rejilla del ventilador
+tubeX(A, 57, 59, 6.8, () => COL.STEEL_D);
+for (let y=CY-7; y<=CY+7; y++)
+  for (let z=CZ-7; z<=CZ+7; z++) {
+    const d = Math.hypot(y-CY, z-CZ);
+    if (d <= 6.8) {
+      if (d <= 1.6) A(60,y,z,COL.DARK);
+      else if ((y+z) % 2 === 0) A(60,y,z,COL.GRILLE);
+    }
+  }
+// Patas del motor
+[[36,40],[50,54]].forEach(([fx0,fx1]) => {
+  for (let x=fx0; x<=fx1; x++)
+    for (let z=5; z<=18; z++)
+      for (let y=4; y<=5; y++)
+        A(x,y,z,COL.MOTOR_D);
+  for (let x=fx0+1; x<=fx1-1; x++)
+    for (let z=8; z<=15; z++)
+      A(x,6,z,COL.MOTOR_D);
+  for (let x=fx0+1; x<=fx1-1; x++)
+    for (let z=10; z<=13; z++)
+      A(x,7,z,COL.MOTOR_D);
+});
+// Caja de conexiones (con tapa y sello)
+for (let x=44; x<=46; x++)
+  for (let y=20; y<=21; y++)
+    for (let z=10; z<=14; z++)
+      A(x,y,z,COL.MOTOR_D);      // pedestal caja
+for (let x=42; x<=48; x++)
+  for (let y=21; y<=26; y++)
+    for (let z=8; z<=15; z++) {
+      const sh = (x===42 || x===48 || y===26 || z===8 || z===15);
+      if (!sh) continue;
+      const seam = (y===25);
+      A(x,y,z, seam ? COL.DARK : COL.MOTOR_D);
+    }
+// Conduit eléctrico a la base
+for (let y=4; y<=21; y++) A(43, y, 4, COL.DARK);
+A(43,21,5,COL.DARK); A(43,21,6,COL.DARK); A(43,21,7,COL.DARK);
+// Cáncamo de izaje
+A(38,21,12,COL.NUT);
+A(38,22,12,COL.DARK);
+A(38,23,11,COL.DARK); A(38,23,13,COL.DARK);
+A(38,24,12,COL.DARK);
+
+// ====== BASTIDOR DE BALEROS + PEDESTAL (conjunto vibrante) ======
+tubeX(A, 19, 25, 3.6, () => COL.STEEL_D);
+diskX(A, 18, 3.6, COL.STEEL_D, 1.3);
+diskX(A, 26, 3.6, COL.STEEL_D, 1.3);
+for (let x=19; x<=25; x++)
+  for (let y=4; y<=10; y++)
+    for (let z=8; z<=15; z++) {
+      const plate = (z===15 && x>=20 && x<=24 && y>=6 && y<=8);
+      A(x,y,z, plate ? COL.PLATE : COL.FRAME);   // placa de datos al frente
+    }
+// Muñones de flecha (hacia el acoplamiento)
+[[27],[33]].forEach(([sx]) => {
+  [[0,0],[1,0],[-1,0],[0,1],[0,-1]].forEach(([dy,dz]) => A(sx, CY+dy, CZ+dz, COL.SHAFT));
+});
+
+// ====== VOLUTA ESPIRAL (azul industrial, conjunto vibrante) ======
+function rSpiral(a) { return 6.2 + 2.8 * (a / (Math.PI*2)); }
+for (let x=8; x<=16; x++)
+  for (let y=4; y<=25; y++)
+    for (let z=2; z<=22; z++) {
+      const dy=y-CY, dz=z-CZ;
+      const d = Math.hypot(dy,dz);
+      let a = Math.atan2(dz, dy);
+      a = (a + Math.PI*2) % (Math.PI*2);   // 0 arriba, crece con el giro
+      const r = rSpiral(a);
+      if (x===8 || x===16) {
+        if (d <= r) {
+          const hole = (x===8 && d<=3.2) || (x===16 && d<=1.6);
+          if (!hole) A(x,y,z,COL.VOLUTE_D);
+        }
+      } else {
+        if (d <= r && d >= r-1.6) A(x,y,z,COL.VOLUTE);
+        else if (d < r-1.6) A(x,y,z,COL.DARK);
+      }
+    }
+// Patas de la voluta
+for (let x=10; x<=14; x++)
+  for (let y=4; y<=6; y++)
+    for (let z=9; z<=15; z++)
+      A(x,y,z,COL.VOLUTE_D);
+// Tapón de drenaje
+A(12,6,12,COL.BRASS); A(12,5,12,COL.BRASS);
+// Boquilla de descarga vertical + brida de bomba
+tubeY(A, 20, 28, 3.2, () => COL.VOLUTE);
+diskY(A, 29, 5, COL.FLANGE, 2.5);
+diskY(A, 30, 5, COL.FLANGE, 2.5);
+boltRingY(A, 28, 3.9, COL.NUT);
+// Boquilla de succión horizontal + brida de bomba
+tubeX(A, 4, 7, 3.2, () => COL.VOLUTE);
+diskX(A, 2, 5, COL.FLANGE, 2.5);
+diskX(A, 3, 5, COL.FLANGE, 2.5);
+boltRingX(A, 4, 3.9, COL.NUT);
+
+// ====== GUARDA-ACOPLAMIENTO (rejilla + acentos amarillos, estática) ======
+for (const gx of [27, 33])
+  for (let y=CY-8; y<=CY+8; y++)
+    for (let z=CZ-8; z<=CZ+8; z++) {
+      const d = Math.hypot(y-CY, z-CZ);
+      if (d >= 5.6 && d <= 7.2 && y >= 9) S(gx,y,z,COL.SAFETY);
+    }
+for (let gx=28; gx<=32; gx++)
+  for (let y=CY-8; y<=CY+8; y++)
+    for (let z=CZ-8; z<=CZ+8; z++) {
+      const d = Math.hypot(y-CY, z-CZ);
+      if (d >= 5.8 && d <= 7.0 && y >= 9 && (gx+y+z) % 2 === 0)
+        S(gx,y,z,COL.GRILLE);   // malla de rejilla
+    }
+for (let gx=27; gx<=33; gx++)
+  for (let z=11; z<=13; z++)
+    S(gx,21,z,COL.SAFETY);      // espina superior amarilla
+[[27,6],[27,18],[33,6],[33,18]].forEach(([lx,lz]) => {
+  for (let y=4; y<=9; y++) S(lx,y,lz,COL.SAFETY);
+});
+
+// ====== TUBERÍA DE DESCARGA (vertical, estática) ======
+const bandY = y => (y===35 || y===36 || y===49 || y===50) ? COL.BAND : COL.STEEL;
+diskY(S, 31, 5, COL.FLANGE, 2.5);
+diskY(S, 32, 5, COL.FLANGE, 2.5);
+boltRingY(S, 33, 3.9, COL.NUT);
+tubeY(S, 33, 52, 3, bandY);
+// Válvula de compuerta (cuerpo + bonete al frente + volante rojo)
+[3.8,4.6,5.2,4.6,3.8].forEach((r,i) => {
+  const y = 40+i;
+  for (let x=Math.floor(12-r); x<=Math.ceil(12+r); x++)
+    for (let z=Math.floor(CZ-r); z<=Math.ceil(CZ+r); z++) {
+      const d = Math.hypot(x-12, z-CZ);
+      if (d<=r && d>=r-1.5) S(x,y,z,COL.STEEL_D);
+    }
+});
+for (let z=17; z<=21; z++)
+  for (let x=10; x<=14; x++)
+    for (let y=40; y<=44; y++) {
+      const d = Math.hypot(x-12, y-42);
+      if (d <= 2) S(x,y,z,COL.STEEL_D);
+    }
+S(12,42,22,COL.SHAFT); S(12,42,23,COL.SHAFT);
+for (let dx=-4; dx<=4; dx++)
+  for (let dy=-4; dy<=4; dy++) {
+    const d = Math.hypot(dx,dy);
+    if (d>=2.6 && d<=3.4) S(12+dx, 42+dy, 24, COL.RED);
+    else if ((dx===0 || dy===0) && d>=1 && d<=2.4) S(12+dx, 42+dy, 24, COL.RED);
+  }
+S(12,42,24,COL.DARK);
+// Manómetro de descarga (carátula ámbar)
+S(12,36,16,COL.BRASS); S(12,36,17,COL.BRASS);
+for (let dx=-3; dx<=3; dx++)
+  for (let dy=-3; dy<=3; dy++) {
+    const d = Math.hypot(dx,dy);
+    if (d <= 2.6) {
+      S(12+dx, 36+dy, 18, COL.DARK);
+      S(12+dx, 36+dy, 19, d>1.8 ? COL.DARK : COL.FACE_D);
+      S(12+dx, 36+dy, 20, d>1.8 ? COL.DARK : COL.FACE_D);
+    }
+  }
+S(12,36,20,COL.DARK);
+S(12,37,20,COL.NEEDLE); S(13,38,20,COL.NEEDLE);
+// Brida superior con espárragos
+diskY(S, 53, 5, COL.FLANGE, 2.5);
+diskY(S, 54, 5, COL.FLANGE, 2.5);
+boltRingY(S, 55, 3.9, COL.NUT);
+boltRingY(S, 52, 3.9, COL.NUT);
+
+// ====== TUBERÍA DE SUCCIÓN (horizontal, estática) ======
+const bandX = x => (x===-5 || x===-4 || x===-17 || x===-16) ? COL.BAND : COL.STEEL;
+diskX(S, 0, 5, COL.FLANGE, 2.5);
+diskX(S, 1, 5, COL.FLANGE, 2.5);
+boltRingX(S, -1, 3.9, COL.NUT);
+tubeX(S, -20, -1, 3, bandX);
+// Válvula de compuerta (bonete hacia arriba + volante rojo)
+[3.8,4.6,5.2,4.6,3.8].forEach((r,i) => {
+  const x = -12+i;
+  for (let y=Math.floor(CY-r); y<=Math.ceil(CY+r); y++)
+    for (let z=Math.floor(CZ-r); z<=Math.ceil(CZ+r); z++) {
+      const d = Math.hypot(y-CY, z-CZ);
+      if (d<=r && d>=r-1.5) S(x,y,z,COL.STEEL_D);
+    }
+});
+for (let y=18; y<=23; y++)
+  for (let x=-12; x<=-8; x++)
+    for (let z=10; z<=14; z++) {
+      const d = Math.hypot(x+10, z-CZ);
+      if (d <= 2) S(x,y,z,COL.STEEL_D);
+    }
+S(-10,24,12,COL.SHAFT); S(-10,25,12,COL.SHAFT);
+for (let dx=-4; dx<=4; dx++)
+  for (let dz=-4; dz<=4; dz++) {
+    const d = Math.hypot(dx,dz);
+    if (d>=2.6 && d<=3.4) S(-10+dx, 26, 12+dz, COL.RED);
+    else if ((dx===0 || dz===0) && d>=1 && d<=2.4) S(-10+dx, 26, 12+dz, COL.RED);
+  }
+S(-10,26,12,COL.DARK);
+// Manómetro de succión (carátula azul claro)
+S(-5,17,12,COL.BRASS); S(-5,18,12,COL.BRASS); S(-5,19,12,COL.BRASS);
+for (let dx=-3; dx<=3; dx++)
+  for (let dy=-3; dy<=3; dy++) {
+    const d = Math.hypot(dx,dy);
+    if (d <= 2.6) {
+      S(-5+dx, 21+dy, 11, COL.DARK);
+      S(-5+dx, 21+dy, 12, d>1.8 ? COL.DARK : COL.FACE_S);
+      S(-5+dx, 21+dy, 13, d>1.8 ? COL.DARK : COL.FACE_S);
+    }
+  }
+S(-5,21,13,COL.DARK);
+S(-5,22,13,COL.NEEDLE); S(-4,23,13,COL.NEEDLE);
+// Brida extrema con espárragos
+diskX(S, -22, 5, COL.FLANGE, 2.5);
+diskX(S, -21, 5, COL.FLANGE, 2.5);
+boltRingX(S, -23, 3.9, COL.NUT);
+boltRingX(S, -20, 3.9, COL.NUT);
+// Soporte de tubería a piso
+for (let x=-18; x<=-16; x++)
+  for (let z=11; z<=13; z++)
+    for (let y=1; y<=10; y++)
+      S(x,y,z,COL.FRAME);
+for (let x=-19; x<=-15; x++)
+  for (let z=9; z<=15; z++)
+    S(x,0,z,COL.DARK);
+
+// ====== INSTANCED MESHES ======
+const cubeGeo = new THREE.BoxGeometry(1,1,1);
+const MATPROPS = {
+  [COL.CONCRETE]:  { rough:0.95, metal:0.02 },
+  [COL.CONCRETE_D]:{ rough:0.95, metal:0.02 },
+  [COL.GROUT]:     { rough:0.98, metal:0.0  },
+  [COL.VOLUTE]:    { rough:0.38, metal:0.30 },
+  [COL.VOLUTE_D]:  { rough:0.42, metal:0.30 },
+  [COL.SAFETY]:    { rough:0.50, metal:0.15 },
+  [COL.RED]:       { rough:0.45, metal:0.20 },
+  [COL.BRASS]:     { rough:0.35, metal:0.80 },
+  [COL.NUT]:       { rough:0.35, metal:0.85 },
+  [COL.SHAFT]:     { rough:0.28, metal:0.90 },
+  [COL.PLATE]:     { rough:0.35, metal:0.60 },
+  [COL.FACE_S]:    { rough:0.30, metal:0.0, emissive:COL.FACE_S, ei:0.25 },
+  [COL.FACE_D]:    { rough:0.30, metal:0.0, emissive:COL.FACE_D, ei:0.25 },
+  [COL.NEEDLE]:    { rough:0.35, metal:0.2, emissive:COL.NEEDLE, ei:0.35 },
+};
+const vibGroup = new THREE.Group();
+scene.add(vibGroup);
+
+let totalVox = 0;
+function buildInstanced(store, parent) {
+  for (const k in store.data) {
+    const { color, positions } = store.data[k];
+    totalVox += positions.length;
+    const p = MATPROPS[color] || {};
+    const mat = new THREE.MeshStandardMaterial({
+      color,
+      roughness: p.rough ?? 0.5,
+      metalness: p.metal ?? 0.55,
+      emissive: p.emissive ?? 0x000000,
+      emissiveIntensity: p.ei ?? 0,
+    });
+    const mesh = new THREE.InstancedMesh(cubeGeo, mat, positions.length);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    const m = new THREE.Matrix4();
+    positions.forEach((pos, i) => {
+      m.setPosition(pos[0]+0.5, pos[1]+0.5, pos[2]+0.5);
+      mesh.setMatrixAt(i, m);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    parent.add(mesh);
+  }
+}
+buildInstanced(stStatic, scene);
+buildInstanced(stAssembly, vibGroup);
+document.getElementById('vcount').textContent = totalVox.toLocaleString('es-MX') + ' voxeles';
+
+// ====== ACOPLAMIENTO (animado, con inercia) ======
+const coupMat = new THREE.MeshStandardMaterial({
+  color:0xff2233, emissive:0xff2233, emissiveIntensity:0.4,
+  roughness:0.35, metalness:0.8
+});
+const couplingGroup = new THREE.Group();
+couplingGroup.position.set(30.5, CY+0.5, CZ+0.5);
+for (const hx of [-1.8, 1.8]) {
+  for (let i=0; i<12; i++) {
+    const a = i/12*Math.PI*2;
+    const c = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.85, 0.85), coupMat);
+    c.position.set(hx, Math.cos(a)*2.1, Math.sin(a)*2.1);
+    c.rotation.x = a;
+    c.castShadow = true;
+    couplingGroup.add(c);
+  }
+  const hub = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.7, 1.7), coupMat);
+  hub.position.set(hx, 0, 0);
+  couplingGroup.add(hub);
+}
+for (let i=0; i<4; i++) {
+  const a = i/4*Math.PI*2 + Math.PI/4;
+  const b = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.6, 0.6), coupMat);
+  b.position.set(0, Math.cos(a)*1.5, Math.sin(a)*1.5);
+  b.rotation.x = a;
+  couplingGroup.add(b);
+}
+const coupShaft = new THREE.Mesh(new THREE.BoxGeometry(3.6, 1.1, 1.1), coupMat);
+couplingGroup.add(coupShaft);
+vibGroup.add(couplingGroup);
+
+// ====== VENTILADOR TRASERO DEL MOTOR (animado, tras la rejilla) ======
+const mfMat = new THREE.MeshStandardMaterial({ color:0x35353a, metalness:0.6, roughness:0.45 });
+const motorFan = new THREE.Group();
+motorFan.position.set(58.8, CY+0.5, CZ+0.5);
+for (let i=0; i<5; i++) {
+  const a = i/5*Math.PI*2;
+  for (let rr=1; rr<=4; rr++) {
+    const c = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.8), mfMat);
+    c.position.set(0, Math.cos(a)*rr, Math.sin(a)*rr);
+    c.rotation.x = a;
+    motorFan.add(c);
+  }
+}
+const mfHub = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.5, 1.5), mfMat);
+motorFan.add(mfHub);
+vibGroup.add(motorFan);
+
+// ====== LED DE ESTADO + POINT LIGHT (en caja de conexiones) ======
+const ledMat = new THREE.MeshStandardMaterial({
+  color:0xff2233, emissive:0xff2233, emissiveIntensity:1.4,
+  roughness:0.25, metalness:0.3
+});
+const led = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), ledMat);
+led.position.set(45.5, 24.5, 16.1);
+vibGroup.add(led);
+const ledLight = new THREE.PointLight(0xff2233, 1.1, 12);
+ledLight.position.set(45.5, 24.5, 17.2);
+vibGroup.add(ledLight);
+
+// ====== FLECHA DE SENTIDO DE GIRO (amarilla, pulsa con rpm) ======
+const arrowMat = new THREE.MeshStandardMaterial({
+  color:0xf2c230, emissive:0xf2c230, emissiveIntensity:0.18,
+  roughness:0.5, metalness:0.15
+});
+const arrowG = new THREE.Group();
+const R = 8.6, AX = 26.2;
+for (let phi=-0.5; phi<=1.78; phi+=0.16) {
+  const c = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.55), arrowMat);
+  c.position.set(AX, CY+0.5 + Math.cos(phi)*R, CZ+0.5 + Math.sin(phi)*R);
+  arrowG.add(c);
+}
+const phiE = 1.9;
+[[R-1.2, phiE],[R+1.2, phiE],[R, phiE+0.14]].forEach(([rr, ph]) => {
+  const c = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.62), arrowMat);
+  c.position.set(AX, CY+0.5 + Math.cos(ph)*rr, CZ+0.5 + Math.sin(ph)*rr);
+  arrowG.add(c);
+});
+scene.add(arrowG);
+
+// ====== MÁQUINA DE ESTADOS ======
+const COLOR_ON  = new THREE.Color(0x00ff66);
+const COLOR_OFF = new THREE.Color(0xff2233);
+const state = { pump:false, vib:false };
+let rpm = 0;   // 0..1 (con inercia)
+
+function applyState() {
+  const on = state.pump;
+  coupMat.color.copy(on ? COLOR_ON : COLOR_OFF);
+  coupMat.emissive.copy(on ? COLOR_ON : COLOR_OFF);
+  coupMat.emissiveIntensity = on ? 0.65 : 0.4;
+  ledMat.color.copy(on ? COLOR_ON : COLOR_OFF);
+  ledMat.emissive.copy(on ? COLOR_ON : COLOR_OFF);
+  ledMat.emissiveIntensity = on ? 1.7 : 1.2;
+  ledLight.color.copy(on ? COLOR_ON : COLOR_OFF);
+  ledLight.intensity = on ? 1.5 : 1.0;
+}
+applyState();
+
+// ====== UI ======
+function bind(id, key) {
+  const btn = document.getElementById(id);
+  btn.onclick = () => {
+    state[key] = !state[key];
+    btn.className = state[key] ? 'on' : 'off';
+    btn.textContent = state[key] ? 'ON' : 'OFF';
+    applyState();
+  };
+}
+bind('bPump','pump');
+bind('bVib','vib');
+const bRot = document.getElementById('bRot');
+bRot.onclick = () => {
+  controls.autoRotate = !controls.autoRotate;
+  bRot.className = controls.autoRotate ? 'on' : 'off';
+  bRot.textContent = controls.autoRotate ? 'ON' : 'OFF';
+};
+
+// ====== TRAYECTORIAS DE FLUJO ======
+function polyline(points) {
+  const pts = points.map(p => new THREE.Vector3(p[0], p[1], p[2]));
+  const segs = []; let total = 0;
+  for (let i=0; i<pts.length-1; i++) {
+    const l = pts[i].distanceTo(pts[i+1]);
+    segs.push({ a:pts[i], b:pts[i+1], l0:total, l });
+    total += l;
+  }
+  const v = new THREE.Vector3();
+  return {
+    at(t) {
+      const d = Math.min(t,1) * total;
+      for (const s of segs)
+        if (d <= s.l0 + s.l) return v.lerpVectors(s.a, s.b, s.l ? (d-s.l0)/s.l : 0);
+      return v.copy(pts[pts.length-1]);
+    }
+  };
+}
+// Guías de flujo sobre la superficie de la tubería (rodean bonetes y cuerpos de válvula)
+const suctionPath = polyline([
+  [-27, 14.5, 16.4], [-14, 14.5, 16.4], [-12.5, 14.5, 18.4], [-7.5, 14.5, 18.4],
+  [-6, 14.5, 16.4], [2, 14.5, 16.4], [5, 14.5, 14.5], [8.5, 14.5, 12.5]
+]);
+const dischargePath = polyline([
+  [15.8, 22, 12.5], [16.4, 30, 12.5], [16.4, 39, 12.5], [18.2, 40.5, 12.5],
+  [18.2, 43.5, 12.5], [16.4, 45.5, 12.5], [16.4, 53, 12.5], [15.4, 58.5, 12.5]
+]);
+
+// ====== PARTÍCULAS ======
+function spawn(n, colorHex) {
+  const arr = [];
+  const geo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+  for (let i=0; i<n; i++) {
+    const p = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:colorHex, transparent:true, opacity:0 }));
+    p.userData = { t: Math.random(), seed: Math.random()*10 };
+    scene.add(p);
+    arr.push(p);
+  }
+  return arr;
+}
+const sucP = spawn(12, 0x7fd4ff);
+const disP = spawn(12, 0x2f7fe0);
+
+function updateFlow(list, path, speed, alpha, dt, jit=0.15) {
+  for (const p of list) {
+    if (alpha <= 0.02) { p.material.opacity = 0; continue; }
+    p.userData.t += dt * speed;
+    if (p.userData.t > 1) p.userData.t -= 1;
+    const tt = p.userData.t, s = p.userData.seed;
+    const pos = path.at(tt);
+    p.position.set(
+      pos.x + Math.sin(tt*9 + s)*jit,
+      pos.y + Math.cos(tt*7 + s)*jit,
+      pos.z + Math.sin(tt*5 + s)*jit
+    );
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.85 * alpha;
+  }
+}
+
+// ====== RESIZE ======
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ====== ANIMATE ======
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t  = clock.elapsedTime;
+
+  // Inercia: arranque más rápido que el paro por inercia (coast-down)
+  const target = state.pump ? 1 : 0;
+  const k = state.pump ? 1.5 : 0.5;
+  rpm += (target - rpm) * Math.min(1, dt * k);
+  if (Math.abs(rpm - target) < 0.0015) rpm = target;
+
+  const spin = rpm * 16;
+  couplingGroup.rotation.x -= dt * spin;
+  motorFan.rotation.x -= dt * spin;
+  arrowMat.emissiveIntensity = 0.18 + rpm * 0.65;
+
+  // Vibración sutil del conjunto motor-bomba
+  const amp = state.vib ? (0.03 + 0.1 * rpm) : 0;
+  vibGroup.position.set(
+    Math.sin(t*46) * amp,
+    Math.abs(Math.sin(t*57)) * amp * 0.55,
+    Math.sin(t*51 + 1.7) * amp * 0.85
+  );
+
+  const alpha = Math.min(1, rpm * 1.7);
+  updateFlow(sucP, suctionPath,   0.16, alpha, dt);
+  updateFlow(disP, dischargePath, 0.15, alpha, dt);
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
