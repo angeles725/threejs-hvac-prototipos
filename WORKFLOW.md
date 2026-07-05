@@ -49,7 +49,7 @@ only content layers change; the pipeline layers persist.
 Correctness:
 - [x] Glass: `opacity:1` with transmission — DONE 2026-07-04 (8 sites/6 files, commit 2750b9d)
 - [x] CanvasTexture SRGBColorSpace — DONE 2026-07-04 (10 sites/7 files, commit 2750b9d)
-- [~] Rebuild r128 legacy data_center — IN PROGRESS (writer launched 2026-07-04)
+- [x] Rebuild r128 legacy data_center — DONE 2026-07-04 (1,086→37 draws, 29x, commit bc9e2d8)
 
 Performance (effort-ordered):
 - [x] Baked shadows backported — DONE 2026-07-04 (22 files + caster exclusions + re-bake on user toggles, commit d420dab)
