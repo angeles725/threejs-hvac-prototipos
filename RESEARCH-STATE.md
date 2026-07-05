@@ -10,9 +10,10 @@
 
 ## Coverage
 
-- **Covered blocks**: 31 (B1-B31)
-- **Coverage metric**: 31 / 32 closed (runs 4-5 opened 11 new gaps)
-- **RUN 5 (2026-07-04, AUTO/orchestrated)**: HVAC-domain design (G29-G32) — G29 (HVAC/industrial equipment visualization domain, B29), G30 (dashboards & telemetry, B30), and G31 (terrain/relief, B31) covered. 1 gap remains (G32). User authorized auto-chaining incl. emergent gaps; RUN 5 auto-continues. Hard-stops: failed self-report, cap, exhaustion, destructive step.
+- **Covered blocks**: 32 (B1-B32)
+- **Coverage metric**: 32 / 32 closed — **ALL GAPS COVERED across 5 runs**
+- **RUN 5 STOPPED (2026-07-04): read-only-investigable = 0 — ALL RUNS COMPLETE (32/32 gaps, 5 runs)**
+- **RUN 5 (2026-07-04, AUTO/orchestrated)**: HVAC-domain design (G29-G32) — G29 (HVAC/industrial equipment visualization domain, B29), G30 (dashboards & telemetry, B30), G31 (terrain/relief, B31), and G32 (buildings/BIM, B32) covered — **RUN 5 COMPLETE, all 4 gaps closed**. User authorized auto-chaining incl. emergent gaps; RUN 5 ran to exhaustion of the backlog with no new gaps left. Hard-stops: failed self-report, cap, exhaustion, destructive step.
 - **RUN 4 (REOPEN §8, 2026-07-04, AUTO/orchestrated)**: 3D-design craft + optimization (G22-G28) — **RUN 4 COMPLETE**, all 7 gaps covered (B22-B28).
 - **RUN 3 (REOPEN §8, 2026-07-04)**: user supplied a 3rd batch — 11 showcase URLs + 6 forum threads (discourse/reddit) for problems & solutions. Runs 1-2 history preserved above.
 - **Last iteration**: 2026-07-04 — **RUN 2 (REOPEN, §8)**: user expanded scope — rendering deep-dive, optimization methods, external case studies (20 URLs), MapLibre. G11/G13 back in scope.
@@ -46,7 +47,7 @@
 | high | G29 — HVAC/industrial equipment visualization domain: digital-twin viewer patterns, exploded views, status overlays (run 5) | web + case refs | **covered → [Block 29]** |
 | high | G30 — Dashboards: three.js + telemetry/data binding, HTML/CSS2D overlays, charts integration (run 5) | context7 + web | **covered → [Block 30]** |
 | medium | G31 — Terrain/relief: heightmap displacement, DEM data sources, MapLibre terrain tie-in (run 5) | context7 + web + B16 | **covered → [Block 31]** |
-| medium | G32 — Buildings/BIM: IFC pipeline (web-ifc), floor-plan-to-3D, building shells for site context (run 5) | web + tool docs | queued (run 5) |
+| medium | G32 — Buildings/BIM: IFC pipeline (web-ifc), floor-plan-to-3D, building shells for site context (run 5) | web + tool docs | **covered → [Block 32]** |
 | high | G16 — Rendering methods deep-dive: render loop styles, on-demand rendering, render targets, WebGPURenderer/TSL status, alt renderers, path tracing (NEW, run 2) | context7 + web | **covered → [Block 13]** (path tracing deferred to G18 case block) |
 | high | G17 — Optimization compendium beyond B11: LOD, BVH, culling, KTX2, disposal/memory (NEW, run 2) | context7 + web | **covered → [Block 17]** |
 | high | G18 — External case studies: 18 showcase pages — techniques + applicability (NEW, run 2) | web sweeps (preserved) | **covered → [Block 14] + [Block 15]** |
@@ -89,11 +90,12 @@
 | 29 | 2026-07-04 | G29 HVAC viz domain (run 5) | B29 | yes · sonnet (full iteration) | 0 |
 | 30 | 2026-07-04 | G30 dashboards & telemetry (run 5) | B30 | yes · sonnet (full iteration) | 0 |
 | 31 | 2026-07-04 | G31 terrain/relief (run 5) | B31 | yes · sonnet (full iteration) | 0 |
+| 32 | 2026-07-04 | G32 buildings/BIM (run-5 final) | B32 | yes · sonnet (full iteration) | 0 |
 
-**RUN 4 gaps complete** (G22-G28, all covered). RUN 5 (G29-G32 — HVAC domain, dashboards, terrain,
-BIM) opened with G29 covered (B29); G30 (dashboards, B30) and G31 (terrain/relief, B31) now also
-covered; auto-continues per user authorization (see stop-control line below). Only G32 (BIM)
-remains.
+**RUN 4 gaps complete** (G22-G28, all covered). **RUN 5 COMPLETE** (G29-G32 — HVAC domain,
+dashboards, terrain, buildings/BIM) — G29 (B29), G30 (B30), G31 (B31), and G32 (B32, this
+iteration) all covered. Backlog exhausted: 0 open gaps of any status. **This closes the
+research-SDD run set: 32/32 gaps across 5 runs, no further iterations pending.**
 
 ## Blocked gaps (each tagged with what it needs)
 
@@ -101,7 +103,7 @@ remains.
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 1 (G32; G29/G30/G31 now closed, run 5 opened). Budget cap runs 4-5: +14 blocks (B22-B35). Execution: ORCHESTRATED-AUTO (one fresh sub-agent per iteration; driver gatekeeps via §11 self-reports).
+- **Open gaps — read-only investigable**: 0 (G32 closed this iteration; backlog exhausted). Budget cap runs 4-5: +14 blocks (B22-B35), used 11 (B22-B32), cap not exceeded. Execution: ORCHESTRATED-AUTO (one fresh sub-agent per iteration; driver gatekeeps via §11 self-reports). **RUN 5 STOP: investigable=0.**
 - **Open gaps — requires-execution**: 0
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2

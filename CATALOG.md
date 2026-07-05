@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **31 blocks**
+Total: **32 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -37,3 +37,4 @@ Total: **31 blocks**
 | 29 | [threejs-block29.md](threejs-block29.md) | HVAC/industrial equipment visualization domain (run 5 opener) |
 | 30 | [threejs-block30.md](threejs-block30.md) | Dashboards: 3D scene + telemetry/data binding + charts |
 | 31 | [threejs-block31.md](threejs-block31.md) | Terrain and relief for site context |
+| 32 | [threejs-block32.md](threejs-block32.md) | Buildings/BIM: building shells and floor plans as context for HVAC equipment |
