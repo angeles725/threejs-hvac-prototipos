@@ -11,8 +11,8 @@
 ## Coverage
 
 - **RUN 6 (REOPEN §8, 2026-07-04, AUTO/orchestrated — queued behind the WORKFLOW.md fix writers)**: design-craft completion from the graphic-designer + 3D-designer lens (G33-G39). Cap +7 (B33-B39). Order per driver recommendation: template-system first (multiplier), then motion/UX, then 2D tokens/accessibility, then art direction/deliverables/dataviz.
-- **Covered blocks**: 32 (B1-B32)
-- **Coverage metric**: 32 / 32 closed — **ALL GAPS COVERED across 5 runs**
+- **Covered blocks**: 33 (B1-B33)
+- **Coverage metric**: 33 / 39 closed — RUN 6 opened (G33 closed this iteration; G34-G39 queued)
 - **RUN 5 STOPPED (2026-07-04): read-only-investigable = 0 — ALL RUNS COMPLETE (32/32 gaps, 5 runs)**
 - **RUN 5 (2026-07-04, AUTO/orchestrated)**: HVAC-domain design (G29-G32) — G29 (HVAC/industrial equipment visualization domain, B29), G30 (dashboards & telemetry, B30), G31 (terrain/relief, B31), and G32 (buildings/BIM, B32) covered — **RUN 5 COMPLETE, all 4 gaps closed**. User authorized auto-chaining incl. emergent gaps; RUN 5 ran to exhaustion of the backlog with no new gaps left. Hard-stops: failed self-report, cap, exhaustion, destructive step.
 - **RUN 4 (REOPEN §8, 2026-07-04, AUTO/orchestrated)**: 3D-design craft + optimization (G22-G28) — **RUN 4 COMPLETE**, all 7 gaps covered (B22-B28).
@@ -49,7 +49,7 @@
 | high | G30 — Dashboards: three.js + telemetry/data binding, HTML/CSS2D overlays, charts integration (run 5) | context7 + web | **covered → [Block 30]** |
 | medium | G31 — Terrain/relief: heightmap displacement, DEM data sources, MapLibre terrain tie-in (run 5) | context7 + web + B16 | **covered → [Block 31]** |
 | medium | G32 — Buildings/BIM: IFC pipeline (web-ifc), floor-plan-to-3D, building shells for site context (run 5) | web + tool docs | **covered → [Block 32]** |
-| high | G33 — The template as a system: shared module (palette/rig/scaffolding) + parametric reusable equipment components (compressor, fan, coil) — architecture proposal (run 6) | corpus + web | queued (run 6) |
+| high | G33 — The template as a system: shared module (palette/rig/scaffolding) + parametric reusable equipment components (compressor, fan, coil) — architecture proposal (run 6) | corpus + web | **covered → [Block 33]** |
 | high | G34 — Motion design 3D: easing/timing with intent, cinematic camera (tours, preset transitions), animated exploded views, state micro-animations (run 6) | context7 + web | queued (run 6) |
 | high | G35 — 3D interaction UX: hover/select visual states, focus+context dimming, touch gestures, loading states, camera history (run 6) | context7 + web | queued (run 6) |
 | high | G36 — 2D design tokens + accessibility: typography scale, UI color system (vs PBR palette), iconography, WCAG contrast, colorblind-safe alarm states (run 6) | web + standards | queued (run 6) |
@@ -99,11 +99,12 @@
 | 30 | 2026-07-04 | G30 dashboards & telemetry (run 5) | B30 | yes · sonnet (full iteration) | 0 |
 | 31 | 2026-07-04 | G31 terrain/relief (run 5) | B31 | yes · sonnet (full iteration) | 0 |
 | 32 | 2026-07-04 | G32 buildings/BIM (run-5 final) | B32 | yes · sonnet (full iteration) | 0 |
+| 33 | 2026-07-04 | G33 template as a system (run 6) | B33 | yes · sonnet (full iteration) | 0 |
 
 **RUN 4 gaps complete** (G22-G28, all covered). **RUN 5 COMPLETE** (G29-G32 — HVAC domain,
-dashboards, terrain, buildings/BIM) — G29 (B29), G30 (B30), G31 (B31), and G32 (B32, this
-iteration) all covered. Backlog exhausted: 0 open gaps of any status. **This closes the
-research-SDD run set: 32/32 gaps across 5 runs, no further iterations pending.**
+dashboards, terrain, buildings/BIM) — G29 (B29), G30 (B30), G31 (B31), and G32 (B32) all covered,
+32/32 across 5 runs. **RUN 6 REOPENED** (G33-G39, design-craft completion) — G33 (B33, this
+iteration) covered, template-as-a-system architecture proposal. 6 gaps remain queued (G34-G39).
 
 ## Blocked gaps (each tagged with what it needs)
 
@@ -111,7 +112,7 @@ research-SDD run set: 32/32 gaps across 5 runs, no further iterations pending.**
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 0 (G32 closed this iteration; backlog exhausted). Budget cap runs 4-5: +14 blocks (B22-B35), used 11 (B22-B32), cap not exceeded. Execution: ORCHESTRATED-AUTO (one fresh sub-agent per iteration; driver gatekeeps via §11 self-reports). **RUN 5 STOP: investigable=0.**
+- **Open gaps — read-only investigable**: 6 (G34-G39 queued, run 6; G33 closed this iteration). Budget cap run 6: +7 blocks (B33-B39), used 1 (B33), cap not exceeded. Execution: ORCHESTRATED-AUTO (one fresh sub-agent per iteration; driver gatekeeps via §11 self-reports).
 - **Open gaps — requires-execution**: 0
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2

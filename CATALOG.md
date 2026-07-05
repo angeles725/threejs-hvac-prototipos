@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **32 blocks**
+Total: **33 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -38,3 +38,4 @@ Total: **32 blocks**
 | 30 | [threejs-block30.md](threejs-block30.md) | Dashboards: 3D scene + telemetry/data binding + charts |
 | 31 | [threejs-block31.md](threejs-block31.md) | Terrain and relief for site context |
 | 32 | [threejs-block32.md](threejs-block32.md) | Buildings/BIM: building shells and floor plans as context for HVAC equipment |
+| 33 | [threejs-block33.md](threejs-block33.md) | The template as a system: a design-library architecture proposal |

@@ -7,7 +7,7 @@ HVAC equipment prototype corpus in this directory (25 standalone HTML files: 7 r
 context7 MCP (`/mrdoob/three.js`), WebSearch/WebFetch over threejs.org + official wiki,
 fetch-doc.sh for preservation. Block style and markers: see `research-sdd/METHODOLOGY.md`.
 
-This index guides through the **32 blocks** of this research. Each block is an independent
+This index guides through the **33 blocks** of this research. Each block is an independent
 `.md`, linked to the rest with `[Block K]`. The auto-generated flat catalog lives in
 [CATALOG.md](CATALOG.md) (regenerate with `python3 tools/gen-catalog.py`).
 
@@ -29,6 +29,7 @@ This index guides through the **32 blocks** of this research. Each block is an i
 | 5 | Synthesis: team workflow | 12 | done | Voxel-first → realistic-second pipeline doc (B12 + WORKFLOW.md) |
 | 6 | Dynamic phase & performance budgets (run 4) | 26-27 | active | Live-measured baseline (draws/triangles) + device-class budget tables derived from it |
 | 7 | HVAC domain (run 5) | 29-32 | done | Digital-twin/equipment-viewer conventions applied to this corpus; dashboard/telemetry data-binding layer; terrain/relief and buildings/BIM for site context |
+| 8 | Design system (run 6) | 33 | active | Template-as-a-system architecture proposal: shared `lib/` module + parametric equipment components + export contract to client integration projects |
 
 ---
 
@@ -101,6 +102,12 @@ This index guides through the **32 blocks** of this research. Each block is an i
 | 31 | Terrain and relief for site context | [block31](threejs-block31.md) | CPU heightmap displacement (position attribute + computeVertexNormals) vs material displacementMap (with its "pair with a matching normal map" caveat), Mapbox Terrain-RGB decode formula, AWS Terrain Tiles/Terrarium free public-S3 decode formula, MapLibre native `terrain`+`raster-dem`+`TerrainControl` as an alternative to hand-built relief, cheap terrain texturing (vertex color by altitude/slope, CanvasTexture gradients, satellite draping), three ranked site-context recipes (stylized pad / real-relief patch / full MapLibre terrain) |
 | 32 | Buildings/BIM: building shells and floor plans for HVAC context | [block32](threejs-block32.md) | ThatOpen `web-ifc` (WASM IFC parser, MPL-2.0) + `@thatopen/components` (MIT, current `OBC` API, IFC→Fragments convert-once workflow) superseding deprecated `web-ifc-three`, corpus's own floor-plan-to-3D technique in `cuarto-frio-plano-realistic (6).html` (`Shape`/`ShapeGeometry` per-room polygons + axis-aligned box-stacked walls with door cuts), general `ExtrudeGeometry`-along-path form for non-rectilinear plans, image-underlay tracing tools (blueprint3d/blueprint3d-modern/OpenPlan3D), OSM `building`/`height` tags + MapLibre `fill-extrusion` for footprint massing, decision table (IFC vs plan-extrusion vs OSM massing vs MapLibre) tied to the two-pass workflow's context-vs-hero framing — closes G32, the final gap (32/32) |
 
+### Layer 8 — Design system (run 6)
+
+| # | Block | File | Key topics |
+|---|--------|---------|------------|
+| 33 | The template as a system: a design-library architecture proposal | [block33](threejs-block33.md) | copy-paste quantification across 27 prototypes + 4 independent client-integration reinventions (Tridium, Honeywell UpDetail/CarcamoDetail, bms-casino React), `lib/` proposal (scene-kit/palette/rig/equipment/viewer), composite-scene shell kits (room/datacenter/plant), export contract (.glb vs versioned module) with the React-hosted contrast case, migration path ranked by leverage |
+
 ---
 
 ## Pending (gap-backlog)
@@ -132,6 +139,7 @@ This index guides through the **32 blocks** of this research. Each block is an i
 - [x] G30 — Dashboards & telemetry → [Block 30]
 - [x] G31 — Terrain/relief → [Block 31]
 - [x] G32 — Buildings/BIM → [Block 32]
+- [x] G33 — The template as a system (design library architecture) → [Block 33]
 - [x] G21 — Forum intelligence → [Block 20]
 - [x] G16 — Rendering methods deep-dive → [Block 13]
 - [x] G17 — Optimization compendium → [Block 17]
@@ -146,4 +154,4 @@ This index guides through the **32 blocks** of this research. Each block is an i
 
 ## Estimated coverage
 
-32/39 — RUN 6 queued (design craft completion, G33-G39) behind the WORKFLOW.md fix writers. RUN 5 complete (G29-G32 all covered); RUN 5 STOPPED: read-only-investigable = 0.
+33/39 — RUN 6 opened (design craft completion, G33-G39): G33 covered this iteration (template-as-a-system, [Block 33]); G34-G39 remain queued.
