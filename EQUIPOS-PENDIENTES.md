@@ -21,6 +21,7 @@
 | 10 | Tanque expansión / buffer | `voxel/tanques-expansion-buffer-voxel-v1.html` | 53 draws / 236,339 tris |
 | 11 | Filtro de arena + bomba alberca | `voxel/filtrado-alberca-voxel-v1.html` | 107 draws / 413,292 tris |
 | 5 | Caldera + tanque ACS | `voxel/caldera-acs-voxel.html` | 139 draws / 553,062 tris |
+| 7 | Tablero eléctrico + VFDs | `voxel/mcc-vfd-voxel-v1.html` | 229 draws / 1,289,844 tris |
 
 **📦 Ya existen en `voxel/` (era claude.ai — NO recrear; se auditan y rescatan al integrar):**
 
@@ -31,8 +32,8 @@
 - Minisplit / split / Liebert → `voxel/minisplit-voxel-v2 (4).html`, `split-system-voxel.html`, `liebert-split-voxel*.html`
 - Extractor de cocina → `voxel/extractor-cocina-voxel (2).html` · Generador → `voxel/generador-electrico-voxel (1).html`
 
-**❌ Faltan por crear (prompts abajo):** 7 tablero VFDs · **12 kit tubería hidráulica
-(spec para el kit realistic de red; opcional pero sube la fidelidad)**. (Todo lo demás entregado.)
+**❌ Faltan por crear (prompts abajo):** solo **12 kit tubería hidráulica** (spec para el kit
+realistic de red; opcional pero sube la fidelidad). (Todo lo demás entregado.)
 
 ## REGLAS DE CASA — pegar al FINAL de cada prompt
 
@@ -169,7 +170,7 @@ Panel CONTROL DE EQUIPO: FLUJO ON-OFF (partículas animadas entrando/saliendo po
 AUTO-ROTATE.
 ```
 
-- [ ] **7. Tablero eléctrico + VFDs** → `voxel/tablero-vfd-voxel.html`
+- [x] **7. Tablero eléctrico + VFDs** → entregado: `voxel/mcc-vfd-voxel-v1.html`
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un muro técnico

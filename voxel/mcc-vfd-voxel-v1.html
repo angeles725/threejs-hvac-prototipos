@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>MURO TÉCNICO · MCC + 3×VFD · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); z-index:5; }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); z-index:5; color:#9fb2c8; }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; letter-spacing:0.08em; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #coord { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); z-index:5; letter-spacing:0.06em; }
+  #coord span { color:#ffe14d; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter: blur(6px); z-index:5; }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; gap:12px; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:54px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel button.alarm { color:#06080d; border-color:#ff2233; background:#ff2233; box-shadow:0 0 12px #ff223388; animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:0.55; } }
+</style>
+<script>
+// Inyección dinámica de importmap (evita el mangling de package@version por Cloudflare)
+(function(){
+  if (typeof document === 'undefined') return;
+  var AT = String.fromCharCode(64);
+  var base = 'https://unpkg.com/three' + AT + '0.160.0/';
+  var im = document.createElement('script');
+  im.type = 'importmap';
+  im.textContent = JSON.stringify({ imports: {
+    'three': base + 'build/three.module.js',
+    'three/addons/': base + 'examples/jsm/'
+  }});
+  document.head.appendChild(im);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>MURO TÉCNICO · MCC + 3×VFD</b><br>
+  <span>Voxel Art 3D · SCADA · 1 voxel = 0.025 m</span>
+</div>
+<div id="legend">
+  <div><i style="background:#ffb300"></i> ALIMENTACIÓN (480 V)</div>
+  <div><i style="background:#3aa0ff"></i> CONTROL (24 V)</div>
+  <div><i style="background:#ff7a30"></i> A MOTOR</div>
+</div>
+<div id="coord">DRAG: Rotar · WHEEL: Zoom · CLIC: Capturar voxel<br><span id="coordVal">VOX  —</span></div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>VFD-1 · 5.5 kW</label><button id="bV1" class="on">ON</button></div>
+  <div class="row"><label>VFD-2 · 11 kW</label><button id="bV2" class="on">ON</button></div>
+  <div class="row"><label>VFD-3 · 22 kW</label><button id="bV3" class="off">OFF</button></div>
+  <div class="row"><label>FALLA SIMULADA (VFD-2)</label><button id="bF" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="module" id="app">
+// ============================================================================
+// MURO TÉCNICO — MCC + 3×VFD · Voxel Art 3D (estilo SCADA dark)
+//
+// SCALE: 1 voxel = 0.025 m  (micro-voxel, alta densidad)
+//   Muro:  4.00 m ancho × 2.60 m alto  = 160 × 104 vox
+//   MCC:   0.80 × 2.00 × 0.55 m        = 32 × 80 × 22 vox  (piso)
+//   VFD-1: 0.40 m alto = 16 vox · VFD-2: 0.55 m = 22 vox · VFD-3: 0.70 m = 28 vox
+//
+// three.js r0.160.0 vía importmap (unpkg) · voxeles estáticos en InstancedMesh
+// por color (BoxGeometry(1,1,1) compartida) · partes animadas en Groups aparte.
+// ============================================================================
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const HEADLESS = (typeof window === 'undefined') || !!globalThis.__HEADLESS__;
+
+// ====== PALETA ======
+const PAL = {
+  WALL:   { c:0x39404c, r:0.95, m:0.00 },
+  WALL_D: { c:0x323945, r:0.95, m:0.00 },
+  WALL_L: { c:0x424b59, r:0.95, m:0.00 },
+  WALL_J: { c:0x2b313c, r:0.95, m:0.00 },
+  FLOOR:  { c:0x22262e, r:0.90, m:0.05 },
+  FLOOR_D:{ c:0x1c2028, r:0.90, m:0.05 },
+  BASE:   { c:0x14171d, r:0.85, m:0.10 },
+  MET:    { c:0x9aa3ac, r:0.38, m:0.85 },
+  MET_D:  { c:0x6f7883, r:0.45, m:0.85 },
+  MET_L:  { c:0xbcc4cc, r:0.30, m:0.90 },
+  DOORT:  { c:0x9aa3ac, r:0.35, m:0.85, t:0.2 },
+  GALV:   { c:0xb7c0c7, r:0.30, m:0.95 },
+  GALV_D: { c:0x87919a, r:0.40, m:0.90 },
+  COPPER: { c:0xc4793c, r:0.35, m:1.00 },
+  CHAR:   { c:0x262b33, r:0.60, m:0.60 },
+  CHAR_D: { c:0x1a1e25, r:0.70, m:0.50 },
+  FIN:    { c:0x3b434e, r:0.42, m:0.85 },
+  TEAL:   { c:0x00d4aa, r:0.50, m:0.20, e:0x00d4aa, ei:0.35 },
+  YEL:    { c:0xffc400, r:0.75, m:0.00 },
+  BLK:    { c:0x0b0d11, r:0.80, m:0.20 },
+  WHT:    { c:0xe8edf2, r:0.60, m:0.10 },
+  WHTP:   { c:0xcfd6dd, r:0.55, m:0.30 },
+  GRN_B:  { c:0x0f8a4f, r:0.50, m:0.10, e:0x0f8a4f, ei:0.35 },
+  RED_B:  { c:0xc22233, r:0.50, m:0.10, e:0xc22233, ei:0.35 },
+  AMBER:  { c:0xffb300, r:0.50, m:0.20, e:0xffb300, ei:0.55 },
+  BLUEB:  { c:0x3aa0ff, r:0.50, m:0.20, e:0x3aa0ff, ei:0.55 },
+  ORNG:   { c:0xff7a30, r:0.50, m:0.20, e:0xff7a30, ei:0.55 },
+  GRAYK:  { c:0x555e69, r:0.50, m:0.60 },
+  DISP:   { c:0x04060a, r:0.95, m:0.00 }
+};
+
+// ====== ACUMULADOR DE VOXELES (Map => 0 celdas duplicadas por construcción) ======
+const cells = new Map();
+let overwrites = 0;
+const K = (x, y, z) => x + ',' + y + ',' + z;
+function vox(x, y, z, c) {
+  const k = K(x, y, z);
+  if (cells.has(k)) overwrites++;
+  cells.set(k, c);
+}
+function fill(x0, x1, y0, y1, z0, z1, c) {
+  for (let x = x0; x <= x1; x++)
+    for (let y = y0; y <= y1; y++)
+      for (let z = z0; z <= z1; z++) vox(x, y, z, c);
+}
+function carve(x0, x1, y0, y1, z0, z1) {
+  for (let x = x0; x <= x1; x++)
+    for (let y = y0; y <= y1; y++)
+      for (let z = z0; z <= z1; z++) cells.delete(K(x, y, z));
+}
+function hash2(a, b) { return (((a + 31) * 73856093) ^ ((b + 71) * 19349663)) >>> 0; }
+
+// ====== MURO (4.0 m × 2.6 m, z=0) con dithering y juntas ======
+const JX = new Set([40, 80, 120]);
+for (let x = 0; x < 160; x++) {
+  for (let y = 0; y < 104; y++) {
+    let c = 'WALL';
+    const h = hash2(x, y) % 100;
+    if (h < 12) c = 'WALL_D'; else if (h >= 88) c = 'WALL_L';
+    if (JX.has(x) || y === 52) c = 'WALL_J';
+    vox(x, y, 0, c);
+  }
+}
+// zoclo
+fill(0, 159, 0, 2, 1, 1, 'BASE');
+
+// ====== PISO (y = -1) con juntas y línea amarilla de seguridad ======
+for (let x = -8; x <= 167; x++) {
+  for (let z = -4; z <= 46; z++) {
+    let c = (hash2(x, z) % 100 < 18) ? 'FLOOR_D' : 'FLOOR';
+    if ((x + 80) % 24 === 0) c = 'FLOOR_D';
+    vox(x, -1, z, c);
+  }
+}
+for (let x = 4; x <= 48; x++) {
+  if (x % 6 < 4) { vox(x, -1, 30, 'YEL'); vox(x, -1, 31, 'YEL'); }
+}
+
+// ====== MCC DE PISO (0.80 × 2.00 × 0.55 m => x10..41, y0..79, z1..22) ======
+const MX0 = 10, MX1 = 41, MY1 = 79, MZ0 = 1, MZ1 = 22;
+fill(MX0, MX1, 0, 3, MZ0, MZ1, 'BASE');                 // plinto
+fill(MX0, MX1, 4, MY1, MZ0, MZ0, 'MET_D');              // fondo
+fill(MX0, MX0, 4, MY1, MZ0, MZ1, 'MET_D');              // lateral izq
+fill(MX1, MX1, 4, MY1, MZ0, MZ1, 'MET_D');              // lateral der
+fill(MX0, MX1, MY1, MY1, MZ0, MZ1, 'MET');              // techo
+fill(MX0, MX1, 4, MY1, MZ1, MZ1, 'MET');                // marco frontal
+// puertas cut-away (transparentes) — superior e inferior
+fill(12, 39, 43, 76, 22, 22, 'DOORT');
+fill(12, 39, 6, 40, 22, 22, 'DOORT');
+// manijas
+fill(37, 37, 58, 61, 23, 23, 'BLK');
+fill(37, 37, 22, 25, 23, 23, 'BLK');
+// bisagras
+[[11,50],[11,60],[11,70],[11,12],[11,22],[11,32]].forEach(p => vox(p[0], p[1], 23, 'MET_L'));
+// ranuras de ventilación (louvers)
+for (const y of [8, 10, 12, 14]) fill(15, 34, y, y, 22, 22, 'MET_D');
+for (const y of [45, 47]) fill(15, 34, y, y, 22, 22, 'MET_D');
+// interruptor principal con palanca (posición ON)
+fill(28, 36, 64, 72, 22, 24, 'MET_D');
+fill(29, 35, 65, 71, 24, 24, 'BLK');
+fill(31, 32, 66, 71, 25, 25, 'RED_B');
+vox(31, 71, 25, 'MET_L'); vox(32, 71, 25, 'MET_L');
+vox(34, 70, 24, 'WHT');
+// paro de emergencia (puerta inferior)
+fill(15, 18, 30, 33, 23, 23, 'YEL');
+fill(16, 17, 31, 32, 24, 24, 'RED_B');
+// etiqueta de seguridad amarilla con rayo (puerta superior)
+fill(15, 20, 55, 59, 23, 23, 'YEL');
+fill(15, 20, 59, 59, 23, 23, 'BLK');
+vox(18, 58, 23, 'BLK'); vox(17, 57, 23, 'BLK'); vox(18, 56, 23, 'BLK'); vox(17, 55, 23, 'BLK');
+// pads de lámparas piloto del MCC (marco superior)
+fill(14, 16, 76, 78, 23, 23, 'BLK');
+fill(19, 21, 76, 78, 23, 23, 'BLK');
+// interior: barras de bus de cobre
+for (const bx of [20, 24, 28]) fill(bx, bx, 6, 76, 3, 3, 'COPPER');
+fill(14, 37, 72, 74, 3, 3, 'COPPER');
+// interior: gavetas (buckets) con manija y pilotos
+for (let i = 0; i < 4; i++) {
+  const gy = 8 + i * 14;
+  fill(13, 30, gy, gy + 9, 4, 11, 'MET_L');
+  fill(27, 29, gy + 4, gy + 5, 12, 12, 'BLK');
+  vox(15, gy + 7, 12, 'GRN_B'); vox(17, gy + 7, 12, 'RED_B');
+}
+// interior: ducto de cables derecho con hilos
+fill(33, 38, 6, 70, 4, 10, 'MET_D');
+fill(34, 34, 8, 68, 10, 10, 'AMBER');
+fill(36, 36, 8, 68, 10, 10, 'BLUEB');
+// entradas de cable inferiores
+fill(16, 17, 4, 6, 4, 5, 'BLK'); fill(22, 23, 4, 6, 4, 5, 'BLK');
+
+// ====== VFDs DE PARED ======
+const VFDS = [
+  { id: 1, x0: 58,  x1: 68,  y0: 42, y1: 57, zf: 7, stripeY: 56,
+    win: [59, 67, 48, 54], txt: '45', dig: [60, 49],
+    btnG: [60, 61, 44, 45], btnR: [63, 64, 44, 45], arrows: null,
+    pot: [66, 67, 44, 45], potPtr: [66, 45],
+    lampG: [60, 55], lampR: [62, 55],
+    fan: { type: 'bottom', cx: 63.5, cy: 41.3, cz: 4.5, fr: 2.0 } },
+  { id: 2, x0: 82,  x1: 94,  y0: 38, y1: 59, zf: 8, stripeY: 58,
+    win: [84, 92, 50, 56], txt: '60', dig: [85, 51], fault: 'F2',
+    btnG: [84, 85, 45, 46], btnR: [87, 88, 45, 46], arrows: [[90, 46], [90, 45]],
+    pot: [91, 92, 42, 43], potPtr: [91, 43],
+    lampG: [84, 57], lampR: [86, 57],
+    fan: { type: 'front', cx: 88.5, cy: 41.5, r: 2.6, fr: 2.0 } },
+  { id: 3, x0: 110, x1: 125, y0: 34, y1: 61, zf: 9, stripeY: 60,
+    win: [113, 121, 51, 57], txt: '52', dig: [114, 52],
+    btnG: [112, 113, 46, 47], btnR: [115, 116, 46, 47], arrows: [[119, 47], [119, 46]],
+    pot: [121, 123, 45, 47], potPtr: [122, 47],
+    lampG: [112, 59], lampR: [114, 59],
+    fan: { type: 'front', cx: 117.5, cy: 40.0, r: 3.2, fr: 2.6 } }
+];
+
+function fanOpening(cx, cy, zf, r) {
+  const gx0 = Math.floor(cx - r) - 1, gx1 = Math.ceil(cx + r) + 1;
+  const gy0 = Math.floor(cy - r) - 1, gy1 = Math.ceil(cy + r) + 1;
+  for (let x = gx0; x <= gx1; x++) {
+    for (let y = gy0; y <= gy1; y++) {
+      const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+      if (d <= r) {
+        if (y % 2 === 0) vox(x, y, zf, 'FIN');       // barras de rejilla
+        else cells.delete(K(x, y, zf));               // apertura
+        cells.delete(K(x, y, zf - 1));                // cavidad
+        vox(x, y, zf - 2, 'CHAR_D');                  // placa trasera
+      }
+    }
+  }
+}
+
+function buildVFD(v) {
+  const x0 = v.x0, x1 = v.x1, y0 = v.y0, y1 = v.y1, zf = v.zf;
+  fill(x0, x1, y0, y1, 1, zf, 'CHAR');
+  carve(x0 + 1, x1 - 1, y0 + 1, y1 - 1, 2, zf - 1);   // hueco interior
+  // borde frontal
+  fill(x0, x1, y0, y0, zf, zf, 'CHAR_D');
+  fill(x0, x1, y1, y1, zf, zf, 'CHAR_D');
+  fill(x0, x0, y0, y1, zf, zf, 'CHAR_D');
+  fill(x1, x1, y0, y1, zf, zf, 'CHAR_D');
+  // aletas laterales de disipador (protruyen)
+  for (let z = 2; z < zf; z += 2) {
+    fill(x0 - 1, x0 - 1, y0 + 2, y1 - 2, z, z, 'FIN');
+    fill(x1 + 1, x1 + 1, y0 + 2, y1 - 2, z, z, 'FIN');
+  }
+  // ranuras superiores
+  for (let z = 2; z < zf; z += 2) fill(x0 + 2, x1 - 2, y1, y1, z, z, 'CHAR_D');
+  // pernos de montaje a muro
+  vox(x0 - 1, y0, 1, 'GALV_D'); vox(x1 + 1, y0, 1, 'GALV_D');
+  vox(x0 - 1, y1, 1, 'GALV_D'); vox(x1 + 1, y1, 1, 'GALV_D');
+  // franja de marca teal
+  fill(x0 + 1, x1 - 1, v.stripeY, v.stripeY, zf, zf, 'TEAL');
+  // ventana del display
+  fill(v.win[0], v.win[1], v.win[2], v.win[3], zf, zf, 'DISP');
+  // botonera
+  fill(v.btnG[0], v.btnG[1], v.btnG[2], v.btnG[3], zf + 1, zf + 1, 'GRN_B');
+  fill(v.btnR[0], v.btnR[1], v.btnR[2], v.btnR[3], zf + 1, zf + 1, 'RED_B');
+  if (v.arrows) for (const a of v.arrows) vox(a[0], a[1], zf + 1, 'TEAL');
+  // potenciómetro
+  fill(v.pot[0], v.pot[1], v.pot[2], v.pot[3], zf + 1, zf + 1, 'GRAYK');
+  vox(v.potPtr[0], v.potPtr[1], zf + 1, 'WHT');
+  // biseles de lámparas piloto
+  vox(v.lampG[0], v.lampG[1], zf, 'BLK');
+  vox(v.lampR[0], v.lampR[1], zf, 'BLK');
+  // apertura de ventilador frontal
+  if (v.fan.type === 'front') fanOpening(v.fan.cx, v.fan.cy, zf, v.fan.r);
+}
+VFDS.forEach(buildVFD);
+
+// ====== CONDUIT METÁLICO (2×2) CON CODOS Y CONDULETS ======
+function conduitV(x, ya, yb, z0) { fill(x, x + 1, Math.min(ya, yb), Math.max(ya, yb), z0, z0 + 1, 'GALV'); }
+function conduitH(xa, xb, y, z0) { fill(Math.min(xa, xb), Math.max(xa, xb), y, y + 1, z0, z0 + 1, 'GALV'); }
+function condulet(cx, cy, z0) {
+  fill(cx - 2, cx + 2, cy - 2, cy + 2, z0, z0 + 1, 'GALV_D');
+  fill(cx - 1, cx + 1, cy - 1, cy + 1, z0 + 2, z0 + 2, 'GALV');
+}
+function bandV(x, y, z0, c) { fill(x, x + 1, y, y, z0, z0 + 1, c); }
+function bandH(x, y, z0, c) { fill(x, x, y, y + 1, z0, z0 + 1, c); }
+
+// -- ALIMENTACIÓN: bajada de servicio al MCC
+conduitV(25, 80, 103, 1);
+condulet(26, 81, 1);
+bandV(25, 98, 1, 'AMBER'); bandV(25, 92, 1, 'AMBER'); bandV(25, 86, 1, 'AMBER');
+// -- ALIMENTACIÓN: subida MCC -> run horizontal superior -> bajadas a VFDs
+conduitV(30, 80, 88, 1);
+condulet(31, 90, 1);
+conduitH(33, 118, 90, 1);
+const DROPS = [{ x: 62, top: 58 }, { x: 87, top: 60 }, { x: 116, top: 62 }];
+for (const d of DROPS) { condulet(d.x + 1, 90, 1); conduitV(d.x, d.top, 87, 1); }
+for (let x = 40; x <= 112; x += 12) bandH(x, 90, 1, 'AMBER');
+bandV(62, 78, 1, 'AMBER'); bandV(87, 78, 1, 'AMBER'); bandV(116, 78, 1, 'AMBER');
+
+// ====== CANALETA PORTACABLES (CONTROL, separada del muro) ======
+const CY0 = 66, CY1 = 71, CZ0 = 3, CZ1 = 6, CX0 = 42, CX1 = 132;
+fill(CX0, CX1, CY0, CY0, CZ0, CZ1, 'WHTP');
+fill(CX0, CX1, CY0 + 1, CY1 - 1, CZ1, CZ1, 'WHTP');
+fill(CX0, CX1, CY0 + 1, CY1 - 1, CZ0, CZ0, 'WHTP');
+fill(CX0, CX0, CY0 + 1, CY1 - 1, CZ0, CZ1, 'WHTP');
+fill(CX1, CX1, CY0 + 1, CY1 - 1, CZ0, CZ1, 'WHTP');
+fill(CX0, 72, CY1, CY1, CZ0, CZ1, 'WHTP');       // tapa parcial 1
+fill(96, 118, CY1, CY1, CZ0, CZ1, 'WHTP');       // tapa parcial 2
+for (const bx of [50, 70, 90, 110, 130]) fill(bx, bx, 68, 69, 1, 2, 'GALV_D'); // ménsulas
+for (const bx of [48, 64, 80, 96, 112, 128]) fill(bx, bx, CY0 + 1, CY1 - 1, CZ1, CZ1, 'BLUEB');
+// bajadas flexibles de control a cada VFD (z=4)
+fill(66, 66, 58, 65, 4, 4, 'CHAR_D');
+fill(91, 91, 60, 65, 4, 4, 'CHAR_D');
+fill(122, 122, 62, 65, 4, 4, 'CHAR_D');
+
+// ====== CONDUITS A MOTOR (bandas naranjas) ======
+conduitV(62, 9, 41, 1);   condulet(63, 6, 1);    conduitH(66, 159, 4, 1);
+conduitV(87, 12, 37, 1);  condulet(88, 9, 1);    conduitH(91, 159, 7, 1);
+conduitV(116, 15, 33, 1); condulet(117, 12, 1);  conduitH(120, 159, 10, 1);
+bandV(62, 20, 1, 'ORNG'); bandV(87, 24, 1, 'ORNG'); bandV(116, 26, 1, 'ORNG');
+for (let x = 78; x <= 156; x += 14) bandH(x, 4, 1, 'ORNG');
+for (let x = 102; x <= 156; x += 14) bandH(x, 7, 1, 'ORNG');
+for (let x = 132; x <= 156; x += 14) bandH(x, 10, 1, 'ORNG');
+
+// ====== ETIQUETAS DE SEGURIDAD EN MURO ======
+function safetyLabel(x0, y0) {
+  fill(x0, x0 + 3, y0, y0 + 5, 1, 1, 'YEL');
+  fill(x0, x0 + 3, y0 + 5, y0 + 5, 1, 1, 'BLK');
+  vox(x0 + 2, y0 + 4, 1, 'BLK'); vox(x0 + 1, y0 + 3, 1, 'BLK');
+  vox(x0 + 2, y0 + 2, 1, 'BLK'); vox(x0 + 1, y0 + 1, 1, 'BLK');
+}
+safetyLabel(51, 47); safetyLabel(76, 46); safetyLabel(104, 45);
+
+// ====== ESCENA / LUCES ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 220, 520);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(110, 170, 150);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left = -140; sc.right = 140; sc.top = 140; sc.bottom = -40; sc.near = 5; sc.far = 520;
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.5;
+sun.target.position.set(80, 40, 0);
+scene.add(sun, sun.target);
+const fillL = new THREE.DirectionalLight(0x88aaff, 0.4);
+fillL.position.set(-70, 60, 90);
+scene.add(fillL);
+const rimL = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rimL.position.set(40, 60, -120);
+scene.add(rimL);
+
+// ====== INSTANCED MESH POR COLOR (voxeles estáticos) ======
+const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+const byColor = new Map();
+for (const [k, c] of cells) {
+  if (!byColor.has(c)) byColor.set(c, []);
+  byColor.get(c).push(k);
+}
+const staticMeshes = [];
+for (const [cname, keys] of byColor) {
+  const def = PAL[cname];
+  const mat = new THREE.MeshStandardMaterial({
+    color: def.c, roughness: def.r, metalness: def.m, envMapIntensity: 0.5
+  });
+  if (def.e) { mat.emissive = new THREE.Color(def.e); mat.emissiveIntensity = def.ei; }
+  if (def.t) { mat.transparent = true; mat.opacity = def.t; mat.depthWrite = false; mat.side = THREE.DoubleSide; }
+  const im = new THREE.InstancedMesh(cubeGeo, mat, keys.length);
+  const M = new THREE.Matrix4();
+  keys.forEach((key, i) => {
+    const p = key.split(',');
+    M.setPosition(+p[0] + 0.5, +p[1] + 0.5, +p[2] + 0.5);
+    im.setMatrixAt(i, M);
+  });
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = !def.t;
+  im.receiveShadow = true;
+  if (def.t) im.renderOrder = 2;
+  im.name = 'vox_' + cname;
+  scene.add(im);
+  staticMeshes.push(im);
+}
+
+// ====== ESTADO ======
+const state = { v1: true, v2: true, v3: false, falla: false, rot: true };
+function running(n) { return state['v' + n] && !(state.falla && n === 2); }
+
+// ====== PARTES DINÁMICAS (Groups separados del InstancedMesh) ======
+const dynGeo = new THREE.BoxGeometry(1, 1, 1);
+function emat(hex, base, i) {
+  return new THREE.MeshStandardMaterial({
+    color: base, emissive: hex, emissiveIntensity: i, roughness: 0.4, metalness: 0.1
+  });
+}
+function dynBox(mat, x, y, z, sx, sy, sz) {
+  const m = new THREE.Mesh(dynGeo, mat);
+  m.position.set(x, y, z);
+  m.scale.set(sx || 1, sy || 1, sz || 1);
+  m.castShadow = false;
+  return m;
+}
+
+// -- Displays 7 segmentos (dígitos 3×5)
+const SEG_CELLS = {
+  a: [[0, 4], [1, 4], [2, 4]], b: [[2, 3]], c: [[2, 1]],
+  d: [[0, 0], [1, 0], [2, 0]], e: [[0, 1]], f: [[0, 3]],
+  g: [[0, 2], [1, 2], [2, 2]]
+};
+const CHAR_SEGS = {
+  '0': 'abcdef', '1': 'bc', '2': 'abgde', '3': 'abgcd', '4': 'fgbc',
+  '5': 'afgcd', '6': 'afgedc', '7': 'abc', '8': 'abcdefg', '9': 'abfgcd',
+  'F': 'aefg', ' ': ''
+};
+function buildDigits(str, mat, ox, oy, oz) {
+  const g = new THREE.Group();
+  let cx = ox;
+  for (const ch of str) {
+    for (const s of (CHAR_SEGS[ch] || '')) {
+      for (const cell of SEG_CELLS[s]) {
+        g.add(dynBox(mat, cx + cell[0] + 0.5, oy + cell[1] + 0.5, oz, 0.92, 0.92, 0.5));
+      }
+    }
+    cx += 4;
+  }
+  return g;
+}
+
+// -- Ventiladores (aspas de cajas con pitch)
+const matBlade = new THREE.MeshStandardMaterial({ color: 0x7d8894, roughness: 0.35, metalness: 0.85, envMapIntensity: 0.5 });
+const matHub = new THREE.MeshStandardMaterial({ color: 0x1a1e25, roughness: 0.5, metalness: 0.6 });
+function buildFan(r) {
+  const g = new THREE.Group();
+  g.add(dynBox(matHub, 0, 0, 0, 1.3, 1.3, 0.7));
+  for (let i = 0; i < 4; i++) {
+    const arm = new THREE.Group();
+    const b = dynBox(matBlade, 0, r * 0.55, 0, 0.85, r, 0.4);
+    b.rotation.y = 0.55;
+    arm.add(b);
+    arm.rotation.z = i * Math.PI / 2;
+    g.add(arm);
+  }
+  return g;
+}
+
+// -- Rigs por VFD: display, lámparas piloto, PointLight, ventilador
+const rigs = [];
+for (const v of VFDS) {
+  const rig = {};
+  rig.dispMat = emat(0x00ff88, 0x06140c, 1.35);
+  rig.runG = buildDigits(v.txt, rig.dispMat, v.dig[0], v.dig[1], v.zf + 0.95);
+  scene.add(rig.runG);
+  if (v.fault) {
+    rig.faultMat = emat(0xff2233, 0x140607, 1.6);
+    rig.faultG = buildDigits(v.fault, rig.faultMat, v.dig[0], v.dig[1], v.zf + 0.95);
+    rig.faultG.visible = false;
+    scene.add(rig.faultG);
+  }
+  rig.lampGmat = emat(0x00ff66, 0x062a12, 1.6);
+  rig.lampRmat = emat(0xff2233, 0x2a0708, 1.4);
+  scene.add(dynBox(rig.lampGmat, v.lampG[0] + 0.5, v.lampG[1] + 0.5, v.zf + 1.3, 0.85, 0.85, 0.75));
+  scene.add(dynBox(rig.lampRmat, v.lampR[0] + 0.5, v.lampR[1] + 0.5, v.zf + 1.3, 0.85, 0.85, 0.75));
+  rig.light = new THREE.PointLight(0x00ff66, 1.5, 16, 2);
+  rig.light.position.set((v.x0 + v.x1) / 2 + 0.5, v.lampG[1] + 0.5, v.zf + 3.5);
+  scene.add(rig.light);
+  const fan = buildFan(v.fan.fr);
+  const mount = new THREE.Group();
+  mount.add(fan);
+  if (v.fan.type === 'bottom') {
+    mount.position.set(v.fan.cx, v.fan.cy, v.fan.cz);
+    mount.rotation.x = Math.PI / 2;
+  } else {
+    mount.position.set(v.fan.cx, v.fan.cy, v.zf - 0.4);
+  }
+  scene.add(mount);
+  rig.fan = fan;
+  rigs.push(rig);
+}
+
+// -- Lámparas piloto del MCC (energizado permanente)
+const mccG = emat(0x00ff66, 0x062a12, 1.6);
+const mccR = emat(0xff2233, 0x2a0708, 0.12);
+scene.add(dynBox(mccG, 15.5, 77.5, 24.4, 0.9, 0.9, 0.8));
+scene.add(dynBox(mccR, 20.5, 77.5, 24.4, 0.9, 0.9, 0.8));
+const mccLight = new THREE.PointLight(0x00ff66, 1.2, 16, 2);
+mccLight.position.set(18, 78, 27);
+scene.add(mccLight);
+
+// -- Partículas de flujo por conduit (gateadas por estado)
+function makeFlow(pts, hex, speed) {
+  const v = pts.map(p => new THREE.Vector3(p[0], p[1], p[2]));
+  const segs = [];
+  let L = 0;
+  for (let i = 0; i < v.length - 1; i++) {
+    const l = v[i].distanceTo(v[i + 1]);
+    segs.push({ a: v[i], b: v[i + 1], l0: L, l: l });
+    L += l;
+  }
+  const mat = emat(hex, 0x05070a, 1.5);
+  const g = new THREE.Group();
+  const items = [];
+  const count = Math.max(4, Math.round(L / 7));
+  for (let i = 0; i < count; i++) {
+    const m = dynBox(mat, 0, 0, 0, 0.68, 0.68, 0.68);
+    g.add(m);
+    items.push({ m: m, t: i / count });
+  }
+  function at(t, out) {
+    const d = t * L;
+    for (let i = 0; i < segs.length; i++) {
+      const s = segs[i];
+      if (d <= s.l0 + s.l || i === segs.length - 1) {
+        const k = s.l ? Math.min(Math.max((d - s.l0) / s.l, 0), 1) : 0;
+        out.lerpVectors(s.a, s.b, k);
+        return;
+      }
+    }
+  }
+  return {
+    group: g,
+    update(dt, on) {
+      g.visible = on;
+      if (!on) return;
+      for (const it of items) {
+        it.t = (it.t + dt * speed / L) % 1;
+        at(it.t, it.m.position);
+      }
+    }
+  };
+}
+const flows = [
+  { f: makeFlow([[26, 105, 2], [26, 80, 2]], 0xffb300, 15), gate: () => true },
+  { f: makeFlow([[31, 80, 2], [31, 91, 2], [63, 91, 2], [63, 57, 2]], 0xffb300, 15), gate: () => running(1) },
+  { f: makeFlow([[31, 80, 2], [31, 91, 2], [88, 91, 2], [88, 59, 2]], 0xffb300, 15), gate: () => running(2) },
+  { f: makeFlow([[31, 80, 2], [31, 91, 2], [117, 91, 2], [117, 61, 2]], 0xffb300, 15), gate: () => running(3) },
+  { f: makeFlow([[42, 68.5, 4.5], [66.5, 68.5, 4.5], [66.5, 58, 4.5]], 0x3aa0ff, 8), gate: () => true },
+  { f: makeFlow([[42, 68.5, 4.5], [91.5, 68.5, 4.5], [91.5, 60, 4.5]], 0x3aa0ff, 8), gate: () => true },
+  { f: makeFlow([[42, 68.5, 4.5], [122.5, 68.5, 4.5], [122.5, 62, 4.5]], 0x3aa0ff, 8), gate: () => true },
+  { f: makeFlow([[63, 41, 2], [63, 5, 2], [160, 5, 2]], 0xff7a30, 16), gate: () => running(1) },
+  { f: makeFlow([[88, 37, 2], [88, 8, 2], [160, 8, 2]], 0xff7a30, 16), gate: () => running(2) },
+  { f: makeFlow([[117, 33, 2], [117, 11, 2], [160, 11, 2]], 0xff7a30, 16), gate: () => running(3) }
+];
+flows.forEach(o => scene.add(o.f.group));
+
+// ====== TICK (node-safe, sin renderer) ======
+let tNow = 0;
+function tick(dt) {
+  tNow += dt;
+  for (let i = 0; i < 3; i++) {
+    const rig = rigs[i], n = i + 1, on = running(n), fault = state.falla && n === 2;
+    if (on) rig.fan.rotation.z += dt * (9 + i * 1.5);
+    rig.lampGmat.emissiveIntensity = on ? 1.6 : 0.12;
+    rig.lampRmat.emissiveIntensity = fault
+      ? 0.3 + 1.5 * Math.abs(Math.sin(tNow * 8))
+      : (on ? 0.12 : 1.4);
+    if (fault) {
+      rig.runG.visible = false;
+      rig.faultG.visible = true;
+      rig.faultMat.emissiveIntensity = 0.35 + 1.5 * Math.abs(Math.sin(tNow * 7));
+      rig.light.color.setHex(0xff2233);
+      rig.light.intensity = 0.5 + 1.2 * Math.abs(Math.sin(tNow * 8));
+    } else {
+      if (rig.faultG) rig.faultG.visible = false;
+      rig.runG.visible = true;
+      rig.dispMat.emissiveIntensity = on ? 1.35 : 0.1;
+      rig.light.color.setHex(on ? 0x00ff66 : 0xff2233);
+      rig.light.intensity = on ? 1.5 : 1.0;
+    }
+  }
+  for (const o of flows) o.f.update(dt, o.gate());
+}
+
+// ====== STATS + EXPORT (harness headless) ======
+function computeStats() {
+  const colors = {};
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9, minZ = 1e9, maxZ = -1e9;
+  for (const [k, c] of cells) {
+    colors[c] = (colors[c] || 0) + 1;
+    const p = k.split(',');
+    const x = +p[0], y = +p[1], z = +p[2];
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+    if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+  }
+  return { total: cells.size, overwrites: overwrites, colors: colors,
+           bounds: { minX: minX, maxX: maxX, minY: minY, maxY: maxY, minZ: minZ, maxZ: maxZ } };
+}
+const stats = computeStats();
+globalThis.__VOX__ = { stats: stats, state: state, tick: tick, running: running, cells: cells };
+
+// ====== INIT (solo navegador) ======
+function init() {
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+  const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.5, 1200);
+  camera.position.set(160, 82, 160);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.target.set(82, 42, 6);
+  controls.autoRotate = state.rot;
+  controls.autoRotateSpeed = 0.5;
+
+  // ---- UI ----
+  const BSPEC = [['bV1', 'v1'], ['bV2', 'v2'], ['bV3', 'v3'], ['bF', 'falla'], ['bRot', 'rot']];
+  function refreshUI() {
+    for (const bs of BSPEC) {
+      const b = document.getElementById(bs[0]);
+      const on = state[bs[1]];
+      b.textContent = on ? 'ON' : 'OFF';
+      b.className = on ? (bs[1] === 'falla' ? 'alarm' : 'on') : 'off';
+    }
+  }
+  for (const bs of BSPEC) {
+    document.getElementById(bs[0]).addEventListener('click', () => {
+      state[bs[1]] = !state[bs[1]];
+      refreshUI();
+    });
+  }
+  refreshUI();
+
+  // ---- Captura de coordenadas (raycaster con guard de drag) ----
+  const marker = new THREE.Group();
+  marker.add(new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.15, 1.15),
+    new THREE.MeshBasicMaterial({ color: 0xffe14d, wireframe: true })));
+  marker.add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3),
+    new THREE.MeshBasicMaterial({ color: 0xffe14d })));
+  marker.visible = false;
+  scene.add(marker);
+  const ray = new THREE.Raycaster();
+  const ptr = new THREE.Vector2();
+  let pd = null;
+  renderer.domElement.addEventListener('pointerdown', e => {
+    pd = { x: e.clientX, y: e.clientY, t: performance.now() };
+  });
+  renderer.domElement.addEventListener('pointerup', e => {
+    if (!pd) return;
+    const dx = e.clientX - pd.x, dy = e.clientY - pd.y;
+    const ok = (dx * dx + dy * dy < 36) && (performance.now() - pd.t < 350);
+    pd = null;
+    if (!ok) return;
+    ptr.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+    ray.setFromCamera(ptr, camera);
+    const hits = ray.intersectObjects(staticMeshes, false);
+    if (!hits.length) return;
+    const h = hits[0];
+    const p = h.point.clone().addScaledVector(h.face.normal, -0.5);
+    const vx = Math.floor(p.x), vy = Math.floor(p.y), vz = Math.floor(p.z);
+    marker.position.set(vx + 0.5, vy + 0.5, vz + 0.5);
+    marker.visible = true;
+    const txt = vx + ', ' + vy + ', ' + vz;
+    document.getElementById('coordVal').textContent = 'VOX  ' + txt;
+    if (navigator.clipboard) navigator.clipboard.writeText(txt).catch(() => {});
+  });
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  const clock = new THREE.Clock();
+  renderer.setAnimationLoop(() => {
+    const dt = Math.min(clock.getDelta(), 0.05);
+    tick(dt);
+    controls.autoRotate = state.rot;
+    controls.update();
+    renderer.render(scene, camera);
+  });
+}
+if (!HEADLESS) init();
+</script>
+</body>
+</html>
