@@ -34,7 +34,13 @@
 - Extractor de cocina → `voxel/extractor-cocina-voxel (2).html` · Generador → `voxel/generador-electrico-voxel (1).html`
 
 **✅ Equipos: 12/12 entregados.** **❌ Pendiente: 13 edificio torre hotel (arquitectura — feedback
-del equipo: la torre actual no lee como hotel real; cuartos y fachada incongruentes).**
+del equipo: la torre actual no lee como hotel real; cuartos con MINISPLIT c/u, fachada sur limpia,
+condensadoras en racks al norte).**
+
+> Nota (feedback 2026-07-05): el equipo de la alberca NO es UMA — es un **calentador de
+> resistencias eléctricas** para el agua de la alberca. La estructura del gabinete existente
+> sirve; se convierte en escena (v6.1): sin ducto de aire, conectado al circuito de agua
+> después del filtro, resistencias emisivas al encender. UMA-2 → "RESISTENCIAS · ALBERCA".
 
 ## REGLAS DE CASA — pegar al FINAL de cada prompt
 
@@ -297,12 +303,15 @@ Partes obligatorias:
 — PLANTA BAJA: lobby de doble altura con marquesina de acceso, ventanal corrido, recepción
 sugerida al interior, arcada/columnas, jardineras.
 — PISOS TIPO (8): ~11 módulos de cuarto por piso en fachada sur (módulo ~4 m); CADA cuarto con
-balcón (losa volada), barandal de cristal con pasamanos de aluminio, puerta corrediza de vidrio
-de 2 hojas, y una REJILLA LINEAL discreta de fan coil sobre la puerta (NO minisplits — el hotel
-usa agua helada central; la fachada va LIMPIA, sin equipos colgados).
+balcón (losa volada), barandal de cristal con pasamanos de aluminio y puerta corrediza de vidrio
+de 2 hojas. La fachada SUR va LIMPIA (sin equipos colgados).
+— CLIMA POR CUARTO: cada cuarto tiene su MINISPLIT — evaporadora de pared visible en los
+cuartos en corte (unidad alta sobre la cabecera o junto a la puerta del balcón); las
+CONDENSADORAS van en RACKS por piso en la FACHADA NORTE (repisas metálicas con unidades
+pequeñas con rejilla de ventilador — patrón repetido, discreto y realista).
 — CUARTOS EN CORTE: la fachada sur debe poder OCULTARSE por completo (toggle CORTE) revelando
 3-4 cuartos amueblados por piso: cama con cabecera, buró, TV en muro, clóset, puerta de baño,
-plafón con rejilla del FCU — el resto de cuartos como volúmenes sugeridos.
+minisplit de pared — el resto de cuartos como volúmenes sugeridos.
 — NÚCLEO: pasillo central iluminado, núcleo de 2 elevadores + escalera en el extremo norte.
 — FACHADAS ESTE/OESTE/NORTE: ventanería menor, escalera de emergencia exterior en la norte.
 — AZOTEA: pretil perimetral, cuarto de máquinas de elevadores, bases libres para equipos
