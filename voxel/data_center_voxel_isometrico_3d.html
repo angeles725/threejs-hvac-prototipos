@@ -56,9 +56,26 @@
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
+// Dynamic importmap (house pattern, [Block 1] §1.2) - avoids middleware rewriting a static "@" tag.
+(function(){
+  const AT = String.fromCharCode(64);
+  const im = document.createElement('script');
+  im.type = 'importmap';
+  im.textContent = JSON.stringify({
+    imports: {
+      "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+    }
+  });
+  document.head.appendChild(im);
+})();
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
 (function() {
   const stage = document.getElementById('dc-stage');
   let W = stage.clientWidth, H = 540;
@@ -70,9 +87,22 @@
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(W, H);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false; // perf: static sun + static geometry -> bake shadows once (B5 §5.4)
+  renderer.shadowMap.needsUpdate = true;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   stage.appendChild(renderer.domElement);
 
-  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  // IBL (house voxel-family convention, observed near-universally in voxel/*.html siblings)
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  // No scene.fog: canvas uses alpha:true over a CSS gradient backdrop (#dc-stage) - fog would
+  // fade geometry toward an RGB fog color that fights that backdrop instead of the room itself.
+
+  const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 1, 0);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
@@ -81,43 +111,45 @@
   controls.maxPolarAngle = Math.PI / 2.05;
   controls.autoRotateSpeed = 0.6;
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-  const sun = new THREE.DirectionalLight(0xffffff, 0.55);
-  sun.position.set(18, 26, 12);
+  // 3-light house rig ([Block 4] §4.2)
+  scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+  sun.position.set(20, 30, 16);
+  sun.target.position.set(4, 1, 2); // centroid of the room + exterior chiller/condenser pads
+  scene.add(sun.target);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  const sc = sun.shadow.camera;
+  sc.left = -22; sc.right = 22; sc.top = 18; sc.bottom = -18; sc.near = 1; sc.far = 90;
+  sun.shadow.bias = -0.0003;
   scene.add(sun);
-  const fill = new THREE.DirectionalLight(0xbed1e0, 0.22);
+  const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
   fill.position.set(-15, 8, -10);
   scene.add(fill);
+  const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+  rim.position.set(-10, 12, 14);
+  scene.add(rim);
 
-  const matCache = {};
-  function mat(color, opts) {
-    const k = color + ':' + (opts ? JSON.stringify(opts) : '');
-    if (matCache[k]) return matCache[k];
-    const o = { color };
-    if (opts && opts.transparent) { o.transparent = true; o.opacity = opts.opacity || 0.5; }
-    matCache[k] = new THREE.MeshLambertMaterial(o);
-    return matCache[k];
+  // ====== Voxel data collection ======
+  // vox()/wall() no longer create a Mesh per box (r128 pattern). Boxes are bucketed by
+  // color+transparency and turned into one InstancedMesh per bucket below ([Block 2] §2.3).
+  const buckets = new Map();
+  function bucketKey(color, transparent, opacity) { return color + '|' + (transparent ? 1 : 0) + '|' + (opacity || 1); }
+  function pushBox(x, y, z, w, h, d, color, opts) {
+    opts = opts || {};
+    const transparent = !!opts.transparent;
+    const opacity = opts.opacity || 0.5;
+    const k = bucketKey(color, transparent, opacity);
+    let b = buckets.get(k);
+    if (!b) { b = { color, transparent, opacity, boxes: [] }; buckets.set(k, b); }
+    b.boxes.push({ x, y, z, w, h, d });
   }
-  const edgeMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.18 });
-  const edgeSoft = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.09 });
+  function vox(x, y, z, w, h, d, color, opts) {
+    pushBox(x, y, z, w, h, d, color, opts);
+  }
 
   const group = new THREE.Group();
   scene.add(group);
-
-  function vox(x, y, z, w, h, d, color, opts) {
-    opts = opts || {};
-    const geo = new THREE.BoxGeometry(w, h, d);
-    const m = new THREE.Mesh(geo, mat(color, opts));
-    m.position.set(x, y, z);
-    group.add(m);
-    if (!opts.noEdges) {
-      const e = new THREE.EdgesGeometry(geo);
-      const l = new THREE.LineSegments(e, opts.softEdges ? edgeSoft : edgeMat);
-      l.position.set(x, y, z);
-      group.add(l);
-    }
-    return m;
-  }
 
   const C = {
     floor: 0xeeece4, tileA: 0xdedcd2, tileB: 0xe6e4da,
@@ -146,14 +178,7 @@
 
   const wallH = 0.6;
   function wall(x, y, z, w, h, d) {
-    const geo = new THREE.BoxGeometry(w, h, d);
-    const m = new THREE.Mesh(geo, mat(C.wall, { transparent: true, opacity: 0.42 }));
-    m.position.set(x, y, z);
-    group.add(m);
-    const e = new THREE.EdgesGeometry(geo);
-    const l = new THREE.LineSegments(e, edgeMat);
-    l.position.set(x, y, z);
-    group.add(l);
+    pushBox(x, y, z, w, h, d, C.wall, { transparent: true, opacity: 0.42 });
   }
   wall(0, wallH/2, -ROOM_D/2, ROOM_W, wallH, 0.15);
   wall(-ROOM_W/2, wallH/2, 0, 0.15, wallH, ROOM_D);
@@ -347,6 +372,43 @@
 
   vox(16, -0.21, -3, 9, 0.04, 4, C.pad, { softEdges: true });
   vox(-0.5, -0.21, 11, 9, 0.04, 2.4, C.pad, { softEdges: true });
+
+  // ====== Material palette (dielectric vs metal discipline, [Block 22]) ======
+  // All surfaces are painted sheet metal, concrete, plastic or emissive LEDs - no bare/raw metal
+  // reflector in this scene, so metalness stays low (0-0.45) across the board.
+  const MP = new Map();
+  function profile(hexList, rough, metal, opts) {
+    hexList.forEach(h => MP.set(h, Object.assign({ rough, metal }, opts || {})));
+  }
+  profile([C.floor, C.tileA, C.tileB, C.pad, C.coldAisle, C.hotAisle], 0.88, 0.0);          // concrete / floor tiles
+  profile([C.rack, C.rackTop, C.rackSide, C.rackFront, C.fan, C.crac, C.cracPanel, C.cracTop,
+           C.ups, C.upsPanel, C.chiller, C.cond, 0xe0e0dc, 0x4a4a48], 0.6, 0.15);           // painted cabinet steel
+  profile([C.cracGrille, 0x6a6a66, C.condGrille, C.chillerGr, C.chillerLeg, C.fanRing,
+           C.tray, C.trayLight, C.upsAccent, 0x111111], 0.5, 0.45);                          // perforated / bare metal
+  profile([C.pipeBlue, C.pipeRed], 0.4, 0.05);                                               // painted pipe insulation jacket
+  profile([C.ledBlue, C.ledGreen, C.ledAmber], 0.3, 0.0, { emissive: true });                // status LEDs
+  const DEFAULT_MP = { rough: 0.6, metal: 0.1 };
+
+  // ====== Build one InstancedMesh per bucket (shared unit BoxGeometry, [Block 2] §2.3) ======
+  const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+  const m4 = new THREE.Matrix4();
+  for (const b of buckets.values()) {
+    const mp = MP.get(b.color) || DEFAULT_MP;
+    const params = { color: b.color, roughness: mp.rough, metalness: mp.metal };
+    if (mp.emissive) { params.emissive = b.color; params.emissiveIntensity = 1.0; }
+    if (b.transparent) { params.transparent = true; params.opacity = b.opacity; params.depthWrite = false; params.side = THREE.DoubleSide; }
+    const material = new THREE.MeshStandardMaterial(params);
+    const mesh = new THREE.InstancedMesh(cubeGeo, material, b.boxes.length);
+    mesh.castShadow = !b.transparent;
+    mesh.receiveShadow = true;
+    b.boxes.forEach((box, i) => {
+      m4.makeScale(box.w, box.h, box.d);
+      m4.setPosition(box.x, box.y, box.z);
+      mesh.setMatrixAt(i, m4);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    group.add(mesh);
+  }
 
   function setView(pos, target) {
     const dur = 700;
