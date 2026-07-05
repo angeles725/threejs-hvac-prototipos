@@ -58,10 +58,13 @@
   <div class="row"><label>VAV PISO 7</label><button id="bV7">OFF</button></div>
   <div class="row"><label>VAV PISO 8</label><button id="bV8">OFF</button></div>
   <div class="row"><label>BOMBAS ALBERCA</label><button id="bPool">OFF</button></div>
+  <div class="sub">CORTE</div>
+  <div class="row"><label>CORTE TORRE</label><button id="bCut">OFF</button></div>
   <div class="sub">CÁMARA</div>
   <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
   <div class="row"><label>VISTA 3/4</label><button id="bView3Q" class="view">GO</button></div>
   <div class="row"><label>VISTA PLANTA</label><button id="bViewTop" class="view">GO</button></div>
+  <div class="row"><label>VISTA CORTE</label><button id="bViewCut" class="view">GO</button></div>
 </div>
 
 <script type="importmap">
@@ -138,8 +141,10 @@ rim.position.set(140, 50, -160);
 scene.add(rim);
 
 // ====== GROUND ======
+// Sized so its outer edge sits well beyond camera.far (3200) from any scene
+// camera position — the plane is effectively edgeless (v3 polish).
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(3200, 3200),
+  new THREE.PlaneGeometry(9000, 9000),
   new THREE.MeshStandardMaterial({ color:0xcdc3a5, roughness:0.95, metalness:0 })
 );
 ground.rotation.x = -Math.PI/2;
@@ -148,12 +153,15 @@ ground.receiveShadow = true;
 scene.add(ground);
 
 // ====== SEA (dielectric water plane to the horizon) ======
+// Same edgeless-sizing rule as ground: near edge kept at z=180 (meets the
+// shore band) but width/depth pushed past camera.far so no far/left edge is
+// ever visible against the sky, from the default view or either preset (v3).
 const sea = new THREE.Mesh(
-  new THREE.PlaneGeometry(2600, 940),
+  new THREE.PlaneGeometry(9000, 6000),
   new THREE.MeshStandardMaterial({ color:0x1a6f96, roughness:0.22, metalness:0 })
 );
 sea.rotation.x = -Math.PI/2;
-sea.position.set(150, 0.8, 650);
+sea.position.set(150, 0.8, 3180);
 sea.receiveShadow = true;
 scene.add(sea);
 
@@ -207,6 +215,22 @@ const COL = {
   GRASS:    0x66a851,
   PAVE:     0xd8d2c2,
   WIN:      0x39718f,
+  // beach furniture (v3)
+  LNG_WHITE: 0xefe9da,
+  LNG_TEAL:  0x3f9c94,
+  UMB_CORAL: 0xd8735a,
+  PATH:      0xcbb98a,
+  THATCH:    0x9c7a3c,
+  // tower cutaway: near-duplicate hexes give the south (beach-facing) facade
+  // its own InstancedMesh buckets so it can be hidden with one visible=false
+  // per mesh, without touching the shared BEIGE/WIN/PANEL used elsewhere (v3).
+  FACADE_BEIGE: 0xd6d0b9,
+  FACADE_WIN:   0x39718e,
+  FACADE_PANEL: 0xb0aa93,
+  // tower cutaway interior hints (v3)
+  INT_SLAB:  0xb5b0a0,
+  INT_FLOOR: 0xcac2ad,
+  INT_WALL:  0xe8e4d8,
 };
 
 // ====== LAYOUT (voxels; 1 vox = 0.5 m) ======
@@ -350,35 +374,54 @@ pipeRun([209,1,79],[211,1,79], COL.PIPE_B);
 voxBox(TWX0, 0, TWZ0, TWX1, 0, TWZ1, COL.PANEL);                 // plinth
 voxBox(TWX0, 1, TWZ0, TWX1, 47, TWZ0, COL.BEIGE);                // north wall
 voxBox(TWX0, 1, TWZ0+1, TWX0, 47, TWZ1, COL.BEIGE);              // west wall
-// window facades: south (sea side) and east (camera side); rooms 8 vox (4 m) wide
-function facadeRuns(fixedIsZ, w, lo, hi) {
+// window facades: south (sea side) and east (camera side); rooms 8 vox (4 m) wide.
+// Colors are passed in so the south (beach-facing) facade can use its own
+// FACADE_* keys — same look, but its own InstancedMesh buckets for the
+// tower cutaway toggle (v3, see FACADE_COLORS / facadeMeshes below).
+function facadeRuns(fixedIsZ, w, lo, hi, wallCol, winCol, slabCol) {
   FLOORS.forEach(f => {
     const put = (a0, a1, y0, y1, color) => {
       if (fixedIsZ) voxBox(a0, y0, w, a1, y1, w, color);
       else voxBox(w, y0, a0, w, y1, a1, color);
     };
-    put(lo, hi, f+1, f+1, COL.BEIGE);          // low spandrel
-    put(lo, hi, f+5, f+5, COL.BEIGE);          // high spandrel
-    if (f > 0) put(lo, hi, f, f, COL.PANEL);   // slab edge
+    put(lo, hi, f+1, f+1, wallCol);            // low spandrel
+    put(lo, hi, f+5, f+5, wallCol);            // high spandrel
+    if (f > 0) put(lo, hi, f, f, slabCol);     // slab edge
     let start = null, type = null;
     for (let a=lo; a<=hi+1; a++) {
       const m = (a-lo) % 8;
       const t = a > hi ? null : ((m===0 || m===7 || a===hi) ? 'P' : 'W');
       if (t !== type) {
-        if (type === 'P') put(start, a-1, f+2, f+4, COL.BEIGE);
-        if (type === 'W') put(start, a-1, f+2, f+4, COL.WIN);
+        if (type === 'P') put(start, a-1, f+2, f+4, wallCol);
+        if (type === 'W') put(start, a-1, f+2, f+4, winCol);
         type = t; start = a;
       }
     }
   });
 }
-facadeRuns(true, TWZ1, TWX0+1, TWX1);    // south face
-facadeRuns(false, TWX1, TWZ0+1, TWZ1-1); // east face
+facadeRuns(true, TWZ1, TWX0+1, TWX1, COL.FACADE_BEIGE, COL.FACADE_WIN, COL.FACADE_PANEL);  // south face (beach-facing, cuttable)
+facadeRuns(false, TWX1, TWZ0+1, TWZ1-1, COL.BEIGE, COL.WIN, COL.PANEL);                    // east face (camera side, stays)
 voxBox(TWX0-1, 48, TWZ0-1, TWX1+1, 48, TWZ1+1, COL.BEIGE_D);     // roof slab
 voxBox(TWX0-1, 49, TWZ0-1, TWX1+1, 49, TWZ0-1, COL.BEIGE_D);     // parapet
 voxBox(TWX0-1, 49, TWZ1+1, TWX1+1, 49, TWZ1+1, COL.BEIGE_D);
 voxBox(TWX0-1, 49, TWZ0, TWX0-1, 49, TWZ1, COL.BEIGE_D);
 voxBox(TWX1+1, 49, TWZ0, TWX1+1, 49, TWZ1, COL.BEIGE_D);
+
+// ====== TOWER INTERIOR HINTS (revealed by the CORTE TORRE cutaway, v3) ======
+// Always built (cheap, occluded by the intact shell in normal view) — the
+// cutaway toggle only hides the south facade group, exposing these.
+const INT_X0 = TWX0+1, INT_X1 = TWX1-1, INT_Z0 = TWZ0+1, INT_Z1 = TWZ1-1;
+const INT_MIDZ = Math.round((INT_Z0+INT_Z1)/2);
+FLOORS.forEach(f => {
+  if (f > 0) voxBox(INT_X0, f, INT_Z0, INT_X1, f, INT_Z1, COL.INT_SLAB);  // floor deck (f=0 uses the plinth)
+  voxBox(INT_X0, f+1, INT_MIDZ, INT_X1, f+1, INT_MIDZ, COL.INT_FLOOR);    // corridor centerline
+  [INT_X0+14, INT_X0+30, INT_X0+46].forEach(dx => {                       // 3 room divider walls
+    voxBox(dx, f+1, INT_Z0, dx, f+5, INT_MIDZ-1, COL.INT_WALL);
+    voxBox(dx, f+1, INT_MIDZ+1, dx, f+5, INT_Z1, COL.INT_WALL);
+  });
+  voxBox(INT_X1-3, f+2, INT_MIDZ-1, INT_X1-2, f+3, INT_MIDZ+1, COL.HOUSING_D);  // VAV box
+  voxBox(INT_X1-7, f+3, INT_MIDZ,   INT_X1-3, f+3, INT_MIDZ,   COL.DUCT);       // short duct run to corridor
+});
 
 // ====== ROOFTOP AHUs (4 m long x 2 m tall) ======
 function buildAHU(x0, z0, yBase) {
@@ -550,12 +593,76 @@ const TOWEL_COLORS = [COL.PIPE_R, COL.COIL, COL.LEAF];
   voxBox(ux+4, tb, uz-1, ux+5, tb, uz+1, TOWEL_COLORS[i]);
 });
 
+// ====== BEACH LIFE: loungers, umbrellas, paths, palapas (v3) ======
+// Scale: lounger 4 vox long (2 m) x 2 vox wide, backrest raises one end to
+// 2 voxels tall. Umbrella pole 5 vox (2.5 m). Scattered, not gridded.
+function lounger(ux, uz, color, alongZ) {
+  const b = beachH(ux, uz) + 1;
+  if (alongZ) {
+    voxBox(ux, b, uz, ux+1, b, uz+3, color);        // seat, long axis along z
+    voxBox(ux, b, uz+3, ux+1, b+1, uz+3, color);     // backrest, 2 vox tall
+  } else {
+    voxBox(ux, b, uz, ux+3, b, uz+1, color);         // seat, long axis along x
+    voxBox(ux, b, uz, ux, b+1, uz+1, color);         // backrest, 2 vox tall
+  }
+}
+function umbrella(ux, uz, canopyColor) {
+  const b = beachH(ux, uz) + 1;
+  voxBox(ux, b, uz, ux, b+4, uz, COL.TRUNK);         // pole, 2.5 m
+  for (let dz=-2; dz<=2; dz++) {
+    const half = Math.floor(Math.sqrt(Math.max(0, 6 - dz*dz)));
+    voxBox(ux-half, b+5, uz+dz, ux+half, b+5, uz+dz, canopyColor);
+  }
+}
+function beachPath(px, z0, z1) {
+  for (let z=z0; z<=z1; z++) {
+    const h = beachH(px, z);
+    vox(px, h, z, COL.PATH);
+    vox(px+1, h, z, COL.PATH);
+  }
+}
+function palapa(ux, uz) {
+  const b = beachH(ux, uz) + 1;
+  [[ux,uz],[ux+3,uz],[ux,uz+3],[ux+3,uz+3]].forEach(([px,pz]) => voxBox(px, b, pz, px, b+4, pz, COL.TRUNK));
+  voxBox(ux-1, b+5, uz-1, ux+4, b+5, uz+4, COL.THATCH);
+  voxBox(ux,   b+6, uz,   ux+3, b+6, uz+3, COL.THATCH);
+}
+const LOUNGER_CLUSTERS = [
+  { x:40,  z:140, umb:COL.LNG_TEAL,  c1:COL.TRUNK,     c2:COL.LNG_WHITE, rot:false },
+  { x:80,  z:132, umb:COL.UMB_CORAL, c1:COL.LNG_WHITE, c2:COL.LNG_TEAL,  rot:true  },
+  { x:118, z:146, umb:COL.LNG_TEAL,  c1:COL.TRUNK,     c2:COL.TRUNK,     rot:false },
+  { x:165, z:128, umb:COL.UMB_CORAL, c1:COL.LNG_TEAL,  c2:COL.LNG_WHITE, rot:true  },
+  { x:205, z:144, umb:COL.LNG_TEAL,  c1:COL.LNG_WHITE, c2:COL.TRUNK,     rot:false },
+  { x:255, z:133, umb:COL.UMB_CORAL, c1:COL.TRUNK,     c2:COL.LNG_TEAL,  rot:true  },
+  { x:295, z:141, umb:COL.LNG_TEAL,  c1:COL.LNG_WHITE, c2:COL.LNG_WHITE, rot:false },
+];
+LOUNGER_CLUSTERS.forEach(cl => {
+  if (cl.rot) {
+    lounger(cl.x,   cl.z, cl.c1, true);
+    lounger(cl.x+3, cl.z, cl.c2, true);
+    umbrella(cl.x+1, cl.z+5, cl.umb);
+  } else {
+    lounger(cl.x, cl.z,   cl.c1, false);
+    lounger(cl.x, cl.z+3, cl.c2, false);
+    umbrella(cl.x+5, cl.z+1, cl.umb);
+  }
+});
+beachPath(98, 115, 175);
+beachPath(198, 115, 175);
+palapa(130, 150);
+palapa(230, 138);
+
 // ====== INSTANCED MESHES ======
 // One shared unit cube, one InstancedMesh per color group (B2 Sec2.3 house pattern).
 const cubeGeo = new THREE.BoxGeometry(1,1,1);
-const NO_CAST = new Set([COL.SAND, COL.SAND_D, COL.SAND_W, COL.OCEAN_S, COL.WATER, COL.WATER_P, COL.TILE, COL.GRASS, COL.PAVE]);
+const NO_CAST = new Set([COL.SAND, COL.SAND_D, COL.SAND_W, COL.OCEAN_S, COL.WATER, COL.WATER_P, COL.TILE, COL.GRASS, COL.PAVE, COL.PATH, COL.INT_SLAB, COL.INT_FLOOR]);
 const WATERISH = new Set([COL.WATER, COL.WATER_P]);
-const MATTE = new Set([COL.GRASS, COL.SAND, COL.SAND_D, COL.SAND_W, COL.PAVE, COL.BEIGE, COL.BEIGE_D, COL.PANEL, COL.TRUNK, COL.WOOD_D, COL.LEAF]);
+const MATTE = new Set([COL.GRASS, COL.SAND, COL.SAND_D, COL.SAND_W, COL.PAVE, COL.BEIGE, COL.BEIGE_D, COL.PANEL, COL.TRUNK, COL.WOOD_D, COL.LEAF,
+  COL.LNG_WHITE, COL.LNG_TEAL, COL.UMB_CORAL, COL.PATH, COL.THATCH,
+  COL.FACADE_BEIGE, COL.FACADE_PANEL, COL.INT_SLAB, COL.INT_FLOOR, COL.INT_WALL]);
+// South (beach-facing) facade buckets — hidden as one group by the cutaway toggle (v3).
+const FACADE_COLORS = new Set([COL.FACADE_BEIGE, COL.FACADE_WIN, COL.FACADE_PANEL]);
+const facadeMeshes = [];
 let sceneMinX=Infinity, sceneMaxX=-Infinity, sceneMinZ=Infinity, sceneMaxZ=-Infinity;
 const m4 = new THREE.Matrix4(), qIdentity = new THREE.Quaternion(), vPos = new THREE.Vector3(), vScale = new THREE.Vector3();
 for (const k in voxData) {
@@ -582,6 +689,7 @@ for (const k in voxData) {
   });
   mesh.instanceMatrix.needsUpdate = true;
   scene.add(mesh);
+  if (FACADE_COLORS.has(color)) facadeMeshes.push(mesh);
 }
 
 // ====== CAMERA / VIEWS (B37 Sec37.3 preset vocabulary) ======
@@ -589,6 +697,9 @@ const CX = (sceneMinX+sceneMaxX)/2, CZC = (sceneMinZ+sceneMaxZ)/2;
 const heroTarget = new THREE.Vector3(152, 10, 58);
 const VIEW_3Q  = { pos: new THREE.Vector3(heroTarget.x+235, heroTarget.y+145, heroTarget.z+220), tgt: heroTarget.clone() };
 const VIEW_TOP = { pos: new THREE.Vector3(CX, Math.max(sceneMaxX-sceneMinX, sceneMaxZ-sceneMinZ)*0.9, CZC+0.1), tgt: new THREE.Vector3(CX, 0, CZC) };
+// 3/4 view from the beach side, favoring the open face once CORTE TORRE hides the south facade.
+const cutTarget = new THREE.Vector3((TWX0+TWX1)/2, 20, (TWZ0+TWZ1)/2);
+const VIEW_CUT = { pos: new THREE.Vector3(cutTarget.x-70, cutTarget.y+25, TWZ1+130), tgt: cutTarget.clone() };
 function setView(v) { camera.position.copy(v.pos); controls.target.copy(v.tgt); controls.update(); }
 setView(VIEW_3Q);
 
@@ -814,7 +925,7 @@ const state = {
   bc:true, bp:true, tw:true,
   u1:true, u2:true,
   v1:true, v2:true, v3:true, v4:true, v5:true, v6:true, v7:false, v8:false,
-  pool:true
+  pool:true, cut:false
 };
 const chOn = () => [state.c1, state.c2, state.c3, state.c4];
 const vArr = () => [state.v1, state.v2, state.v3, state.v4, state.v5, state.v6, state.v7, state.v8];
@@ -875,6 +986,24 @@ bRot.onclick = () => {
 };
 document.getElementById('bView3Q').onclick = () => { controls.autoRotate = false; bRot.className='off'; bRot.textContent='OFF'; setView(VIEW_3Q); };
 document.getElementById('bViewTop').onclick = () => { controls.autoRotate = false; bRot.className='off'; bRot.textContent='OFF'; setView(VIEW_TOP); };
+
+// Tower cutaway: hides the south (beach-facing) facade InstancedMesh group in
+// one shot, exposing the always-built interior slabs/corridor/VAV hints.
+// Geometry visibility changed -> shadow map MUST be re-baked (baked-shadow rule).
+const bCut = document.getElementById('bCut');
+function setCutaway(on) {
+  state.cut = on;
+  facadeMeshes.forEach(m => { m.visible = !on; });
+  bCut.className = on ? 'on' : 'off';
+  bCut.textContent = on ? 'ON' : 'OFF';
+  renderer.shadowMap.needsUpdate = true;
+}
+bCut.onclick = () => setCutaway(!state.cut);
+document.getElementById('bViewCut').onclick = () => {
+  controls.autoRotate = false; bRot.className='off'; bRot.textContent='OFF';
+  setCutaway(true);
+  setView(VIEW_CUT);
+};
 
 // ====== RESIZE ======
 addEventListener('resize', () => {
