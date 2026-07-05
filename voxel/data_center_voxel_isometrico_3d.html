@@ -1,0 +1,392 @@
+<style>
+#dc-wrap { width: 100%; padding: 0.5rem 0; }
+#dc-stage {
+  width: 100%;
+  height: 540px;
+  border-radius: var(--border-radius-lg);
+  border: 0.5px solid var(--color-border-tertiary);
+  background: linear-gradient(180deg, #f5f5f0 0%, #e8e6dc 100%);
+  position: relative;
+  overflow: hidden;
+}
+#dc-hint {
+  position: absolute;
+  bottom: 10px;
+  left: 14px;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  background: rgba(255,255,255,0.7);
+  padding: 4px 10px;
+  border-radius: var(--border-radius-md);
+  pointer-events: none;
+}
+#dc-controls { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+#dc-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 14px;
+  margin-top: 16px;
+  font-size: 12px;
+}
+.lg-row { display: flex; align-items: center; gap: 8px; color: var(--color-text-secondary); }
+.lg-sw { width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0; border: 0.5px solid rgba(0,0,0,0.18); }
+</style>
+
+<h2 class="sr-only">Modelo isométrico 3D voxel de un data center con racks de servidores, unidades CRAC, gabinetes UPS, tuberías de agua fría y caliente, charolas de cableado y chiller exterior con condensadores</h2>
+
+<div id="dc-wrap">
+  <div id="dc-stage">
+    <div id="dc-hint">Arrastra para rotar · Rueda para zoom · Click derecho para mover</div>
+  </div>
+  <div id="dc-controls">
+    <button id="b-iso">Vista isométrica</button>
+    <button id="b-top">Vista superior</button>
+    <button id="b-front">Vista frontal</button>
+    <button id="b-rot">Auto-rotar</button>
+  </div>
+  <div id="dc-legend">
+    <div class="lg-row"><span class="lg-sw" style="background:#1a1a1a"></span>Racks de servidores</div>
+    <div class="lg-row"><span class="lg-sw" style="background:#e8e8e6"></span>Unidades CRAC / CRAH</div>
+    <div class="lg-row"><span class="lg-sw" style="background:#2a2a2a"></span>UPS / Tableros eléctricos</div>
+    <div class="lg-row"><span class="lg-sw" style="background:#378ADD"></span>Tubería agua fría (suministro)</div>
+    <div class="lg-row"><span class="lg-sw" style="background:#E24B4A"></span>Tubería agua caliente (retorno)</div>
+    <div class="lg-row"><span class="lg-sw" style="background:#9a9a9a"></span>Charolas de cableado</div>
+    <div class="lg-row"><span class="lg-sw" style="background:#d6e7f5"></span>Pasillo frío</div>
+    <div class="lg-row"><span class="lg-sw" style="background:#f2dcd8"></span>Pasillo caliente</div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function() {
+  const stage = document.getElementById('dc-stage');
+  let W = stage.clientWidth, H = 540;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(32, W/H, 0.1, 200);
+  camera.position.set(28, 22, 30);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(W, H);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  stage.appendChild(renderer.domElement);
+
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 1, 0);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance = 14;
+  controls.maxDistance = 70;
+  controls.maxPolarAngle = Math.PI / 2.05;
+  controls.autoRotateSpeed = 0.6;
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.55);
+  sun.position.set(18, 26, 12);
+  scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xbed1e0, 0.22);
+  fill.position.set(-15, 8, -10);
+  scene.add(fill);
+
+  const matCache = {};
+  function mat(color, opts) {
+    const k = color + ':' + (opts ? JSON.stringify(opts) : '');
+    if (matCache[k]) return matCache[k];
+    const o = { color };
+    if (opts && opts.transparent) { o.transparent = true; o.opacity = opts.opacity || 0.5; }
+    matCache[k] = new THREE.MeshLambertMaterial(o);
+    return matCache[k];
+  }
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.18 });
+  const edgeSoft = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.09 });
+
+  const group = new THREE.Group();
+  scene.add(group);
+
+  function vox(x, y, z, w, h, d, color, opts) {
+    opts = opts || {};
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const m = new THREE.Mesh(geo, mat(color, opts));
+    m.position.set(x, y, z);
+    group.add(m);
+    if (!opts.noEdges) {
+      const e = new THREE.EdgesGeometry(geo);
+      const l = new THREE.LineSegments(e, opts.softEdges ? edgeSoft : edgeMat);
+      l.position.set(x, y, z);
+      group.add(l);
+    }
+    return m;
+  }
+
+  const C = {
+    floor: 0xeeece4, tileA: 0xdedcd2, tileB: 0xe6e4da,
+    coldAisle: 0xd6e7f5, hotAisle: 0xf2dcd8,
+    wall: 0xffffff,
+    rack: 0x1a1a1a, rackTop: 0x2c2c2c, rackSide: 0x222222, rackFront: 0x0d0d0d,
+    ledBlue: 0x4da6ff, ledGreen: 0x66dd66, ledAmber: 0xf0a020,
+    crac: 0xeeeeec, cracPanel: 0xd0d0cc, cracGrille: 0x8a8a86, cracTop: 0xc8c8c4,
+    ups: 0x2a2a2a, upsPanel: 0x3a3a3a, upsAccent: 0xc8c8c8,
+    pipeBlue: 0x378ADD, pipeRed: 0xE24B4A,
+    tray: 0x8a8a8a, trayLight: 0xa0a0a0,
+    chiller: 0xf0f0ed, chillerLeg: 0xb8b8b4, chillerGr: 0xbcbcb8,
+    fan: 0x1a1a1a, fanCenter: 0x4a4a4a, fanRing: 0x6a6a6a,
+    cond: 0xe8e8e4, condGrille: 0xa8a8a4,
+    pad: 0xd6d4cc
+  };
+
+  const ROOM_W = 24, ROOM_D = 16;
+
+  vox(0, -0.2, 0, ROOM_W, 0.4, ROOM_D, C.floor, { softEdges: true });
+  for (let i = -11; i <= 11; i += 2) {
+    for (let j = -7; j <= 7; j += 2) {
+      vox(i, 0.005, j, 1.9, 0.02, 1.9, ((i + j) / 2) % 2 === 0 ? C.tileA : C.tileB, { noEdges: true });
+    }
+  }
+
+  const wallH = 0.6;
+  function wall(x, y, z, w, h, d) {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const m = new THREE.Mesh(geo, mat(C.wall, { transparent: true, opacity: 0.42 }));
+    m.position.set(x, y, z);
+    group.add(m);
+    const e = new THREE.EdgesGeometry(geo);
+    const l = new THREE.LineSegments(e, edgeMat);
+    l.position.set(x, y, z);
+    group.add(l);
+  }
+  wall(0, wallH/2, -ROOM_D/2, ROOM_W, wallH, 0.15);
+  wall(-ROOM_W/2, wallH/2, 0, 0.15, wallH, ROOM_D);
+  wall(ROOM_W/2, wallH/2, -5.5, 0.15, wallH, 5);
+  wall(ROOM_W/2, wallH/2, 5.5, 0.15, wallH, 5);
+  wall(-7, wallH/2, ROOM_D/2, 8, wallH, 0.15);
+  wall(7, wallH/2, ROOM_D/2, 8, wallH, 0.15);
+
+  function aisleTint(zCenter, zSize, color) {
+    vox(0, 0.025, zCenter, 7, 0.04, zSize, color, { noEdges: true });
+  }
+  aisleTint(-3.75, 0.5, C.coldAisle);
+  aisleTint(-2.25, 0.5, C.hotAisle);
+  aisleTint(-0.5, 1.0, C.coldAisle);
+  aisleTint(1.25, 0.5, C.hotAisle);
+  aisleTint(3.25, 0.5, C.coldAisle);
+
+  const RACK_W = 1.0, RACK_H = 2.2, RACK_D = 1.0;
+  const RACK_X = [-3, -2, -1, 0, 1, 2, 3];
+  const rackRows = [
+    { z: -3.0, face: -1 },
+    { z: -1.5, face: +1 },
+    { z: 0.5,  face: -1 },
+    { z: 2.0,  face: +1 }
+  ];
+
+  function buildRack(cx, cz, face) {
+    vox(cx, RACK_H/2 + 0.1, cz, RACK_W * 0.94, RACK_H, RACK_D * 0.94, C.rack);
+    vox(cx, RACK_H + 0.15, cz, RACK_W * 0.94, 0.1, RACK_D * 0.94, C.rackTop, { noEdges: true });
+    vox(cx, 0.05, cz, RACK_W, 0.1, RACK_D, C.rackSide, { noEdges: true });
+    const frontZ = cz + face * (RACK_D * 0.94 / 2 + 0.01);
+    vox(cx, RACK_H/2 + 0.1, frontZ, RACK_W * 0.82, RACK_H * 0.92, 0.02, C.rackFront, { noEdges: true });
+    for (let i = 0; i < 6; i++) {
+      const y = 0.45 + i * 0.32;
+      vox(cx, y, frontZ + face * 0.015, RACK_W * 0.66, 0.05, 0.02, 0x2a2a2a, { noEdges: true });
+    }
+    const ledY = [0.55, 1.05, 1.55, 1.95];
+    ledY.forEach((y, idx) => {
+      const col = idx % 3 === 0 ? C.ledGreen : (idx % 3 === 1 ? C.ledBlue : C.ledAmber);
+      vox(cx - 0.28, y, frontZ + face * 0.025, 0.07, 0.07, 0.012, col, { noEdges: true });
+      vox(cx - 0.12, y, frontZ + face * 0.025, 0.07, 0.07, 0.012, C.ledBlue, { noEdges: true });
+    });
+  }
+  rackRows.forEach(row => { RACK_X.forEach(x => buildRack(x, row.z, row.face)); });
+
+  function buildTray(zCenter) {
+    const trayY = 3.2;
+    vox(0, trayY, zCenter, 8, 0.12, 0.45, C.tray);
+    for (let x = -3.5; x <= 3.5; x += 0.5) {
+      vox(x, trayY - 0.08, zCenter, 0.06, 0.04, 0.45, C.trayLight, { noEdges: true });
+    }
+    for (let x = -3; x <= 3; x += 3) {
+      vox(x, trayY + 0.6, zCenter, 0.08, 1.2, 0.08, C.trayLight, { noEdges: true });
+    }
+  }
+  buildTray(-2.25);
+  buildTray(1.25);
+
+  function buildCRAC(cx, cz) {
+    vox(cx, 1.15, cz, 1.5, 2.3, 1.7, C.crac);
+    vox(cx, 2.35, cz, 1.5, 0.12, 1.7, C.cracTop, { noEdges: true });
+    vox(cx + 0.76, 1.15, cz, 0.02, 2.1, 1.5, C.cracPanel, { noEdges: true });
+    vox(cx + 0.77, 1.15, cz, 0.04, 1.7, 1.3, C.cracGrille, { noEdges: true });
+    for (let i = 0; i < 8; i++) {
+      vox(cx + 0.78, 0.4 + i * 0.22, cz, 0.005, 0.04, 1.2, 0x6a6a66, { noEdges: true });
+    }
+    vox(cx + 0.78, 1.85, cz - 0.55, 0.005, 0.28, 0.35, 0x222222, { noEdges: true });
+    vox(cx + 0.785, 1.85, cz - 0.55, 0.003, 0.2, 0.28, C.ledBlue, { noEdges: true });
+    vox(cx, 0.3, cz, 1.4, 0.3, 1.6, C.cracGrille, { noEdges: true });
+  }
+  buildCRAC(-5, -3);
+  buildCRAC(-5, 0);
+  buildCRAC(-5, 3);
+
+  function buildUPS(cx, cz, w) {
+    w = w || 1.3;
+    vox(cx, 1.1, cz, w, 2.2, 0.9, C.ups);
+    vox(cx, 2.22, cz, w, 0.06, 0.9, 0x1a1a1a, { noEdges: true });
+    vox(cx, 1.1, cz + 0.46, w * 0.9, 1.9, 0.02, C.upsPanel, { noEdges: true });
+    vox(cx, 1.75, cz + 0.475, w * 0.5, 0.28, 0.008, 0x111111, { noEdges: true });
+    vox(cx, 1.75, cz + 0.48, w * 0.42, 0.2, 0.005, C.ledGreen, { noEdges: true });
+    for (let i = 0; i < 6; i++) {
+      vox(cx, 0.4 + i * 0.15, cz + 0.475, w * 0.7, 0.05, 0.005, 0x3a3a3a, { noEdges: true });
+    }
+    vox(cx, 2.02, cz + 0.475, w * 0.55, 0.04, 0.005, C.upsAccent, { noEdges: true });
+  }
+  buildUPS(-4, -6.5);
+  buildUPS(-2, -6.5);
+  buildUPS(0, -6.5);
+  buildUPS(2, -6.5);
+  buildUPS(4.3, -6.5, 1.6);
+
+  function pipe(x1, y1, z1, x2, y2, z2, color, th) {
+    th = th || 0.18;
+    const dx = Math.abs(x2 - x1), dy = Math.abs(y2 - y1), dz = Math.abs(z2 - z1);
+    const w = dx > 0 ? dx + th * 0.5 : th;
+    const h = dy > 0 ? dy + th * 0.5 : th;
+    const d = dz > 0 ? dz + th * 0.5 : th;
+    vox((x1+x2)/2, (y1+y2)/2, (z1+z2)/2, w, h, d, color);
+  }
+  function elbow(x, y, z, color) {
+    vox(x, y, z, 0.22, 0.22, 0.22, color);
+  }
+
+  const PY = 3.65;
+  pipe(-5.6, PY, 0, 12.5, PY, 0, C.pipeBlue);
+  pipe(-5.6, PY, -3, -5.6, PY, 3, C.pipeBlue);
+  elbow(-5.6, PY, 0, C.pipeBlue);
+  elbow(-5.6, PY, -3, C.pipeBlue);
+  elbow(-5.6, PY, 3, C.pipeBlue);
+  elbow(12.3, PY, 0, C.pipeBlue);
+  pipe(-5.6, 2.4, -3, -5.6, PY, -3, C.pipeBlue);
+  pipe(-5.6, 2.4, 0, -5.6, PY, 0, C.pipeBlue);
+  pipe(-5.6, 2.4, 3, -5.6, PY, 3, C.pipeBlue);
+  pipe(-5.6, 2.4, -3, -5, 2.4, -3, C.pipeBlue);
+  pipe(-5.6, 2.4, 0, -5, 2.4, 0, C.pipeBlue);
+  pipe(-5.6, 2.4, 3, -5, 2.4, 3, C.pipeBlue);
+
+  const PYR = 4.0;
+  pipe(-6.0, PYR, 0.5, 12.5, PYR, 0.5, C.pipeRed);
+  pipe(-6.0, PYR, -3.5, -6.0, PYR, 3.5, C.pipeRed);
+  elbow(-6.0, PYR, 0.5, C.pipeRed);
+  elbow(-6.0, PYR, -3.5, C.pipeRed);
+  elbow(-6.0, PYR, 3.5, C.pipeRed);
+  elbow(12.3, PYR, 0.5, C.pipeRed);
+  pipe(-6.0, 2.4, -3.5, -6.0, PYR, -3.5, C.pipeRed);
+  pipe(-6.0, 2.4, 0.5, -6.0, PYR, 0.5, C.pipeRed);
+  pipe(-6.0, 2.4, 3.5, -6.0, PYR, 3.5, C.pipeRed);
+  pipe(-6.0, 2.4, -3.5, -5, 2.4, -3.5, C.pipeRed);
+  pipe(-6.0, 2.4, 0.5, -5, 2.4, 0.5, C.pipeRed);
+  pipe(-6.0, 2.4, 3.5, -5, 2.4, 3.5, C.pipeRed);
+
+  pipe(12.5, PY, 0, 12.5, 2.6, 0, C.pipeBlue);
+  pipe(12.5, 2.6, 0, 15, 2.6, 0, C.pipeBlue);
+  pipe(12.5, PYR, 0.5, 12.5, 2.6, 0.5, C.pipeRed);
+  pipe(12.5, 2.6, 0.5, 15, 2.6, 0.5, C.pipeRed);
+
+  function buildChiller(cx, cz) {
+    vox(cx, 0.55, cz, 7, 0.3, 2.8, C.chillerLeg, { softEdges: true });
+    vox(cx - 3.4, 0.2, cz, 0.25, 0.4, 0.25, C.chillerLeg, { noEdges: true });
+    vox(cx + 3.4, 0.2, cz, 0.25, 0.4, 0.25, C.chillerLeg, { noEdges: true });
+    vox(cx - 3.4, 0.2, cz - 1.2, 0.25, 0.4, 0.25, C.chillerLeg, { noEdges: true });
+    vox(cx + 3.4, 0.2, cz - 1.2, 0.25, 0.4, 0.25, C.chillerLeg, { noEdges: true });
+    vox(cx - 3.4, 0.2, cz + 1.2, 0.25, 0.4, 0.25, C.chillerLeg, { noEdges: true });
+    vox(cx + 3.4, 0.2, cz + 1.2, 0.25, 0.4, 0.25, C.chillerLeg, { noEdges: true });
+
+    vox(cx, 1.5, cz, 7, 1.6, 2.8, C.chiller);
+    vox(cx, 1.5, cz - 1.05, 6.8, 1.4, 0.12, C.chillerGr, { noEdges: true });
+    vox(cx, 1.5, cz + 1.05, 6.8, 1.4, 0.12, C.chillerGr, { noEdges: true });
+    for (let i = -3.2; i <= 3.2; i += 0.45) {
+      vox(cx + i, 1.5, cz - 1.11, 0.04, 1.3, 0.005, 0x8a8a86, { noEdges: true });
+      vox(cx + i, 1.5, cz + 1.11, 0.04, 1.3, 0.005, 0x8a8a86, { noEdges: true });
+    }
+    vox(cx, 2.35, cz, 7, 0.18, 2.8, 0xe0e0dc, { noEdges: true });
+
+    const fans = [
+      {x:-2.7, z:-0.7}, {x:-1.35, z:-0.7}, {x:0, z:-0.7}, {x:1.35, z:-0.7}, {x:2.7, z:-0.7},
+      {x:-2.7, z: 0.7}, {x:-1.35, z: 0.7}, {x:0, z: 0.7}, {x:1.35, z: 0.7}, {x:2.7, z: 0.7}
+    ];
+    fans.forEach(f => {
+      vox(cx + f.x, 2.5, cz + f.z, 1.0, 0.12, 1.0, C.fanRing, { noEdges: true });
+      vox(cx + f.x, 2.6, cz + f.z, 0.85, 0.04, 0.16, C.fan, { noEdges: true });
+      vox(cx + f.x, 2.6, cz + f.z, 0.16, 0.04, 0.85, C.fan, { noEdges: true });
+      vox(cx + f.x, 2.65, cz + f.z, 0.18, 0.06, 0.18, C.fanCenter, { noEdges: true });
+    });
+
+    vox(cx - 3.5, 1.0, cz, 0.06, 0.5, 0.6, 0x4a4a48, { noEdges: true });
+    vox(cx - 3.5, 1.5, cz - 0.25, 0.04, 0.3, 0.2, 0x111111, { noEdges: true });
+    vox(cx - 3.51, 1.5, cz - 0.25, 0.002, 0.22, 0.15, C.ledGreen, { noEdges: true });
+  }
+  buildChiller(16, -3);
+
+  function buildCondenser(cx, cz) {
+    vox(cx, 0.1, cz, 1.5, 0.2, 1.5, C.chillerLeg, { noEdges: true });
+    vox(cx, 0.8, cz, 1.4, 1.2, 1.4, C.cond);
+    for (let i = -0.45; i <= 0.45; i += 0.13) {
+      vox(cx, 0.8 + i, cz + 0.71, 1.3, 0.025, 0.005, C.condGrille, { noEdges: true });
+      vox(cx, 0.8 + i, cz - 0.71, 1.3, 0.025, 0.005, C.condGrille, { noEdges: true });
+      vox(cx + 0.71, 0.8 + i, cz, 0.005, 0.025, 1.3, C.condGrille, { noEdges: true });
+      vox(cx - 0.71, 0.8 + i, cz, 0.005, 0.025, 1.3, C.condGrille, { noEdges: true });
+    }
+    vox(cx, 1.45, cz, 1.3, 0.1, 1.3, C.fanRing, { noEdges: true });
+    vox(cx, 1.52, cz, 1.05, 0.04, 0.16, C.fan, { noEdges: true });
+    vox(cx, 1.52, cz, 0.16, 0.04, 1.05, C.fan, { noEdges: true });
+    vox(cx, 1.57, cz, 0.2, 0.06, 0.2, C.fanCenter, { noEdges: true });
+  }
+  buildCondenser(-4, 11);
+  buildCondenser(-1.7, 11);
+  buildCondenser(0.6, 11);
+  buildCondenser(2.9, 11);
+
+  vox(16, -0.21, -3, 9, 0.04, 4, C.pad, { softEdges: true });
+  vox(-0.5, -0.21, 11, 9, 0.04, 2.4, C.pad, { softEdges: true });
+
+  function setView(pos, target) {
+    const dur = 700;
+    const sp = camera.position.clone();
+    const st = controls.target.clone();
+    const ep = new THREE.Vector3(pos.x, pos.y, pos.z);
+    const et = new THREE.Vector3(target.x, target.y, target.z);
+    const t0 = performance.now();
+    function step() {
+      const t = Math.min(1, (performance.now() - t0) / dur);
+      const e = t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2) / 2;
+      camera.position.lerpVectors(sp, ep, e);
+      controls.target.lerpVectors(st, et, e);
+      controls.update();
+      if (t < 1) requestAnimationFrame(step);
+    }
+    step();
+  }
+
+  document.getElementById('b-iso').onclick = () => setView({x:28, y:22, z:30}, {x:0, y:1, z:0});
+  document.getElementById('b-top').onclick = () => setView({x:0.1, y:38, z:0.1}, {x:0, y:0, z:0});
+  document.getElementById('b-front').onclick = () => setView({x:0, y:6, z:34}, {x:0, y:1, z:0});
+  const btnRot = document.getElementById('b-rot');
+  btnRot.onclick = () => {
+    controls.autoRotate = !controls.autoRotate;
+    btnRot.textContent = controls.autoRotate ? 'Detener rotación' : 'Auto-rotar';
+  };
+
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize', () => {
+    W = stage.clientWidth;
+    camera.aspect = W / H;
+    camera.updateProjectionMatrix();
+    renderer.setSize(W, H);
+  });
+})();
+</script>

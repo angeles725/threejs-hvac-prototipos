@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VAV · Fan-Coil Voxel</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#06080d;color:#e6eaf2;font-family:'JetBrains Mono',monospace;overflow:hidden;height:100vh}
+  #c{position:fixed;inset:0;display:block}
+  #title{position:fixed;top:18px;left:20px;z-index:10;pointer-events:none}
+  #title h1{margin:0;font-size:13px;letter-spacing:3px;color:#e6eaf2;font-weight:600;font-family:'DM Sans'}
+  #title p{margin:3px 0 0;font-size:9px;letter-spacing:2.5px;color:#4a5568}
+  #title span{color:#00d4aa}
+  #panel{position:fixed;bottom:20px;right:20px;background:rgba(10,14,22,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid #1e2838;border-radius:10px;padding:14px 14px 10px;min-width:230px;z-index:10}
+  #panel h3{margin:0 0 12px;font-size:10px;letter-spacing:2.5px;color:#00d4aa;font-weight:600}
+  .btn{display:flex;justify-content:space-between;align-items:center;padding:9px 11px;margin:5px 0;border:1px solid #1e2838;border-radius:6px;background:#0b1018;cursor:pointer;font-size:9.5px;letter-spacing:1.3px;color:#8892a6;transition:all .15s;font-family:inherit;user-select:none}
+  .btn:hover{border-color:#2a3550;background:#0d131d}
+  .btn.on{border-color:#00d4aa;color:#00d4aa;box-shadow:inset 0 0 12px rgba(0,212,170,.08)}
+  .btn.off{border-color:#ff2233;color:#ff2233;box-shadow:inset 0 0 12px rgba(255,34,51,.08)}
+  .dot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+  #hint{position:fixed;bottom:20px;left:20px;font-size:9px;letter-spacing:1.5px;color:#3a4558;z-index:10}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="title"><h1>VAV · FAN COIL MODULE</h1><p>VOXEL<span> · </span>SCADA VIEW<span> · </span>64 × 22 × 22</p></div>
+<div id="hint">DRAG · ROTATE &nbsp;·&nbsp; SCROLL · ZOOM</div>
+<div id="panel">
+  <h3>CONTROL PANEL</h3>
+  <div class="btn on" data-k="fan1">SUPPLY FAN 1<span class="dot"></span></div>
+  <div class="btn on" data-k="fan2">SUPPLY FAN 2<span class="dot"></span></div>
+  <div class="btn on" data-k="coil">HEATING COIL<span class="dot"></span></div>
+  <div class="btn on" data-k="cut">CUT-AWAY<span class="dot"></span></div>
+  <div class="btn on" data-k="rot">AUTO-ROTATE<span class="dot"></span></div>
+</div>
+
+<script type="importmap">
+{"imports":{
+  "three":"https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+
+/* ======================= RENDERER / SCENE ======================= */
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.15;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color('#06080d');
+scene.fog=new THREE.Fog('#06080d',90,260);
+
+const pmrem=new THREE.PMREMGenerator(renderer);
+scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
+
+const camera=new THREE.PerspectiveCamera(40,innerWidth/innerHeight,0.1,500);
+camera.position.set(70,45,75);
+
+const controls=new OrbitControls(camera,canvas);
+controls.target.set(32,12,0);
+controls.enableDamping=true;
+controls.dampingFactor=0.08;
+controls.autoRotate=true;
+controls.autoRotateSpeed=0.55;
+controls.minDistance=35;
+controls.maxDistance=180;
+
+/* Lighting — SCADA rim lights */
+scene.add(new THREE.AmbientLight(0xffffff,0.22));
+const key=new THREE.DirectionalLight(0xffffff,1.1);key.position.set(50,70,40);scene.add(key);
+const rimT=new THREE.PointLight(0x00d4aa,120,140,2);rimT.position.set(32,30,-40);scene.add(rimT);
+const rimB=new THREE.PointLight(0x4da6ff,50,120,2);rimB.position.set(32,-12,40);scene.add(rimB);
+
+/* ======================= PALETTE ======================= */
+const C={
+  SHELL:   0x2a3040,
+  SHELL_D: 0x1a1f2c,
+  FRAME:   0x3d4558,
+  FLANGE:  0x4a5568,
+  FIN:     0x3a4558,
+  FIN_D:   0x232a38,
+  COPPER:  0xc87533,
+  COPPER_D:0x8a4a1c,
+  HUB:     0x0e131d,
+  BLADE:   0x5a6578,
+  BLADE_D: 0x3a4252,
+  BOLT:    0x6a7486,
+  DUCT:    0x252b3a
+};
+const SHELL_SET=new Set([C.SHELL,C.SHELL_D,C.DUCT]);
+
+/* ======================= VOXEL ACCUMULATORS ======================= */
+const mainVox={};    // bulk static voxels
+const cutVox={};     // the cut-away panel (toggleable)
+
+function V(bucket,c,x,y,z){(bucket[c]=bucket[c]||[]).push([x,y,z]);}
+
+const LEN=64, CY=12, R=10;
+
+/* ---------- SHELL (tubular, octagonal ring) ---------- */
+function onShell(y,z){
+  const d=Math.sqrt((y-CY)*(y-CY)+z*z);
+  return d>=R-0.55 && d<=R+0.55;
+}
+const FLANGE_X=new Set([0,5,14,19,27,45,51,58,63]);
+for(let x=0;x<LEN;x++){
+  for(let y=CY-R-1;y<=CY+R+1;y++){
+    for(let z=-R-1;z<=R+1;z++){
+      if(!onShell(y,z))continue;
+      const isFlange=FLANGE_X.has(x);
+      let col;
+      if(isFlange) col=C.FLANGE;
+      else if((x>=6&&x<=13)||(x>=20&&x<=26)) col=C.DUCT;         // fan housings
+      else col=((x+y+z)%5===0)?C.SHELL_D:C.SHELL;                 // main shell
+      // Cut-away window: middle top-front quadrant between flanges
+      const inCut = x>=28 && x<=44 && z>1 && y>=CY;
+      if(inCut) V(cutVox,col,x,y,z);
+      else      V(mainVox,col,x,y,z);
+    }
+  }
+}
+
+/* ---------- BOLTS on flanges (decorative) ---------- */
+for(const fx of FLANGE_X){
+  for(let a=0;a<12;a++){
+    const ang=(a/12)*Math.PI*2;
+    const by=Math.round(CY+Math.sin(ang)*(R+1));
+    const bz=Math.round(Math.cos(ang)*(R+1));
+    V(mainVox,C.BOLT,fx,by,bz);
+  }
+}
+
+/* ---------- COIL FINS (vertical slabs) ---------- */
+const COIL_X0=29, COIL_X1=44;
+const tubePos=[
+  [CY-5,-5],[CY-5,0],[CY-5,5],
+  [CY+0,-5],[CY+0,5],
+  [CY+5,-5],[CY+5,0],[CY+5,5]
+];
+function nearTube(y,z){
+  for(const[ty,tz]of tubePos){
+    const d=(y-ty)*(y-ty)+(z-tz)*(z-tz);
+    if(d<=2) return true;
+  }
+  return false;
+}
+for(let x=COIL_X0;x<=COIL_X1;x++){
+  if((x-COIL_X0)%2!==0) continue;              // fin every 2 units
+  for(let y=CY-R+1;y<=CY+R-1;y++){
+    for(let z=-R+1;z<=R-1;z++){
+      if(Math.sqrt((y-CY)*(y-CY)+z*z)>R-1.2) continue;
+      if(nearTube(y,z)) continue;
+      const col=((x+y)%3===0)?C.FIN_D:C.FIN;
+      V(mainVox,col,x,y,z);
+    }
+  }
+}
+
+/* ---------- COPPER TUBES through coil + return bends ---------- */
+for(let x=COIL_X0-1;x<=COIL_X1+1;x++){
+  for(const[ty,tz]of tubePos){
+    V(mainVox,(x%2===0?C.COPPER:C.COPPER_D),x,ty,tz);
+  }
+}
+// U-bend headers at front (z = R-1) at both ends, joining tube rows
+function bendColumn(xBend){
+  for(const[ty,tz]of tubePos){
+    // vertical copper run from tube to top header
+    const topY=CY+R-1;
+    for(let y=ty;y<=topY;y++) V(mainVox,C.COPPER_D,xBend,y,tz);
+  }
+  // header pipe running along x inside, at top front
+  for(let zz=-5;zz<=5;zz++) V(mainVox,C.COPPER,xBend,CY+R-1,zz);
+}
+bendColumn(COIL_X0-2);
+bendColumn(COIL_X1+2);
+
+// Supply/return pipe stubs sticking out the top
+for(let y=CY+R;y<=CY+R+3;y++){
+  V(mainVox,C.COPPER,COIL_X0-2,y,-4);
+  V(mainVox,C.COPPER,COIL_X1+2,y,4);
+}
+
+/* ======================= BUILD INSTANCED MESHES ======================= */
+const cubeGeo=new THREE.BoxGeometry(1,1,1);
+const meshRoot=new THREE.Group(); scene.add(meshRoot);
+const cutGroup=new THREE.Group(); meshRoot.add(cutGroup);
+
+function buildInstanced(bucket,parent,opts={}){
+  const meshes=[];
+  for(const colStr in bucket){
+    const positions=bucket[colStr];
+    const col=parseInt(colStr);
+    const isShell=SHELL_SET.has(col);
+    const mat=new THREE.MeshStandardMaterial({
+      color:col,
+      metalness:isShell?0.85:(col===C.COPPER||col===C.COPPER_D?0.9:0.6),
+      roughness:isShell?0.38:(col===C.COPPER||col===C.COPPER_D?0.28:0.55),
+      emissive:col,
+      emissiveIntensity:isShell?0.02:0.04
+    });
+    const im=new THREE.InstancedMesh(cubeGeo,mat,positions.length);
+    const m=new THREE.Matrix4();
+    positions.forEach((p,i)=>{
+      m.setPosition(p[0]+0.5,p[1]+0.5,p[2]+0.5);
+      im.setMatrixAt(i,m);
+    });
+    im.instanceMatrix.needsUpdate=true;
+    im.castShadow=false;
+    parent.add(im);
+    meshes.push({im,mat,col});
+  }
+  return meshes;
+}
+
+const mainMeshes=buildInstanced(mainVox,meshRoot);
+const cutMeshes =buildInstanced(cutVox,cutGroup);
+
+/* ======================= ANIMATED FANS (voxel blades) ======================= */
+function makeFan(xCenter){
+  const g=new THREE.Group();
+  g.position.set(xCenter+0.5,CY+0.5,0.5);
+
+  // Hub — 3×3×3 core
+  const hubMat=new THREE.MeshStandardMaterial({color:C.HUB,metalness:0.7,roughness:0.4});
+  for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)for(let dz=-1;dz<=1;dz++){
+    const cube=new THREE.Mesh(cubeGeo,hubMat);
+    cube.position.set(dx,dy,dz);
+    g.add(cube);
+  }
+  // Motor shaft cap
+  for(let dx=-2;dx<=2;dx++){
+    const cube=new THREE.Mesh(cubeGeo,hubMat);
+    cube.position.set(dx,0,0);
+    g.add(cube);
+  }
+
+  // 5 blades rotating around X axis
+  const bladeMat=new THREE.MeshStandardMaterial({color:C.BLADE,metalness:0.75,roughness:0.42});
+  const bladeMatD=new THREE.MeshStandardMaterial({color:C.BLADE_D,metalness:0.75,roughness:0.5});
+  const NBLADES=5;
+  for(let b=0;b<NBLADES;b++){
+    const bg=new THREE.Group();
+    bg.rotation.x=(b/NBLADES)*Math.PI*2;
+    // Blade cubes along radial with slight pitch (z offset = tilt)
+    for(let r=2;r<=R-1.5;r++){
+      const pitch=(r-2)*0.22;
+      const cube=new THREE.Mesh(cubeGeo,r%2?bladeMat:bladeMatD);
+      cube.position.set(0,r,pitch);
+      bg.add(cube);
+      // Width of blade grows with radius
+      if(r>=3){
+        const w=new THREE.Mesh(cubeGeo,bladeMat);
+        w.position.set(0,r,pitch+1);
+        bg.add(w);
+      }
+      if(r>=5){
+        const w=new THREE.Mesh(cubeGeo,bladeMatD);
+        w.position.set(0,r,pitch-1);
+        bg.add(w);
+      }
+    }
+    g.add(bg);
+  }
+  return g;
+}
+
+const fan1=makeFan(10); meshRoot.add(fan1);
+const fan2=makeFan(23); meshRoot.add(fan2);
+
+/* ======================= LED INDICATORS ======================= */
+function makeLED(x,label){
+  const g=new THREE.Group();
+  g.position.set(x+0.5,CY+R+1.5,0.5);
+  const mat=new THREE.MeshStandardMaterial({color:0x00d4aa,emissive:0x00d4aa,emissiveIntensity:2.2,metalness:0.2,roughness:0.3});
+  const cube=new THREE.Mesh(cubeGeo,mat);
+  g.add(cube);
+  const light=new THREE.PointLight(0x00d4aa,1.5,18,2);
+  light.position.set(0,0.5,0);
+  g.add(light);
+  g.userData={mat,light};
+  return g;
+}
+const led1=makeLED(10); meshRoot.add(led1);
+const led2=makeLED(23); meshRoot.add(led2);
+const ledCoil=makeLED(37); meshRoot.add(ledCoil);
+
+/* ======================= AIRFLOW PARTICLES ======================= */
+const PCOUNT=120;
+const partGeo=new THREE.BoxGeometry(0.55,0.55,0.55);
+const partMat=new THREE.MeshStandardMaterial({
+  color:0x00d4aa,emissive:0x00d4aa,emissiveIntensity:1.8,
+  transparent:true,opacity:0.85,metalness:0.1,roughness:0.4
+});
+const partsMesh=new THREE.InstancedMesh(partGeo,partMat,PCOUNT);
+meshRoot.add(partsMesh);
+
+const parts=[];
+for(let i=0;i<PCOUNT;i++){
+  const ang=Math.random()*Math.PI*2;
+  const rad=Math.random()*(R-2);
+  parts.push({
+    x:Math.random()*LEN,
+    y:CY+Math.sin(ang)*rad,
+    z:Math.cos(ang)*rad,
+    vx:0.25+Math.random()*0.35,
+    opa:Math.random()
+  });
+}
+const pMat=new THREE.Matrix4();
+
+/* ======================= STATE & CONTROL ======================= */
+const state={fan1:true,fan2:true,coil:true,cut:true,rot:true};
+
+function applyState(){
+  controls.autoRotate=state.rot;
+  cutGroup.visible=!state.cut;   // CUT ON = panel hidden (cut-away visible)
+
+  // LEDs color
+  const setLed=(g,on)=>{
+    g.userData.mat.color.setHex(on?0x00d4aa:0xff2233);
+    g.userData.mat.emissive.setHex(on?0x00d4aa:0xff2233);
+    g.userData.light.color.setHex(on?0x00d4aa:0xff2233);
+    g.userData.light.intensity=on?1.5:0.9;
+  };
+  setLed(led1,state.fan1);
+  setLed(led2,state.fan2);
+  setLed(ledCoil,state.coil);
+
+  // Coil copper emissive glow
+  for(const m of mainMeshes){
+    if(m.col===C.COPPER||m.col===C.COPPER_D){
+      m.mat.emissiveIntensity=state.coil?0.55:0.04;
+      m.mat.color.setHex(state.coil?(m.col===C.COPPER?0xff8c3a:0xc8551a):m.col);
+      m.mat.emissive.setHex(state.coil?0xff6020:m.col);
+    }
+  }
+
+  // Particle color by coil state
+  partMat.color.setHex(state.coil?0xff8040:0x00d4aa);
+  partMat.emissive.setHex(state.coil?0xff5020:0x00d4aa);
+}
+
+document.querySelectorAll('.btn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    const k=b.dataset.k;
+    state[k]=!state[k];
+    b.classList.toggle('on',state[k]);
+    b.classList.toggle('off',!state[k]);
+    applyState();
+  });
+});
+applyState();
+
+/* ======================= ANIMATION LOOP ======================= */
+const clock=new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+  const t=clock.elapsedTime;
+
+  if(state.fan1) fan1.rotation.x += dt*8;
+  if(state.fan2) fan2.rotation.x += dt*8.5;
+
+  // LED pulse
+  const pulse=0.85+Math.sin(t*4)*0.15;
+  led1.userData.mat.emissiveIntensity  =2.2*pulse;
+  led2.userData.mat.emissiveIntensity  =2.2*pulse;
+  ledCoil.userData.mat.emissiveIntensity=2.2*pulse;
+
+  // Airflow particles — only if at least one fan running
+  const flow=(state.fan1||state.fan2);
+  for(let i=0;i<PCOUNT;i++){
+    const p=parts[i];
+    if(flow){
+      p.x += p.vx*(state.fan1&&state.fan2?1.6:1.0);
+      if(p.x>LEN+2){
+        p.x=-2;
+        const ang=Math.random()*Math.PI*2;
+        const rad=Math.random()*(R-2);
+        p.y=CY+Math.sin(ang)*rad;
+        p.z=Math.cos(ang)*rad;
+      }
+    }
+    pMat.setPosition(p.x,p.y,p.z);
+    partsMesh.setMatrixAt(i,pMat);
+  }
+  partsMesh.instanceMatrix.needsUpdate=true;
+  partMat.opacity=flow?0.85:0;
+
+  controls.update();
+  renderer.render(scene,camera);
+}
+animate();
+
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>

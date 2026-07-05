@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>CHILLER ENFRIADO POR AIRE · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(6px); z-index:10; }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter:blur(6px); z-index:10; }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); z-index:10; }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:230px; font-size:11px; backdrop-filter:blur(6px); z-index:10; }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:54px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>CHILLER ENFRIADO POR AIRE</b><br>
+  <span>Voxel Art · Vista en Corte · Alta Fidelidad</span>
+</div>
+<div id="legend">
+  <div><i style="background:#aa55ff"></i> Refrigerante</div>
+  <div><i style="background:#44aaff"></i> Aire condensador</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>COMPRESOR 1</label><button id="bC1" class="off">OFF</button></div>
+  <div class="row"><label>COMPRESOR 2</label><button id="bC2" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ====== MATERIALS — CHILLER_MATS (M01–M21) ======
+const CHILLER_MATS = {};
+
+// M01: copper — suction/discharge lines, headers, ports
+CHILLER_MATS.M01 = new THREE.MeshStandardMaterial({ color: 0xb87333, roughness: 0.32, metalness: 0.92 });
+
+// M02: aluminum — skid frame, structural
+CHILLER_MATS.M02 = new THREE.MeshStandardMaterial({ color: 0x909098, roughness: 0.35, metalness: 0.90 });
+
+// M03: steel — compressor shells, fan housings
+CHILLER_MATS.M03 = new THREE.MeshStandardMaterial({ color: 0x505058, roughness: 0.40, metalness: 0.85 });
+
+// M04: concrete — base/skid
+const concTex = (() => {
+  const c = Object.assign(document.createElement('canvas'), {width:512, height:512});
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#bdb6a6'; ctx.fillRect(0,0,512,512);
+  const id = ctx.getImageData(0,0,512,512);
+  const d = id.data;
+  for (let i=0; i<d.length; i+=4) {
+    const n = (Math.random()-0.5)*76;
+    d[i]+=n; d[i+1]+=n; d[i+2]+=n;
+  }
+  for (let i=0; i<18; i++) {
+    const x=Math.random()*512, y=Math.random()*512, r=Math.random()*14+4;
+    const g = ctx.createRadialGradient(x,y,0,x,y,r);
+    g.addColorStop(0,'rgba(60,50,40,0.35)'); g.addColorStop(1,'rgba(60,50,40,0)');
+    ctx.fillStyle=g; ctx.fillRect(x-r-2,y-r-2,r*2+4,r*2+4);
+  }
+  for (let i=0; i<14; i++) {
+    const x=Math.random()*512, y=Math.random()*512, r=Math.random()*8+2;
+    const g = ctx.createRadialGradient(x,y,0,x,y,r);
+    g.addColorStop(0,'rgba(220,215,205,0.3)'); g.addColorStop(1,'rgba(220,215,205,0)');
+    ctx.fillStyle=g; ctx.fillRect(x-r-2,y-r-2,r*2+4,r*2+4);
+  }
+  for (let i=0; i<220; i++) {
+    const x=Math.random()*512, y=Math.random()*512;
+    ctx.fillStyle=`rgba(${Math.random()>0.5?180:100},${Math.random()>0.5?170:90},${Math.random()>0.5?160:80},0.25)`;
+    ctx.fillRect(x,x,1,1);
+  }
+  ctx.putImageData(id,0,0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(1.5,1.5);
+  return t;
+})();
+CHILLER_MATS.M04 = new THREE.MeshStandardMaterial({ color: 0x0a0e16, roughness: 0.85, metalness: 0.05, map: concTex });
+CHILLER_MATS.M04.bumpMap = concTex; CHILLER_MATS.M04.bumpScale = 0.6;
+
+// M05: insulation — refrigerant pipe wrap
+const insTex = (() => {
+  const c = Object.assign(document.createElement('canvas'), {width:256, height:256});
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#4a5058'; ctx.fillRect(0,0,256,256);
+  for (let y=0; y<256; y+=4) {
+    const g = ctx.createLinearGradient(0,y,256,y);
+    g.addColorStop(0,'rgba(80,85,93,0)');
+    g.addColorStop(0.2,'rgba(80,85,93,0.5)');
+    g.addColorStop(0.5,'rgba(90,96,105,0.6)');
+    g.addColorStop(0.8,'rgba(80,85,93,0.5)');
+    g.addColorStop(1,'rgba(80,85,93,0)');
+    ctx.fillStyle=g; ctx.fillRect(0,y-1,256,3);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(3,3);
+  return t;
+})();
+CHILLER_MATS.M05 = new THREE.MeshStandardMaterial({ color: 0x4a6878, roughness: 0.75, metalness: 0.10, map: insTex });
+CHILLER_MATS.M05.bumpMap = insTex; CHILLER_MATS.M05.bumpScale = 0.15;
+
+// M06: shell_transparent — roof panels
+CHILLER_MATS.M06 = new THREE.MeshStandardMaterial({ color: 0xc8c2a8, roughness: 0.45, metalness: 0.55, transparent: true, opacity: 0.16, side: THREE.DoubleSide });
+
+// M07: plastic_black — junction boxes, control panel body
+CHILLER_MATS.M07 = new THREE.MeshStandardMaterial({ color: 0x22222a, roughness: 0.60, metalness: 0.20 });
+
+// M08: glass — sight glasses (MeshPhysicalMaterial)
+CHILLER_MATS.M08 = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.05, metalness: 0.0, transmission: 0.92, ior: 1.45, thickness: 0.1, transparent: true, opacity: 0.92 });
+
+// M09: fan_blade
+CHILLER_MATS.M09 = new THREE.MeshStandardMaterial({ color: 0xff2233, roughness: 0.50, metalness: 0.65, emissive: 0xff2233, emissiveIntensity: 0.4 });
+
+// M10: compressor_housing
+CHILLER_MATS.M10 = new THREE.MeshStandardMaterial({ color: 0x38383e, roughness: 0.38, metalness: 0.88 });
+
+// M11: copper_header — with concrete texture (used as copper with slight texture)
+CHILLER_MATS.M11 = new THREE.MeshStandardMaterial({ color: 0x8a5522, roughness: 0.32, metalness: 0.92 });
+
+// M12: condenser_coil
+CHILLER_MATS.M12 = new THREE.MeshStandardMaterial({ color: 0x6888a8, roughness: 0.30, metalness: 0.92 });
+
+// M13: filter_drier — valve brass
+CHILLER_MATS.M13 = new THREE.MeshStandardMaterial({ color: 0x998844, roughness: 0.45, metalness: 0.60 });
+
+// M14: insulation_wrap — with insulation texture (same as M05 but slightly different tint)
+CHILLER_MATS.M14 = new THREE.MeshStandardMaterial({ color: 0x4a6878, roughness: 0.75, metalness: 0.10, map: insTex });
+CHILLER_MATS.M14.bumpMap = insTex; CHILLER_MATS.M14.bumpScale = 0.15;
+
+// M15: coil_base / control panel
+CHILLER_MATS.M15 = new THREE.MeshStandardMaterial({ color: 0x5a7888, roughness: 0.55, metalness: 0.45 });
+
+// M16: exp_valve / grille
+CHILLER_MATS.M16 = new THREE.MeshStandardMaterial({ color: 0x18181e, roughness: 0.80, metalness: 0.30 });
+
+// M17: motor_housing
+CHILLER_MATS.M17 = new THREE.MeshStandardMaterial({ color: 0x505058, roughness: 0.42, metalness: 0.80 });
+
+// M18: frame_steel
+CHILLER_MATS.M18 = new THREE.MeshStandardMaterial({ color: 0x727278, roughness: 0.40, metalness: 0.85 });
+
+// M19: bolt
+CHILLER_MATS.M19 = new THREE.MeshStandardMaterial({ color: 0x808084, roughness: 0.35, metalness: 0.90 });
+
+// M20: paint_white — roof panels opaque
+CHILLER_MATS.M20 = new THREE.MeshStandardMaterial({ color: 0xc8c2a8, roughness: 0.50, metalness: 0.30 });
+
+// M21: paint_yellow — BAFFLE end caps
+CHILLER_MATS.M21 = new THREE.MeshStandardMaterial({ color: 0xd0cabb, roughness: 0.50, metalness: 0.30 });
+
+// Color → material key mapping for instanced voxels
+const COL_MAT = {
+  [0xb0b0b4]: 'M02', // SKID
+  [0x808084]: 'M02', // SKID_D
+  [0x22222a]: 'M07', // DARK
+  [0x333340]: 'M07', // DARK_L
+  [0x707078]: 'M10', // HOUSING
+  [0x505058]: 'M10', // HOUSING_D
+  [0x4a6878]: 'M05', // COIL
+  [0x6888a8]: 'M12', // COIL_H
+  [0x5a7888]: 'M15', // COIL_FIN
+  [0xb87333]: 'M01', // COPPER
+  [0x8a5522]: 'M11', // COPPER_D
+  [0x38383e]: 'M10', // COMP
+  [0x50505a]: 'M18', // COMP_L
+  [0x48484e]: 'M03', // COMP_RIB
+  [0x505058]: 'M17', // MOTOR
+  [0x3a3a42]: 'M17', // MOTOR_D
+  [0x727278]: 'M18', // FRAME
+  [0x505058]: 'M03', // FRAME_D
+  [0x18181e]: 'M16', // GRILLE
+  [0xd0cabb]: 'M21', // BAFFLE
+  [0x1a1a1a]: 'M05', // RUBBER
+  [0x998844]: 'M13', // VALVE
+  [0x909098]: 'M15', // PANEL_F
+  [0xc8c2a8]: 'M20', // BEIGE
+  [0xa8a290]: 'M20', // BEIGE_D
+};
+// Shell-transparent materials (BEIGE, BAFFLE use M06)
+const SHELL_MATS = { [0xc8c2a8]: true, [0xa8a290]: true, [0xd0cabb]: true };
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 160, 420);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 900);
+camera.position.set(140, 95, 120);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+// Canvas appended via container div in ResizeObserver section below
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+// Apply environment to metallic materials M01–M08, M18
+['M01','M02','M03','M04','M05','M06','M07','M08','M18'].forEach(k => {
+  if (CHILLER_MATS[k]) CHILLER_MATS[k].environment = scene.environment;
+});
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.target.set(42, 18, 28);
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.5;
+
+// ====== LIGHTS ======
+scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(80, 140, 70);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);
+const sc = sun.shadow.camera;
+sc.left=-140; sc.right=140; sc.top=140; sc.bottom=-140; sc.near=1; sc.far=350;
+sun.shadow.bias = -0.0003;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.35).translateOnAxis(new THREE.Vector3(-1,0.5,-1).normalize(), 60));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.18).translateOnAxis(new THREE.Vector3(0,0.3,-1).normalize(), 60));
+// Warm underlight to show compressor bay
+const under = new THREE.PointLight(0xffaa44, 0.3, 80);
+under.position.set(42, 5, 28);
+scene.add(under);
+
+// ====== GROUND ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(700,700),
+  new THREE.MeshStandardMaterial({ color:0x0a0e16, roughness:0.92, metalness:0.05 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+const gridH = new THREE.GridHelper(700, 120, 0x00d4aa, 0x142028);
+gridH.material.opacity = 0.1;
+gridH.material.transparent = true;
+gridH.position.y = 0.01;
+scene.add(gridH);
+
+// ====== VOXEL BUILDER ======
+const voxData = {};
+function vox(x,y,z,c) {
+  const k = c.toString();
+  if (!voxData[k]) voxData[k] = { color:c, positions:[] };
+  voxData[k].positions.push([x,y,z]);
+}
+
+const C = {
+  BEIGE:    0xc8c2a8,
+  BEIGE_D:  0xa8a290,
+  SKID:     0xb0b0b4,
+  SKID_D:   0x808084,
+  DARK:     0x22222a,
+  DARK_L:   0x333340,
+  HOUSING:  0x707078,
+  HOUSING_D:0x505058,
+  COIL:     0x4a6878,
+  COIL_H:   0x6888a8,
+  COIL_FIN: 0x5a7888,
+  COPPER:   0xb87333,
+  COPPER_D: 0x8a5522,
+  COMP:     0x38383e,
+  COMP_L:   0x50505a,
+  COMP_RIB: 0x48484e,
+  MOTOR:    0x505058,
+  MOTOR_D:  0x3a3a42,
+  FRAME:    0x727278,
+  FRAME_D:  0x505058,
+  GRILLE:   0x18181e,
+  BAFFLE:   0xd0cabb,
+  RUBBER:   0x1a1a1a,
+  VALVE:    0x998844,
+  PANEL_F:  0x909098,
+  GREEN_L:  0x00cc44,
+};
+
+// ====== DIMENSIONS ======
+const L = 84;
+const W = 56;
+const H = 34;
+const midY = 17;
+const compR = 6;
+const compCy = 10;
+const comp1Cz = 18;
+const comp2Cz = 38;
+const compXs = 6;
+const compXe = 77;
+const thirdX = 28;
+const twoThirdX = 56;
+
+// ====== SKID / BASE with vibration isolators ======
+for (let x=-1; x<=L+1; x++)
+  for (let z=-1; z<=W+1; z++) {
+    vox(x, 0, z, C.SKID);
+    if (x===-1||x===L+1||z===-1||z===W+1) { vox(x,1,z,C.SKID_D); vox(x,2,z,C.DARK); }
+  }
+// Channel base rails
+for (let x=0; x<=L; x++) {
+  for (const zz of [4, W-5, Math.floor(W/2)-1, Math.floor(W/2)+1]) {
+    vox(x,1,zz,C.FRAME_D); vox(x,2,zz,C.FRAME_D);
+  }
+}
+// Cross rails
+for (let z=4; z<=W-5; z++) {
+  for (const xx of [0, thirdX, twoThirdX, L]) {
+    vox(xx,1,z,C.FRAME_D); vox(xx,2,z,C.FRAME_D);
+  }
+}
+// Vibration isolator pads (rubber blocks under compressors)
+function isopad(x,z) {
+  for (let dx=0;dx<3;dx++) for (let dz=0;dz<3;dz++) {
+    vox(x+dx,1,z+dz,C.RUBBER); vox(x+dx,2,z+dz,C.RUBBER);
+    vox(x+dx,3,z+dz,C.SKID_D);
+  }
+}
+// Pads under comp 1
+isopad(compXs+2, comp1Cz-1); isopad(compXs+20, comp1Cz-1); isopad(compXs+38, comp1Cz-1);
+isopad(compXe-10, comp1Cz-1);
+// Pads under comp 2
+isopad(compXs+2, comp2Cz-1); isopad(compXs+20, comp2Cz-1); isopad(compXs+38, comp2Cz-1);
+isopad(compXe-10, comp2Cz-1);
+
+// ====== STRUCTURAL FRAME ======
+function vPost(x,z,y0,y1) {
+  for (let y=y0;y<=y1;y++) {
+    vox(x,y,z,C.FRAME); vox(x+1,y,z,C.FRAME); vox(x,y,z+1,C.FRAME);
+  }
+}
+// 4 corner posts
+vPost(0,0,3,H); vPost(L-1,0,3,H); vPost(0,W-2,3,H); vPost(L-1,W-2,3,H);
+// Intermediate posts at thirds
+vPost(thirdX,0,3,H); vPost(thirdX,W-2,3,H);
+vPost(twoThirdX,0,3,H); vPost(twoThirdX,W-2,3,H);
+
+// Top perimeter rails
+for (let x=0;x<=L;x++) { vox(x,H,0,C.FRAME); vox(x,H,W-1,C.FRAME); }
+for (let z=0;z<=W-1;z++) { vox(0,H,z,C.FRAME); vox(L,H,z,C.FRAME); vox(thirdX,H,z,C.FRAME); vox(twoThirdX,H,z,C.FRAME); }
+// Mid-height perimeter rails
+for (let x=0;x<=L;x++) { vox(x,midY,0,C.FRAME); vox(x,midY,W-1,C.FRAME); }
+for (let z=0;z<=W-1;z++) { vox(0,midY,z,C.FRAME); vox(L,midY,z,C.FRAME); }
+// Bottom perimeter rails
+for (let x=0;x<=L;x++) { vox(x,3,0,C.FRAME); vox(x,3,W-1,C.FRAME); }
+for (let z=0;z<=W-1;z++) { vox(0,3,z,C.FRAME); vox(L,3,z,C.FRAME); }
+
+// Diagonal cross-bracing on end frames
+function xBrace(x, z0, z1, y0, y1) {
+  const steps = Math.max(Math.abs(z1-z0), Math.abs(y1-y0));
+  for (let s=0;s<=steps;s++) {
+    const z = Math.round(z0 + (z1-z0)*s/steps);
+    const y = Math.round(y0 + (y1-y0)*s/steps);
+    vox(x,y,z,C.FRAME_D);
+  }
+}
+// Left end X-braces
+xBrace(0, 3, W-3, 4, midY-1);
+xBrace(0, W-3, 3, 4, midY-1);
+// Right end X-braces
+xBrace(L, 3, W-3, 4, midY-1);
+xBrace(L, W-3, 3, 4, midY-1);
+
+// ====== ROOF (transparent shell) ======
+for (let x=1;x<L;x++)
+  for (let z=1;z<W-1;z++) {
+    vox(x,H,z,C.BEIGE); vox(x,H+1,z,C.BEIGE_D);
+  }
+
+// ====== COMPRESSORS (2 parallel, highly detailed) ======
+function buildComp(xs,xe,cy,cz,r) {
+  // Mounting feet / cradle brackets
+  for (let x=xs; x<=xe; x+=10) {
+    for (let z=cz-r-2; z<=cz+r+2; z++) {
+      vox(x,3,z,C.SKID_D); vox(x+1,3,z,C.SKID_D); vox(x+2,3,z,C.SKID_D);
+    }
+    for (let y=3;y<=cy-r;y++) {
+      vox(x,y,cz-r-1,C.FRAME_D); vox(x,y,cz+r+1,C.FRAME_D);
+      vox(x+2,y,cz-r-1,C.FRAME_D); vox(x+2,y,cz+r+1,C.FRAME_D);
+    }
+  }
+  // Main cylinder body
+  for (let x=xs;x<=xe;x++)
+    for (let y=cy-r;y<=cy+r;y++)
+      for (let z=cz-r;z<=cz+r;z++) {
+        const dy=y-cy, dz=z-cz, d2=dy*dy+dz*dz;
+        if (d2<=r*r) {
+          const isShell = d2>=(r-1)*(r-1);
+          // Rib bands every 6 voxels
+          const isRib = isShell && (x%6===0);
+          vox(x,y,z, isRib ? C.COMP_RIB : (isShell ? C.COMP_L : C.COMP));
+        }
+      }
+  // Right hemispheric dome
+  for (let dx=0;dx<=r;dx++) {
+    const rr=Math.round(Math.sqrt(r*r-dx*dx));
+    for (let y=cy-rr;y<=cy+rr;y++)
+      for (let z=cz-rr;z<=cz+rr;z++)
+        if ((y-cy)**2+(z-cz)**2<=rr*rr)
+          vox(xe+1+dx,y,z,C.COMP);
+  }
+  // Left end plate with bolt ring
+  for (let y=cy-r;y<=cy+r;y++)
+    for (let z=cz-r;z<=cz+r;z++) {
+      const dy=y-cy,dz=z-cz,d2=dy*dy+dz*dz;
+      if (d2<=r*r) vox(xs-1,y,z,C.DARK);
+      if (d2>=(r-1)*(r-1) && d2<=r*r) vox(xs-1,y,z,C.DARK_L);
+    }
+  // Bolt pattern on end plate
+  for (let i=0;i<8;i++) {
+    const a=(i/8)*Math.PI*2;
+    const by=cy+Math.round(Math.cos(a)*(r-1));
+    const bz=cz+Math.round(Math.sin(a)*(r-1));
+    vox(xs-1,by,bz,C.SKID);
+  }
+
+  // Motor housing on left end
+  for (let y=cy-4;y<=cy+4;y++)
+    for (let z=cz-4;z<=cz+4;z++) {
+      const dy=y-cy,dz=z-cz;
+      if (dy*dy+dz*dz<=16) {
+        vox(xs-2,y,z,C.MOTOR); vox(xs-3,y,z,C.MOTOR);
+      }
+      if (dy*dy+dz*dz<=9) {
+        vox(xs-4,y,z,C.MOTOR_D); vox(xs-5,y,z,C.MOTOR_D);
+      }
+    }
+  // Motor shaft coupling
+  vox(xs-6,cy,cz,C.SKID); vox(xs-6,cy-1,cz,C.SKID); vox(xs-6,cy,cz-1,C.SKID);
+
+  // Junction / terminal box on front
+  for (let x2=xs+6;x2<=xs+12;x2++)
+    for (let y=cy-3;y<=cy+2;y++) {
+      vox(x2,y,cz-r-1,C.DARK_L);
+      vox(x2,y,cz-r-2,C.DARK);
+    }
+  // Terminal box cover screws
+  vox(xs+7,cy+1,cz-r-2,C.SKID); vox(xs+11,cy+1,cz-r-2,C.SKID);
+  vox(xs+7,cy-2,cz-r-2,C.SKID); vox(xs+11,cy-2,cz-r-2,C.SKID);
+
+  // Oil sump sight glass (small window on side)
+  vox(xs+3,cy-r+1,cz,C.VALVE); vox(xs+3,cy-r+1,cz+1,C.VALVE);
+
+  // Suction port (large) on top
+  const suctX = Math.floor((xs+xe)/2)-5;
+  for (let y=cy+r;y<=cy+r+2;y++) {
+    vox(suctX,y,cz-1,C.COPPER); vox(suctX,y,cz,C.COPPER); vox(suctX,y,cz+1,C.COPPER);
+    vox(suctX+1,y,cz-1,C.COPPER); vox(suctX+1,y,cz,C.COPPER); vox(suctX+1,y,cz+1,C.COPPER);
+  }
+  // Discharge port (smaller) on top
+  const disX = Math.floor((xs+xe)/2)+5;
+  for (let y=cy+r;y<=cy+r+2;y++) {
+    vox(disX,y,cz,C.COPPER); vox(disX,y,cz+1,C.COPPER);
+    vox(disX+1,y,cz,C.COPPER);
+  }
+
+  // Service valves
+  vox(suctX,cy+r+3,cz,C.VALVE); vox(suctX+1,cy+r+3,cz,C.VALVE);
+  vox(disX,cy+r+3,cz,C.VALVE);
+
+  // Copper headers rising to coils — suction line (larger)
+  for (let y=cy+r+2;y<=midY+3;y++) {
+    vox(suctX,y,cz,C.COPPER); vox(suctX+1,y,cz,C.COPPER);
+    vox(suctX,y,cz+1,C.COPPER);
+  }
+  // Discharge line rising
+  for (let y=cy+r+2;y<=midY+3;y++) {
+    vox(disX,y,cz,C.COPPER_D); vox(disX+1,y,cz,C.COPPER_D);
+  }
+  // Horizontal headers connecting to coils
+  for (let x=suctX-8;x<=suctX+8;x++) {
+    vox(x,midY+3,cz,C.COPPER); vox(x,midY+3,cz+1,C.COPPER);
+  }
+  for (let x=disX-8;x<=disX+8;x++) {
+    vox(x,midY+3,cz,C.COPPER_D);
+  }
+
+  // Additional risers at ends
+  for (const rx of [xs+4, xe-4]) {
+    for (let y=midY;y<=midY+3;y++) {
+      vox(rx,y,cz,C.COPPER); vox(rx,y,cz+1,C.COPPER);
+    }
+  }
+}
+
+buildComp(compXs, compXe, compCy, comp1Cz, compR);
+buildComp(compXs, compXe, compCy, comp2Cz, compR);
+
+// ====== CYLINDER REPLACEMENTS (Phase 3) ======
+// Compressor bodies — CylinderGeometry(r, r, length, 24)
+const cylCompBodyGeo = new THREE.CylinderGeometry(compR, compR, compXe-compXs+1, 24);
+const cylCompDomeGeo = new THREE.SphereGeometry(compR, 24, 12, 0, Math.PI*2, 0, Math.PI/2);
+const ribRingGeo = new THREE.CylinderGeometry(compR+0.1, compR+0.1, 0.8, 24);
+const compCXZ=[[Math.floor((compXs+compXe)/2), comp1Cz],[Math.floor((compXs+compXe)/2), comp2Cz]];
+compCXZ.forEach(([cx,cz]) => {
+  // Main cylindrical body
+  const body = new THREE.Mesh(cylCompBodyGeo, CHILLER_MATS.M10);
+  body.position.set(cx, compCy, cz);
+  body.castShadow = true; body.receiveShadow = true;
+  scene.add(body);
+  // Dome end cap (right side)
+  const dome = new THREE.Mesh(cylCompDomeGeo, CHILLER_MATS.M10);
+  dome.position.set(compXe+1+compR/2, compCy, cz);
+  dome.castShadow = true; dome.receiveShadow = true;
+  scene.add(dome);
+  // Rib bands every 6 units
+  for (let x=Math.floor(cx-compXe+compXs)+6; x<compXe-compXs; x+=6) {
+    const rib = new THREE.Mesh(ribRingGeo, CHILLER_MATS.M03);
+    rib.position.set(x+0.5, compCy, cz);
+    rib.castShadow = true; scene.add(rib);
+  }
+});
+
+// Suction/discharge ports — CylinderGeometry(1.2, 1.2, 3, 16)
+const portGeo = new THREE.CylinderGeometry(1.2, 1.2, 3, 16);
+const portGeoSm = new THREE.CylinderGeometry(0.9, 0.9, 3, 16);
+compCXZ.forEach(([,cz]) => {
+  const suctX = Math.floor((compXs+compXe)/2)-5;
+  const disX = Math.floor((compXs+compXe)/2)+5;
+  // Suction port (larger)
+  const suct = new THREE.Mesh(portGeo, CHILLER_MATS.M01);
+  suct.position.set(suctX+0.5, compCy+compR+1, cz);
+  suct.castShadow = true; scene.add(suct);
+  // Discharge port (smaller)
+  const dis = new THREE.Mesh(portGeoSm, CHILLER_MATS.M11);
+  dis.position.set(disX+0.5, compCy+compR+1, cz);
+  dis.castShadow = true; scene.add(dis);
+});
+
+// Header pipe runs — CylinderGeometry(0.5, 0.5, length, 16)
+const hdrGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
+// Suction line rising
+compCXZ.forEach(([,cz]) => {
+  const suctX = Math.floor((compXs+compXe)/2)-5;
+  const rise = new THREE.Mesh(hdrGeo, CHILLER_MATS.M01);
+  rise.position.set(suctX+0.5, compCy+compR+4, cz+0.5);
+  rise.scale.y = midY+3-(compCy+compR+2);
+  rise.castShadow = true; scene.add(rise);
+  // Discharge line rising
+  const disX = Math.floor((compXs+compXe)/2)+5;
+  const drise = new THREE.Mesh(hdrGeo, CHILLER_MATS.M11);
+  drise.position.set(disX+0.5, compCy+compR+4, cz+0.5);
+  drise.scale.y = midY+3-(compCy+compR+2);
+  drise.castShadow = true; scene.add(drise);
+  // Horizontal header connecting coils
+  const horizGeo = new THREE.CylinderGeometry(0.5, 0.5, 17, 16);
+  horizGeo.applyMatrix4(new THREE.Matrix4().makeRotationZ(Math.PI/2));
+  const h1 = new THREE.Mesh(horizGeo, CHILLER_MATS.M01);
+  h1.position.set(suctX-8+8.5, midY+3.5, cz+0.5);
+  h1.castShadow = true; scene.add(h1);
+  const h2 = new THREE.Mesh(horizGeo, CHILLER_MATS.M11);
+  h2.position.set(disX-8+8.5, midY+3.5, cz+0.5);
+  h2.castShadow = true; scene.add(h2);
+  // End risers
+  for (const rx of [compXs+4, compXe-4]) {
+    const rv = new THREE.Mesh(hdrGeo, CHILLER_MATS.M01);
+    rv.position.set(rx+0.5, midY+1.5, cz+0.5);
+    rv.scale.y = 4; rv.castShadow = true; scene.add(rv);
+  }
+});
+
+// Liquid line horizontal pipe
+const liqY = 5;
+const liqZ = Math.floor(W/2);
+const liqPipeGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
+liqPipeGeo.applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI/2));
+const liqPipe = new THREE.Mesh(liqPipeGeo, CHILLER_MATS.M11);
+liqPipe.position.set(compXs+(compXe-compXs)/2, liqY+0.5, liqZ+0.5);
+liqPipe.scale.y = compXe-compXs; liqPipe.castShadow = true;
+scene.add(liqPipe);
+
+// Filter drier cylinder
+const drierGeo = new THREE.CylinderGeometry(1.5, 1.5, 7, 16);
+const drier = new THREE.Mesh(drierGeo, CHILLER_MATS.M13);
+drier.position.set(33, liqY+1, liqZ+0.5);
+drier.castShadow = true; drier.receiveShadow = true;
+scene.add(drier);
+
+// Expansion valve body
+const expGeo = new THREE.CylinderGeometry(1, 1, 2, 16);
+for (let dx=0; dx<2; dx++) {
+  const exp = new THREE.Mesh(expGeo, CHILLER_MATS.M07);
+  exp.position.set(50+dx, liqY+1, liqZ+0.5);
+  exp.castShadow = true; scene.add(exp);
+}
+
+// Sight glass — CylinderGeometry with glass material
+const glassGeo = new THREE.CylinderGeometry(0.8, 0.8, 2, 16);
+const glass1 = new THREE.Mesh(glassGeo, CHILLER_MATS.M08);
+glass1.position.set(40, liqY+0.5, liqZ+0.5);
+scene.add(glass1);
+
+// Fan housing CylinderGeometry rings — 3 stacked per fan
+const fanRingGeo = new THREE.CylinderGeometry(7, 7, 1, 24);
+const fanRingGeoInner = new THREE.CylinderGeometry(6, 6, 1, 24);
+fanPositions.forEach(([cx,cz]) => {
+  for (let layer=0; layer<3; layer++) {
+    const y = H+3+layer;
+    const ring = new THREE.Mesh(fanRingGeo, layer<2 ? CHILLER_MATS.M03 : CHILLER_MATS.M10);
+    ring.position.set(cx+0.5, y+0.5, cz+0.5);
+    ring.castShadow = true; ring.receiveShadow = true;
+    scene.add(ring);
+  }
+  // Guard grille top (thin cylinder)
+  const guard = new THREE.Mesh(fanRingGeoInner, CHILLER_MATS.M16);
+  guard.position.set(cx+0.5, H+7+0.5, cz+0.5);
+  guard.castShadow = true; scene.add(guard);
+});
+
+// ====== LIQUID LINE with filter-drier and sight glass ======
+// Horizontal liquid line between compressors
+for (let x=compXs;x<=compXe;x++) {
+  vox(x,liqY,liqZ,C.COPPER_D); vox(x,liqY+1,liqZ,C.COPPER_D);
+}
+// Filter drier (cylindrical block on liquid line)
+for (let x=30;x<=36;x++)
+  for (let dy=-1;dy<=1;dy++)
+    for (let dz=-1;dz<=1;dz++)
+      if (dy*dy+dz*dz<=1)
+        vox(x,liqY+dy,liqZ+dz,C.VALVE);
+// Sight glass
+vox(40,liqY,liqZ,C.GREEN_L); vox(40,liqY+1,liqZ,C.GREEN_L);
+// Expansion valve
+for (let dy=-1;dy<=1;dy++)
+  for (let dz=-1;dz<=1;dz++) {
+    vox(50,liqY+dy,liqZ+dz,C.DARK_L);
+    vox(51,liqY+dy,liqZ+dz,C.DARK_L);
+  }
+vox(50,liqY+2,liqZ,C.COPPER); // Sensing bulb tube going up
+
+// ====== V-SHAPED CONDENSER COILS (3 bays, with copper return bends) ======
+const bayS = [3, thirdX+2, twoThirdX+2];
+const bayE = [thirdX-2, twoThirdX-2, L-3];
+const zCen = Math.floor(W/2);
+
+for (let b=0;b<3;b++) {
+  const xS=bayS[b], xE=bayE[b];
+  const yBot=midY+2, yTop=H-2;
+
+  for (let y=yBot;y<=yTop;y++) {
+    const p=(y-yBot)/(yTop-yBot);
+    const zL=Math.round(zCen - p*(zCen-5));
+    const zR=Math.round(zCen + p*(zCen-6));
+
+    for (let x=xS;x<=xE;x++) {
+      // Left V-panel with fin detail
+      vox(x,y,zL,C.COIL);
+      if (zL+1<zCen) vox(x,y,zL+1, (x%2===0)?C.COIL_H:C.COIL_FIN);
+      if (zL+2<zCen && x%3===0) vox(x,y,zL+2,C.COIL_FIN);
+      // Right V-panel with fin detail
+      vox(x,y,zR,C.COIL);
+      if (zR-1>zCen) vox(x,y,zR-1, (x%2===0)?C.COIL_H:C.COIL_FIN);
+      if (zR-2>zCen && x%3===0) vox(x,y,zR-2,C.COIL_FIN);
+    }
+
+    // Copper return bends on the bay-boundary side (visible U-bends)
+    if (y%3===0) {
+      vox(xS-1,y,zL,C.COPPER); vox(xS-1,y,zL+1,C.COPPER);
+      vox(xS-2,y,zL,C.COPPER); vox(xS-2,y,zL+1,C.COPPER);
+      vox(xS-1,y,zR,C.COPPER); vox(xS-1,y,zR-1,C.COPPER);
+      vox(xS-2,y,zR,C.COPPER); vox(xS-2,y,zR-1,C.COPPER);
+    }
+  }
+
+  // Baffle end-cap walls at bay boundaries
+  for (let y=yBot;y<=yTop;y++) {
+    const p=(y-yBot)/(yTop-yBot);
+    const zL=Math.round(zCen-p*(zCen-5));
+    const zR=Math.round(zCen+p*(zCen-6));
+    for (let z=zL;z<=zR;z++) {
+      vox(xE+1,y,z,C.BAFFLE);
+    }
+  }
+}
+// Central baffle walls at third divisions
+for (let y=midY+2;y<H-1;y++)
+  for (let z=5;z<W-5;z++) {
+    vox(thirdX,y,z,C.BAFFLE); vox(twoThirdX,y,z,C.BAFFLE);
+  }
+
+// ====== CONTROL PANEL (detailed, front-left) ======
+const cpX=3, cpZ=1;
+for (let x=cpX;x<=cpX+8;x++)
+  for (let y=4;y<=midY-1;y++)
+    for (let z=cpZ;z<=cpZ+4;z++) {
+      const isEdge=(x===cpX||x===cpX+8||y===4||y===midY-1||z===cpZ||z===cpZ+4);
+      vox(x,y,z, isEdge?C.PANEL_F:C.DARK);
+    }
+// Door seam
+for (let y=5;y<midY-1;y++) vox(cpX+4,y,cpZ,C.DARK_L);
+// Door handle
+vox(cpX+3,10,cpZ,C.SKID); vox(cpX+5,10,cpZ,C.SKID);
+// Status LEDs column
+for (let i=0;i<4;i++) vox(cpX+1,12-i,cpZ,C.GREEN_L);
+// Ventilation grille on panel
+for (let y=5;y<=7;y++) for (let x2=cpX+1;x2<=cpX+7;x2++)
+  if (x2%2===0) vox(x2,y,cpZ,C.DARK);
+// Conduit going up
+for (let y=midY;y<=midY+4;y++) { vox(cpX+2,y,cpZ+2,C.DARK_L); vox(cpX+3,y,cpZ+2,C.DARK_L); }
+
+// ====== FAN DECK ======
+for (let x=1;x<L;x++)
+  for (let z=1;z<W-1;z++)
+    vox(x,H+2,z,C.BEIGE_D);
+// Deck edge trim
+for (let x=0;x<=L;x++) { vox(x,H+2,0,C.FRAME); vox(x,H+2,W-1,C.FRAME); }
+for (let z=0;z<=W-1;z++) { vox(0,H+2,z,C.FRAME); vox(L,H+2,z,C.FRAME); }
+
+// ====== 6 FAN HOUSINGS (3×2, taller + guard mesh) ======
+const fanCols=[14,42,70], fanRowZ=[14,42];
+const fanPositions=[];
+for (const fx of fanCols) for (const fz of fanRowZ) fanPositions.push([fx,fz]);
+
+function fanHousingV(cx,cz) {
+  const r=7;
+  for (let layer=0;layer<4;layer++) {
+    const y=H+3+layer;
+    for (let x=cx-r;x<=cx+r;x++)
+      for (let z=cz-r;z<=cz+r;z++) {
+        const dx=x-cx,dz=z-cz,d2=dx*dx+dz*dz;
+        if (d2<=r*r && d2>=(r-1)*(r-1)) {
+          vox(x,y,z, layer<2?C.HOUSING:C.HOUSING_D);
+        }
+      }
+  }
+  // Top guard mesh (grille pattern)
+  const y=H+7;
+  for (let x=cx-r+1;x<=cx+r-1;x++)
+    for (let z=cz-r+1;z<=cz+r-1;z++) {
+      const dx=x-cx,dz=z-cz,d2=dx*dx+dz*dz;
+      if (d2<=(r-1)*(r-1)) {
+        if ((x+z)%3===0 || x===cx || z===cz)
+          vox(x,y,z,C.HOUSING_D);
+      }
+    }
+}
+fanPositions.forEach(([cx,cz])=>fanHousingV(cx,cz));
+
+// ====== INSTANCED MESHES ======
+const cubeGeo = new THREE.BoxGeometry(1,1,1);
+for (const k in voxData) {
+  const { color, positions } = voxData[k];
+  const matKey = COL_MAT[color];
+  let mat;
+  if (SHELL_MATS[color]) {
+    mat = CHILLER_MATS.M06.clone();
+  } else if (matKey) {
+    mat = CHILLER_MATS[matKey];
+  } else {
+    // Fallback for GREEN_L (LED) — keep existing behavior
+    mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.6 });
+  }
+  const mesh = new THREE.InstancedMesh(cubeGeo, mat, positions.length);
+  mesh.castShadow = !SHELL_MATS[color];
+  mesh.receiveShadow = true;
+  const m = new THREE.Matrix4();
+  positions.forEach((p,i)=>{
+    m.setPosition(p[0]+0.5, p[1]+0.5, p[2]+0.5);
+    mesh.setMatrixAt(i,m);
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+  scene.add(mesh);
+}
+
+// ====== ANIMATED: COMPRESSOR MOTOR COUPLINGS ======
+const compTops=[];
+compCXZ.forEach(([cx,cz])=>{
+  const g=new THREE.Group();
+  g.position.set(cx+0.5, compCy+compR+2, cz+0.5);
+  const topMat=new THREE.MeshStandardMaterial({color:0x55555c, roughness:0.3, metalness:0.9});
+  for (let ax=-3;ax<=3;ax++)
+    for (let az=-3;az<=3;az++)
+      if (ax*ax+az*az<=10) {
+        const c=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.5,0.9), topMat);
+        c.position.set(ax,0,az); c.castShadow=true; g.add(c);
+      }
+  for (let i=0;i<6;i++) {
+    const a=(i/6)*Math.PI*2;
+    const bolt=new THREE.Mesh(new THREE.BoxGeometry(0.45,0.55,0.45),
+      new THREE.MeshStandardMaterial({color:0x1a1a20, metalness:0.8}));
+    bolt.position.set(Math.cos(a)*2.2,0.4,Math.sin(a)*2.2);
+    g.add(bolt);
+  }
+  scene.add(g); compTops.push(g);
+});
+
+// ====== COMPRESSOR LEDs ======
+const ledMats=[];
+compCXZ.forEach(([cx,cz])=>{
+  const mat=new THREE.MeshStandardMaterial({
+    color:0xff2233, emissive:0xff2233, emissiveIntensity:1.4, roughness:0.2, metalness:0.3
+  });
+  const led=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.2,1.2), mat);
+  led.position.set(cx+0.5, compCy+compR+4, cz+0.5);
+  scene.add(led);
+  const pl=new THREE.PointLight(0xff2233, 1.5, 18);
+  pl.position.copy(led.position);
+  scene.add(pl);
+  ledMats.push({mat, light:pl});
+});
+
+// ====== 6 CONDENSER FANS (voxel blades) ======
+const fanGroups=[], fanBladeMats=[];
+fanPositions.forEach(([cx,cz])=>{
+  const g=new THREE.Group();
+  g.position.set(cx+0.5, H+6.2, cz+0.5);
+  const bladeMat=new THREE.MeshStandardMaterial({
+    color:0xff2233, roughness:0.4, metalness:0.65,
+    emissive:0xff2233, emissiveIntensity:0.4
+  });
+  // 6 blades, more voxels per blade for realism
+  for (let i=0;i<6;i++) {
+    const a=(i/6)*Math.PI*2;
+    for (let rr=1;rr<=6;rr++) {
+      const c=new THREE.Mesh(new THREE.BoxGeometry(0.85,0.4,0.85), bladeMat);
+      c.position.set(Math.cos(a)*rr,0,Math.sin(a)*rr);
+      c.castShadow=true; g.add(c);
+      // Second row for wider blade
+      if (rr>=2 && rr<=5) {
+        const a2=a+0.12;
+        const c2=new THREE.Mesh(new THREE.BoxGeometry(0.85,0.4,0.85), bladeMat);
+        c2.position.set(Math.cos(a2)*rr, 0.15, Math.sin(a2)*rr);
+        g.add(c2);
+      }
+    }
+  }
+  g.add(new THREE.Mesh(
+    new THREE.BoxGeometry(2,0.8,2),
+    new THREE.MeshStandardMaterial({color:0x55555c, metalness:0.85})
+  ));
+  scene.add(g); fanGroups.push(g); fanBladeMats.push(bladeMat);
+});
+
+// ====== STATE MACHINE ======
+const COLOR_OFF=new THREE.Color(0xff2233), COLOR_ON=new THREE.Color(0x00ff66);
+const state={c1:false, c2:false};
+
+// Fan mapping: front row (z=14) → C1, back row (z=42) → C2
+function getFanOn() { return [state.c1,state.c2, state.c1,state.c2, state.c1,state.c2]; }
+
+function applyState() {
+  [state.c1,state.c2].forEach((on,i)=>{
+    ledMats[i].mat.color.copy(on?COLOR_ON:COLOR_OFF);
+    ledMats[i].mat.emissive.copy(on?COLOR_ON:COLOR_OFF);
+    ledMats[i].mat.emissiveIntensity=on?1.8:1.2;
+    ledMats[i].light.color.copy(on?COLOR_ON:COLOR_OFF);
+    ledMats[i].light.intensity=on?2.0:1.0;
+  });
+  const fOn=getFanOn();
+  fanBladeMats.forEach((m,i)=>{
+    m.color.copy(fOn[i]?COLOR_ON:COLOR_OFF);
+    m.emissive.copy(fOn[i]?COLOR_ON:COLOR_OFF);
+    m.emissiveIntensity=fOn[i]?0.6:0.4;
+  });
+}
+applyState();
+
+// ====== UI ======
+function bind(id,key){
+  const btn=document.getElementById(id);
+  btn.onclick=()=>{
+    state[key]=!state[key];
+    btn.className=state[key]?'on':'off';
+    btn.textContent=state[key]?'ON':'OFF';
+    applyState();
+  };
+}
+bind('bC1','c1'); bind('bC2','c2');
+document.getElementById('bRot').onclick=function(){
+  controls.autoRotate=!controls.autoRotate;
+  this.className=controls.autoRotate?'on':'off';
+  this.textContent=controls.autoRotate?'ON':'OFF';
+};
+
+// ====== PARTICLES ======
+const N_AIR=60, N_REF=30;
+const airP=[], refP=[];
+const pGeo=new THREE.BoxGeometry(0.55,0.55,0.55);
+
+for (let i=0;i<N_AIR;i++){
+  const p=new THREE.Mesh(pGeo, new THREE.MeshBasicMaterial({color:0x44bbff, transparent:true, opacity:0.9}));
+  p.userData={t:Math.random(), seed:Math.random()*10, circ:i<N_AIR/2?0:1};
+  scene.add(p); airP.push(p);
+}
+for (let i=0;i<N_REF;i++){
+  const p=new THREE.Mesh(pGeo, new THREE.MeshBasicMaterial({color:0xaa55ff, transparent:true, opacity:0.9}));
+  p.userData={t:Math.random(), seed:Math.random()*10, circ:i<N_REF/2?0:1};
+  scene.add(p); refP.push(p);
+}
+
+// ====== LIFECYCLE / DISPOSAL (Phase 5) ======
+let resizeObs = null;
+let disposed = false;
+let rafId = 0;
+
+function destroy() {
+  disposed = true;
+  cancelAnimationFrame(rafId);
+  // Dispose instanced meshes (geometries + materials via traverse)
+  scene.traverse(obj => {
+    if (obj.geometry && obj.geometry !== cubeGeo) obj.geometry.dispose();
+    if (obj.material) {
+      if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+      else if (obj.material.dispose) obj.material.dispose();
+    }
+  });
+  // Dispose standalone geometries
+  [cylCompBodyGeo, cylCompDomeGeo, ribRingGeo, portGeo, portGeoSm, hdrGeo,
+   liqPipeGeo, drierGeo, expGeo, glassGeo, fanRingGeo, fanRingGeoInner,
+   cubeGeo].forEach(g => g.dispose());
+  // Dispose canvas textures
+  [concTex, insTex].forEach(t => t.dispose());
+  // Remove resize listener
+  window.removeEventListener('resize', resizeHandler);
+  if (resizeObs) resizeObs.disconnect();
+  // Dispose renderer
+  renderer.dispose();
+  if (renderer.domElement.parentNode) {
+    renderer.domElement.parentNode.removeChild(renderer.domElement);
+  }
+}
+
+// ====== RESIZE (ResizeObserver) ======
+function resizeHandler() {
+  const w = container.clientWidth || innerWidth;
+  const h = container.clientHeight || innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+// Wrap canvas in container for ResizeObserver
+const container = document.createElement('div');
+container.style.cssText = 'position:fixed;inset:0;';
+document.body.insertBefore(container, document.body.firstChild);
+container.appendChild(renderer.domElement);
+resizeObs = new ResizeObserver(resizeHandler);
+resizeObs.observe(container);
+
+// ====== ANIMATE ======
+const clock=new THREE.Clock();
+function animate(){
+  if (disposed) return;
+  rafId = requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+  const t=clock.elapsedTime;
+
+  // Fans
+  const fOn=getFanOn();
+  fanGroups.forEach((g,i)=>{ if(fOn[i]) g.rotation.y+=dt*(7+i*0.25); });
+
+  // Compressor motor tops
+  [state.c1,state.c2].forEach((on,i)=>{
+    const baseY=compCy+compR+2;
+    if(on){
+      compTops[i].rotation.y+=dt*14;
+      compTops[i].position.y=baseY+Math.sin(t*35+i)*0.1;
+    } else compTops[i].position.y=baseY;
+  });
+
+  // Air particles — opacity couples to fan/compressor state
+  const czArr=[comp1Cz, comp2Cz];
+  airP.forEach((p,i)=>{
+    const ci=p.userData.circ;
+    if(![state.c1,state.c2][ci]){ p.material.opacity=0; return; }
+    p.userData.t+=dt*0.12;
+    if(p.userData.t>1)p.userData.t=0;
+    const tt=p.userData.t, seed=p.userData.seed;
+    const col=fanCols[i%3];
+    const tZ=fanRowZ[ci];
+    const sideZ=ci===0?2:W-3;
+
+    if(tt<0.3){
+      const u=tt/0.3;
+      p.position.x=col+Math.sin(u*3+seed)*2.5;
+      p.position.y=midY+3+u*9+Math.sin(u*5+seed)*0.5;
+      p.position.z=sideZ+(tZ-sideZ)*u+Math.cos(u*4+seed)*0.5;
+    } else {
+      const u=(tt-0.3)/0.7;
+      p.position.x=col+Math.sin(u*4+seed)*2;
+      p.position.y=midY+12+u*30;
+      p.position.z=tZ+Math.cos(u*3+seed)*2;
+    }
+    p.material.opacity=Math.sin(tt*Math.PI)*0.9;
+  });
+
+  // Refrigerant particles — opacity couples to fan/compressor state
+  refP.forEach((p,i)=>{
+    const ci=p.userData.circ;
+    if(![state.c1,state.c2][ci]){ p.material.opacity=0; return; }
+    p.userData.t+=dt*0.09;
+    if(p.userData.t>1)p.userData.t=0;
+    const tt=p.userData.t, seed=p.userData.seed;
+    const cz=czArr[ci];
+
+    if(tt<0.35){
+      const u=tt/0.35;
+      p.position.x=compXs+u*(compXe-compXs)+Math.sin(u*8+seed)*0.6;
+      p.position.y=compCy+Math.sin(u*6+seed)*3;
+      p.position.z=cz+Math.cos(u*4+seed)*3;
+    } else if(tt<0.55){
+      const u=(tt-0.35)/0.2;
+      p.position.x=compXs+10+(i%3)*22+Math.sin(u*3+seed)*0.5;
+      p.position.y=compCy+compR+u*(midY-compCy-compR+6);
+      p.position.z=cz+Math.cos(u*5+seed)*0.8;
+    } else {
+      const u=(tt-0.55)/0.45;
+      p.position.x=compXs+10+(i%3)*22+Math.sin(u*4+seed)*7;
+      p.position.y=midY+3+u*12+Math.sin(u*6+seed)*2.5;
+      p.position.z=cz+Math.cos(u*3+seed)*10;
+    }
+    p.material.opacity=Math.sin(tt*Math.PI)*0.85;
+  });
+
+  controls.update();
+  renderer.render(scene,camera);
+}
+animate();
+</script>
+</body>
+</html>

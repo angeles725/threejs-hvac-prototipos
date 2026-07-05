@@ -1,0 +1,1583 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>TRANE RTU · Semi-Realistic Cut-away</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:10px; height:10px; display:inline-block; border-radius:2px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:230px; font-size:11px; backdrop-filter: blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:62px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel button.standby { color:#06080d; border-color:#3aa6ff; background:#3aa6ff; box-shadow:0 0 12px #3aa6ff55; }
+  #panel button.alarm   { color:#06080d; border-color:#ff2233; background:#ff2233; box-shadow:0 0 12px #ff223388; animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:0.55; } }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>TRANE PACKAGED ROOFTOP UNIT</b><br>
+  <span>Semi-Realistic · Cut-away View</span>
+</div>
+<div id="legend">
+  <div><i style="background:#ff4422"></i> Aire de retorno</div>
+  <div><i style="background:#44aaff"></i> Aire de suministro</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>SUPPLY FAN</label><button id="bFan" class="standby">STANDBY</button></div>
+  <div class="row"><label>COMPRESOR 1</label><button id="bC1" class="standby">STANDBY</button></div>
+  <div class="row"><label>COMPRESOR 2</label><button id="bC2" class="standby">STANDBY</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ============================================================
+// SCENE / RENDERER
+// ============================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 140, 340);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 800);
+camera.position.set(-15, 70, -90);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(49, 18, 14);
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.6;
+
+// ============================================================
+// LIGHTS
+// ============================================================
+scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(60, 120, 60);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left=-120; sc.right=120; sc.top=120; sc.bottom=-120; sc.near=1; sc.far=300;
+sun.shadow.bias = -0.0003;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.35);
+fill.position.set(-60, 40, -60);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.18);
+rim.position.set(0, 20, -80);
+scene.add(rim);
+
+// ============================================================
+// GROUND
+// ============================================================
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(600, 600),
+  new THREE.MeshStandardMaterial({ color:0x0a0e16, roughness:0.92, metalness:0.05 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(600, 100, 0x00d4aa, 0x142028);
+grid.material.opacity = 0.12;
+grid.material.transparent = true;
+grid.position.y = 0.01;
+scene.add(grid);
+
+// ============================================================
+// DIMENSIONS (world units)
+// ============================================================
+const HOOD_LEN = 22;
+const CAB_LEN  = 48;
+const COMP_LEN = 28;
+const W = 28;
+const H = 28;
+const cabX0 = HOOD_LEN;
+const cabX1 = cabX0 + CAB_LEN;
+const compX0 = cabX1;
+const compX1 = compX0 + COMP_LEN;
+const TOTAL = compX1;
+
+// ============================================================
+// MATERIALS (PBR palette)
+// ============================================================
+const M = {
+  // Exterior painted galvanized steel (typical Trane beige)
+  shell: new THREE.MeshStandardMaterial({
+    color: 0xc8c2a8, roughness: 0.62, metalness: 0.25,
+    transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide
+  }),
+  shellSolid: new THREE.MeshStandardMaterial({
+    color: 0xc8c2a8, roughness: 0.58, metalness: 0.28
+  }),
+  shellTrim: new THREE.MeshStandardMaterial({
+    color: 0xa8a290, roughness: 0.55, metalness: 0.35
+  }),
+  shellEdge: new THREE.MeshStandardMaterial({
+    color: 0x7a7466, roughness: 0.6, metalness: 0.4
+  }),
+  // Base skid / channel steel
+  skid: new THREE.MeshStandardMaterial({
+    color: 0x8a8a90, roughness: 0.7, metalness: 0.5
+  }),
+  skidDark: new THREE.MeshStandardMaterial({
+    color: 0x3a3a40, roughness: 0.75, metalness: 0.4
+  }),
+  // Galvanized interior panels
+  galv: new THREE.MeshStandardMaterial({
+    color: 0xb0b4b8, roughness: 0.5, metalness: 0.7
+  }),
+  galvDark: new THREE.MeshStandardMaterial({
+    color: 0x6a6e74, roughness: 0.55, metalness: 0.65
+  }),
+  // Cuerpo de ductos (galvanizado oscuro, semi-transparente para que se vea
+  // el flujo de aire en el interior y saliendo por los extremos).
+  ductBody: new THREE.MeshStandardMaterial({
+    color: 0x6a6e74, roughness: 0.55, metalness: 0.65,
+    transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide
+  }),
+  // Compressor / motor housings (black painted)
+  black: new THREE.MeshStandardMaterial({
+    color: 0x1e1e22, roughness: 0.38, metalness: 0.85
+  }),
+  blackMatte: new THREE.MeshStandardMaterial({
+    color: 0x15151a, roughness: 0.75, metalness: 0.3
+  }),
+  // Dark grille / vent slots
+  grille: new THREE.MeshStandardMaterial({
+    color: 0x0a0a0e, roughness: 0.85, metalness: 0.2
+  }),
+  // Copper refrigerant lines
+  copper: new THREE.MeshStandardMaterial({
+    color: 0xb87333, roughness: 0.32, metalness: 0.92
+  }),
+  copperDark: new THREE.MeshStandardMaterial({
+    color: 0x7a4a1f, roughness: 0.45, metalness: 0.85
+  }),
+  // Aluminum fins
+  aluminum: new THREE.MeshStandardMaterial({
+    color: 0xc0c4c8, roughness: 0.35, metalness: 0.9,
+    side: THREE.DoubleSide
+  }),
+  aluminumBright: new THREE.MeshStandardMaterial({
+    color: 0xd8dce0, roughness: 0.25, metalness: 0.95
+  }),
+  // Coil face (oxidized aluminum bluish tint)
+  coilFace: new THREE.MeshStandardMaterial({
+    color: 0x4a6878, roughness: 0.68, metalness: 0.55
+  }),
+  // Rubber / belt / gasket
+  rubber: new THREE.MeshStandardMaterial({
+    color: 0x18181c, roughness: 0.9, metalness: 0.05
+  }),
+  // Filter media
+  filter: new THREE.MeshStandardMaterial({
+    color: 0xd0c090, roughness: 0.95, metalness: 0.02
+  }),
+  // Insulation (soft gray foam on suction line)
+  insulation: new THREE.MeshStandardMaterial({
+    color: 0x30363e, roughness: 0.95, metalness: 0.0
+  }),
+  // Nameplate
+  plate: new THREE.MeshStandardMaterial({
+    color: 0x2a2f36, roughness: 0.5, metalness: 0.6
+  }),
+  // Screws / bolts
+  bolt: new THREE.MeshStandardMaterial({
+    color: 0x40444a, roughness: 0.4, metalness: 0.85
+  })
+};
+
+// ============================================================
+// UTILITY: make box with position (center-based)
+// ============================================================
+function box(w,h,d, mat, x,y,z) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.position.set(x,y,z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+function panel(w,h,d, mat, x,y,z) {
+  const m = box(w,h,d, mat, x,y,z);
+  m.castShadow = false; // thin panels don't cast strong shadows
+  return m;
+}
+// Tube between two 3D points
+function tube(p0, p1, r, mat, radialSegs=10) {
+  const dir = new THREE.Vector3().subVectors(p1,p0);
+  const len = dir.length();
+  const g = new THREE.CylinderGeometry(r, r, len, radialSegs);
+  const m = new THREE.Mesh(g, mat);
+  m.position.copy(p0).add(dir.multiplyScalar(0.5));
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+
+const root = new THREE.Group();
+// Wrapper que aplica el espejo en X al final, así el compartimento de
+// compresores queda a la derecha cuando se ve desde el frente.
+const unit = new THREE.Group();
+unit.add(root);
+scene.add(unit);
+
+// ============================================================
+// SKID / BASE (channel steel frame)
+// ============================================================
+(function buildSkid() {
+  // Bottom plate
+  root.add(box(TOTAL+2, 1.2, W+2, M.skid, TOTAL/2, 0.6, W/2));
+  // Perimeter C-channel edge
+  const edge = (x,z,w,d) => {
+    const m = box(w, 2.2, d, M.skidDark, x, 1.6, z);
+    root.add(m);
+  };
+  edge(TOTAL/2, -0.2,      TOTAL+2, 0.8);
+  edge(TOTAL/2, W+0.2,     TOTAL+2, 0.8);
+  edge(-0.4,    W/2,       0.8,     W+2);
+  edge(TOTAL+0.4, W/2,     0.8,     W+2);
+  // Cross bracing beneath
+  for (let i=1; i<6; i++) {
+    const x = (TOTAL/6)*i;
+    root.add(box(0.6, 0.9, W+2, M.skidDark, x, 0.3, W/2));
+  }
+  // Forklift slots (visual cutouts represented as dark strips)
+  root.add(box(10, 0.4, 1.5, M.grille, 20, 0.4, 4));
+  root.add(box(10, 0.4, 1.5, M.grille, 20, 0.4, W-4));
+  root.add(box(10, 0.4, 1.5, M.grille, 78, 0.4, 4));
+  root.add(box(10, 0.4, 1.5, M.grille, 78, 0.4, W-4));
+})();
+
+// ============================================================
+// CABINET SHELL (semi-transparent for cut-away)
+// Top + back only; front opened for interior visibility
+// ============================================================
+(function buildCabinetShell() {
+  // ROOF over main cabinet (beige)
+  root.add(panel(CAB_LEN + 0.2, 0.5, W, M.shell, cabX0 + CAB_LEN/2, H + 0.25, W/2));
+  // ROOF over compressor section
+  root.add(panel(COMP_LEN + 0.2, 0.5, W, M.shell, compX0 + COMP_LEN/2, H + 0.25, W/2));
+  // Roof cap edge (dark trim)
+  root.add(panel(TOTAL - HOOD_LEN, 0.3, W + 1, M.shellTrim, (HOOD_LEN + TOTAL)/2, H + 0.6, W/2));
+
+  // BACK wall (main cabinet) — dividida en 4 segmentos para dejar HUECO
+  // por donde sale el ducto de abasto. El ducto NO sale detrás del blower
+  // sino LATERALMENTE, en el espacio entre el blower y la partition de
+  // compresores. Mismo tamaño (14×14) y altura central que el ducto de retorno.
+  const SD_X_CENTER = 61;             // centro X del ducto supply (lateral al blower)
+  const SD_W_HOLE = 14;
+  const SD_H_HOLE = 14;
+  const SD_Y_CENTER = H/2 + 1;        // 15 — misma altura central que el ducto de retorno
+  const SD_X0 = SD_X_CENTER - SD_W_HOLE/2;   // 54
+  const SD_X1 = SD_X_CENTER + SD_W_HOLE/2;   // 68
+  const SD_Y0 = SD_Y_CENTER - SD_H_HOLE/2;
+  const SD_Y1 = SD_Y_CENTER + SD_H_HOLE/2;
+  // Segmento izquierdo (X<SD_X0)
+  root.add(panel(SD_X0 - cabX0, H - 2, 0.5, M.shell,
+    (cabX0 + SD_X0)/2, H/2 + 1, W - 0.25));
+  // Segmento derecho (X>SD_X1)
+  root.add(panel((cabX0 + CAB_LEN) - SD_X1, H - 2, 0.5, M.shell,
+    (SD_X1 + cabX0 + CAB_LEN)/2, H/2 + 1, W - 0.25));
+  // Faja superior sobre el hueco
+  root.add(panel(SD_W_HOLE, (H - 1) - SD_Y1, 0.5, M.shell,
+    SD_X_CENTER, (SD_Y1 + H - 1)/2, W - 0.25));
+  // Faja inferior bajo el hueco
+  root.add(panel(SD_W_HOLE, SD_Y0 - 1, 0.5, M.shell,
+    SD_X_CENTER, (1 + SD_Y0)/2, W - 0.25));
+  // BACK wall (compressor section)
+  root.add(panel(COMP_LEN, H - 2, 0.5, M.shell, compX0 + COMP_LEN/2, H/2 + 1, W - 0.25));
+
+  // RIGHT end wall (solid beige — service access from opposite side)
+  root.add(panel(0.5, H - 2, W, M.shellSolid, compX1 + 0.25, H/2 + 1, W/2));
+  // Vertical trim strip on right end
+  for (let iz=0; iz<=1; iz++) {
+    root.add(box(0.7, H - 2, 0.5, M.shellEdge, compX1 + 0.35, H/2 + 1, iz===0 ? 1 : W-1));
+  }
+
+  // Upper front access door on compressor section (solid)
+  root.add(panel(COMP_LEN - 1, H*0.42, 0.4, M.shellSolid, compX0 + COMP_LEN/2, H - H*0.21, 0.2));
+  // Door seam (vertical)
+  root.add(box(0.15, H*0.42, 0.45, M.shellEdge, compX0 + COMP_LEN/2, H - H*0.21, 0.05));
+  // Door handles (lever type)
+  const handle = (x,y) => {
+    const hdl = box(1.8, 0.35, 0.25, M.skid, x, y, -0.15);
+    root.add(hdl);
+    root.add(box(0.25, 0.55, 0.35, M.bolt, x - 0.7, y, -0.18));
+    root.add(box(0.25, 0.55, 0.35, M.bolt, x + 0.7, y, -0.18));
+  };
+  handle(compX0 + 6,  H*0.72);
+  handle(compX0 + 22, H*0.72);
+
+  // Lower rear grille (condenser air intake) — slotted
+  const grW = COMP_LEN - 4, grH = H*0.48;
+  root.add(panel(grW, grH, 0.3, M.grille, compX0 + COMP_LEN/2, grH/2 + 2, W - 0.15));
+  // Horizontal louvers overlay (slats)
+  for (let i=0; i<8; i++) {
+    const y = 3 + i*1.5;
+    root.add(box(grW - 0.5, 0.3, 0.25, M.shellEdge, compX0 + COMP_LEN/2, y, W - 0.05));
+  }
+
+  // Panel screws (corner bolts) on compressor door
+  const doorScrew = (x,y) => {
+    const s = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.25, 8), M.bolt);
+    s.rotation.x = Math.PI/2;
+    s.position.set(x, y, -0.05);
+    root.add(s);
+  };
+  for (let x = compX0 + 2; x < compX1; x += 3) {
+    doorScrew(x, H - 1);
+    doorScrew(x, H*0.58 + 1);
+  }
+
+  // TRANE nameplate on right end (small dark rectangle)
+  root.add(panel(0.2, 3, 7, M.plate, compX1 + 0.55, H - 5, W/2));
+  // TRANE logo bar (bright accent)
+  root.add(panel(0.22, 0.6, 5.5, new THREE.MeshStandardMaterial({
+    color: 0xcc2222, roughness: 0.4, metalness: 0.5,
+    emissive: 0xcc2222, emissiveIntensity: 0.15
+  }), compX1 + 0.58, H - 5.6, W/2));
+})();
+
+// ============================================================
+// END SECTION (antes era el hood del economizador — ahora gabinete plano)
+// El aire de retorno entra por un ducto rectangular horizontal en la pared
+// trasera (z=W) dentro de esta zona X=0..HOOD_LEN.
+// ============================================================
+// Hueco del ducto de retorno en la pared trasera (referenciado luego en
+// buildExternalDucts para alinear el ducto exterior).
+const RD_X_CENTER = 11;     // centro X del ducto de retorno
+const RD_W = 14;            // ancho del ducto (X)
+const RD_H = 14;            // alto del ducto (Y)
+const RD_Y_CENTER = 15;     // centro Y del ducto de retorno
+const RD_X0 = RD_X_CENTER - RD_W/2;
+const RD_X1 = RD_X_CENTER + RD_W/2;
+const RD_Y0 = RD_Y_CENTER - RD_H/2;
+const RD_Y1 = RD_Y_CENTER + RD_H/2;
+
+(function buildEndSection() {
+  // ROOF (continuación del techo del cabinet, mismo nivel)
+  root.add(panel(HOOD_LEN + 0.2, 0.5, W, M.shell, HOOD_LEN/2, H + 0.25, W/2));
+  // Roof trim (banda oscura, igual que en cabinet)
+  root.add(panel(HOOD_LEN, 0.3, W + 1, M.shellTrim, HOOD_LEN/2, H + 0.6, W/2));
+
+  // PARED TRASERA (z=W) — dividida en 4 segmentos para dejar HUECO de retorno
+  // Segmento izquierdo (X<RD_X0)
+  if (RD_X0 > 0) {
+    root.add(panel(RD_X0, H - 2, 0.5, M.shell, RD_X0/2, H/2 + 1, W - 0.25));
+  }
+  // Segmento derecho (X>RD_X1)
+  if (RD_X1 < HOOD_LEN) {
+    root.add(panel(HOOD_LEN - RD_X1, H - 2, 0.5, M.shell, (RD_X1 + HOOD_LEN)/2, H/2 + 1, W - 0.25));
+  }
+  // Faja superior sobre el hueco (entre RD_Y1 y H-1)
+  root.add(panel(RD_W, H - 1 - RD_Y1, 0.5, M.shell, RD_X_CENTER, (RD_Y1 + H - 1)/2, W - 0.25));
+  // Faja inferior bajo el hueco (entre 1 y RD_Y0)
+  root.add(panel(RD_W, RD_Y0 - 1, 0.5, M.shell, RD_X_CENTER, (1 + RD_Y0)/2, W - 0.25));
+
+  // PARED FRONTAL (z=0) abierta para cut-away (igual que el cabinet)
+
+  // EXTREMO X=0 — panel sólido (igual al extremo de compresores en compX1)
+  root.add(panel(0.5, H - 2, W, M.shellSolid, -0.25, H/2 + 1, W/2));
+  // Trim vertical en las esquinas del extremo
+  for (let iz=0; iz<=1; iz++) {
+    root.add(box(0.7, H - 2, 0.5, M.shellEdge, -0.35, H/2 + 1, iz===0 ? 1 : W-1));
+  }
+  // Tornillos decorativos en el panel del extremo
+  const endScrew = (y, z) => {
+    const s = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.25, 8), M.bolt);
+    s.rotation.z = Math.PI/2;
+    s.position.set(-0.2, y, z);
+    root.add(s);
+  };
+  for (const y of [3.5, 9, 14.5, 20, 25.5]) {
+    endScrew(y, 2.2);
+    endScrew(y, W - 2.2);
+  }
+
+  // NAMEPLATE TRANE (espejo del existente en compX1)
+  root.add(panel(0.2, 3, 7, M.plate, -0.55, H - 5, W/2));
+  // Logo bar rojo emisivo
+  root.add(panel(0.22, 0.6, 5.5, new THREE.MeshStandardMaterial({
+    color: 0xcc2222, roughness: 0.4, metalness: 0.5,
+    emissive: 0xcc2222, emissiveIntensity: 0.15
+  }), -0.58, H - 5.6, W/2));
+
+  // Costilla de transición entre end-section y cabinet (vertical band)
+  root.add(box(0.4, H - 2.5, W + 0.5, M.shellTrim, HOOD_LEN + 0.05, H/2 + 1.25, W/2));
+})();
+
+// ============================================================
+// FILTER RACK (just inside the hood, before coil)
+// ============================================================
+(function buildFilterRack() {
+  const x0 = HOOD_LEN + 1;
+  // Filter media (pleated tan)
+  root.add(box(2, H - 6, W - 6, M.filter, x0 + 1, H/2 + 1, W/2));
+  // Frame around filter
+  root.add(box(0.3, H - 6, 0.3, M.galvDark, x0, H/2 + 1, 3));
+  root.add(box(0.3, H - 6, 0.3, M.galvDark, x0, H/2 + 1, W - 3));
+  root.add(box(0.3, H - 6, 0.3, M.galvDark, x0 + 2, H/2 + 1, 3));
+  root.add(box(0.3, H - 6, 0.3, M.galvDark, x0 + 2, H/2 + 1, W - 3));
+  root.add(box(2, 0.3, W - 5.7, M.galvDark, x0 + 1, 4, W/2));
+  root.add(box(2, 0.3, W - 5.7, M.galvDark, x0 + 1, H - 2, W/2));
+  // Pleat lines on filter (visual texture)
+  for (let i=1; i<10; i++) {
+    const z = 3.5 + i*2;
+    root.add(box(2.05, H - 6.3, 0.05, M.aluminum, x0 + 1, H/2 + 1, z));
+  }
+})();
+
+// ============================================================
+// COOLING COIL (fins + copper tubes)
+// ============================================================
+const COIL_X = cabX0 + 6;
+(function buildCoolingCoil() {
+  // Coil frame
+  const fw = 4, fh = H - 6, fd = W - 5;
+  root.add(box(0.3, fh, 0.3, M.galvDark, COIL_X,       H/2 + 1, 2.7));
+  root.add(box(0.3, fh, 0.3, M.galvDark, COIL_X,       H/2 + 1, W - 2.7));
+  root.add(box(0.3, fh, 0.3, M.galvDark, COIL_X + fw,  H/2 + 1, 2.7));
+  root.add(box(0.3, fh, 0.3, M.galvDark, COIL_X + fw,  H/2 + 1, W - 2.7));
+  root.add(box(fw, 0.3, fd + 0.3, M.galvDark, COIL_X + fw/2, 4, W/2));
+  root.add(box(fw, 0.3, fd + 0.3, M.galvDark, COIL_X + fw/2, H - 2, W/2));
+
+  // Aluminum fins (stack of thin planes)
+  const FIN_COUNT = 44;
+  const finGap = fd / FIN_COUNT;
+  for (let i=0; i<FIN_COUNT; i++) {
+    const z = 3 + i * finGap + finGap/2;
+    const fin = new THREE.Mesh(
+      new THREE.PlaneGeometry(fw - 0.2, fh - 0.4),
+      M.aluminum
+    );
+    fin.position.set(COIL_X + fw/2, H/2 + 1, z);
+    fin.rotation.y = Math.PI/2;
+    fin.receiveShadow = true;
+    root.add(fin);
+  }
+  // Faint blue-green coil face plate (appears when viewed at angle)
+  root.add(panel(0.15, fh - 0.5, fd - 0.1, M.coilFace, COIL_X + fw + 0.08, H/2 + 1, W/2));
+  root.add(panel(0.15, fh - 0.5, fd - 0.1, M.coilFace, COIL_X - 0.08, H/2 + 1, W/2));
+
+  // Copper tubes running horizontally through coil (visible ends + U-bends)
+  const rowCount = 6;
+  for (let r=0; r<rowCount; r++) {
+    const y = 5 + r * ((fh - 2) / rowCount);
+    // Tube end on left side (peeks out of frame)
+    const t = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.28, 0.28, fd + 0.8, 12),
+      M.copper
+    );
+    t.rotation.x = Math.PI/2;
+    t.position.set(COIL_X - 0.5, y, W/2);
+    t.castShadow = true;
+    root.add(t);
+    // U-bends on near side (bottom of face)
+    if (r < rowCount - 1) {
+      const nextY = 5 + (r+1) * ((fh - 2) / rowCount);
+      const midY = (y + nextY) / 2;
+      // U-bend as torus arc
+      const ubend = new THREE.Mesh(
+        new THREE.TorusGeometry((nextY - y)/2, 0.28, 8, 16, Math.PI),
+        M.copper
+      );
+      ubend.position.set(COIL_X - 0.5, midY, 2);
+      ubend.rotation.y = Math.PI/2;
+      ubend.rotation.z = -Math.PI/2;
+      root.add(ubend);
+    }
+  }
+
+  // Drain pan (beneath coil)
+  root.add(box(fw + 2, 0.4, fd + 1, M.galv, COIL_X + fw/2, 3.2, W/2));
+  // Drain line exit
+  const drain = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.4, 0.4, 6, 10),
+    M.blackMatte
+  );
+  drain.position.set(COIL_X + 1, 2, W + 1.5);
+  drain.rotation.x = Math.PI/2;
+  root.add(drain);
+})();
+
+// ============================================================
+// INTERNAL PARTITION (between blower section and compressor bay)
+// ============================================================
+(function buildPartition() {
+  // Full wall between cabinet and compressor section
+  root.add(panel(0.4, H - 2.5, W - 0.5, M.shellTrim, compX0 + 0.2, H/2 + 1.25, W/2));
+  // Mini partition between blower plenum and coil zone (half-height baffle)
+  root.add(panel(0.3, H - 4, W - 6, M.galv, cabX0 + 34, H/2 + 1, W/2));
+})();
+
+// ============================================================
+// BLOWER ASSEMBLY — curved scroll + squirrel cage wheel + motor
+// ============================================================
+const bcx = cabX0 + 22;
+const bcy = H/2 + 1;
+const bcz = W/2;
+const blowerGroup = new THREE.Group();
+const wheelMat = new THREE.MeshStandardMaterial({
+  color: 0x3aa6ff, roughness: 0.38, metalness: 0.7,
+  emissive: 0x3aa6ff, emissiveIntensity: 0.35
+});
+
+(function buildBlower() {
+  // SCROLL HOUSING — approximated with a thick torus + flat backplate
+  const scrollR = 8, scrollDepth = 10;
+  // Outer ring (half-torus, rear half only, so we can see the wheel)
+  const scrollGeo = new THREE.TorusGeometry(scrollR, 1.2, 12, 32, Math.PI);
+  const scroll = new THREE.Mesh(scrollGeo, M.galvDark);
+  scroll.position.set(bcx, bcy, bcz + 5);
+  scroll.rotation.x = Math.PI/2;
+  scroll.rotation.y = 0;
+  // Actually we want the half-open toward viewer (front), so place "missing half" on viewer side
+  scroll.rotation.z = Math.PI/2;
+  scroll.castShadow = true;
+  root.add(scroll);
+  // Plus: sidewalls of scroll (two disks, back one only since front is cut away)
+  const backDisk = new THREE.Mesh(
+    new THREE.CylinderGeometry(scrollR, scrollR, 0.3, 32),
+    M.galv
+  );
+  backDisk.position.set(bcx, bcy, bcz + scrollDepth);
+  backDisk.rotation.x = Math.PI/2;
+  root.add(backDisk);
+  // Front ring (partial — just a thin band so wheel is visible)
+  const frontRing = new THREE.Mesh(
+    new THREE.RingGeometry(scrollR - 0.8, scrollR, 32),
+    M.galvDark
+  );
+  frontRing.position.set(bcx, bcy, bcz);
+  root.add(frontRing);
+
+  // OUTLET TRANSITION — el aire sale del scroll LATERALMENTE (eje X+) hacia
+  // el "hueco" entre el blower y la partition de compresores, y desde ese
+  // hueco gira 90° para salir horizontalmente por la pared trasera (z=W).
+  // Dimensiones del ducto: 14×14 (igual que el ducto de retorno), centrado
+  // en Y=bcy=15 (a la altura del eje del scroll).
+  const SD_DUCT_W = 14;                // ancho X del ducto
+  const SD_DUCT_H = 14;                // alto Y del ducto
+  const SD_DUCT_X = 61;                // centro X (coincide con el hueco trasero)
+  const SD_DUCT_Y = bcy;               // 15 — centro Y del ducto
+  // 1) Cuello LATERAL CORTO — pegado al lado X+ del scroll
+  const SD_LATERAL_X0 = bcx + scrollR;          // X=52 (lado X+ del scroll)
+  const SD_LATERAL_X1 = SD_DUCT_X - SD_DUCT_W/2;// X=54 (donde empieza el ducto principal)
+  const SD_LATERAL_LEN = SD_LATERAL_X1 - SD_LATERAL_X0;  // 2
+  root.add(box(SD_LATERAL_LEN + 0.5, SD_DUCT_H, scrollDepth - 1, M.ductBody,
+    (SD_LATERAL_X0 + SD_LATERAL_X1)/2, SD_DUCT_Y, bcz + scrollDepth/2 - 0.5));
+  // 2) Cuerpo principal del ducto (en el "hueco" lateral) — desde X=54 hasta X=68
+  //    extendido en Z desde la zona del scroll hasta la pared trasera.
+  const SD_INT_Z0 = bcz;                 // 14 — empieza en el frente del scroll
+  const SD_INT_Z1 = W - 0.5;             // 27.5 — termina justo antes de la pared
+  const SD_INT_LEN = SD_INT_Z1 - SD_INT_Z0;
+  root.add(box(SD_DUCT_W, SD_DUCT_H, SD_INT_LEN, M.ductBody,
+    SD_DUCT_X, SD_DUCT_Y, SD_INT_Z0 + SD_INT_LEN/2));
+  // Inlet cone (on front, sucking air from coil)
+  const inletCone = new THREE.Mesh(
+    new THREE.CylinderGeometry(scrollR - 2, scrollR - 4, 1.2, 24, 1, true),
+    M.galv
+  );
+  inletCone.position.set(bcx, bcy, bcz - 0.6);
+  inletCone.rotation.x = Math.PI/2;
+  root.add(inletCone);
+
+  // === WHEEL (squirrel cage centrifugal fan) ===
+  // Hub
+  const hub = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.4, 1.4, scrollDepth - 1, 16),
+    new THREE.MeshStandardMaterial({ color: 0x55555c, roughness: 0.4, metalness: 0.85 })
+  );
+  hub.rotation.x = Math.PI/2;
+  hub.position.set(0, 0, 4.3);
+  blowerGroup.add(hub);
+  // Shaft
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.35, 0.35, scrollDepth + 4, 10),
+    new THREE.MeshStandardMaterial({ color: 0x7a7a80, roughness: 0.35, metalness: 0.9 })
+  );
+  shaft.rotation.x = Math.PI/2;
+  shaft.position.set(0, 0, 4.3);
+  blowerGroup.add(shaft);
+
+  // Forward-curved blades: thin curved plates arranged in a ring
+  // Each blade is a slightly curved strip spanning scrollDepth
+  const BLADES = 28;
+  const bladeR = scrollR - 2.3;
+  const bladeW = 0.8;   // chord
+  const bladeThick = 0.25;
+  const bladeGeo = new THREE.BoxGeometry(bladeW, bladeThick, scrollDepth - 1.2);
+  for (let i=0; i<BLADES; i++) {
+    const a = (i / BLADES) * Math.PI * 2;
+    const blade = new THREE.Mesh(bladeGeo, wheelMat);
+    blade.position.set(Math.cos(a) * bladeR, Math.sin(a) * bladeR, 4.3);
+    blade.rotation.z = a + Math.PI/2 + 0.25; // slight forward curve angle
+    blade.castShadow = true;
+    blowerGroup.add(blade);
+  }
+  // End rings on wheel (inner rims)
+  for (const z of [-0.5, scrollDepth - 2]) {
+    const rim = new THREE.Mesh(
+      new THREE.TorusGeometry(bladeR + 0.2, 0.18, 6, 36),
+      new THREE.MeshStandardMaterial({ color: 0x55555c, roughness: 0.4, metalness: 0.9 })
+    );
+    rim.position.set(0, 0, z + 4.3);
+    blowerGroup.add(rim);
+  }
+
+  blowerGroup.position.set(bcx, bcy, bcz - 4);
+  unit.add(blowerGroup);
+
+  // MOTOR (on right side of blower, with drive belt visually)
+  const motorX = bcx + scrollR + 3.5;
+  const motorY = bcy - 3;
+  const motorZ = bcz + 2;
+  // Motor body (cylindrical with fins)
+  const motorBody = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.2, 2.2, 5, 20),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.5, metalness: 0.7 })
+  );
+  motorBody.rotation.z = Math.PI/2;
+  motorBody.position.set(motorX, motorY, motorZ);
+  motorBody.castShadow = true;
+  root.add(motorBody);
+  // Motor cooling fins (thin rings)
+  for (let i=0; i<10; i++) {
+    const fin = new THREE.Mesh(
+      new THREE.TorusGeometry(2.25, 0.12, 5, 20),
+      new THREE.MeshStandardMaterial({ color: 0x45454a, roughness: 0.4, metalness: 0.8 })
+    );
+    fin.rotation.y = Math.PI/2;
+    fin.position.set(motorX - 2.3 + i * 0.5, motorY, motorZ);
+    root.add(fin);
+  }
+  // Motor junction box
+  root.add(box(1.4, 1.4, 1.2, M.black, motorX, motorY + 2.3, motorZ - 0.3));
+  // Motor mount bracket
+  root.add(box(5, 0.6, 2.4, M.galvDark, motorX, motorY - 2.4, motorZ));
+  // Motor pulley
+  const pulleyMat = new THREE.MeshStandardMaterial({ color: 0x3a3a40, roughness: 0.4, metalness: 0.8 });
+  const motorPulley = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.8, 16), pulleyMat);
+  motorPulley.rotation.z = Math.PI/2;
+  motorPulley.position.set(motorX - 3, motorY, motorZ - 3.5);
+  root.add(motorPulley);
+  // Wheel pulley (on shaft end, right side)
+  const wheelPulley = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.0, 0.8, 20), pulleyMat);
+  wheelPulley.rotation.z = Math.PI/2;
+  wheelPulley.position.set(bcx + scrollDepth/2 + 0.4, bcy, bcz - 3.5);
+  // We'll skip attaching to blowerGroup since belts aren't animated here
+  root.add(wheelPulley);
+  // Belt (visual: torus connecting the two pulleys as a stadium shape — approximated with a bent box)
+  const beltGeo = new THREE.TorusGeometry(1.8, 0.18, 6, 24, Math.PI * 1.6);
+  const belt = new THREE.Mesh(beltGeo, M.rubber);
+  belt.position.set((motorX - 3 + bcx + scrollDepth/2 + 0.4)/2, motorY + 1, motorZ - 3.5);
+  belt.rotation.y = Math.PI/2;
+  root.add(belt);
+  // Belt guard (sheet metal over belt)
+  root.add(box(5.5, 4, 0.3, M.galv, (motorX - 3 + bcx + scrollDepth/2 + 0.4)/2, bcy - 1.5, bcz - 4.5));
+})();
+
+// ============================================================
+// COMPRESSORS (2 scroll compressors)
+// ============================================================
+const compTops = [];
+const compressorStates = [];  // state-reactive emissive materials + lights
+function buildCompressor(cx, cz, idx) {
+  const baseY = 2.2;
+  // Mounting pad
+  root.add(box(10, 0.8, 10, M.blackMatte, cx, baseY + 0.4, cz));
+  // Vibration isolators (4 rubber mounts)
+  for (let ox of [-3.5, 3.5]) for (let oz of [-3.5, 3.5]) {
+    const iso = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.6, 0.7, 0.9, 10),
+      M.rubber
+    );
+    iso.position.set(cx + ox, baseY + 0.9, cz + oz);
+    root.add(iso);
+  }
+  // Compressor body — cylindrical scroll
+  const bodyR = 3.5, bodyH = 11;
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(bodyR, bodyR, bodyH, 28),
+    M.black
+  );
+  body.position.set(cx, baseY + 1.3 + bodyH/2, cz);
+  body.castShadow = true;
+  root.add(body);
+  // Top dome (hemispheric)
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(bodyR, 24, 12, 0, Math.PI * 2, 0, Math.PI/2),
+    M.black
+  );
+  dome.position.set(cx, baseY + 1.3 + bodyH, cz);
+  dome.castShadow = true;
+  root.add(dome);
+  // Bottom flange
+  const flange = new THREE.Mesh(
+    new THREE.CylinderGeometry(bodyR + 0.6, bodyR + 0.6, 0.6, 28),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.5, metalness: 0.8 })
+  );
+  flange.position.set(cx, baseY + 1.3, cz);
+  root.add(flange);
+  // Terminal junction box (front of compressor)
+  root.add(box(2, 2.5, 1.2, M.galv, cx, baseY + 1.3 + bodyH * 0.55, cz - bodyR - 0.6));
+  // ========== STATE-REACTIVE VISUAL ELEMENTS ==========
+  // Main label band (emissive, changes color with compressor state)
+  const labelMat = new THREE.MeshStandardMaterial({
+    color: 0x3aa6ff, emissive: 0x3aa6ff, emissiveIntensity: 0.9,
+    roughness: 0.35, metalness: 0.4
+  });
+  const label = new THREE.Mesh(
+    new THREE.CylinderGeometry(bodyR + 0.02, bodyR + 0.02, 1.8, 28, 1, true),
+    labelMat
+  );
+  label.position.set(cx, baseY + 1.3 + bodyH * 0.35, cz);
+  root.add(label);
+
+  // Upper glow ring (shoulder band — bright status indicator)
+  const glowRingMat = new THREE.MeshStandardMaterial({
+    color: 0x3aa6ff, emissive: 0x3aa6ff, emissiveIntensity: 1.4,
+    roughness: 0.35, metalness: 0.3
+  });
+  const glowRing = new THREE.Mesh(
+    new THREE.CylinderGeometry(bodyR + 0.04, bodyR + 0.04, 0.5, 28, 1, true),
+    glowRingMat
+  );
+  glowRing.position.set(cx, baseY + 1.3 + bodyH * 0.78, cz);
+  root.add(glowRing);
+
+  // Vertical status stripe on front (always visible regardless of viewing angle)
+  const stripeMat = new THREE.MeshStandardMaterial({
+    color: 0x3aa6ff, emissive: 0x3aa6ff, emissiveIntensity: 1.6,
+    roughness: 0.3, metalness: 0.2
+  });
+  const stripe = new THREE.Mesh(
+    new THREE.BoxGeometry(0.2, bodyH - 2.5, 0.15),
+    stripeMat
+  );
+  stripe.position.set(cx, baseY + 1.3 + bodyH/2, cz - bodyR - 0.08);
+  root.add(stripe);
+
+  // Base ring emissive (bottom glow around flange)
+  const baseGlowMat = new THREE.MeshStandardMaterial({
+    color: 0x3aa6ff, emissive: 0x3aa6ff, emissiveIntensity: 1.1,
+    roughness: 0.4, metalness: 0.3
+  });
+  const baseGlow = new THREE.Mesh(
+    new THREE.TorusGeometry(bodyR + 0.5, 0.18, 8, 32),
+    baseGlowMat
+  );
+  baseGlow.rotation.x = Math.PI/2;
+  baseGlow.position.set(cx, baseY + 1.55, cz);
+  root.add(baseGlow);
+
+  // Ambient PointLight — compressor radiates its state color into surroundings
+  const compLight = new THREE.PointLight(0x3aa6ff, 1.0, 18);
+  compLight.position.set(cx, baseY + 1.3 + bodyH * 0.6, cz);
+  unit.add(compLight);
+
+  compressorStates.push({ labelMat, glowRingMat, stripeMat, baseGlowMat, compLight });
+
+  // Refrigerant port connections are made by the global piping system below
+
+  // Animated "compressor top" ring (for visual vibration when ON)
+  const topGroup = new THREE.Group();
+  topGroup.position.set(cx, baseY + 1.3 + bodyH + 0.05, cz);
+  // Mount bolts ring
+  for (let i=0; i<8; i++) {
+    const a = (i/8) * Math.PI * 2;
+    const bolt = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.2, 0.2, 0.4, 6),
+      M.bolt
+    );
+    bolt.position.set(Math.cos(a)*(bodyR - 0.4), 0, Math.sin(a)*(bodyR - 0.4));
+    topGroup.add(bolt);
+  }
+  unit.add(topGroup);
+  compTops.push({ group: topGroup, baseY: baseY + 1.3 + bodyH + 0.05 });
+}
+buildCompressor(compX0 + 8,  W/2, 0);
+buildCompressor(compX0 + 20, W/2, 1);
+
+// ============================================================
+// PIPING UTILITY — waypoint-based pipe run with elbow sphere joints
+// ============================================================
+function pipeRun(waypoints, r, mat, jointScale) {
+  const group = new THREE.Group();
+  const jR = r * (jointScale || 1.18);
+  const pts = waypoints.map(p => new THREE.Vector3(p[0], p[1], p[2]));
+  // Elbow spheres at every waypoint
+  pts.forEach(p => {
+    const s = new THREE.Mesh(new THREE.SphereGeometry(jR, 12, 8), mat);
+    s.position.copy(p);
+    s.castShadow = true;
+    group.add(s);
+  });
+  // Straight cylindrical runs between consecutive points
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i+1];
+    const dir = new THREE.Vector3().subVectors(b, a);
+    const len = dir.length();
+    if (len < 0.01) continue;
+    const cyl = new THREE.Mesh(
+      new THREE.CylinderGeometry(r, r, len, 12),
+      mat
+    );
+    cyl.position.copy(a).add(dir.clone().multiplyScalar(0.5));
+    cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
+    cyl.castShadow = true;
+    group.add(cyl);
+  }
+  root.add(group);
+  return group;
+}
+
+// ============================================================
+// REFRIGERANT CIRCUITS — 2 independent circuits (as installed)
+//  Each circuit: Compressor → Discharge line → Condenser coil
+//                → Liquid line → Filter drier → Sight glass → TXV → Evap
+//                → Suction line (insulated) → back to Compressor
+// ============================================================
+(function buildRefrigerantCircuits() {
+  const c1X = compX0 + 8;     // 78
+  const c2X = compX0 + 20;    // 90
+  const cZ  = W/2;            // 14  (compressor Z position)
+  const portY = 18;           // compressor dome top (discharge/suction port level)
+  const dOff  = 1.3;          // discharge port X offset (+X side of dome)
+  const sOff  = -1.3;         // suction port X offset (-X side of dome)
+  const rearZ = W - 1.5;      // 26.5 (just in front of rear condenser coil)
+
+  // Glass material for sight glass
+  const glassMat = new THREE.MeshPhysicalMaterial({
+    color: 0x88ccff, transmission: 0.75, roughness: 0.05,
+    metalness: 0.15, thickness: 0.5, ior: 1.45
+  });
+
+  // -------- CIRCUIT 1 (front route) --------
+  // Discharge: C1 top → rear condenser (left half) — bare copper, hot
+  pipeRun([
+    [c1X + dOff, portY,       cZ],
+    [c1X + dOff, portY + 3.5, cZ],
+    [c1X + dOff, portY + 4.5, cZ + 4],
+    [c1X + dOff, portY + 4.5, rearZ - 0.5],
+    [c1X + dOff, portY + 2.0, rearZ]
+  ], 0.3, M.copper);
+
+  // Liquid: rear condenser bottom → drier → sight glass → TXV1
+  pipeRun([
+    [c1X - dOff, 19, rearZ],        // condenser bottom outlet (left half)
+    [c1X - dOff, 19, 22],
+    [c1X - dOff, 5.5, 22],          // drop to service level
+    [c1X - dOff, 5.5, cZ],
+    [compX0 - 0.6, 5.5, cZ - 0.5],  // through partition grommet
+    [64, 5, 12],                    // approach drier
+    [54, 5, 11.5],                  // after drier (sight glass region)
+    [44, 5, 11],                    // under blower
+    [36, 5, 11],                    // approach evaporator
+    [33.5, 6.5, 11],                // up to TXV
+    [33, 7, 11]                     // TXV1 inlet
+  ], 0.22, M.copper);
+  // Filter drier body (inline on liquid line 1)
+  const drier1 = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.58, 0.58, 3.2, 16),
+    M.copperDark
+  );
+  drier1.rotation.z = Math.PI/2;
+  drier1.position.set(59, 5, 11.75);
+  drier1.castShadow = true;
+  root.add(drier1);
+  // End caps on drier (darker flanges)
+  for (const dx of [-1.6, 1.6]) {
+    const cap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.42, 0.42, 0.35, 12),
+      M.bolt
+    );
+    cap.rotation.z = Math.PI/2;
+    cap.position.set(59 + dx, 5, 11.75);
+    root.add(cap);
+  }
+  // Sight glass (glass sphere between drier and TXV)
+  const sg1 = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 10), glassMat);
+  sg1.position.set(50, 5, 11.4);
+  root.add(sg1);
+  // Small brass fitting around sight glass
+  root.add(new THREE.Mesh(
+    new THREE.CylinderGeometry(0.35, 0.35, 0.9, 10),
+    M.copper
+  ).translateX(50).translateY(5).translateZ(11.4).rotateZ(Math.PI/2));
+
+  // Suction 1 (insulated): evap top → FRONT-TOP → C1 suction port
+  pipeRun([
+    [32.5, 24,   12],               // evap top-left exit
+    [32.5, 26,   11],               // rise
+    [37,   26.5, 6.5],              // move to front (away from blower duct)
+    [50,   26.5, 6],
+    [62,   26.5, 6.5],
+    [compX0 - 0.5, 26, 7],          // through partition
+    [c1X,  25,   9],
+    [c1X,  22,   12],               // descent toward port
+    [c1X + sOff + 0.1, 19.8, cZ]   // suction port approach
+  ], 0.55, M.insulation);
+  // Copper stub visible where insulation ends (at port)
+  root.add(tube(
+    new THREE.Vector3(c1X + sOff, 19.8, cZ),
+    new THREE.Vector3(c1X + sOff, 18, cZ),
+    0.32, M.copper, 12
+  ));
+
+  // -------- CIRCUIT 2 (back route) --------
+  // Discharge
+  pipeRun([
+    [c2X + dOff, portY,       cZ],
+    [c2X + dOff, portY + 3.5, cZ],
+    [c2X + dOff, portY + 5.0, cZ + 5],
+    [c2X + dOff, portY + 5.0, rearZ - 0.5],
+    [c2X + dOff, portY + 2.5, rearZ]
+  ], 0.3, M.copper);
+
+  // Liquid 2
+  pipeRun([
+    [c2X - dOff, 19, rearZ],
+    [c2X - dOff, 19, 20],
+    [c2X - dOff, 7.5, 20],
+    [c2X - dOff, 7.5, cZ + 2],
+    [compX0 - 0.6, 7, cZ + 3],     // partition (offset from C1 grommet)
+    [64, 7, 16],
+    [54, 7, 16.5],
+    [44, 7, 17],
+    [36, 7.5, 17],
+    [33.5, 8, 17],
+    [33, 8.5, 17]                    // TXV2 inlet
+  ], 0.22, M.copper);
+  const drier2 = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.58, 0.58, 3.2, 16),
+    M.copperDark
+  );
+  drier2.rotation.z = Math.PI/2;
+  drier2.position.set(59, 7, 16.75);
+  drier2.castShadow = true;
+  root.add(drier2);
+  for (const dx of [-1.6, 1.6]) {
+    const cap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.42, 0.42, 0.35, 12),
+      M.bolt
+    );
+    cap.rotation.z = Math.PI/2;
+    cap.position.set(59 + dx, 7, 16.75);
+    root.add(cap);
+  }
+  const sg2 = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 10), glassMat);
+  sg2.position.set(50, 7, 16.4);
+  root.add(sg2);
+
+  // TXV2 body (second expansion valve at evaporator right half)
+  root.add(box(1.1, 1.5, 1.1, M.copper, 33, 8, 17));
+  // TXV sensing bulbs (strapped to suction lines)
+  root.add(box(0.35, 0.35, 1.4, M.copper, 33, 24.5, 12));
+  root.add(box(0.35, 0.35, 1.4, M.copper, 33, 24.5, 16));
+
+  // Suction 2 (insulated): evap top → BACK-TOP → C2 suction port
+  pipeRun([
+    [32.5, 24,   16],               // evap top-right exit
+    [32.5, 26,   17],               // rise
+    [38,   26.5, 22],               // move to back
+    [50,   26.5, 22.5],
+    [62,   26.5, 22],
+    [compX0 - 0.5, 26, 21],         // through partition
+    [c2X,  25,   19],
+    [c2X,  22,   16],
+    [c2X + sOff + 0.1, 19.8, cZ]
+  ], 0.55, M.insulation);
+  root.add(tube(
+    new THREE.Vector3(c2X + sOff, 19.8, cZ),
+    new THREE.Vector3(c2X + sOff, 18, cZ),
+    0.32, M.copper, 12
+  ));
+
+  // -------- SERVICE VALVES at compressor ports --------
+  function serviceValve(x, y, z) {
+    // Main body
+    const v = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.45, 0.42, 0.8, 10),
+      M.bolt
+    );
+    v.position.set(x, y, z);
+    v.castShadow = true;
+    root.add(v);
+    // Hex handle on side
+    const handle = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.18, 0.45, 6),
+      M.copper
+    );
+    handle.rotation.z = Math.PI/2;
+    handle.position.set(x + 0.5, y, z);
+    root.add(handle);
+    // Schrader cap on top
+    const cap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.2, 0.24, 0.28, 8),
+      M.bolt
+    );
+    cap.position.set(x, y + 0.55, z);
+    root.add(cap);
+  }
+  // 4 service valves at the 4 compressor ports
+  serviceValve(c1X + dOff, 19.2, cZ);
+  serviceValve(c1X + sOff, 19.3, cZ);
+  serviceValve(c2X + dOff, 19.2, cZ);
+  serviceValve(c2X + sOff, 19.3, cZ);
+
+  // -------- PIPE SUPPORTS / CLAMPS (along liquid line runs) --------
+  function pipeClamp(x, y, z) {
+    const c = new THREE.Mesh(
+      new THREE.BoxGeometry(0.25, 0.6, 1.0),
+      M.galvDark
+    );
+    c.position.set(x, y, z);
+    root.add(c);
+    // Thread rod above
+    const rod = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.07, 0.07, 1.2, 6),
+      M.bolt
+    );
+    rod.position.set(x, y + 0.9, z);
+    root.add(rod);
+  }
+  // Along liquid lines
+  pipeClamp(65, 5.7, 11.9);
+  pipeClamp(48, 5.7, 11.2);
+  pipeClamp(65, 7.7, 16.3);
+  pipeClamp(48, 7.7, 16.9);
+})();
+
+// ============================================================
+// EXTERNAL SUPPLY & RETURN DUCTS — sobresalen por la pared trasera (z=W)
+// Ductos rectangulares horizontales, conectados a los huecos del shell.
+// ============================================================
+(function buildExternalDucts() {
+  const PROTRUDE = 14;        // longitud que sobresale más allá de z=W
+  const FLANGE_T = 0.6;       // espesor del flange en la pared trasera
+
+  // Helpers locales
+  const ductBolt = (x, y, z) => {
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.3, 8), M.bolt);
+    b.rotation.x = Math.PI/2;
+    b.position.set(x, y, z);
+    root.add(b);
+  };
+  const labelMatRed = new THREE.MeshStandardMaterial({
+    color: 0xcc3322, roughness: 0.5, metalness: 0.4,
+    emissive: 0xcc3322, emissiveIntensity: 0.45
+  });
+  const labelMatBlue = new THREE.MeshStandardMaterial({
+    color: 0x3aa6ff, roughness: 0.5, metalness: 0.4,
+    emissive: 0x3aa6ff, emissiveIntensity: 0.55
+  });
+
+  // ---------------- DUCTO DE RETORNO (zona del antiguo hood) ----------------
+  // Constantes RD_* declaradas globalmente arriba.
+  // Cuerpo (rectangular) saliendo de z=W hacia z=W+PROTRUDE
+  root.add(box(RD_W, RD_H, PROTRUDE, M.ductBody,
+    RD_X_CENTER, RD_Y_CENTER, W + PROTRUDE/2));
+  // Aristas/refuerzos en las 4 esquinas longitudinales
+  for (const dx of [-RD_W/2, RD_W/2]) for (const dy of [-RD_H/2, RD_H/2]) {
+    root.add(box(0.4, 0.4, PROTRUDE + 0.2, M.shellEdge,
+      RD_X_CENTER + dx, RD_Y_CENTER + dy, W + PROTRUDE/2));
+  }
+  // Costillas transversales decorativas (refuerzos típicos de ductería)
+  for (const z of [W + 4, W + 9]) {
+    // Marco rectangular: 4 boxes finas (top, bottom, left, right)
+    root.add(box(RD_W + 0.4, 0.35, 0.35, M.shellTrim, RD_X_CENTER, RD_Y_CENTER + RD_H/2, z));
+    root.add(box(RD_W + 0.4, 0.35, 0.35, M.shellTrim, RD_X_CENTER, RD_Y_CENTER - RD_H/2, z));
+    root.add(box(0.35, RD_H, 0.35, M.shellTrim, RD_X_CENTER - RD_W/2, RD_Y_CENTER, z));
+    root.add(box(0.35, RD_H, 0.35, M.shellTrim, RD_X_CENTER + RD_W/2, RD_Y_CENTER, z));
+  }
+  // Flange en la pared trasera
+  root.add(panel(RD_W + 2.2, RD_H + 2.2, FLANGE_T, M.galv,
+    RD_X_CENTER, RD_Y_CENTER, W + FLANGE_T/2));
+  // Pernos en el flange (perimetrales)
+  for (const dx of [-RD_W/2 - 0.85, -RD_W/4, RD_W/4, RD_W/2 + 0.85]) {
+    ductBolt(RD_X_CENTER + dx, RD_Y_CENTER - RD_H/2 - 0.85, W + 0.4);
+    ductBolt(RD_X_CENTER + dx, RD_Y_CENTER + RD_H/2 + 0.85, W + 0.4);
+  }
+  for (const dy of [-RD_H/4, RD_H/4]) {
+    ductBolt(RD_X_CENTER - RD_W/2 - 0.85, RD_Y_CENTER + dy, W + 0.4);
+    ductBolt(RD_X_CENTER + RD_W/2 + 0.85, RD_Y_CENTER + dy, W + 0.4);
+  }
+  // Etiqueta visual: banda roja "RETURN"
+  root.add(panel(RD_W - 4, 0.5, 0.05, labelMatRed,
+    RD_X_CENTER, RD_Y_CENTER + RD_H/2 + 1.3, W + PROTRUDE/2));
+
+  // ---------------- DUCTO DE ABASTO (lateral al blower, en el hueco) ----------------
+  // Sale por la pared trasera (z=W) en X=61, Y=15, mismas dimensiones (14×14)
+  // que el ducto de retorno.
+  const SD_X = 61;
+  const SD_W = 14;
+  const SD_H = 14;
+  const SD_Y = bcy;            // 15 — coincide con el ducto interno y con el retorno en altura
+  // Cuerpo (rectangular) saliendo de z=W hacia z=W+PROTRUDE
+  root.add(box(SD_W, SD_H, PROTRUDE, M.ductBody, SD_X, SD_Y, W + PROTRUDE/2));
+  // Aristas/refuerzos en las 4 esquinas longitudinales
+  for (const dx of [-SD_W/2, SD_W/2]) for (const dy of [-SD_H/2, SD_H/2]) {
+    root.add(box(0.4, 0.4, PROTRUDE + 0.2, M.shellEdge,
+      SD_X + dx, SD_Y + dy, W + PROTRUDE/2));
+  }
+  // Costillas transversales decorativas
+  for (const z of [W + 4, W + 9]) {
+    root.add(box(SD_W + 0.4, 0.35, 0.35, M.shellTrim, SD_X, SD_Y + SD_H/2, z));
+    root.add(box(SD_W + 0.4, 0.35, 0.35, M.shellTrim, SD_X, SD_Y - SD_H/2, z));
+    root.add(box(0.35, SD_H, 0.35, M.shellTrim, SD_X - SD_W/2, SD_Y, z));
+    root.add(box(0.35, SD_H, 0.35, M.shellTrim, SD_X + SD_W/2, SD_Y, z));
+  }
+  // Flange en la pared trasera
+  root.add(panel(SD_W + 2.2, SD_H + 2.2, FLANGE_T, M.galv,
+    SD_X, SD_Y, W + FLANGE_T/2));
+  // Pernos perimetrales (mismo patrón que el ducto de retorno)
+  for (const dx of [-SD_W/2 - 0.85, -SD_W/4, SD_W/4, SD_W/2 + 0.85]) {
+    ductBolt(SD_X + dx, SD_Y - SD_H/2 - 0.85, W + 0.4);
+    ductBolt(SD_X + dx, SD_Y + SD_H/2 + 0.85, W + 0.4);
+  }
+  for (const dy of [-SD_H/4, SD_H/4]) {
+    ductBolt(SD_X - SD_W/2 - 0.85, SD_Y + dy, W + 0.4);
+    ductBolt(SD_X + SD_W/2 + 0.85, SD_Y + dy, W + 0.4);
+  }
+  // Etiqueta visual: banda azul "SUPPLY"
+  root.add(panel(SD_W - 4, 0.5, 0.05, labelMatBlue,
+    SD_X, SD_Y + SD_H/2 + 1.3, W + PROTRUDE/2));
+})();
+
+// ============================================================
+// CONDENSER SECTION (coil around top + raised deck)
+// ============================================================
+(function buildCondenser() {
+  // Raised deck where condenser fans sit
+  root.add(box(COMP_LEN - 1.5, 0.5, W - 2, M.galvDark, compX0 + COMP_LEN/2, H + 1.3, W/2));
+  // Deck support beams
+  for (let dx of [compX0 + 3, compX0 + COMP_LEN - 3]) {
+    root.add(box(0.6, 2, W - 3, M.galvDark, dx, H + 0.5, W/2));
+  }
+  // Condenser coil wrapped around the sides below the deck (vertical wall coils)
+  const coilH = 8;
+  const makeCondCoil = (x, z, lx, lz) => {
+    // Front/back face of condenser coil (represented as ribbed aluminum panel)
+    const coil = box(lx, coilH, lz, M.coilFace, x, H - coilH/2 - 1, z);
+    root.add(coil);
+    // Horizontal fin lines
+    for (let i=0; i<14; i++) {
+      const y = H - 1 - i * (coilH/14) - 0.3;
+      root.add(box(lx + 0.05, 0.1, lz + 0.05, M.aluminumBright, x, y, z));
+    }
+  };
+  makeCondCoil(compX0 + COMP_LEN/2, W - 0.8, COMP_LEN - 2, 0.25);
+  makeCondCoil(compX1 - 0.8, W/2, 0.25, W - 3);
+})();
+
+// ============================================================
+// CONDENSER FANS (axial with curved aerodynamic blades)
+// ============================================================
+const fanGroups = [];
+const fanMats = [];
+
+// Scimitar-shaped twisted blade geometry (shared across all condenser fans)
+function makeAeroBlade() {
+  // Planform outline: X = radial (root→tip), Y = chord
+  const shape = new THREE.Shape();
+  shape.moveTo(0.5, -0.30);
+  shape.quadraticCurveTo(1.6, -0.75, 3.1, -0.55);     // leading edge sweeping back
+  shape.quadraticCurveTo(3.9, -0.35, 4.15, 0.05);     // tip curl-around
+  shape.quadraticCurveTo(4.25, 0.38, 3.85, 0.58);
+  shape.quadraticCurveTo(2.8, 0.88, 1.4, 0.55);       // trailing edge (swept)
+  shape.quadraticCurveTo(0.8, 0.35, 0.5, 0.20);
+  shape.closePath();
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.2, bevelEnabled: true, bevelSegments: 2,
+    bevelSize: 0.04, bevelThickness: 0.04, steps: 1
+  });
+  geo.translate(0, 0, -0.1);
+  // Apply aerodynamic twist: steeper pitch at root, shallower at tip
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const tParam = Math.max(0, Math.min(1, (x - 0.5) / 3.7));
+    const twist = 0.70 - tParam * 0.48;  // radians
+    const cy = y * Math.cos(twist) - z * Math.sin(twist);
+    const cz = y * Math.sin(twist) + z * Math.cos(twist);
+    pos.setXYZ(i, x, cy, cz);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+const aeroBladeGeo = makeAeroBlade();
+
+function makeCondenserFan(cx, cz) {
+  // Empotrado en el techo: shroud parcialmente embebido en el deck
+  // Deck top está en H + 1.55 (deck en H+1.3, altura 0.5 → top a +0.25)
+  // Shroud de altura 1.8 centrado en fanY → base en fanY-0.9, top en fanY+0.9
+  // Con fanY = H + 1.8: base a Y=H+0.9 (debajo del deck), top a Y=H+2.7 (sobresale 1.15)
+  const fanY = H + 1.8;
+  // Fan shroud (Venturi ring)
+  const shroud = new THREE.Mesh(
+    new THREE.CylinderGeometry(5, 5, 1.8, 28, 1, true),
+    M.galv
+  );
+  shroud.position.set(cx, fanY, cz);
+  shroud.castShadow = true;
+  root.add(shroud);
+  // Shroud top lip
+  const lip = new THREE.Mesh(
+    new THREE.TorusGeometry(5, 0.35, 8, 32),
+    M.galvDark
+  );
+  lip.position.set(cx, fanY + 0.95, cz);
+  lip.rotation.x = Math.PI/2;
+  root.add(lip);
+  // Fan guard (wire grille on top) — use concentric tori + radial spokes
+  for (const r of [1.5, 3, 4.5]) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(r, 0.08, 4, 24),
+      M.bolt
+    );
+    ring.position.set(cx, fanY + 1.25, cz);
+    ring.rotation.x = Math.PI/2;
+    root.add(ring);
+  }
+  for (let i=0; i<8; i++) {
+    const a = (i/8) * Math.PI * 2;
+    const spoke = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 0.12, 4.8),
+      M.bolt
+    );
+    spoke.rotation.y = a;
+    spoke.position.set(cx, fanY + 1.25, cz);
+    root.add(spoke);
+  }
+
+  // Fan blade assembly (rotating)
+  const g = new THREE.Group();
+  g.position.set(cx, fanY - 0.1, cz);
+  const bladeMat = new THREE.MeshStandardMaterial({
+    color: 0x3aa6ff, roughness: 0.4, metalness: 0.65,
+    emissive: 0x3aa6ff, emissiveIntensity: 0.35,
+    side: THREE.DoubleSide
+  });
+  // Hub
+  const fhub = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.0, 1.2, 1.2, 16),
+    new THREE.MeshStandardMaterial({ color: 0x45454a, roughness: 0.4, metalness: 0.85 })
+  );
+  g.add(fhub);
+  // Blades: 5 twisted scimitar blades (shared geometry, rotated around Y)
+  const BLADES = 5;
+  for (let i=0; i<BLADES; i++) {
+    const a = (i/BLADES) * Math.PI * 2;
+    const blade = new THREE.Mesh(aeroBladeGeo, bladeMat);
+    blade.rotation.y = a;
+    blade.castShadow = true;
+    g.add(blade);
+  }
+  unit.add(g);
+  fanGroups.push(g);
+  fanMats.push(bladeMat);
+}
+const fanPositions = [
+  [compX0 + 7,  7],
+  [compX0 + 7,  W - 7],
+  [compX0 + 20, 7],
+  [compX0 + 20, W - 7],
+];
+fanPositions.forEach(([cx,cz]) => makeCondenserFan(cx, cz));
+
+// ============================================================
+// LED INDICATORS (compressor status) + control panel box
+// ============================================================
+const ledMats = [];
+function makeLed(cx, cz) {
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x3aa6ff, emissive: 0x3aa6ff, emissiveIntensity: 1.3,
+    roughness: 0.3, metalness: 0.3
+  });
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 8), mat);
+  led.position.set(cx, 20.5, cz - 4);
+  unit.add(led);
+  const pl = new THREE.PointLight(0x3aa6ff, 1.0, 8);
+  pl.position.copy(led.position);
+  unit.add(pl);
+  ledMats.push({ mat, light: pl });
+}
+makeLed(compX0 + 8,  W/2);
+makeLed(compX0 + 20, W/2);
+
+// Electrical control panel (enclosure on right end)
+(function buildControlPanel() {
+  const cx = compX1 - 3;
+  const cz = 5;
+  const cy = 20;
+  root.add(box(4, 6, 3, M.galv, cx, cy, cz));
+  // Door handle
+  root.add(box(0.15, 1.4, 0.3, M.bolt, cx, cy, cz - 1.55));
+  // Indicator LEDs on panel
+  const greenL = new THREE.Mesh(
+    new THREE.SphereGeometry(0.22, 10, 8),
+    new THREE.MeshStandardMaterial({ color: 0x00ff66, emissive: 0x00ff66, emissiveIntensity: 1.2 })
+  );
+  greenL.position.set(cx - 1, cy + 1.5, cz - 1.55);
+  unit.add(greenL);
+  const redL = new THREE.Mesh(
+    new THREE.SphereGeometry(0.22, 10, 8),
+    new THREE.MeshStandardMaterial({ color: 0xff2233, emissive: 0xff2233, emissiveIntensity: 0.3 })
+  );
+  redL.position.set(cx + 1, cy + 1.5, cz - 1.55);
+  unit.add(redL);
+})();
+
+// ============================================================
+// STATE MACHINE
+// ============================================================
+const COLOR_STANDBY = new THREE.Color(0x3aa6ff);
+const COLOR_ON      = new THREE.Color(0x00ff66);
+const COLOR_ALARM   = new THREE.Color(0xff2233);
+const colorFor = s => s==='on' ? COLOR_ON : s==='alarm' ? COLOR_ALARM : COLOR_STANDBY;
+const intensityFor = s => s==='on' ? 0.55 : s==='alarm' ? 0.7 : 0.4;
+const state = { fan:'standby', c1:'standby', c2:'standby' };
+
+function applyState() {
+  wheelMat.color.copy(colorFor(state.fan));
+  wheelMat.emissive.copy(colorFor(state.fan));
+  wheelMat.emissiveIntensity = intensityFor(state.fan);
+
+  const fanStates = [state.c1, state.c1, state.c2, state.c2];
+  fanMats.forEach((m, i) => {
+    m.color.copy(colorFor(fanStates[i]));
+    m.emissive.copy(colorFor(fanStates[i]));
+    m.emissiveIntensity = intensityFor(fanStates[i]);
+  });
+
+  [state.c1, state.c2].forEach((s, i) => {
+    ledMats[i].mat.color.copy(colorFor(s));
+    ledMats[i].mat.emissive.copy(colorFor(s));
+    ledMats[i].mat.emissiveIntensity = s==='standby' ? 1.2 : 1.7;
+    ledMats[i].light.color.copy(colorFor(s));
+    ledMats[i].light.intensity = s==='standby' ? 1.0 : 1.5;
+  });
+
+  // Compressor body illumination (label, glow ring, stripe, base torus, PointLight)
+  [state.c1, state.c2].forEach((s, i) => {
+    const c = colorFor(s);
+    const cs = compressorStates[i];
+    cs.labelMat.color.copy(c);
+    cs.labelMat.emissive.copy(c);
+    cs.labelMat.emissiveIntensity = s === 'standby' ? 0.8 : 1.1;
+    cs.glowRingMat.color.copy(c);
+    cs.glowRingMat.emissive.copy(c);
+    cs.glowRingMat.emissiveIntensity = s === 'on' ? 1.7 : s === 'alarm' ? 1.5 : 1.3;
+    cs.stripeMat.color.copy(c);
+    cs.stripeMat.emissive.copy(c);
+    cs.stripeMat.emissiveIntensity = s === 'on' ? 1.9 : 1.4;
+    cs.baseGlowMat.color.copy(c);
+    cs.baseGlowMat.emissive.copy(c);
+    cs.baseGlowMat.emissiveIntensity = s === 'on' ? 1.5 : 1.1;
+    cs.compLight.color.copy(c);
+    cs.compLight.intensity = s === 'on' ? 2.4 : s === 'alarm' ? 2.0 : 1.0;
+  });
+}
+
+// ============================================================
+// MIRROR LONGITUDINAL — alinea con el equipo real
+// ============================================================
+// Espejea la unidad sobre el plano YZ que pasa por su centro.
+// Resultado: hood y compresor intercambian extremos en X mundial,
+// pero el frente (z=0) sigue siendo el frente. Cuando se ve desde
+// el frente, el compartimento de compresores queda a la derecha.
+// El renderer detecta la determinante negativa de la matriz y
+// invierte el face culling automáticamente, así sombras y PBR
+// siguen correctos.
+unit.scale.x = -1;
+unit.position.x = TOTAL;
+
+applyState();
+
+// ============================================================
+// UI CYCLE: STANDBY → ON → ALARM → STANDBY
+// ============================================================
+const CYCLE = { standby:'on', on:'alarm', alarm:'standby' };
+function bind(id, key) {
+  const btn = document.getElementById(id);
+  btn.onclick = () => {
+    state[key] = CYCLE[state[key]];
+    btn.className = state[key];
+    btn.textContent = state[key].toUpperCase();
+    applyState();
+  };
+}
+bind('bFan','fan');
+bind('bC1','c1');
+bind('bC2','c2');
+const bRot = document.getElementById('bRot');
+bRot.onclick = () => {
+  controls.autoRotate = !controls.autoRotate;
+  bRot.className = controls.autoRotate ? 'on' : 'off';
+  bRot.textContent = controls.autoRotate ? 'ON' : 'OFF';
+};
+
+// ============================================================
+// AIRFLOW PARTICLES
+// ============================================================
+const N = 60;
+const returnP = [], supplyP = [];
+const pGeo = new THREE.SphereGeometry(0.3, 6, 4);
+const redMat  = new THREE.MeshBasicMaterial({ color:0xff5533, transparent:true, opacity:0.85 });
+const blueMat = new THREE.MeshBasicMaterial({ color:0x44bbff, transparent:true, opacity:0.85 });
+
+for (let i=0; i<N; i++) {
+  const r = new THREE.Mesh(pGeo, redMat.clone());
+  r.userData = { t: Math.random(), seed: Math.random()*10 };
+  unit.add(r); returnP.push(r);
+  const s = new THREE.Mesh(pGeo, blueMat.clone());
+  s.userData = { t: Math.random(), seed: Math.random()*10 };
+  unit.add(s); supplyP.push(s);
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ============================================================
+// ANIMATE
+// ============================================================
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t  = clock.elapsedTime;
+
+  if (state.fan==='on') blowerGroup.rotation.z += dt * 7;
+
+  const fanOn = [state.c1==='on', state.c1==='on', state.c2==='on', state.c2==='on'];
+  fanGroups.forEach((g, i) => { if (fanOn[i]) g.rotation.y += dt * (9 + i*0.4); });
+
+  const compOn = [state.c1==='on', state.c2==='on'];
+  compTops.forEach((ct, i) => {
+    if (compOn[i]) {
+      ct.group.rotation.y += dt * 8;
+      ct.group.position.y = ct.baseY + Math.sin(t*30 + i)*0.08;
+    } else {
+      ct.group.position.y = ct.baseY;
+    }
+  });
+
+  // Compressor illumination dynamics: alarm pulses, on shimmers gently
+  const cStates = [state.c1, state.c2];
+  compressorStates.forEach((cs, i) => {
+    const s = cStates[i];
+    if (s === 'alarm') {
+      const pulse = 0.5 + Math.sin(t * 5 + i)*0.5;
+      cs.stripeMat.emissiveIntensity = 0.9 + pulse * 1.0;
+      cs.glowRingMat.emissiveIntensity = 0.8 + pulse * 0.9;
+      cs.compLight.intensity = 1.2 + pulse * 1.2;
+    } else if (s === 'on') {
+      const shimmer = 0.95 + Math.sin(t * 12 + i*2)*0.08;
+      cs.compLight.intensity = 2.4 * shimmer;
+      cs.stripeMat.emissiveIntensity = 1.9 * shimmer;
+    }
+  });
+
+  returnP.forEach((p, i) => {
+    if (state.fan!=='on') { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.14;
+    if (p.userData.t > 1) p.userData.t = 0;
+    const tt = p.userData.t;
+    const seed = p.userData.seed;
+    const xJit = ((i % 5) - 2) * 1.8;
+    const yJit = ((Math.floor(i/5) % 4) - 1.5) * 1.8;
+    // Fase 1 (0..0.30): viene desde detrás del extremo del ducto exterior
+    //                  hacia el interior del equipo (atraviesa el ducto opaco)
+    // Fase 2 (0.30..1):  ya dentro de la unidad, atraviesa filtro y coil
+    if (tt < 0.30) {
+      const u = tt / 0.30;
+      p.position.x = RD_X_CENTER + xJit * 0.6 + Math.sin(u*4 + seed)*0.4;
+      p.position.y = RD_Y_CENTER + yJit * 0.6 + Math.sin(u*5 + seed)*0.4;
+      // De Z=W+18 (4 unidades fuera del extremo del ducto) a Z=W (entra al cabinet)
+      p.position.z = W + 18 - u * 18;
+    } else {
+      const u = (tt - 0.30) / 0.70;
+      p.position.x = RD_X_CENTER + xJit * 0.4 + u * 24;   // 11 → 35 (atraviesa filtro y coil)
+      p.position.y = RD_Y_CENTER - 1 + yJit * 0.5 + Math.sin(u*4 + seed)*0.6;
+      p.position.z = W/2 + Math.cos(u*4 + seed)*1.4;
+    }
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.85;
+  });
+
+  supplyP.forEach((p, i) => {
+    if (state.fan!=='on') { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.18;
+    if (p.userData.t > 1) p.userData.t = 0;
+    const tt = p.userData.t;
+    const seed = p.userData.seed;
+    const xJit = ((i % 5) - 2) * 1.6;
+    const yJit = ((Math.floor(i/5) % 4) - 1.5) * 1.6;
+    // Fase 1 (0..0.40): el aire sale LATERALMENTE del scroll (X+) hacia el
+    //                   ducto principal en X=61, a la altura del eje Y=bcy=15
+    // Fase 2 (0.40..1):  recorre el ducto horizontalmente y SALE por el extremo
+    //                    (Z = W + PROTRUDE + 4 = 46) — visible afuera del ducto
+    if (tt < 0.40) {
+      const u = tt / 0.40;
+      p.position.x = 52 + u * 9;            // de X=52 (lado del scroll) a X=61
+      p.position.y = 15 + yJit * 0.5 + Math.sin(u*4 + seed)*0.6;
+      p.position.z = bcz + xJit * 0.3;      // se mantiene a la altura del scroll en Z
+    } else {
+      const u = (tt - 0.40) / 0.60;
+      p.position.x = 61 + xJit * 0.4 + Math.sin(u*3 + seed)*0.4;
+      p.position.y = 15 + yJit * 0.5 + Math.sin(u*4 + seed)*0.4;
+      // De Z=bcz=14 hasta Z=W+18=46 (sale visiblemente del extremo del ducto)
+      p.position.z = bcz + u * (W + 18 - bcz);
+    }
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.85;
+  });
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

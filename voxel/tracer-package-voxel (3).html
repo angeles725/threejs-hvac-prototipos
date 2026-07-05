@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Unidad Paquete Trane · Tracer · Voxel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #06080d;
+      --panel: rgba(10, 14, 22, 0.85);
+      --accent: #00d4aa;
+      --on: #00ff66;
+      --off: #ff2233;
+      --text: #c8d4dc;
+      --muted: #5a6878;
+      --border: rgba(0, 212, 170, 0.18);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: var(--bg); color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    #canvas { display: block; width: 100%; height: 100%; outline: none; }
+
+    #hud {
+      position: fixed; top: 18px; left: 18px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 11px; letter-spacing: 0.18em;
+      color: var(--muted); text-transform: uppercase;
+      pointer-events: none; user-select: none;
+      z-index: 10;
+    }
+    #hud .title { color: var(--text); font-size: 13px; margin-bottom: 6px; font-weight: 600; }
+    #hud .accent { color: var(--accent); }
+    #hud .info { font-size: 9.5px; margin-top: 4px; color: var(--muted); }
+
+    #controls {
+      position: fixed; bottom: 18px; right: 18px;
+      background: var(--panel);
+      backdrop-filter: blur(14px) saturate(140%);
+      -webkit-backdrop-filter: blur(14px) saturate(140%);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      display: flex; flex-direction: column; gap: 8px;
+      min-width: 222px;
+      z-index: 10;
+    }
+    #controls .label {
+      color: var(--accent); text-transform: uppercase;
+      font-size: 9px; letter-spacing: 0.22em;
+      padding-bottom: 8px; margin-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+      font-family: 'Outfit', sans-serif; font-weight: 500;
+    }
+    .btn {
+      background: transparent;
+      border: 1px solid var(--off);
+      color: var(--off);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; font-weight: 500;
+      letter-spacing: 0.16em; text-transform: uppercase;
+      padding: 9px 12px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      border-radius: 3px;
+      display: flex; justify-content: space-between; align-items: center;
+      width: 100%;
+    }
+    .btn:hover { background: rgba(255, 34, 51, 0.07); }
+    .btn.on { border-color: var(--on); color: var(--on); }
+    .btn.on:hover { background: rgba(0, 255, 102, 0.07); }
+    .btn .state { font-size: 9px; opacity: 0.7; }
+
+    #loader {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg); color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; letter-spacing: 0.3em;
+      z-index: 100;
+      transition: opacity 0.6s ease;
+    }
+    #loader.hidden { opacity: 0; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <div id="loader">/// CARGANDO UNIDAD PAQUETE ///</div>
+
+  <div id="hud">
+    <div class="title">UNIDAD PAQUETE TRANE <span class="accent">/// TRACER · VOXEL</span></div>
+    <div>1 SUPPLY FAN · 2 COMPRESORES · 4 COND FANS · ECONOMIZER · DUCTOS S/R</div>
+    <div class="info">drag: rotar &nbsp;·&nbsp; scroll: zoom</div>
+  </div>
+
+  <div id="controls">
+    <div class="label">/// CONTROL · BMS TRACER</div>
+    <button class="btn" id="btn-fan">SUPPLY FAN <span class="state">OFF</span></button>
+    <button class="btn" id="btn-c1">COMPRESOR 1 <span class="state">OFF</span></button>
+    <button class="btn" id="btn-c2">COMPRESOR 2 <span class="state">OFF</span></button>
+    <button class="btn on" id="btn-rot">AUTO-ROTATE <span class="state">ON</span></button>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+    // ============================================================
+    // RENDERER / SCENE / PBR ENVIRONMENT
+    // ============================================================
+    const canvas = document.getElementById('canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x06080d);
+    scene.fog = new THREE.Fog(0x06080d, 260, 520);
+
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+    const camera = new THREE.PerspectiveCamera(36, window.innerWidth / window.innerHeight, 0.1, 1200);
+    camera.position.set(140, 92, 122);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.target.set(38, 11, 15);
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.55;
+    controls.minDistance = 70;
+    controls.maxDistance = 340;
+
+    // Lights
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.05);
+    keyLight.position.set(70, 130, 60);
+    scene.add(keyLight);
+    const fill = new THREE.DirectionalLight(0x88aaff, 0.30);
+    fill.position.set(-60, 55, -35);
+    scene.add(fill);
+    const rim = new THREE.DirectionalLight(0x00d4aa, 0.38);
+    rim.position.set(-30, 28, 90);
+    scene.add(rim);
+
+    // ============================================================
+    // VOXEL SYSTEM
+    // ============================================================
+    const voxData = {};
+    const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+
+    function vox(x, y, z, color) {
+      const key = color.toString();
+      if (!voxData[key]) voxData[key] = { color, positions: [] };
+      voxData[key].positions.push([x, y, z]);
+    }
+
+    // Palette — chasis de acero GALVANIZADO (plateado) como la foto
+    const SHELL      = 0xaeb6bf;  // gabinete galvanizado (transparente)
+    const FRAME      = 0x40454c;  // bastidores / postes
+    const SKID       = 0x3a4046;  // base / riel
+    const COIL_FIN   = 0xc8d4dc;  // aletas coil DX (aluminio)
+    const COIL_DARK  = 0x6a8090;  // sombras del coil
+    const COIL_FRAME = 0x55626c;  // marco del coil
+    const COPPER     = 0xc97a3a;  // líneas de refrigerante
+    const COPPER_D   = 0x9a5826;  // cobre sombra
+    const COMP_BODY  = 0x282c33;  // cuerpo compresor
+    const COMP_DK    = 0x14171c;  // domo compresor
+    const MOTOR_YEL  = 0xd9a814;  // MOTOR AMARILLO (banda) — como la foto
+    const MOTOR_YD   = 0xa67c0a;  // motor amarillo sombra
+    const BELT       = 0x16181c;  // banda de hule
+    const SHEAVE     = 0x6a7078;  // poleas
+    const BLADE_C    = 0xa8b0b8;  // aspas aluminio
+    const ELEC       = 0x1a1d22;  // tableros eléctricos
+    const ELEC_HI    = 0x4a5560;  // detalle eléctrico
+    const FILT       = 0x6a5840;  // medio filtrante
+    const FILT_DK    = 0x4a3a25;  // filtro sombra
+    const FILT_HI    = 0x8a7860;  // filtro highlight
+    const RAIL       = 0x808890;  // rieles / marcos
+    const DUCT       = 0x707880;  // ducto descarga
+    const DAMPER     = 0x9aa2aa;  // hojas de damper
+    const DAMPER_D   = 0x5a626a;  // damper sombra
+    const HOOD       = 0x8a929a;  // hood de toma de aire
+    const HOOD_D     = 0x5e666e;  // hood sombra
+    const PIPE_GRN   = 0x3aa056;  // sensor verde
+    const PANEL_HUB  = 0x404448;  // hubs / herrajes
+    const COLOR_ON   = 0x00ff66;
+    const COLOR_OFF  = 0xff2233;
+
+    // ============================================================
+    // GEOMETRY LAYOUT (voxel units) — flujo: aire entra DERECHA, sale IZQUIERDA
+    //   MECH (blower+compresores)  →  COIL DX  →  FILTROS  →  ECONOMIZER
+    // ============================================================
+    const MECH_LEN = 34;
+    const COIL_LEN = 8;
+    const FILT_LEN = 16;
+    const ECON_LEN = 18;
+    const TOTAL = MECH_LEN + COIL_LEN + FILT_LEN + ECON_LEN; // 76
+    const W = 30;   // ancho/fondo
+    const H = 26;   // alto
+
+    const X_MECH = 0;
+    const X_COIL = X_MECH + MECH_LEN;   // 34
+    const X_FILT = X_COIL + COIL_LEN;   // 42
+    const X_ECON = X_FILT + FILT_LEN;   // 58
+
+    // Blower (squirrel cage) en zona mecánica
+    const BLOW_CX = 11, BLOW_CY = Math.floor(H / 2), BLOW_CZ = Math.floor(W / 2);
+    const BLOW_R  = 7.4;
+
+    // Compresores (lado a lado en Z, junto al coil)
+    const COMP_R  = 4;
+    const C1X = 27, C1Z = 8;
+    const C2X = 27, C2Z = W - 8; // 22
+
+    // 4 condenser fans en el techo (2×2) sobre la zona mecánica
+    const FAN_R = 5.6;
+    const FANS = [
+      { cx: 9,  cz: 8 },      // 0
+      { cx: 9,  cz: W - 8 },  // 1
+      { cx: 25, cz: 8 },      // 2
+      { cx: 25, cz: W - 8 },  // 3
+    ];
+
+    // Dos ductos traseros (cara +Z, salen 14×14) — por función:
+    //   SUMINISTRO (azul) junto al blower (izq) · RETORNO (rojo) en economizer (der)
+    const DUCT_HW   = 7;                       // medio lado → ducto 15 voxeles (≈14)
+    const DUCT_LEN  = 11;                      // qué tanto sobresale en +Z
+    const LABEL_BLUE = 0x3aa6ff;               // etiqueta suministro
+    const LABEL_RED  = 0xcc3322;               // etiqueta retorno
+    const SUP_DUCT = { cx: BLOW_CX, cy: Math.floor(H / 2) };     // x=11 (blower)
+    const RET_DUCT = { cx: X_ECON + 8, cy: Math.floor(H / 2) };  // x=66 (economizer)
+
+    function inDuctOpening(x, y) {
+      for (const d of [SUP_DUCT, RET_DUCT]) {
+        if (Math.abs(x - d.cx) <= DUCT_HW && Math.abs(y - d.cy) <= DUCT_HW) return true;
+      }
+      return false;
+    }
+
+    // ============================================================
+    // BUILD: SHELL (gabinete transparente + bastidores + recortes de fans)
+    // ============================================================
+    function buildShell() {
+      // Base / skid
+      for (let x = 0; x < TOTAL; x++)
+        for (let z = 0; z < W; z++)
+          vox(x, 0, z, SKID);
+
+      // Techo con recortes circulares para los 4 condenser fans
+      for (let x = 0; x < TOTAL; x++) {
+        for (let z = 0; z < W; z++) {
+          let cut = false;
+          for (const f of FANS) {
+            const d = (x + 0.5 - f.cx) ** 2 + (z + 0.5 - f.cz) ** 2;
+            if (d < FAN_R * FAN_R) { cut = true; break; }
+          }
+          if (cut) continue;
+          vox(x, H - 1, z, SHELL);
+        }
+      }
+
+      // Paredes laterales (transparentes)
+      for (let y = 1; y < H - 1; y++) {
+        for (let x = 0; x < TOTAL; x++) {
+          vox(x, y, 0, SHELL);
+          if (!inDuctOpening(x, y)) vox(x, y, W - 1, SHELL); // hueco para los ductos
+        }
+        for (let z = 1; z < W - 1; z++) {
+          vox(0, y, z, SHELL);
+          vox(TOTAL - 1, y, z, SHELL);
+        }
+      }
+
+      // Bastidores — 12 aristas de la caja
+      for (let x = 0; x < TOTAL; x++) {
+        vox(x, 0, 0, FRAME);     vox(x, 0, W - 1, FRAME);
+        vox(x, H - 1, 0, FRAME); vox(x, H - 1, W - 1, FRAME);
+      }
+      for (let z = 0; z < W; z++) {
+        vox(0, 0, z, FRAME);          vox(TOTAL - 1, 0, z, FRAME);
+        vox(0, H - 1, z, FRAME);      vox(TOTAL - 1, H - 1, z, FRAME);
+      }
+      for (let y = 0; y < H; y++) {
+        vox(0, y, 0, FRAME);          vox(0, y, W - 1, FRAME);
+        vox(TOTAL - 1, y, 0, FRAME);  vox(TOTAL - 1, y, W - 1, FRAME);
+      }
+
+      // Postes divisores de sección (frente + atrás)
+      for (let y = 1; y < H - 1; y++) {
+        for (const x of [X_COIL, X_FILT, X_ECON]) {
+          vox(x, y, 0, FRAME);
+          vox(x, y, W - 1, FRAME);
+        }
+      }
+
+      // Riel base perimetral elevado
+      for (let x = 0; x < TOTAL; x++) { vox(x, 1, 0, FRAME); vox(x, 1, W - 1, FRAME); }
+    }
+
+    // ============================================================
+    // BUILD: BLOWER (squirrel cage) + MOTOR AMARILLO de banda
+    // ============================================================
+    const blowerPivot = new THREE.Group();
+    const blowerWheel = new THREE.Group();
+    blowerPivot.add(blowerWheel);
+    let blowerWheelMat = null;
+
+    function buildBlowerHousing() {
+      const cx = BLOW_CX, cy = BLOW_CY, cz = BLOW_CZ;
+      const housingR = BLOW_R;
+      const z1 = cz - 6, z2 = cz + 6;
+
+      // Voluta cilíndrica (perpendicular al eje Z)
+      for (let x = cx - 9; x <= cx + 9; x++) {
+        for (let y = 1; y < H - 1; y++) {
+          const dx = x - cx, dy = y - cy;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d > housingR - 0.4 && d < housingR + 0.7) {
+            if (dy > housingR - 2.5 && Math.abs(dx) < 3.5) continue; // salida arriba
+            for (let z = z1; z <= z2; z++) vox(x, y, z, FRAME);
+          }
+        }
+      }
+
+      // Bridas laterales (caras de la voluta, hueco central para el wheel)
+      for (const z of [z1 - 1, z2 + 1]) {
+        for (let x = cx - 9; x <= cx + 9; x++) {
+          for (let y = 1; y < H - 1; y++) {
+            const dx = x - cx, dy = y - cy;
+            const d = Math.sqrt(dx * dx + dy * dy);
+            if (d < housingR - 0.4 && d > 1.8) vox(x, y, z, SHELL);
+            if (d > housingR - 0.5 && d < housingR + 0.7) vox(x, y, z, FRAME);
+          }
+        }
+      }
+
+      // Ducto de descarga (sube de la voluta al techo)
+      for (let y = cy + 7; y < H - 1; y++) {
+        for (let x = cx - 3; x <= cx + 3; x++) {
+          for (let z = z1; z <= z2; z++) {
+            const onWall = (x === cx - 3 || x === cx + 3 || z === z1 || z === z2);
+            if (onWall) vox(x, y, z, DUCT);
+          }
+        }
+      }
+
+      // ---- MOTOR AMARILLO (debajo-frente del wheel, eje paralelo Z) ----
+      const mx = cx, my = cy - 9, mz1 = z2 - 1, mz2 = z2 + 6;
+      for (let x = mx - 3; x <= mx + 3; x++) {
+        for (let y = my - 3; y <= my + 3; y++) {
+          const dx = x - mx, dy = y - my;
+          if (Math.sqrt(dx * dx + dy * dy) < 3.2) {
+            for (let z = mz1; z <= mz2; z++) vox(x, y, z, MOTOR_YEL);
+          }
+        }
+      }
+      // Tapas del motor
+      for (let x = mx - 3; x <= mx + 3; x++)
+        for (let y = my - 3; y <= my + 3; y++) {
+          const dx = x - mx, dy = y - my;
+          if (Math.sqrt(dx * dx + dy * dy) < 3.2) {
+            vox(x, y, mz1 - 1, MOTOR_YD);
+            vox(x, y, mz2 + 1, MOTOR_YD);
+          }
+        }
+      // Caja de conexiones del motor
+      for (let x = mx - 1; x <= mx + 1; x++)
+        for (let z = mz1 + 1; z <= mz1 + 3; z++)
+          vox(x, my + 4, z, ELEC);
+      // Patas / base del motor
+      vox(mx - 3, my - 4, mz1 + 1, FRAME); vox(mx + 3, my - 4, mz1 + 1, FRAME);
+      vox(mx - 3, my - 4, mz2 - 1, FRAME); vox(mx + 3, my - 4, mz2 - 1, FRAME);
+
+      // ---- BANDA + POLEAS (motor abajo → wheel arriba) en plano X-Y, en z=z2+1 ----
+      const beltZ = z2 + 1;
+      // polea del wheel (arriba)
+      for (let a = 0; a < Math.PI * 2; a += 0.5) {
+        vox(Math.round(cx + Math.cos(a) * 2.2), Math.round(cy + Math.sin(a) * 2.2), beltZ, SHEAVE);
+      }
+      // polea del motor (abajo)
+      for (let a = 0; a < Math.PI * 2; a += 0.6) {
+        vox(Math.round(mx + Math.cos(a) * 1.6), Math.round(my + Math.sin(a) * 1.6), beltZ, SHEAVE);
+      }
+      // dos ramales verticales de la banda
+      for (let y = my; y <= cy; y++) {
+        vox(cx - 2, y, beltZ, BELT);
+        vox(cx + 2, y, beltZ, BELT);
+      }
+
+      // ---- Wheel animado (squirrel cage) — eje Z, material emisivo único ----
+      blowerPivot.position.set(cx + 0.5, cy + 0.5, cz + 0.5);
+      const wheelMat = new THREE.MeshStandardMaterial({
+        color: COLOR_OFF, emissive: COLOR_OFF, emissiveIntensity: 0.5,
+        roughness: 0.45, metalness: 0.6
+      });
+      blowerWheelMat = wheelMat;
+
+      const wheelBladeR = 4.8;
+      const wheelBladeGeo = new THREE.BoxGeometry(0.55, 1.15, 0.55);
+      for (let i = 0; i < 18; i++) {
+        const a = (i / 18) * Math.PI * 2;
+        for (let zOff = -5; zOff <= 5; zOff++) {
+          const blade = new THREE.Mesh(wheelBladeGeo, wheelMat);
+          blade.position.set(Math.cos(a) * wheelBladeR, Math.sin(a) * wheelBladeR, zOff);
+          blade.rotation.z = a;
+          blowerWheel.add(blade);
+        }
+      }
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 11, 14), wheelMat);
+      hub.rotation.x = Math.PI / 2;
+      blowerWheel.add(hub);
+    }
+
+    // ============================================================
+    // BUILD: COMPRESORES (2) + LÍNEAS DE REFRIGERANTE + LEDs
+    // ============================================================
+    const compTop1Pivot = new THREE.Group();
+    const compTop1Anim  = new THREE.Group();
+    compTop1Pivot.add(compTop1Anim);
+    const compTop2Pivot = new THREE.Group();
+    const compTop2Anim  = new THREE.Group();
+    compTop2Pivot.add(compTop2Anim);
+    const leds = {};
+
+    function buildCompressorBody(cx, cz, animGroup) {
+      const r = COMP_R;
+      const topY = H - 10;
+      // Cuerpo cilíndrico hueco
+      for (let y = 2; y <= topY - 1; y++)
+        for (let x = cx - r; x <= cx + r; x++)
+          for (let z = cz - r; z <= cz + r; z++) {
+            const d = Math.sqrt((x - cx) ** 2 + (z - cz) ** 2);
+            if (d > r - 0.5 && d < r + 0.5) vox(x, y, z, COMP_BODY);
+          }
+      // Placa inferior
+      for (let x = cx - r; x <= cx + r; x++)
+        for (let z = cz - r; z <= cz + r; z++)
+          if (Math.sqrt((x - cx) ** 2 + (z - cz) ** 2) < r) vox(x, 2, z, COMP_DK);
+      // Brida base
+      for (let x = cx - r - 1; x <= cx + r + 1; x++)
+        for (let z = cz - r - 1; z <= cz + r + 1; z++) {
+          const d = Math.sqrt((x - cx) ** 2 + (z - cz) ** 2);
+          if (d > r && d < r + 1) vox(x, 2, z, FRAME);
+        }
+      compToHemisphere(cx, topY, cz, r, animGroup);
+    }
+
+    function compToHemisphere(cx, topY, cz, r, animGroup) {
+      animGroup.parent.position.set(cx + 0.5, topY + 0.5, cz + 0.5);
+      const domeMat = new THREE.MeshStandardMaterial({ color: COMP_DK, metalness: 0.7, roughness: 0.32 });
+      const cuMat   = new THREE.MeshStandardMaterial({ color: COPPER, metalness: 0.85, roughness: 0.3 });
+      const elecMat = new THREE.MeshStandardMaterial({ color: ELEC, metalness: 0.5, roughness: 0.6 });
+      for (let dy = 0; dy <= 3; dy++) {
+        const ringR = Math.sqrt(r * r - dy * dy);
+        for (let lx = -r; lx <= r; lx++)
+          for (let lz = -r; lz <= r; lz++) {
+            const d = Math.sqrt(lx * lx + lz * lz);
+            if (d < ringR && d > ringR - 1.4) {
+              const m = new THREE.Mesh(cubeGeo, domeMat);
+              m.position.set(lx, dy, lz); animGroup.add(m);
+            }
+          }
+      }
+      const cap = new THREE.Mesh(cubeGeo, domeMat); cap.position.set(0, 4, 0); animGroup.add(cap);
+      const jb = new THREE.Mesh(new THREE.BoxGeometry(2, 1.4, 2), elecMat); jb.position.set(0, 5, 0); animGroup.add(jb);
+      const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.4, 0.9), cuMat); p1.position.set(0, 1.2, -1.8); animGroup.add(p1);
+      const p2 = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.4, 0.9), cuMat); p2.position.set(0, 1.2, 1.8); animGroup.add(p2);
+    }
+
+    function buildLED(cx, cy, cz, key) {
+      const ledMat = new THREE.MeshStandardMaterial({ color: COLOR_OFF, emissive: COLOR_OFF, emissiveIntensity: 1.0, metalness: 0, roughness: 0.4 });
+      const ledMesh = new THREE.Mesh(cubeGeo, ledMat);
+      ledMesh.position.set(cx + 0.5, cy + 0.5, cz + 0.5); scene.add(ledMesh);
+      const ledLight = new THREE.PointLight(COLOR_OFF, 1.0, 12);
+      ledLight.position.set(cx + 0.5, cy + 0.5, cz + 0.5); scene.add(ledLight);
+      leds[key] = { mesh: ledMesh, mat: ledMat, light: ledLight };
+    }
+
+    function buildRefrigerantLines() {
+      // Plataforma de compresores
+      for (let x = X_MECH + 18; x < X_COIL - 1; x++)
+        for (let z = 1; z < W - 1; z++)
+          vox(x, 1, z, FRAME);
+      // Header superior conectando ambos compresores hacia el coil
+      const lineY = H - 9;
+      for (let z = Math.min(C1Z, C2Z); z <= Math.max(C1Z, C2Z); z++) {
+        vox(C1X, lineY, z, COPPER);
+        vox(C1X + 1, lineY + 1, z, COPPER_D);
+      }
+      // Drops hacia cada compresor
+      for (let y = H - 10; y < lineY; y++) {
+        vox(C1X - 1, y, C1Z, COPPER);
+        vox(C2X - 1, y, C2Z, COPPER);
+      }
+      // Líneas hacia el coil
+      for (let x = X_COIL; x <= C1X; x++) {
+        vox(x, lineY, C1Z, COPPER);
+        vox(x, lineY, C2Z, COPPER);
+      }
+      // Válvulas de servicio
+      vox(C1X + 4, lineY, C1Z, ELEC);
+      vox(C2X + 4, lineY, C2Z, ELEC);
+    }
+
+    function buildElectricalPanels() {
+      // Tablero principal en pared trasera de la zona mecánica
+      const exs = X_MECH + 16, exe = X_MECH + 26;
+      const eyTop = H - 3, eyBot = H - 10;
+      for (let x = exs; x <= exe; x++)
+        for (let y = eyBot; y <= eyTop; y++) {
+          vox(x, y, W - 2, ELEC);
+          if ((y - eyBot) % 2 === 0 && x > exs && x < exe) vox(x, y, W - 3, ELEC_HI);
+        }
+      for (let y = eyBot; y <= eyTop; y++) vox(exs + 5, y, W - 2, ELEC_HI); // costura puerta
+      // Sensor verde
+      for (let dx = 0; dx < 2; dx++)
+        for (let dy = 0; dy < 2; dy++)
+          vox(X_MECH + 4 + dx, H - 6 + dy, W - 2, PIPE_GRN);
+    }
+
+    function buildCompressors() {
+      buildCompressorBody(C1X, C1Z, compTop1Anim);
+      buildCompressorBody(C2X, C2Z, compTop2Anim);
+      buildLED(C1X, H - 4, C1Z, 'c1');
+      buildLED(C2X, H - 4, C2Z, 'c2');
+      buildRefrigerantLines();
+      buildElectricalPanels();
+    }
+
+    // ============================================================
+    // BUILD: COIL DX (losa de aletas vertical) + charola de drenaje
+    // ============================================================
+    function buildCoil() {
+      const xs = X_COIL + 1;
+      // Losa de coil (4 voxeles de espesor, patrón de aletas vertical)
+      for (let x = xs; x < xs + 5; x++)
+        for (let y = 3; y < H - 3; y++)
+          for (let z = 3; z < W - 3; z++)
+            vox(x, y, z, z % 2 === 0 ? COIL_FIN : COIL_DARK);
+      // Marco del coil
+      for (let x = xs; x <= xs + 4; x++) {
+        for (let z = 3; z <= W - 4; z++) { vox(x, 2, z, COIL_FRAME); vox(x, H - 3, z, COIL_FRAME); }
+        for (let y = 2; y <= H - 3; y++) { vox(x, y, 3, COIL_FRAME); vox(x, y, W - 4, COIL_FRAME); }
+      }
+      // Charola de drenaje
+      for (let x = xs - 1; x <= xs + 5; x++)
+        for (let z = 2; z <= W - 3; z++)
+          vox(x, 1, z, SKID);
+      // Distribuidor de cobre (lado mecánico, hacia compresores)
+      for (let i = 0; i < 6; i++) {
+        const yi = 4 + i * 3;
+        if (yi >= H - 4) break;
+        vox(xs - 1, yi, 5, COPPER);
+        vox(xs - 1, yi, W - 6, COPPER);
+        vox(xs - 1, yi + 1, 5, COPPER_D);
+      }
+    }
+
+    // ============================================================
+    // BUILD: BANCO DE FILTROS ANGULADO
+    // ============================================================
+    function buildFilters() {
+      const xs = X_FILT + 1;
+      const span = FILT_LEN - 3;
+      // Filtro plano inclinado (sube de izquierda a derecha)
+      for (let step = 0; step <= span; step++) {
+        const x = xs + step;
+        const yc = 3 + Math.round(step * (H - 8) / span);
+        for (let z = 4; z < W - 4; z++) {
+          for (let t = -1; t <= 1; t++) {
+            const yy = yc + t;
+            if (yy < 2 || yy >= H - 2) continue;
+            const phase = (z + step) % 3;
+            vox(x, yy, z, phase === 0 ? FILT_HI : phase === 1 ? FILT : FILT_DK);
+          }
+        }
+        // Rieles del bastidor del filtro
+        vox(x, Math.max(2, yc - 2), 4, RAIL);
+        vox(x, Math.min(H - 2, yc + 2), W - 5, RAIL);
+      }
+      // Track guía inferior y superior
+      for (let x = xs; x <= xs + span; x++) {
+        vox(x, 2, 4, RAIL); vox(x, 2, W - 5, RAIL);
+      }
+    }
+
+    // ============================================================
+    // BUILD: ECONOMIZER — caja de mezcla con DAMPERS ANGULADOS + actuador
+    // ============================================================
+    function buildEconomizer() {
+      // Damper de AIRE EXTERIOR (OA) en la cara DERECHA (extremo), hojas anguladas
+      const xBaseOA = TOTAL - 6;
+      for (let b = 0; b < 6; b++) {
+        const yb = 3 + b * 3.4;
+        for (let k = 0; k <= 3; k++) {
+          const yy = Math.round(yb + k);
+          const xx = xBaseOA + k;
+          if (yy >= H - 2) continue;
+          for (let z = 4; z < W - 4; z++)
+            vox(xx, yy, z, k % 2 === 0 ? DAMPER : DAMPER_D);
+        }
+      }
+      // Damper de AIRE DE RETORNO (RA) en la cara FRONTAL inferior, hojas anguladas
+      const zBaseRA = 2;
+      for (let b = 0; b < 4; b++) {
+        const yb = 3 + b * 3.4;
+        for (let k = 0; k <= 3; k++) {
+          const yy = Math.round(yb + k);
+          const zz = zBaseRA + k;
+          if (yy >= H - 6) continue;
+          for (let x = X_ECON + 3; x < TOTAL - 6; x++)
+            vox(x, yy, zz, k % 2 === 0 ? DAMPER : DAMPER_D);
+        }
+      }
+      // Marco / pleno de mezcla
+      for (let y = 2; y < H - 1; y++) {
+        vox(X_ECON + 1, y, 1, FRAME);
+        vox(X_ECON + 1, y, W - 2, FRAME);
+      }
+      // Actuador de damper (motor pequeño + varillaje) en pared trasera
+      for (let dx = 0; dx < 3; dx++)
+        for (let dy = 0; dy < 3; dy++)
+          vox(X_ECON + 4 + dx, H - 8 + dy, W - 2, ELEC);
+      vox(X_ECON + 5, H - 5, W - 2, ELEC_HI);
+      // Varilla de enlace de hojas
+      for (let y = 4; y < H - 3; y += 1) vox(TOTAL - 7, y, W - 5, PANEL_HUB);
+    }
+
+    // ============================================================
+    // BUILD: HOOD de toma de aire (techo extremo derecho, escalonado + louvers)
+    // ============================================================
+    function buildIntakeHood() {
+      // Techo escalonado tipo visera: ancho en la base, se recoge al subir
+      for (let s = 0; s < 5; s++) {
+        const y = H + s;
+        const xStart = X_ECON + 4 + s * 3;
+        for (let x = Math.min(xStart, TOTAL - 1); x < TOTAL; x++)
+          for (let z = 3; z < W - 3; z++)
+            vox(x, y, z, s % 2 === 0 ? HOOD : HOOD_D);
+      }
+      // Cara louvered (vertical derecha) con ranuras
+      for (let y = H; y < H + 5; y++)
+        for (let z = 3; z < W - 3; z++)
+          if (z % 2 === 0) vox(TOTAL - 1, y, z, HOOD_D);
+      // Soportes laterales del hood
+      for (let y = H; y < H + 5; y++) { vox(TOTAL - 2, y, 3, FRAME); vox(TOTAL - 2, y, W - 4, FRAME); }
+    }
+
+    // ============================================================
+    // BUILD: DUCTOS TRASEROS (suministro + retorno) — cara +Z
+    // ============================================================
+    function buildBackDuct(d, labelColor) {
+      const cx = d.cx, cy = d.cy, hw = DUCT_HW;
+      const z0 = W, z1 = W + DUCT_LEN;
+
+      // 4 paredes del tubo (sin esquinas — las ocupan los rieles)
+      for (let z = z0; z < z1; z++) {
+        for (let x = cx - hw + 1; x <= cx + hw - 1; x++) {
+          vox(x, cy - hw, z, DUCT);
+          vox(x, cy + hw, z, DUCT);
+        }
+        for (let y = cy - hw + 1; y <= cy + hw - 1; y++) {
+          vox(cx - hw, y, z, DUCT);
+          vox(cx + hw, y, z, DUCT);
+        }
+        // rieles de esquina a lo largo del ducto
+        vox(cx - hw, cy - hw, z, FRAME); vox(cx + hw, cy - hw, z, FRAME);
+        vox(cx - hw, cy + hw, z, FRAME); vox(cx + hw, cy + hw, z, FRAME);
+      }
+
+      // Brida en la pared + anillos de refuerzo (perímetro hw+1, sobresalen)
+      for (const zr of [z0, z0 + 4, z0 + 8]) {
+        for (let x = cx - hw - 1; x <= cx + hw + 1; x++) {
+          vox(x, cy - hw - 1, zr, RAIL);
+          vox(x, cy + hw + 1, zr, RAIL);
+        }
+        for (let y = cy - hw - 1; y <= cy + hw + 1; y++) {
+          vox(cx - hw - 1, y, zr, RAIL);
+          vox(cx + hw + 1, y, zr, RAIL);
+        }
+      }
+
+      // Tornillos de la brida (radio hw+2, sin solapar el anillo)
+      const r2 = hw + 2;
+      const bolts = [
+        [cx - r2, cy - r2], [cx + r2, cy - r2], [cx - r2, cy + r2], [cx + r2, cy + r2],
+        [cx, cy - r2], [cx, cy + r2], [cx - r2, cy], [cx + r2, cy],
+      ];
+      bolts.forEach(([bx, by]) => vox(bx, by, z0, PANEL_HUB));
+
+      // Etiqueta de color (tira en el techo del ducto, cerca del extremo)
+      for (let x = cx - 3; x <= cx + 3; x++) vox(x, cy + hw + 1, z1 - 2, labelColor);
+    }
+
+    // ============================================================
+    // BUILD: 4 CONDENSER FANS (housings + aspas animadas)
+    // ============================================================
+    const fanGroups = [];
+    const fanLights = [];
+
+    function buildCondenserFanHardware() {
+      const yB1 = H, yB2 = H + 1, yG = H + 2;
+      for (const f of FANS) {
+        const fcx = f.cx, fcz = f.cz;
+        // Bezel cilíndrico (2 capas)
+        for (let x = Math.floor(fcx - FAN_R - 1); x <= Math.ceil(fcx + FAN_R + 1); x++)
+          for (let z = Math.floor(fcz - FAN_R - 1); z <= Math.ceil(fcz + FAN_R + 1); z++) {
+            const d = Math.sqrt((x + 0.5 - fcx) ** 2 + (z + 0.5 - fcz) ** 2);
+            if (d > FAN_R - 0.5 && d < FAN_R + 0.5) { vox(x, yB1, z, FRAME); vox(x, yB2, z, FRAME); }
+          }
+        // Aro exterior nivel grille
+        for (let x = Math.floor(fcx - FAN_R - 1); x <= Math.ceil(fcx + FAN_R + 1); x++)
+          for (let z = Math.floor(fcz - FAN_R - 1); z <= Math.ceil(fcz + FAN_R + 1); z++) {
+            const d = Math.sqrt((x + 0.5 - fcx) ** 2 + (z + 0.5 - fcz) ** 2);
+            if (d > FAN_R - 0.5 && d < FAN_R + 0.5) vox(x, yG, z, FRAME);
+          }
+        // Rejilla radial protectora (cardinales + diagonales)
+        const cxR = Math.round(fcx - 0.5), czR = Math.round(fcz - 0.5);
+        for (let r = 1; r <= Math.floor(FAN_R - 0.5); r++) {
+          vox(cxR + r, yG, czR, FRAME); vox(cxR - r, yG, czR, FRAME);
+          vox(cxR, yG, czR + r, FRAME); vox(cxR, yG, czR - r, FRAME);
+        }
+        for (let r = 1; r <= Math.floor(FAN_R - 1.5); r++) {
+          const dr = Math.max(1, Math.round(r * 0.707));
+          vox(cxR + dr, yG, czR + dr, FRAME); vox(cxR + dr, yG, czR - dr, FRAME);
+          vox(cxR - dr, yG, czR + dr, FRAME); vox(cxR - dr, yG, czR - dr, FRAME);
+        }
+        vox(cxR, yG, czR, FRAME);
+      }
+    }
+
+    function buildFanBladeGroup(cx, cz) {
+      const grp = new THREE.Group();
+      const blades = 3, radius = 5;
+      const bladeMat = new THREE.MeshStandardMaterial({
+        color: COLOR_OFF, emissive: COLOR_OFF, emissiveIntensity: 0.9, metalness: 0.3, roughness: 0.45
+      });
+      const hubMat = new THREE.MeshStandardMaterial({ color: PANEL_HUB, metalness: 0.85, roughness: 0.3 });
+      grp.add(new THREE.Mesh(new THREE.BoxGeometry(2, 1, 2), hubMat));
+      for (let i = 0; i < blades; i++) {
+        const a = (i / blades) * Math.PI * 2;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        for (let r = 1; r <= radius; r++) {
+          const m = new THREE.Mesh(cubeGeo, bladeMat);
+          m.position.set(ca * r, 0, sa * r); grp.add(m);
+        }
+        const tip = new THREE.Mesh(cubeGeo, bladeMat);
+        tip.position.set(ca * radius - sa, 0, sa * radius + ca); grp.add(tip);
+      }
+      const fanLight = new THREE.PointLight(COLOR_OFF, 1.0, 22);
+      fanLight.position.set(0, 0.6, 0); grp.add(fanLight);
+      fanLights.push({ mat: bladeMat, light: fanLight });
+      grp.position.set(cx, H + 1, cz);
+      return grp;
+    }
+
+    // ============================================================
+    // STATE UPDATE HELPERS
+    // ============================================================
+    function updateFanLight(idx, on) {
+      const fl = fanLights[idx]; if (!fl) return;
+      const col = on ? COLOR_ON : COLOR_OFF;
+      fl.mat.color.setHex(col); fl.mat.emissive.setHex(col); fl.mat.emissiveIntensity = on ? 1.4 : 0.9;
+      fl.light.color.setHex(col); fl.light.intensity = on ? 1.8 : 1.0;
+    }
+    function updateLed(key, on) {
+      const l = leds[key]; if (!l) return;
+      const col = on ? COLOR_ON : COLOR_OFF;
+      l.mat.color.setHex(col); l.mat.emissive.setHex(col); l.mat.emissiveIntensity = on ? 1.5 : 1.0;
+      l.light.color.setHex(col); l.light.intensity = on ? 1.8 : 1.0;
+    }
+    function updateBlowerLight(on) {
+      if (!blowerWheelMat) return;
+      const col = on ? COLOR_ON : COLOR_OFF;
+      blowerWheelMat.color.setHex(col); blowerWheelMat.emissive.setHex(col); blowerWheelMat.emissiveIntensity = on ? 0.9 : 0.5;
+    }
+
+    // ============================================================
+    // BUILD ALL
+    // ============================================================
+    buildShell();
+    buildBlowerHousing();
+    buildCompressors();
+    buildCoil();
+    buildFilters();
+    buildEconomizer();
+    buildIntakeHood();
+    buildBackDuct(SUP_DUCT, LABEL_BLUE);  // suministro (azul) — junto al blower
+    buildBackDuct(RET_DUCT, LABEL_RED);   // retorno (rojo) — economizer
+    buildCondenserFanHardware();
+
+    FANS.forEach(f => fanGroups.push(buildFanBladeGroup(f.cx, f.cz)));
+
+    // ============================================================
+    // INSTANCE-MESH PER COLOR
+    // ============================================================
+    const dummy = new THREE.Object3D();
+    Object.values(voxData).forEach(({ color, positions }) => {
+      const isShell = (color === SHELL);
+      const isLabel = (color === LABEL_BLUE || color === LABEL_RED);
+      const mat = new THREE.MeshStandardMaterial({
+        color, metalness: isShell ? 0.3 : 0.55, roughness: isShell ? 0.55 : 0.45,
+        transparent: isShell, opacity: isShell ? 0.18 : 1.0,
+        depthWrite: !isShell, side: isShell ? THREE.DoubleSide : THREE.FrontSide,
+        emissive: isLabel ? color : 0x000000, emissiveIntensity: isLabel ? 0.55 : 1.0,
+      });
+      const inst = new THREE.InstancedMesh(cubeGeo, mat, positions.length);
+      positions.forEach((p, i) => {
+        dummy.position.set(p[0] + 0.5, p[1] + 0.5, p[2] + 0.5);
+        dummy.updateMatrix(); inst.setMatrixAt(i, dummy.matrix);
+      });
+      inst.instanceMatrix.needsUpdate = true;
+      inst.renderOrder = isShell ? 1 : 0;
+      scene.add(inst);
+    });
+
+    scene.add(blowerPivot);
+    scene.add(compTop1Pivot);
+    scene.add(compTop2Pivot);
+    fanGroups.forEach(g => scene.add(g));
+
+    // ============================================================
+    // AIRFLOW PARTICLES (gated por state.fan)
+    // ============================================================
+    const PARTICLE_COUNT = 55;
+    const partGeo = new THREE.BoxGeometry(0.55, 0.55, 0.55);
+    const returnParticles = [];
+    const supplyParticles = [];
+
+    const Z_OUT = W + DUCT_LEN;          // boca exterior de los ductos
+    const INT_Z = Math.floor(W / 2);     // plano interior del gabinete
+
+    // RETORNO (rojo): entra por el ducto de retorno (der) y cruza hasta el blower
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const mat = new THREE.MeshStandardMaterial({ color: 0xff6644, emissive: 0xff4422, emissiveIntensity: 0.7, transparent: true, opacity: 0 });
+      const m = new THREE.Mesh(partGeo, mat);
+      m.userData = {
+        p: Math.random(),
+        jx: (Math.random() - 0.5) * 8,
+        jy: (Math.random() - 0.5) * 8,
+        jz: (Math.random() - 0.5) * 8,
+        speed: 0.30 + Math.random() * 0.22
+      };
+      scene.add(m); returnParticles.push(m);
+    }
+    // SUMINISTRO (azul): sale del blower por el ducto de suministro (izq)
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const mat = new THREE.MeshStandardMaterial({ color: 0x44aaff, emissive: 0x2288dd, emissiveIntensity: 0.7, transparent: true, opacity: 0 });
+      const m = new THREE.Mesh(partGeo, mat);
+      m.userData = {
+        p: Math.random(),
+        jx: (Math.random() - 0.5) * 8,
+        jy: (Math.random() - 0.5) * 8,
+        speed: 0.32 + Math.random() * 0.22
+      };
+      scene.add(m); supplyParticles.push(m);
+    }
+
+    // ============================================================
+    // STATE MACHINE + UI
+    // ============================================================
+    const state = { fan: false, c1: false, c2: false };
+    const btnFan = document.getElementById('btn-fan');
+    const btnC1  = document.getElementById('btn-c1');
+    const btnC2  = document.getElementById('btn-c2');
+    const btnRot = document.getElementById('btn-rot');
+
+    function updateBtn(btn, on) { btn.classList.toggle('on', on); btn.querySelector('.state').textContent = on ? 'ON' : 'OFF'; }
+
+    btnFan.addEventListener('click', () => { state.fan = !state.fan; updateBtn(btnFan, state.fan); updateBlowerLight(state.fan); });
+    btnC1.addEventListener('click',  () => { state.c1 = !state.c1; updateBtn(btnC1, state.c1); updateFanLight(0, state.c1); updateFanLight(1, state.c1); updateLed('c1', state.c1); });
+    btnC2.addEventListener('click',  () => { state.c2 = !state.c2; updateBtn(btnC2, state.c2); updateFanLight(2, state.c2); updateFanLight(3, state.c2); updateLed('c2', state.c2); });
+    btnRot.addEventListener('click', () => { controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); btnRot.querySelector('.state').textContent = controls.autoRotate ? 'ON' : 'OFF'; });
+
+    [0, 1, 2, 3].forEach(i => updateFanLight(i, false));
+    updateLed('c1', false); updateLed('c2', false); updateBlowerLight(false);
+
+    // ============================================================
+    // ANIMATION LOOP
+    // ============================================================
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.05);
+      const t = clock.getElapsedTime();
+      controls.update();
+
+      if (state.fan) blowerWheel.rotation.z += dt * 7;
+
+      if (state.c1) { fanGroups[0].rotation.y += dt * 9; fanGroups[1].rotation.y += dt * 9.4; }
+      if (state.c2) { fanGroups[2].rotation.y += dt * 9.8; fanGroups[3].rotation.y += dt * 10.2; }
+
+      if (state.c1) { compTop1Anim.position.y = Math.sin(t * 32) * 0.09; compTop1Anim.rotation.y += dt * 0.4; }
+      else compTop1Anim.position.y = 0;
+      if (state.c2) { compTop2Anim.position.y = Math.sin(t * 32 + 1.3) * 0.09; compTop2Anim.rotation.y += dt * 0.4; }
+      else compTop2Anim.position.y = 0;
+
+      const targetOpacity = state.fan ? 0.85 : 0;
+      const L = THREE.MathUtils.lerp;
+
+      // RETORNO: etapa A dentro del ducto (Z_OUT→pared), etapa B cruza el gabinete hacia el blower
+      returnParticles.forEach(p => {
+        p.material.opacity = THREE.MathUtils.lerp(p.material.opacity, targetOpacity, dt * 3);
+        if (state.fan) { p.userData.p += p.userData.speed * dt; if (p.userData.p >= 1) p.userData.p = 0; }
+        const u = p.userData, pr = u.p;
+        let x, y, z;
+        if (pr < 0.35) {
+          const k = pr / 0.35;
+          x = RET_DUCT.cx + u.jx * 0.5;
+          y = RET_DUCT.cy + u.jy * 0.5;
+          z = L(Z_OUT, W, k);
+        } else {
+          const k = (pr - 0.35) / 0.65;
+          const blend = Math.min(1, k * 2.2);
+          x = L(RET_DUCT.cx, BLOW_CX + 2, k);
+          y = L(RET_DUCT.cy, BLOW_CY, blend) + u.jy * 0.5 * blend;
+          z = L(W - 2, INT_Z, blend) + u.jz * 0.5 * blend;
+        }
+        p.position.set(x, y, z);
+      });
+
+      // SUMINISTRO: etapa A del blower a la boca del ducto, etapa B sale por el ducto (pared→Z_OUT)
+      supplyParticles.forEach(p => {
+        p.material.opacity = THREE.MathUtils.lerp(p.material.opacity, targetOpacity, dt * 3);
+        if (state.fan) { p.userData.p += p.userData.speed * dt; if (p.userData.p >= 1) p.userData.p = 0; }
+        const u = p.userData, pr = u.p;
+        let x, y, z;
+        if (pr < 0.4) {
+          const k = pr / 0.4;
+          x = SUP_DUCT.cx + u.jx * 0.5 * (1 - k);
+          y = L(BLOW_CY, SUP_DUCT.cy, k) + u.jy * 0.5 * (1 - k);
+          z = L(INT_Z, W, k);
+        } else {
+          const k = (pr - 0.4) / 0.6;
+          x = SUP_DUCT.cx + u.jx * 0.4;
+          y = SUP_DUCT.cy + u.jy * 0.4;
+          z = L(W, Z_OUT, k);
+        }
+        p.position.set(x, y, z);
+      });
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    setTimeout(() => { document.getElementById('loader').classList.add('hidden'); }, 250);
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

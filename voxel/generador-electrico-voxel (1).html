@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>GENERADOR ELÉCTRICO DIESEL · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.82); padding:12px 16px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(8px); z-index:10; line-height:1.6; }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.12em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.82); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter:blur(8px); z-index:10; }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.82); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(8px); z-index:10; }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:10px; height:10px; display:inline-block; border-radius:1px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.9); border:1px solid #00d4aa44; padding:14px 16px; min-width:240px; font-size:11px; backdrop-filter:blur(8px); z-index:10; }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:54px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>GENERADOR ELECTRICO DIESEL</b><br>
+  <span>Voxel Art · Vista en Corte · Alta Fidelidad</span>
+</div>
+<div id="legend">
+  <div><i style="background:#888"></i> Gases de escape</div>
+  <div><i style="background:#44bbff"></i> Aire de enfriamiento</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>MOTOR DIESEL</label><button id="bEng" class="off">OFF</button></div>
+  <div class="row"><label>CARGA ELECT.</label><button id="bLoad" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+/* ================================================================
+   GEN_MATS — MATERIAL FACTORY (M01–M18)
+   ================================================================ */
+const GEN_MATS = {};
+
+// M01: cast iron engine block — roughness:0.60, metalness:0.70
+GEN_MATS.M01 = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.60, metalness: 0.70 });
+
+// M02: steel frame — roughness:0.40, metalness:0.85
+GEN_MATS.M02 = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.40, metalness: 0.85 });
+
+// M03: copper windings — roughness:0.32, metalness:0.92
+GEN_MATS.M03 = new THREE.MeshStandardMaterial({ color: 0xb87333, roughness: 0.32, metalness: 0.92 });
+
+// M04: aluminum radiator — roughness:0.35, metalness:0.90
+GEN_MATS.M04 = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.35, metalness: 0.90 });
+
+// M05: steel bolts — roughness:0.35, metalness:0.90
+GEN_MATS.M05 = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.35, metalness: 0.90 });
+
+// M06: plastic control panel — roughness:0.60, metalness:0.20
+GEN_MATS.M06 = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.60, metalness: 0.20 });
+
+// M07: glass gauges — MeshPhysicalMaterial transmission:0.92, ior:1.45
+GEN_MATS.M07 = new THREE.MeshPhysicalMaterial({
+  color: 0xffffff, roughness: 0.05, metalness: 0.0,
+  transmission: 0.92, ior: 1.45, thickness: 0.1,
+  transparent: true, opacity: 0.92
+});
+
+// M08: rubber hoses — roughness:0.65, metalness:0.15
+GEN_MATS.M08 = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.65, metalness: 0.15 });
+
+// M09: brass fittings — roughness:0.35, metalness:0.85
+GEN_MATS.M09 = new THREE.MeshStandardMaterial({ color: 0xddaa44, roughness: 0.35, metalness: 0.85 });
+
+// M10: steel flywheel — roughness:0.40, metalness:0.85
+GEN_MATS.M10 = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.40, metalness: 0.85 });
+
+// M11: aluminum turbo compressor — roughness:0.35, metalness:0.90
+GEN_MATS.M11 = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.35, metalness: 0.90 });
+
+// M12: steel crankshaft — roughness:0.35, metalness:0.90
+GEN_MATS.M12 = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.35, metalness: 0.90 });
+
+// M13: battery plastic — roughness:0.60, metalness:0.20
+GEN_MATS.M13 = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.60, metalness: 0.20 });
+
+// M14: steel muffler — roughness:0.45, metalness:0.85
+GEN_MATS.M14 = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.45, metalness: 0.85 });
+
+// M15: paint yellow warning — roughness:0.50, metalness:0.30 (transparent shell)
+GEN_MATS.M15 = new THREE.MeshStandardMaterial({
+  color: 0xffcc00, roughness: 0.50, metalness: 0.30,
+  transparent: true, opacity: 0.18, side: THREE.DoubleSide
+});
+
+// M16: steel pipe (additional) — roughness:0.40, metalness:0.85
+GEN_MATS.M16 = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.40, metalness: 0.85 });
+
+// M17: paint red button (additional) — roughness:0.50, metalness:0.30
+GEN_MATS.M17 = new THREE.MeshStandardMaterial({ color: 0xcc2233, roughness: 0.50, metalness: 0.30 });
+
+// M18: rubber/fuel safe (additional) — roughness:0.65, metalness:0.15
+GEN_MATS.M18 = new THREE.MeshStandardMaterial({ color: 0x253525, roughness: 0.65, metalness: 0.15 });
+
+/* ================================================================
+   PROCEDURAL CANVAS TEXTURES
+   ================================================================ */
+// Engine rib bump: vertical stripe pattern with per-stripe roughness variation
+const engineRibTex = (() => {
+  const c = Object.assign(document.createElement('canvas'), { width: 256, height: 256 });
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#444444';
+  ctx.fillRect(0, 0, 256, 256);
+  // Vertical ribs every 16px
+  for (let x = 0; x < 256; x += 16) {
+    const grad = ctx.createLinearGradient(x, 0, x + 8, 0);
+    grad.addColorStop(0, 'rgba(60,60,60,0)');
+    grad.addColorStop(0.5, 'rgba(80,80,80,0.5)');
+    grad.addColorStop(1, 'rgba(60,60,60,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, 0, 8, 256);
+  }
+  // Micro noise
+  const id = ctx.getImageData(0, 0, 256, 256);
+  const d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (Math.random() - 0.5) * 20;
+    d[i] += n; d[i + 1] += n; d[i + 2] += n;
+  }
+  ctx.putImageData(id, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(4, 4);
+  return t;
+})();
+
+// Radiator fin texture: horizontal gradient bands simulating stacked fins
+const radiatorFinTex = (() => {
+  const c = Object.assign(document.createElement('canvas'), { width: 256, height: 256 });
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#cccccc';
+  ctx.fillRect(0, 0, 256, 256);
+  // Horizontal fin bands
+  for (let y = 0; y < 256; y += 6) {
+    const grad = ctx.createLinearGradient(0, y, 0, y + 3);
+    grad.addColorStop(0, 'rgba(200,200,200,0)');
+    grad.addColorStop(0.5, 'rgba(255,255,255,0.4)');
+    grad.addColorStop(1, 'rgba(200,200,200,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, y, 256, 3);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(2, 6);
+  return t;
+})();
+
+// Control panel texture: subtle noise + grid lines
+const panelTex = (() => {
+  const c = Object.assign(document.createElement('canvas'), { width: 256, height: 256 });
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#333333';
+  ctx.fillRect(0, 0, 256, 256);
+  // Grid lines
+  ctx.strokeStyle = 'rgba(80,80,80,0.3)';
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x < 256; x += 16) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 256); ctx.stroke();
+  }
+  for (let y = 0; y < 256; y += 16) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(256, y); ctx.stroke();
+  }
+  // Subtle noise
+  const id = ctx.getImageData(0, 0, 256, 256);
+  const d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (Math.random() - 0.5) * 15;
+    d[i] += n; d[i + 1] += n; d[i + 2] += n;
+  }
+  ctx.putImageData(id, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(1, 1);
+  return t;
+})();
+
+// Apply procedural textures to materials
+GEN_MATS.M01.bumpMap = engineRibTex;
+GEN_MATS.M01.bumpScale = 0.4;
+GEN_MATS.M04.map = radiatorFinTex;
+GEN_MATS.M04.bumpMap = radiatorFinTex;
+GEN_MATS.M04.bumpScale = 0.2;
+GEN_MATS.M06.map = panelTex;
+GEN_MATS.M06.roughnessMap = panelTex;
+GEN_MATS.M06.roughness = 0.65;
+
+/* ================================================================
+   DISPOSAL REGISTRY
+   ================================================================ */
+const geoRegistry = [];
+const matRegistry = [];
+const texRegistry = [];
+
+texRegistry.push(engineRibTex, radiatorFinTex, panelTex);
+
+/* ================================================================
+   SCENE / RENDERER
+   ================================================================ */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 140, 380);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 800);
+camera.position.set(130, 88, 115);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;  // Down from 1.15
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+// Apply environment to metallic materials M01–M12, M14, M16
+['M01','M02','M03','M04','M05','M06','M07','M08','M09','M10','M11','M12','M14','M16'].forEach(k => {
+  if (GEN_MATS[k]) GEN_MATS[k].environment = scene.environment;
+});
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.target.set(40, 16, 17);
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.55;
+
+/* ================================================================
+   LIGHTS
+   ================================================================ */
+scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(55, 110, 60);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left = -120; sc.right = 120; sc.top = 120; sc.bottom = -120; sc.near = 1; sc.far = 350;
+sun.shadow.bias = -0.0003;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.35).translateOnAxis(new THREE.Vector3(-1, 0.5, -1).normalize(), 50));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.18).translateOnAxis(new THREE.Vector3(0, 0.3, -1).normalize(), 50));
+scene.add(new THREE.DirectionalLight(0xffddaa, 0.3).translateOnAxis(new THREE.Vector3(1, 0.6, -0.4).normalize(), 60));
+
+/* ================================================================
+   GROUND
+   ================================================================ */
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(600, 600),
+  new THREE.MeshStandardMaterial({ color: 0x0a0e16, roughness: 0.92, metalness: 0.05 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(600, 100, 0x00d4aa, 0x142028);
+grid.material.opacity = 0.1;
+grid.material.transparent = true;
+grid.position.y = 0.01;
+scene.add(grid);
+
+/* ================================================================
+   VOXEL BUILDER
+   ================================================================ */
+const voxData = {};
+function vox(x, y, z, color) {
+  const k = color.toString();
+  if (!voxData[k]) voxData[k] = { color, positions: [] };
+  voxData[k].positions.push([x, y, z]);
+}
+
+const COL = {
+  YELLOW: 0xd8b428, YELLOW_D: 0xb89820, YELLOW_L: 0xe0c040,
+  SKID: 0x151518, SKID_L: 0x222226, FRAME: 0x111114, FRAME_L: 0x1e1e22,
+  DARK: 0x222226, HOUSING: 0x58585e, HOUSING_D: 0x444448, HOUSING_L: 0x6a6a70,
+  ENGINE: 0x333338, ENGINE_L: 0x44444a, ENGINE_D: 0x28282c,
+  BLOCK_RIB: 0x3a3a40, HEAD: 0x404046, VALVE_CVR: 0x4a4a50, OIL_PAN: 0x2a2a2e,
+  ALT: 0x3e3e44, ALT_L: 0x50505a, ALT_FIN: 0x484850,
+  COPPER: 0xb87333, COPPER_D: 0x8a5522,
+  WIRE_BLK: 0x111114, WIRE_RED: 0x882222, WIRE_BLU: 0x224488,
+  RAD: 0x446070, RAD_H: 0x587888, RAD_FIN: 0x3a5060,
+  EXHAUST: 0x48484e, EXHAUST_D: 0x38383e,
+  FUEL: 0x253525, FUEL_L: 0x304030,
+  GRILLE: 0x141418, PANEL_BG: 0x222228, PANEL_FR: 0x2a2a30,
+  SCREEN: 0x335544, RED_BTN: 0xcc2233, RED_BTN_D: 0x991a28,
+  RUBBER: 0x1a1a1a, BELT: 0x111112, GASKET: 0x553322,
+  COOLANT_H: 0x2a2a2a, INSUL: 0x555550, PIPE: 0x3a3a3e,
+};
+
+/* ================================================================
+   COL → GEN_MATS MAPPING
+   ================================================================ */
+const COL_MAT = {
+  [0xd8b428]: 'M15', [0xb89820]: 'M15', [0xe0c040]: 'M15',  // YELLOW variants (transparent shell)
+  [0x151518]: 'M02', [0x222226]: 'M02', [0x111114]: 'M02', [0x1e1e22]: 'M02',  // SKID/FRAME variants
+  [0x222226]: 'M01', [0x444448]: 'M03', [0x58585e]: 'M03',  // DARK/HOUSING variants → copper-ish (dark iron)
+  [0x333338]: 'M01', [0x44444a]: 'M01', [0x28282c]: 'M01',  // ENGINE variants
+  [0x3a3a40]: 'M01',  // BLOCK_RIB
+  [0x404046]: 'M02', [0x4a4a50]: 'M02',  // HEAD/VALVE_CVR
+  [0x2a2a2e]: 'M01',  // OIL_PAN
+  [0x3e3e44]: 'M03', [0x50505a]: 'M03', [0x484850]: 'M03',  // ALT variants (copper windings)
+  [0xb87333]: 'M03', [0x8a5522]: 'M03',  // COPPER variants
+  [0x446070]: 'M04', [0x587888]: 'M04', [0x3a5060]: 'M04',  // RAD variants (aluminum)
+  [0x48484e]: 'M14', [0x38383e]: 'M14',  // EXHAUST variants (steel muffler)
+  [0x253525]: 'M18', [0x304030]: 'M18',  // FUEL variants (rubber/fuel safe)
+  [0x141418]: 'M16',  // GRILLE (steel)
+  [0x222228]: 'M06', [0x2a2a30]: 'M06',  // PANEL variants (plastic)
+  [0x335544]: 'M07',  // SCREEN (glass — MeshPhysicalMaterial)
+  [0xcc2233]: 'M17', [0x991a28]: 'M17',  // RED_BTN variants
+  [0x1a1a1a]: 'M08', [0x111112]: 'M08',  // RUBBER/BELT
+  [0x553322]: 'M09',  // GASKET (brass)
+  [0x2a2a2a]: 'M06',  // COOLANT_H (plastic)
+  [0x555550]: 'M05',  // INSUL (steel bolts)
+  [0x3a3a3e]: 'M16',  // PIPE (steel)
+};
+
+// Shell-transparent materials (yellow warning panels)
+const SHELL_MATS = { [0xd8b428]: true, [0xb89820]: true, [0xe0c040]: true };
+
+/* ================================================================
+   DIMENSIONS
+   ================================================================ */
+const L = 80, W = 34, H = 32;
+const midZ = Math.floor(W / 2);
+
+/* ================================================================
+   1. SKID / BASE FRAME
+   ================================================================ */
+for (let x = -2; x <= L + 1; x++)
+  for (let z = -2; z <= W + 1; z++)
+    vox(x, 0, z, COL.SKID);
+for (let x = -2; x <= L + 1; x++) {
+  for (const dz of [-2, -1, W, W + 1]) { vox(x, 1, dz, COL.SKID); vox(x, 2, dz, COL.SKID_L); }
+  if (x % 15 === 0) for (let z = -1; z <= W; z++) vox(x, 1, z, COL.SKID_L);
+}
+// Lifting lugs
+for (const [lx, lz] of [[-2, -2], [L + 1, -2], [-2, W + 1], [L + 1, W + 1]]) {
+  for (let dy = 0; dy < 4; dy++) {
+    vox(lx, dy, lz, COL.FRAME); vox(lx + (lx < 0 ? 1 : -1), dy, lz, COL.FRAME); vox(lx, dy, lz + (lz < 0 ? 1 : -1), COL.FRAME);
+  }
+  vox(lx, 3, lz, COL.DARK);
+}
+// Anti-vibration mounts
+for (const mx of [15, 25, 38, 50, 62])
+  for (const mz of [8, W - 8]) {
+    for (let dx = 0; dx < 2; dx++) for (let dz = 0; dz < 2; dz++) {
+      vox(mx + dx, 1, mz + dz, COL.RUBBER); vox(mx + dx, 2, mz + dz, COL.FRAME_L);
+    }
+  }
+
+/* ================================================================
+   2. ENCLOSURE SHELL
+   ================================================================ */
+// Back wall
+for (let x = -1; x <= L; x++) for (let y = 3; y <= H; y++) vox(x, y, W, COL.YELLOW);
+// Front wall — partial
+for (let x = 52; x <= L; x++) for (let y = 3; y <= H; y++) vox(x, y, -1, COL.YELLOW);
+for (let x = -1; x < 52; x++) for (let y = H - 3; y <= H; y++) vox(x, y, -1, COL.YELLOW);
+// Left end wall with louvers
+for (let y = 3; y <= H; y++) for (let z = -1; z <= W; z++) {
+  if (y >= 6 && y <= H - 3 && z >= 4 && z <= W - 4) vox(-1, y, z, y % 2 === 0 ? COL.FRAME : COL.DARK);
+  else vox(-1, y, z, COL.YELLOW);
+}
+// Right end wall
+for (let y = 3; y <= H; y++) for (let z = -1; z <= W; z++) vox(L, y, z, COL.YELLOW);
+// Roof
+for (let x = -1; x <= L; x++) for (let z = -1; z <= W; z++) { vox(x, H + 1, z, COL.YELLOW); vox(x, H + 2, z, COL.YELLOW_D); }
+// Rain drip edge
+for (let x = -1; x <= L; x++) { vox(x, H + 2, -2, COL.YELLOW_D); vox(x, H + 2, W + 1, COL.YELLOW_D); }
+for (let z = -2; z <= W + 1; z++) { vox(-2, H + 2, z, COL.YELLOW_D); vox(L + 1, H + 2, z, COL.YELLOW_D); }
+
+// Panel seams
+for (const sx of [18, 38, 54]) for (let y = 3; y <= H; y++) vox(sx, y, W + 1, COL.FRAME);
+for (let y = 3; y <= H; y++) { vox(62, y, -2, COL.FRAME); vox(72, y, -2, COL.FRAME); }
+for (let x = 52; x <= L; x++) vox(x, Math.floor(H * 0.55), -2, COL.FRAME);
+// Handles
+for (const hx of [58, 68]) { vox(hx, Math.floor(H * 0.42), -2, COL.HOUSING); vox(hx + 1, Math.floor(H * 0.42), -2, COL.HOUSING); }
+// Hinges
+for (const [hx, hy] of [[18, 8], [18, 20], [38, 8], [38, 20], [54, 8], [54, 20]]) { vox(hx, hy, W + 1, COL.HOUSING_D); vox(hx, hy + 1, W + 1, COL.HOUSING_D); }
+
+// Control panel box
+for (let x = 56; x <= 68; x++) for (let y = 18; y <= 27; y++) {
+  if (x === 56 || x === 68 || y === 18 || y === 27) vox(x, y, -2, COL.FRAME);
+  else vox(x, y, -2, COL.PANEL_BG);
+}
+for (let x = 58; x <= 66; x++) for (let y = 22; y <= 26; y++) vox(x, y, -2, COL.SCREEN);
+for (let x = 58; x <= 66; x += 2) vox(x, 20, -2, COL.DARK);
+for (let x = 58; x <= 65; x += 2) vox(x, 19, -2, COL.HOUSING_D);
+
+// Emergency stop
+for (let dy = 0; dy < 3; dy++) for (let dx = 0; dx < 2; dx++) { vox(54 + dx, 22 + dy, -2, COL.RED_BTN); vox(54 + dx, 22 + dy, -3, COL.RED_BTN_D); }
+vox(53, 22, -2, COL.YELLOW_D); vox(53, 24, -2, COL.YELLOW_D); vox(56, 22, -2, COL.YELLOW_D); vox(56, 24, -2, COL.YELLOW_D);
+
+// Front & back grilles
+for (let x = 54; x < L - 1; x++) for (let y = 4; y < 14; y++) if ((x + y) % 2 === 0) { vox(x, y, -2, COL.GRILLE); vox(x, y, W + 1, COL.GRILLE); }
+
+// Sound insulation
+for (let x = 0; x < 52; x++) for (let y = H - 1; y <= H; y++) for (let z = 0; z < W; z++) if (y < H) vox(x, y, z, COL.INSUL);
+
+/* ================================================================
+   3. FUEL TANK
+   ================================================================ */
+for (let x = 8; x < 50; x++) for (let z = 3; z < W - 3; z++) { vox(x, 2, z, COL.FUEL); vox(x, 3, z, COL.FUEL); if (x === 8 || x === 49 || z === 3 || z === W - 4) vox(x, 4, z, COL.FUEL_L); }
+vox(30, 5, 4, COL.HOUSING); vox(31, 5, 4, COL.HOUSING);
+vox(10, 3, 3, COL.SCREEN); vox(10, 4, 3, COL.SCREEN);
+vox(25, 2, W - 3, COL.COPPER);
+for (let y = 4; y < 10; y++) { vox(28, y, 6, COL.COPPER_D); vox(32, y, 6, COL.COPPER); }
+
+/* ================================================================
+   4. RADIATOR
+   ================================================================ */
+const radX = 2;
+for (let x = radX; x < radX + 6; x++) for (let y = 6; y < H - 4; y++) for (let z = 4; z < W - 4; z++) {
+  if (x === radX || x === radX + 5) vox(x, y, z, COL.RAD);
+  else if (z % 2 === 0) vox(x, y, z, COL.RAD_FIN);
+  else vox(x, y, z, COL.RAD_H);
+}
+for (let y = 6; y < H - 4; y++) { vox(radX - 1, y, 4, COL.FRAME); vox(radX - 1, y, W - 5, COL.FRAME); vox(radX + 6, y, 4, COL.FRAME); vox(radX + 6, y, W - 5, COL.FRAME); }
+for (let x = radX - 1; x <= radX + 6; x++) { vox(x, 6, 4, COL.FRAME); vox(x, H - 5, 4, COL.FRAME); vox(x, 6, W - 5, COL.FRAME); vox(x, H - 5, W - 5, COL.FRAME); }
+for (let x = radX; x < radX + 6; x++) for (let z = 5; z < W - 5; z++) { vox(x, H - 4, z, COL.HOUSING_D); vox(x, 5, z, COL.HOUSING_D); }
+for (let x = radX + 6; x < 16; x++) { vox(x, H - 5, midZ, COL.COOLANT_H); vox(x, 7, midZ, COL.COOLANT_H); }
+for (let dx = 0; dx < 2; dx++) for (let dz = 0; dz < 2; dz++) for (let dy = 0; dy < 3; dy++) vox(radX + 1 + dx, H - 3 + dy, 6 + dz, COL.HOUSING_L);
+vox(radX + 1, H, 6, COL.HOUSING);
+
+/* ================================================================
+   5. DIESEL ENGINE BLOCK
+   ================================================================ */
+const engX0 = 16, engX1 = 42, engY0 = 5;
+const engZ0 = 5, engZ1 = W - 5;
+const blockH = 12, blockTop = engY0 + blockH;
+
+for (let x = engX0; x < engX1; x++) for (let y = engY0; y < blockTop; y++) for (let z = engZ0; z < engZ1; z++) {
+  const isFace = (x === engX0 || x === engX1 - 1 || y === engY0 || z === engZ0 || z === engZ1 - 1);
+  vox(x, y, z, isFace ? COL.ENGINE_L : COL.ENGINE);
+}
+// Cylinder ribs
+for (let x = engX0 + 3; x < engX1 - 2; x += 6) for (let y = engY0 + 2; y < blockTop - 1; y++) { vox(x, y, engZ0 - 1, COL.BLOCK_RIB); vox(x, y, engZ1, COL.BLOCK_RIB); }
+// Head + gasket
+for (let x = engX0; x < engX1; x++) for (let z = engZ0; z < engZ1; z++) { vox(x, blockTop, z, COL.GASKET); vox(x, blockTop + 1, z, COL.HEAD); vox(x, blockTop + 2, z, COL.HEAD); }
+// Valve cover
+for (let x = engX0 + 1; x < engX1 - 1; x++) for (let z = engZ0 + 2; z < engZ1 - 2; z++) {
+  vox(x, blockTop + 3, z, COL.VALVE_CVR);
+  if (z === engZ0 + 2 || z === engZ1 - 3) vox(x, blockTop + 3, z, COL.HEAD);
+}
+for (let x = engX0 + 2; x < engX1 - 1; x += 4) for (const bz of [engZ0 + 3, engZ1 - 4]) vox(x, blockTop + 4, bz, COL.DARK);
+vox(engX0 + 4, blockTop + 4, midZ, COL.YELLOW_L);
+// Oil pan
+for (let x = engX0 + 1; x < engX1 - 1; x++) for (let z = engZ0 + 1; z < engZ1 - 1; z++) {
+  vox(x, engY0 - 1, z, COL.OIL_PAN);
+  if (z === engZ0 + 1 || z === engZ1 - 2) vox(x, engY0 - 1, z, COL.ENGINE_D);
+}
+vox(engX0 + 12, engY0 - 1, engZ0, COL.COPPER);
+// Intake manifold
+for (let x = engX0 + 2; x < engX1 - 2; x += 5) { for (let dy = 0; dy < 3; dy++) { vox(x, blockTop + dy, engZ0 - 1, COL.HOUSING); vox(x + 1, blockTop + dy, engZ0 - 1, COL.HOUSING); } vox(x, blockTop, engZ0, COL.HOUSING_D); vox(x + 1, blockTop, engZ0, COL.HOUSING_D); }
+for (let z = engZ0 - 1; z > engZ0 - 5; z--) vox(engX0 + 8, blockTop + 2, z, COL.HOUSING);
+// Air filter
+const afCY = blockTop + 1, afCZ = engZ0 - 6;
+for (let y = afCY - 2; y <= afCY + 2; y++) for (let z = afCZ - 2; z <= afCZ + 2; z++) { const dy = y - afCY, dz = z - afCZ; if (dy * dy + dz * dz <= 5) { for (let dx = 0; dx < 5; dx++) vox(engX0 + 6 + dx, y, z, dx % 2 === 0 ? COL.HOUSING_L : COL.HOUSING); } }
+// Exhaust manifold
+for (let x = engX0 + 2; x < engX1 - 2; x += 5) for (let dy = 0; dy < 2; dy++) { vox(x, blockTop + dy, engZ1, COL.EXHAUST); vox(x + 1, blockTop + dy, engZ1, COL.EXHAUST); }
+for (let x = engX0 + 2; x < engX1 - 5; x++) vox(x, blockTop + 2, engZ1 + 1, COL.EXHAUST);
+// Turbocharger — replaced by CylinderGeometry below (turbo voxels not placed here)
+
+// Starter motor
+for (let dy = 0; dy < 3; dy++) for (let dz = 0; dz < 4; dz++) vox(engX1, engY0 + 2 + dy, engZ0 + 5 + dz, COL.ENGINE_L);
+vox(engX1, engY0 + 5, engZ0 + 6, COL.HOUSING); vox(engX1, engY0 + 5, engZ0 + 7, COL.HOUSING);
+// Belt drive
+for (let dy = -2; dy <= 2; dy++) for (let dz = -2; dz <= 2; dz++) { const d2 = dy * dy + dz * dz; if (d2 >= 3 && d2 <= 5) vox(engX0 - 1, engY0 + 4 + dy, midZ + dz, COL.DARK); }
+for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) if (dy * dy + dz * dz <= 1) vox(engX0 - 1, blockTop - 2 + dy, midZ - 4 + dz, COL.HOUSING);
+for (let y = engY0 + 2; y < blockTop; y++) vox(engX0 - 1, y, midZ - 2, COL.BELT);
+// Water pump
+for (let dy = 0; dy < 2; dy++) for (let dz = 0; dz < 3; dz++) vox(engX0 - 1, engY0 + 7 + dy, midZ + 3 + dz, COL.HOUSING_D);
+// Oil filter
+for (let dy = 0; dy < 3; dy++) vox(engX0 + 3, engY0 + dy, engZ0 - 1, COL.DARK);
+vox(engX0 + 3, engY0, engZ0 - 1, COL.HOUSING);
+// Fuel filters
+for (let dy = 0; dy < 3; dy++) { vox(engX0 + 20, blockTop + 3 + dy, engZ0 - 1, COL.HOUSING_L); vox(engX0 + 22, blockTop + 3 + dy, engZ0 - 1, COL.DARK); }
+for (let x = engX0 + 20; x <= engX0 + 22; x++) vox(x, blockTop + 6, engZ0 - 1, COL.COPPER_D);
+// Injection pump
+for (let dx = 0; dx < 4; dx++) for (let dy = 0; dy < 3; dy++) vox(engX0 + 10 + dx, blockTop + 1 + dy, engZ0 - 1, COL.ENGINE_D);
+for (let x = engX0 + 2; x < engX1 - 2; x += 5) { vox(x, blockTop + 3, engZ0 - 1, COL.COPPER); vox(x, blockTop + 4, engZ0 - 1, COL.COPPER); }
+
+/* ================================================================
+   6. ALTERNATOR
+   ================================================================ */
+const altX0 = 44, altX1 = 64, altCY = 12, altCZ = midZ, altR = 7;
+for (let x = altX0; x < altX1; x++) for (let y = altCY - altR; y <= altCY + altR; y++) for (let z = altCZ - altR; z <= altCZ + altR; z++) {
+  const dy = y - altCY, dz = z - altCZ, d2 = dy * dy + dz * dz;
+  if (d2 <= altR * altR) vox(x, y, z, d2 >= (altR - 1) * (altR - 1) ? COL.ALT : COL.DARK);
+}
+for (let x = altX0 + 1; x < altX1 - 1; x += 2) for (let y = altCY - altR - 1; y <= altCY + altR + 1; y++) for (let z = altCZ - altR - 1; z <= altCZ + altR + 1; z++) {
+  const dy = y - altCY, dz = z - altCZ, d2 = dy * dy + dz * dz;
+  if (d2 > altR * altR && d2 <= (altR + 1) * (altR + 1)) vox(x, y, z, COL.ALT_FIN);
+}
+for (let y = altCY - altR; y <= altCY + altR; y++) for (let z = altCZ - altR; z <= altCZ + altR; z++) {
+  const dy = y - altCY, dz = z - altCZ, d2 = dy * dy + dz * dz;
+  if (d2 <= altR * altR) { vox(altX0 - 1, y, z, COL.ALT_L); vox(altX1, y, z, COL.ALT_L); }
+  if (d2 <= 4) { vox(altX0 - 2, y, z, COL.HOUSING); vox(altX1 + 1, y, z, COL.HOUSING); }
+}
+for (let x = altX0 + 8; x < altX0 + 14; x++) for (let z = altCZ - 2; z <= altCZ + 2; z++) { vox(x, altCY + altR + 1, z, COL.DARK); vox(x, altCY + altR + 2, z, COL.DARK); vox(x, altCY + altR + 3, z, COL.PANEL_BG); }
+for (let i = 0; i < 3; i++) vox(altX0 + 9 + i * 2, altCY + altR + 4, altCZ, COL.COPPER);
+for (let y = altCY + altR + 4; y < H - 3; y++) { vox(altX0 + 9, y, altCZ, COL.WIRE_RED); vox(altX0 + 11, y, altCZ, COL.WIRE_BLU); vox(altX0 + 13, y, altCZ + 1, COL.WIRE_BLK); }
+for (let x = altX0; x < altX1; x += 8) { for (const oz of [-3, 3]) { vox(x, altCY - altR - 1, altCZ + oz, COL.FRAME); vox(x + 1, altCY - altR - 1, altCZ + oz, COL.FRAME); vox(x, altCY - altR - 1, altCZ + oz + (oz > 0 ? 1 : -1), COL.HOUSING); } }
+// Coupling
+for (let y = altCY - 3; y <= altCY + 3; y++) for (let z = altCZ - 3; z <= altCZ + 3; z++) { const dy = y - altCY, dz = z - altCZ, d2 = dy * dy + dz * dz; if (d2 <= 10) { vox(engX1, y, z, COL.HOUSING_D); vox(engX1 + 1, y, z, COL.HOUSING_D); } if (d2 <= 5) vox(altX0 - 3, y, z, COL.HOUSING); }
+
+/* ================================================================
+   7. EXHAUST SYSTEM
+   ================================================================ */
+const mufX0 = 22, mufX1 = 40, mufY = H - 5, mufR = 2;
+const tX = engX0 + 14, tY = blockTop + 2, tZ = engZ1 + 1;
+for (let y = tY; y < mufY; y++) vox(tX, y, tZ + 2, COL.EXHAUST);
+for (let x = tX; x >= mufX0; x--) vox(x, mufY - 1, tZ + 2, COL.EXHAUST);
+for (let z = tZ + 2; z >= midZ; z--) vox(mufX0, mufY - 1, z, COL.EXHAUST);
+for (let x = mufX0; x < mufX1; x++) for (let y = mufY - mufR; y <= mufY + mufR; y++) for (let z = midZ - mufR; z <= midZ + mufR; z++) {
+  const dy = y - mufY, dz = z - midZ, d2 = dy * dy + dz * dz;
+  if (d2 <= mufR * mufR) vox(x, y, z, d2 >= (mufR - 1) * (mufR - 1) ? COL.EXHAUST : COL.EXHAUST_D);
+}
+for (let y = mufY - mufR; y <= mufY + mufR; y++) for (let z = midZ - mufR; z <= midZ + mufR; z++) { const dy = y - mufY, dz = z - midZ; if (dy * dy + dz * dz <= mufR * mufR) { vox(mufX0 - 1, y, z, COL.EXHAUST); vox(mufX1, y, z, COL.EXHAUST); } }
+for (let y = mufY; y <= H + 5; y++) vox(mufX1 - 1, y, midZ, COL.EXHAUST);
+for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) vox(mufX1 - 1 + dx, H + 6, midZ + dz, COL.DARK);
+vox(mufX1 - 1, H + 7, midZ, COL.DARK);
+
+/* ================================================================
+   8. BATTERIES + WIRING + CONTROL CABINET
+   ================================================================ */
+for (let b = 0; b < 2; b++) { const bx = 66 + b * 5; for (let x = bx; x < bx + 4; x++) for (let z = W - 10; z < W - 6; z++) for (let y = 3; y <= 6; y++) vox(x, y, z, COL.DARK); vox(bx + 1, 7, W - 9, COL.COPPER); vox(bx + 2, 7, W - 9, COL.HOUSING); for (let y = 7; y < 10; y++) { vox(bx + 1, y, W - 9, COL.WIRE_RED); vox(bx + 2, y, W - 9, COL.WIRE_BLK); } }
+for (let x = 50; x < L - 2; x++) { vox(x, H - 2, midZ - 1, COL.FRAME); vox(x, H - 2, midZ + 1, COL.FRAME); }
+for (let x = 50; x < L - 2; x += 2) vox(x, H - 2, midZ, COL.COPPER);
+for (let x = 68; x < 74; x++) for (let y = 10; y < 20; y++) for (let z = 4; z < 8; z++) vox(x, y, z, COL.PANEL_FR);
+vox(71, 16, 3, COL.RED_BTN);
+for (let y = 10; y < 20; y++) { vox(74, y, 5, COL.COPPER); vox(74, y, 6, COL.COPPER); vox(74, y, 7, COL.COPPER); }
+for (let x = 68; x < 73; x++) for (let y = 10; y < 18; y++) vox(x, y, W - 7, COL.PANEL_FR);
+
+/* ================================================================
+   INSTANCED MESHES (with GEN_MATS lookup)
+   ================================================================ */
+const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+geoRegistry.push(cubeGeo);
+
+for (const k in voxData) {
+  const { color, positions } = voxData[k];
+  let mat;
+  if (SHELL_MATS[color]) {
+    mat = GEN_MATS.M15.clone(); // yellow transparent shell
+    matRegistry.push(mat);
+  } else {
+    const matKey = COL_MAT[color];
+    if (matKey) {
+      mat = GEN_MATS[matKey];
+    } else {
+      // Fallback: create inline material for unmapped colors
+      mat = new THREE.MeshStandardMaterial({ color, roughness: 0.52, metalness: 0.58 });
+      matRegistry.push(mat);
+    }
+  }
+  const mesh = new THREE.InstancedMesh(cubeGeo, mat, positions.length);
+  mesh.castShadow = !SHELL_MATS[color];
+  mesh.receiveShadow = true;
+  const m = new THREE.Matrix4();
+  positions.forEach((p, i) => { m.setPosition(p[0] + 0.5, p[1] + 0.5, p[2] + 0.5); mesh.setMatrixAt(i, m); });
+  mesh.instanceMatrix.needsUpdate = true;
+  scene.add(mesh);
+}
+
+/* ================================================================
+   TURBOCHARGER SMOOTH GEOMETRY (CylinderGeometry replacing voxel)
+   ================================================================ */
+// Turbo compressor wheel: smooth cylinder at tX, tY, tZ
+const turboWheelGeo = new THREE.CylinderGeometry(2.5, 2.5, 1.5, 16);
+geoRegistry.push(turboWheelGeo);
+const turboWheel = new THREE.Mesh(turboWheelGeo, GEN_MATS.M11);
+turboWheel.position.set(tX + 0.5, tY + 0.5, tZ + 3.5);
+turboWheel.castShadow = true;
+scene.add(turboWheel);
+
+// Turbo housing ring: torus
+const turboHousingGeo = new THREE.TorusGeometry(3.0, 0.5, 8, 16);
+geoRegistry.push(turboHousingGeo);
+const turboHousing = new THREE.Mesh(turboHousingGeo, GEN_MATS.M14);
+turboHousing.position.set(tX + 0.5, tY + 0.5, tZ + 3.5);
+turboHousing.rotation.x = Math.PI / 2;
+turboHousing.castShadow = true;
+scene.add(turboHousing);
+
+// Turbo intake pipe: cylinder
+const turboIntakeGeo = new THREE.CylinderGeometry(1.2, 1.2, 4, 12);
+geoRegistry.push(turboIntakeGeo);
+const turboIntake = new THREE.Mesh(turboIntakeGeo, GEN_MATS.M14);
+turboIntake.position.set(tX + 0.5, tY + 0.5, tZ + 6);
+turboIntake.rotation.x = Math.PI / 2;
+turboIntake.castShadow = true;
+scene.add(turboIntake);
+
+// Turbo exhaust outlet: cylinder
+const turboExhaustGeo = new THREE.CylinderGeometry(0.8, 0.8, 3, 12);
+geoRegistry.push(turboExhaustGeo);
+const turboExhaust = new THREE.Mesh(turboExhaustGeo, GEN_MATS.M14);
+turboExhaust.position.set(tX + 0.5, tY + 0.5, tZ);
+turboExhaust.rotation.x = Math.PI / 2;
+turboExhaust.castShadow = true;
+scene.add(turboExhaust);
+
+/* ================================================================
+   ANIMATED: COOLING FAN
+   ================================================================ */
+const fanCX = 10, fanCY = Math.floor((6 + H - 4) / 2), fanCZ = midZ;
+const fanGroup = new THREE.Group();
+fanGroup.position.set(fanCX + 0.5, fanCY + 0.5, fanCZ + 0.5);
+const fanBladeMat = new THREE.MeshStandardMaterial({ color: 0xff2233, roughness: 0.42, metalness: 0.65, emissive: 0xff2233, emissiveIntensity: 0.4 });
+matRegistry.push(fanBladeMat);
+for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2; for (let rr = 1; rr <= 8; rr++) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.85, 0.4), fanBladeMat); c.position.set(0, Math.cos(a) * rr, Math.sin(a) * rr); c.rotation.x = a + 0.3; c.castShadow = true; fanGroup.add(c); } }
+const fanHubMat = new THREE.MeshStandardMaterial({ color: 0x404048, metalness: 0.8, roughness: 0.35 });
+matRegistry.push(fanHubMat);
+fanGroup.add(new THREE.Mesh(new THREE.BoxGeometry(0.8, 2.0, 2.0), fanHubMat));
+const shroudMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3e, metalness: 0.5, roughness: 0.6 });
+matRegistry.push(shroudMat);
+const shroud = new THREE.Mesh(new THREE.TorusGeometry(9, 0.3, 8, 32), shroudMat);
+shroud.rotation.y = Math.PI / 2; shroud.position.copy(fanGroup.position);
+scene.add(shroud); scene.add(fanGroup);
+
+/* ================================================================
+   ANIMATED: FLYWHEEL
+   ================================================================ */
+const fwGroup = new THREE.Group();
+fwGroup.position.set(engX1 + 0.5, altCY + 0.5, altCZ + 0.5);
+const fwMat = new THREE.MeshStandardMaterial({ color: 0xff2233, roughness: 0.35, metalness: 0.75, emissive: 0xff2233, emissiveIntensity: 0.4 });
+matRegistry.push(fwMat);
+for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; for (let rr = 3; rr <= 4; rr++) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.75), fwMat); c.position.set(0, Math.cos(a) * rr, Math.sin(a) * rr); c.castShadow = true; fwGroup.add(c); } }
+const fwRingMat = new THREE.MeshStandardMaterial({ color: 0x55555c, metalness: 0.8 });
+matRegistry.push(fwRingMat);
+for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; const t2 = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.35, 0.35), fwRingMat); t2.position.set(0, Math.cos(a) * 5, Math.sin(a) * 5); fwGroup.add(t2); }
+const fwHubMat = new THREE.MeshStandardMaterial({ color: 0x404048, metalness: 0.8, roughness: 0.3 });
+matRegistry.push(fwHubMat);
+fwGroup.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.6, 1.6), fwHubMat));
+scene.add(fwGroup);
+
+/* ================================================================
+   ANIMATED: ALTERNATOR ROTOR
+   ================================================================ */
+const rotorGroup = new THREE.Group();
+rotorGroup.position.set((altX0 + altX1) / 2 + 0.5, altCY + 0.5, altCZ + 0.5);
+const rotorMat = new THREE.MeshStandardMaterial({ color: 0xff2233, roughness: 0.38, metalness: 0.72, emissive: 0xff2233, emissiveIntensity: 0.4 });
+matRegistry.push(rotorMat);
+const shaftGeo = new THREE.CylinderGeometry(0.6, 0.6, 18, 10);
+geoRegistry.push(shaftGeo);
+const shaftM = new THREE.Mesh(shaftGeo, GEN_MATS.M12);
+shaftM.rotation.z = Math.PI / 2; rotorGroup.add(shaftM);
+for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; for (let xOff = -7; xOff <= 7; xOff += 2) { const w = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.55, 0.55), rotorMat); w.position.set(xOff, Math.cos(a) * 3.5, Math.sin(a) * 3.5); w.castShadow = true; rotorGroup.add(w); } }
+const rotorRingMat = new THREE.MeshStandardMaterial({ color: COL.COPPER, metalness: 0.9, roughness: 0.2 });
+matRegistry.push(rotorRingMat);
+for (const dx of [-8, -7]) { const ring = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.15, 6, 16), rotorRingMat); ring.rotation.z = Math.PI / 2; ring.position.set(dx, 0, 0); rotorGroup.add(ring); }
+scene.add(rotorGroup);
+
+/* ================================================================
+   ANIMATED: CRANKSHAFT PULLEY
+   ================================================================ */
+const pulleyGroup = new THREE.Group();
+pulleyGroup.position.set(engX0 - 0.5, engY0 + 4.5, midZ + 0.5);
+const pulleyMat = new THREE.MeshStandardMaterial({ color: 0xff2233, roughness: 0.4, metalness: 0.7, emissive: 0xff2233, emissiveIntensity: 0.35 });
+matRegistry.push(pulleyMat);
+for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; const c = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.6), pulleyMat); c.position.set(0, Math.cos(a) * 2.2, Math.sin(a) * 2.2); pulleyGroup.add(c); }
+const pulleyHubMat = new THREE.MeshStandardMaterial({ color: 0x333338, metalness: 0.8 });
+matRegistry.push(pulleyHubMat);
+pulleyGroup.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.2, 1.2), pulleyHubMat));
+scene.add(pulleyGroup);
+
+/* ================================================================
+   VIBRATION INDICATORS
+   ================================================================ */
+const vibeBlocks = [];
+const vibeMat = new THREE.MeshStandardMaterial({ color: 0x55555c, metalness: 0.7, roughness: 0.4 });
+matRegistry.push(vibeMat);
+for (let i = 0; i < 5; i++) { const vb = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), vibeMat); vb.position.set(engX0 + 3 + i * 5 + 0.5, blockTop + 4.5, engZ0 + 4.5); scene.add(vb); vibeBlocks.push(vb); }
+
+/* ================================================================
+   LEDs + POINT LIGHTS
+   ================================================================ */
+const ledMats = [];
+function makeLed(px, py, pz) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xff2233, emissive: 0xff2233, emissiveIntensity: 1.4, roughness: 0.2, metalness: 0.3 });
+  matRegistry.push(mat);
+  const led = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat);
+  led.position.set(px + 0.5, py + 0.5, pz + 0.5); scene.add(led);
+  const pl = new THREE.PointLight(0xff2233, 1.2, 14); pl.position.copy(led.position); scene.add(pl);
+  ledMats.push({ mat, light: pl });
+}
+makeLed(engX0 + 12, blockTop + 5, engZ0 + 2);
+makeLed(altX0 + 10, altCY + altR + 4, altCZ);
+const screenLight = new THREE.PointLight(0x44aa66, 0.5, 8);
+screenLight.position.set(62, 24, -3); scene.add(screenLight);
+
+/* ================================================================
+   STATE MACHINE
+   ================================================================ */
+const COLOR_OFF = new THREE.Color(0xff2233);
+const COLOR_ON = new THREE.Color(0x00ff66);
+const state = { engine: false, load: false };
+
+function applyState() {
+  fanBladeMat.color.copy(state.engine ? COLOR_ON : COLOR_OFF);
+  fanBladeMat.emissive.copy(state.engine ? COLOR_ON : COLOR_OFF);
+  fanBladeMat.emissiveIntensity = state.engine ? 0.6 : 0.35;
+
+  fwMat.color.copy(state.engine ? COLOR_ON : COLOR_OFF);
+  fwMat.emissive.copy(state.engine ? COLOR_ON : COLOR_OFF);
+  fwMat.emissiveIntensity = state.engine ? 0.6 : 0.35;
+
+  pulleyMat.color.copy(state.engine ? COLOR_ON : COLOR_OFF);
+  pulleyMat.emissive.copy(state.engine ? COLOR_ON : COLOR_OFF);
+  pulleyMat.emissiveIntensity = state.engine ? 0.55 : 0.3;
+
+  const loadActive = state.engine && state.load;
+  if (loadActive) { rotorMat.color.copy(COLOR_ON); rotorMat.emissive.copy(COLOR_ON); rotorMat.emissiveIntensity = 0.8; }
+  else if (state.engine) { rotorMat.color.set(0xffaa33); rotorMat.emissive.set(0xffaa33); rotorMat.emissiveIntensity = 0.5; }
+  else { rotorMat.color.copy(COLOR_OFF); rotorMat.emissive.copy(COLOR_OFF); rotorMat.emissiveIntensity = 0.35; }
+
+  ledMats[0].mat.color.copy(state.engine ? COLOR_ON : COLOR_OFF);
+  ledMats[0].mat.emissive.copy(state.engine ? COLOR_ON : COLOR_OFF);
+  ledMats[0].mat.emissiveIntensity = state.engine ? 1.8 : 1.2;
+  ledMats[0].light.color.copy(state.engine ? COLOR_ON : COLOR_OFF);
+  ledMats[0].light.intensity = state.engine ? 1.6 : 0.8;
+
+  ledMats[1].mat.color.copy(loadActive ? COLOR_ON : COLOR_OFF);
+  ledMats[1].mat.emissive.copy(loadActive ? COLOR_ON : COLOR_OFF);
+  ledMats[1].mat.emissiveIntensity = loadActive ? 1.8 : 1.2;
+  ledMats[1].light.color.copy(loadActive ? COLOR_ON : COLOR_OFF);
+  ledMats[1].light.intensity = loadActive ? 1.6 : 0.8;
+
+  screenLight.intensity = state.engine ? 1.2 : 0.3;
+  screenLight.color.set(state.engine ? 0x44dd77 : 0x335544);
+
+  // Turbo wheel spin direction reverses when engine is off
+  if (turboWheel) turboWheel.rotation.z = 0;
+}
+applyState();
+
+/* ================================================================
+   UI
+   ================================================================ */
+function bind(id, key) {
+  const btn = document.getElementById(id);
+  btn.onclick = () => {
+    state[key] = !state[key];
+    if (key === 'engine' && !state.engine) state.load = false;
+    if (key === 'load' && !state.engine) state.load = false;
+    btn.className = state[key] ? 'on' : 'off';
+    btn.textContent = state[key] ? 'ON' : 'OFF';
+    const lb = document.getElementById('bLoad');
+    lb.className = state.load ? 'on' : 'off';
+    lb.textContent = state.load ? 'ON' : 'OFF';
+    applyState();
+  };
+}
+bind('bEng', 'engine'); bind('bLoad', 'load');
+document.getElementById('bRot').onclick = function () {
+  controls.autoRotate = !controls.autoRotate;
+  this.className = controls.autoRotate ? 'on' : 'off';
+  this.textContent = controls.autoRotate ? 'ON' : 'OFF';
+};
+
+/* ================================================================
+   PARTICLES
+   ================================================================ */
+const pGeo = new THREE.BoxGeometry(0.55, 0.55, 0.55);
+geoRegistry.push(pGeo);
+const exhaustP = [], coolP = [];
+for (let i = 0; i < 40; i++) {
+  const mat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0 });
+  matRegistry.push(mat);
+  const p = new THREE.Mesh(pGeo, mat);
+  p.userData = { t: Math.random(), seed: Math.random() * 10 };
+  scene.add(p);
+  exhaustP.push(p);
+}
+for (let i = 0; i < 50; i++) {
+  const mat = new THREE.MeshBasicMaterial({ color: 0x44bbff, transparent: true, opacity: 0 });
+  matRegistry.push(mat);
+  const p = new THREE.Mesh(pGeo, mat);
+  p.userData = { t: Math.random(), seed: Math.random() * 10 };
+  scene.add(p);
+  coolP.push(p);
+}
+
+/* ================================================================
+   LIFECYCLE / DISPOSAL
+   ================================================================ */
+let disposed = false;
+let rafId = 0;
+
+function destroy() {
+  disposed = true;
+  cancelAnimationFrame(rafId);
+
+  // Disconnect ResizeObserver
+  resizeObs.disconnect();
+
+  // Dispose all registered geometries
+  geoRegistry.forEach(g => { if (g && g.dispose) g.dispose(); });
+  geoRegistry.length = 0;
+
+  // Dispose all registered materials
+  matRegistry.forEach(m => { if (m && m.dispose) m.dispose(); });
+  matRegistry.length = 0;
+
+  // Dispose all registered textures
+  texRegistry.forEach(t => { if (t && t.dispose) t.dispose(); });
+  texRegistry.length = 0;
+
+  // Dispose renderer
+  renderer.dispose();
+  if (renderer.domElement.parentNode) {
+    renderer.domElement.parentNode.removeChild(renderer.domElement);
+  }
+}
+
+/* ================================================================
+   RESIZE (ResizeObserver)
+   ================================================================ */
+const container = document.createElement('div');
+container.style.cssText = 'position:fixed;inset:0;';
+document.body.insertBefore(container, document.body.firstChild);
+container.appendChild(renderer.domElement);
+
+function resizeHandler() {
+  const w = container.clientWidth || innerWidth;
+  const h = container.clientHeight || innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+
+const resizeObs = new ResizeObserver(resizeHandler);
+resizeObs.observe(container);
+
+/* ================================================================
+   ANIMATE
+   ================================================================ */
+const clock = new THREE.Clock();
+function animate() {
+  if (disposed) return;
+  rafId = requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  if (state.engine) {
+    fanGroup.rotation.x += dt * 11;
+    fwGroup.rotation.x += dt * 9;
+    pulleyGroup.rotation.x += dt * 9;
+    rotorGroup.rotation.x += dt * (state.load ? 14 : 9);
+    // Turbo wheel spins opposite direction
+    if (turboWheel) turboWheel.rotation.z -= dt * 18;
+  } else {
+    // Slow coast-down for turbo
+    if (turboWheel) turboWheel.rotation.z -= dt * 2;
+  }
+
+  vibeBlocks.forEach((vb, i) => {
+    if (state.engine) { vb.position.y = blockTop + 4.5 + Math.sin(t * 40 + i * 1.7) * 0.06; vb.position.x = engX0 + 3 + i * 5 + 0.5 + Math.cos(t * 32 + i * 2.1) * 0.03; }
+    else { vb.position.y = blockTop + 4.5; vb.position.x = engX0 + 3 + i * 5 + 0.5; }
+  });
+
+  const exhX = mufX1 - 1 + 0.5, exhZ = midZ + 0.5;
+  exhaustP.forEach((p) => {
+    if (!state.engine) { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.18;
+    if (p.userData.t > 1) p.userData.t = 0;
+    const tt = p.userData.t, seed = p.userData.seed, spread = tt * 3.0;
+    p.position.x = exhX + Math.sin(tt * 3.5 + seed) * spread;
+    p.position.y = H + 7 + tt * 22;
+    p.position.z = exhZ + Math.cos(tt * 2.8 + seed) * spread;
+    p.material.opacity = Math.sin(tt * Math.PI) * 0.45;
+    p.material.color.setHSL(0, 0, 0.4 + tt * 0.3);
+    p.scale.setScalar(0.55 + tt * 1.0);
+  });
+
+  coolP.forEach((p, i) => {
+    if (!state.engine) { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.16;
+    if (p.userData.t > 1) p.userData.t = 0;
+    const tt = p.userData.t, seed = p.userData.seed;
+    const yOff = ((i % 6) - 2.5) * 2.2, zOff = ((Math.floor(i / 6) % 5) - 2) * 2.4;
+    p.position.x = -6 + tt * 28;
+    p.position.y = fanCY + yOff + Math.sin(tt * 5 + seed) * 0.5;
+    p.position.z = fanCZ + zOff + Math.cos(tt * 3.5 + seed) * 0.4;
+    p.material.opacity = Math.sin(tt * Math.PI) * 0.65;
+  });
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

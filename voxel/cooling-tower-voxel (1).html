@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>TORRE DE ENFRIAMIENTO · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(6px); z-index:10; }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter:blur(6px); z-index:10; }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); z-index:10; }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.88); border:1px solid #00d4aa44; padding:12px 14px; min-width:240px; font-size:11px; backdrop-filter:blur(6px); z-index:10; }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:54px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>TORRE DE ENFRIAMIENTO</b><br>
+  <span>Voxel Art · Vista en Corte · Alta Fidelidad PBR</span>
+</div>
+<div id="legend">
+  <div><i style="background:#ff5533"></i> Agua caliente (entrada)</div>
+  <div><i style="background:#44bbff"></i> Agua fria (salida)</div>
+  <div><i style="background:#ddeeff"></i> Vapor / aire humedo</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>FAN CELDA 1</label><button id="bF1" class="off">OFF</button></div>
+  <div class="row"><label>FAN CELDA 2</label><button id="bF2" class="off">OFF</button></div>
+  <div class="row"><label>FAN CELDA 3</label><button id="bF3" class="off">OFF</button></div>
+  <div class="row"><label>FAN CELDA 4</label><button id="bF4" class="off">OFF</button></div>
+  <div class="row"><label>BOMBA RECIRC.</label><button id="bPump" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ====== TOWER_MATS — PBR MATERIAL PALETTE (M01–M16 + Water Glass) ======
+const TOWER_MATS = {};
+
+// M01: steel basin
+TOWER_MATS.M01 = new THREE.MeshStandardMaterial({ color: 0x484850, roughness: 0.40, metalness: 0.85 });
+
+// M02: concrete base / pads
+TOWER_MATS.M02 = new THREE.MeshStandardMaterial({ color: 0x808080, roughness: 0.85, metalness: 0.05 });
+
+// M03: PVC fill media
+TOWER_MATS.M03 = new THREE.MeshStandardMaterial({ color: 0x3a5858, roughness: 0.60, metalness: 0.10 });
+
+// M04: aluminum fan blades
+TOWER_MATS.M04 = new THREE.MeshStandardMaterial({ color: 0x909098, roughness: 0.35, metalness: 0.90 });
+
+// M05: stainless drift eliminators
+TOWER_MATS.M05 = new THREE.MeshStandardMaterial({ color: 0x707078, roughness: 0.30, metalness: 0.92 });
+
+// M06: copper water pipes
+TOWER_MATS.M06 = new THREE.MeshStandardMaterial({ color: 0xb87333, roughness: 0.32, metalness: 0.92 });
+
+// M07: plastic louvers (shell transparent)
+TOWER_MATS.M07 = new THREE.MeshStandardMaterial({ color: 0xc0beb0, roughness: 0.55, metalness: 0.20, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false });
+
+// M08: brass pump impeller
+TOWER_MATS.M08 = new THREE.MeshStandardMaterial({ color: 0x998844, roughness: 0.35, metalness: 0.85 });
+
+// M09: structural steel
+TOWER_MATS.M09 = new THREE.MeshStandardMaterial({ color: 0x727278, roughness: 0.40, metalness: 0.85 });
+
+// M10: bolts
+TOWER_MATS.M10 = new THREE.MeshStandardMaterial({ color: 0x808084, roughness: 0.35, metalness: 0.90 });
+
+// M11: paint body
+TOWER_MATS.M11 = new THREE.MeshStandardMaterial({ color: 0xd0cbb8, roughness: 0.50, metalness: 0.30 });
+
+// M12: galvanized steel (pipe connectors)
+TOWER_MATS.M12 = new THREE.MeshStandardMaterial({ color: 0x6a6a70, roughness: 0.42, metalness: 0.82 });
+
+// M13: motor housing
+TOWER_MATS.M13 = new THREE.MeshStandardMaterial({ color: 0x38383e, roughness: 0.38, metalness: 0.88 });
+
+// M14: rubber seal
+TOWER_MATS.M14 = new THREE.MeshStandardMaterial({ color: 0x222226, roughness: 0.80, metalness: 0.05 });
+
+// M15: rail/guard
+TOWER_MATS.M15 = new THREE.MeshStandardMaterial({ color: 0xd0d0d8, roughness: 0.45, metalness: 0.75 });
+
+// M16: water glass (MeshPhysicalMaterial)
+TOWER_MATS.M16 = new THREE.MeshPhysicalMaterial({ color: 0x88ccee, roughness: 0.05, metalness: 0.0, transmission: 0.88, ior: 1.33, transparent: true });
+
+// Color → TOWER_MATS mapping
+const COL_MAT = {
+  [0xd0cbb8]: 'M11', [0xb0ab98]: 'M11', [0x909088]: 'M11', // BODY variants → paint
+  [0x484850]: 'M01', [0x38383e]: 'M01', // BASIN variants → steel basin
+  [0x808080]: 'M02', // CONCRETE
+  [0x3a5858]: 'M03', [0x507272]: 'M03', [0x608888]: 'M03', // FILL variants → PVC
+  [0xa0a0a8]: 'M04', [0x686870]: 'M04', // STEEL variants → aluminum
+  [0xb87333]: 'M06', // COPPER
+  [0xd8d8e0]: 'M06', [0xbabac0]: 'M06', // PIPE variants → copper
+  [0xc0beb0]: 'M07', [0xa0a098]: 'M07', // LOUVER variants → louver shell
+  [0x1a3388]: 'M13', [0x112266]: 'M13', // MOTOR variants → motor housing
+  [0xcc4422]: 'M10', // VALVE → bolt (brass-ish)
+  [0xd0d0d8]: 'M15', // RAIL
+  [0x707078]: 'M09', // LADDER → struct steel
+  [0x1a6688]: 'M16', [0x2288aa]: 'M16', // WATER variants → glass
+  [0x2a2a2e]: 'M09', // GRILLE → struct steel
+  [0x3a3a3e]: 'M09', // FRAME → struct steel
+  [0x6a4a38]: 'M09', // STEEL_R → struct steel (rust steel)
+  [0x3a4a3a]: 'M13', [0x2a3a2a]: 'M13', // ELEC variants → motor housing
+};
+// Shell-transparent materials (louvers)
+const SHELL_MATS = { [0xc0beb0]: true, [0xa0a098]: true };
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 150, 420);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 900);
+camera.position.set(140, 100, 125);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05; // fixed from 1.1
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+// Canvas appended via container div in ResizeObserver section below
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+// Apply environment to metallic materials
+['M01','M04','M05','M06','M08','M09','M10','M11','M12','M13','M15'].forEach(k => {
+  if (TOWER_MATS[k]) TOWER_MATS[k].environment = scene.environment;
+});
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(28, 26, 20);
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.55;
+
+// ====== LIGHTS ======
+scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(70, 140, 70);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left = -130; sc.right = 130; sc.top = 130; sc.bottom = -130; sc.near = 1; sc.far = 350;
+sun.shadow.bias = -0.0003;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.35).translateOnAxis(new THREE.Vector3(-1, 0.5, -1).normalize(), 50));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.18).translateOnAxis(new THREE.Vector3(0, 0.3, -1).normalize(), 50));
+
+// ====== GROUND ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(700, 700),
+  new THREE.MeshStandardMaterial({ color: 0x0a0e16, roughness: 0.92, metalness: 0.05 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+const gridH = new THREE.GridHelper(700, 120, 0x00d4aa, 0x142028);
+gridH.material.opacity = 0.1;
+gridH.material.transparent = true;
+gridH.position.y = 0.01;
+scene.add(gridH);
+
+// ====== VOXEL BUILDER ======
+const voxData = {};
+function vox(x, y, z, color) {
+  const k = color.toString();
+  if (!voxData[k]) voxData[k] = { color, positions: [] };
+  voxData[k].positions.push([x, y, z]);
+}
+
+const COL = {
+  BODY:     0xd0cbb8,
+  BODY_D:   0xb0ab98,
+  BODY_DD:  0x909088,
+  STEEL:    0xa0a0a8,
+  STEEL_D:  0x686870,
+  STEEL_R:  0x6a4a38,
+  DARK:     0x222226,
+  HOUSING:  0x808088,
+  HOUSING_D: 0x606068,
+  FILL:     0x3a5858,
+  FILL_H:   0x507272,
+  FILL_L:   0x608888,
+  COPPER:   0xb87333,
+  PIPE:     0xd8d8e0,
+  PIPE_D:   0xbabac0,
+  BASIN:    0x484850,
+  BASIN_D:  0x38383e,
+  FRAME:    0x3a3a3e,
+  GRILLE:   0x2a2a2e,
+  LOUVER:   0xc0beb0,
+  LOUVER_D: 0xa0a098,
+  MOTOR:    0x1a3388,
+  MOTOR_D:  0x112266,
+  VALVE:    0xcc4422,
+  RAIL:     0xd0d0d8,
+  LADDER:   0x707078,
+  WATER:    0x1a6688,
+  WATER_L:  0x2288aa,
+  ELEC:     0x3a4a3a,
+  ELEC_D:   0x2a3a2a,
+  CONCRETE: 0x808080,
+};
+
+// ====== DIMENSIONS ======
+const TW = 56, TD = 38, LEG_H = 12, BASIN_H = 3, BODY_H = 34;
+const bodyY0 = LEG_H + BASIN_H;
+const bodyY1 = bodyY0 + BODY_H;
+const DECK_Y = bodyY1;
+
+// ====== CONCRETE PADS ======
+[[0, 0], [0, TD - 3], [TW / 2 - 1, 0], [TW / 2 - 1, TD - 3], [TW - 3, 0], [TW - 3, TD - 3]].forEach(([px, pz]) => {
+  for (let x = px; x < px + 3; x++)
+    for (let z = pz; z < pz + 3; z++) { vox(x, 0, z, COL.CONCRETE); vox(x, 1, z, COL.CONCRETE); }
+});
+
+// ====== STRUCTURAL STEEL BASE FRAME ======
+const legPairs = [
+  [1, 1], [1, TD - 2],
+  [Math.floor(TW * 0.3), 1], [Math.floor(TW * 0.3), TD - 2],
+  [Math.floor(TW * 0.7), 1], [Math.floor(TW * 0.7), TD - 2],
+  [TW - 2, 1], [TW - 2, TD - 2],
+];
+legPairs.forEach(([lx, lz]) => {
+  for (let y = 1; y <= LEG_H + BASIN_H; y++) {
+    vox(lx, y, lz, COL.STEEL_R); vox(lx + 1, y, lz, COL.STEEL_R);
+    if (y === 2 || y === LEG_H + BASIN_H) { vox(lx - 1, y, lz, COL.STEEL_D); vox(lx + 2, y, lz, COL.STEEL_D); }
+  }
+});
+// Longitudinal beams
+for (let x = 1; x < TW - 1; x++) {
+  vox(x, LEG_H + BASIN_H, 1, COL.STEEL_R); vox(x, LEG_H + BASIN_H, TD - 2, COL.STEEL_R);
+  vox(x, Math.floor(LEG_H * 0.5) + 2, 1, COL.STEEL_D); vox(x, Math.floor(LEG_H * 0.5) + 2, TD - 2, COL.STEEL_D);
+}
+// Cross beams
+for (let z = 1; z < TD - 1; z++) {
+  vox(1, LEG_H + BASIN_H, z, COL.STEEL_R); vox(TW - 2, LEG_H + BASIN_H, z, COL.STEEL_R); vox(Math.floor(TW / 2), LEG_H + BASIN_H, z, COL.STEEL_R);
+}
+// Diagonal braces
+for (let i = 0; i < 12; i++) {
+  const t = i / 12;
+  vox(Math.floor(2 + t * (TW * 0.28)), Math.floor(3 + t * (LEG_H - 1)), 1, COL.STEEL_D);
+  vox(Math.floor(TW * 0.3 - t * (TW * 0.28 - 2)), Math.floor(3 + t * (LEG_H - 1)), 1, COL.STEEL_D);
+  vox(Math.floor(TW * 0.72 + t * (TW * 0.26)), Math.floor(3 + t * (LEG_H - 1)), 1, COL.STEEL_D);
+  vox(Math.floor(TW - 2 - t * (TW * 0.26)), Math.floor(3 + t * (LEG_H - 1)), 1, COL.STEEL_D);
+}
+
+// ====== BASIN ======
+for (let x = -1; x <= TW; x++)
+  for (let z = -1; z <= TD; z++) { vox(x, LEG_H, z, COL.BASIN); vox(x, LEG_H + 1, z, COL.BASIN_D); }
+for (let x = -1; x <= TW; x++) { vox(x, LEG_H + 2, -1, COL.BASIN); vox(x, LEG_H + 2, TD, COL.BASIN); }
+for (let z = -1; z <= TD; z++) { vox(-1, LEG_H + 2, z, COL.BASIN); vox(TW, LEG_H + 2, z, COL.BASIN); }
+for (let x = 1; x < TW - 1; x++)
+  for (let z = 1; z < TD - 1; z++)
+    vox(x, LEG_H + 2, z, (x + z) % 3 !== 0 ? COL.WATER : COL.WATER_L);
+
+// ====== TOWER BODY ======
+// Front louvers (z=0), partial cut-away right side
+for (let x = 0; x <= TW; x++)
+  for (let y = bodyY0; y < bodyY1; y++) {
+    if (x < TW * 0.6) {
+      if (y % 3 === 0) vox(x, y, 0, COL.LOUVER);
+      else if (y % 3 === 1) vox(x, y, 0, COL.LOUVER_D);
+    }
+    if (x % 12 === 0 || x === TW) vox(x, y, 0, COL.BODY_DD);
+  }
+for (let x = 0; x <= TW; x++) { vox(x, bodyY0, 0, COL.BODY_DD); vox(x, bodyY0 + 1, 0, COL.BODY_DD); vox(x, bodyY1 - 1, 0, COL.BODY_D); vox(x, bodyY1, 0, COL.BODY_D); }
+
+// Back louvers (z=TD)
+for (let x = 0; x <= TW; x++)
+  for (let y = bodyY0; y < bodyY1; y++) {
+    if (y % 3 === 0) vox(x, y, TD, COL.LOUVER);
+    else if (y % 3 === 1) vox(x, y, TD, COL.LOUVER_D);
+    if (x % 12 === 0 || x === TW) vox(x, y, TD, COL.BODY_DD);
+  }
+for (let x = 0; x <= TW; x++) { vox(x, bodyY0, TD, COL.BODY_DD); vox(x, bodyY0 + 1, TD, COL.BODY_DD); vox(x, bodyY1 - 1, TD, COL.BODY_D); vox(x, bodyY1, TD, COL.BODY_D); }
+
+// Left end wall (solid)
+for (let y = bodyY0; y <= bodyY1; y++)
+  for (let z = 0; z <= TD; z++) vox(0, y, z, COL.BODY);
+// Right end wall (partial)
+for (let y = bodyY0; y <= bodyY1; y++)
+  for (let z = 0; z <= TD; z++)
+    if (z <= TD * 0.35 || y <= bodyY0 + 2 || y >= bodyY1 - 1) vox(TW, y, z, COL.BODY);
+
+// Center partition
+for (let y = bodyY0; y <= bodyY1; y++)
+  for (let z = 2; z < TD - 2; z++) vox(Math.floor(TW / 2), y, z, COL.BODY_D);
+
+// ====== FILL MEDIA ======
+function buildFill(x0, x1) {
+  for (let x = x0; x < x1; x++)
+    for (let y = bodyY0 + 3; y < bodyY1 - 4; y++)
+      for (let z = 4; z < TD - 4; z++) {
+        const l = (x - x0) % 4, w = (y + z) % 2 === 0;
+        if (l === 0) vox(x, y, z, COL.FILL);
+        else if (l === 2 && w) vox(x, y, z, COL.FILL_H);
+        else if (l === 1 && (y + z) % 3 === 0) vox(x, y, z, COL.FILL_L);
+      }
+}
+buildFill(4, Math.floor(TW / 2) - 2);
+buildFill(Math.floor(TW / 2) + 3, TW - 3);
+
+// ====== WATER DISTRIBUTION ======
+for (let x = 3; x < TW - 3; x++) {
+  vox(x, bodyY1 - 2, Math.floor(TD / 2), COL.PIPE);
+  vox(x, bodyY1 - 2, Math.floor(TD / 2) - 1, COL.PIPE_D);
+  vox(x, bodyY1 - 2, Math.floor(TD / 2) + 1, COL.PIPE_D);
+}
+for (let x = 5; x < TW - 4; x += 3)
+  if (Math.abs(x - TW / 2) > 3)
+    for (let z = 6; z < TD - 6; z += 4) { vox(x, bodyY1 - 2, z, COL.PIPE_D); vox(x, bodyY1 - 3, z, COL.COPPER); }
+
+// ====== ROOF ======
+for (let x = -1; x <= TW + 1; x++)
+  for (let z = -1; z <= TD + 1; z++) {
+    vox(x, DECK_Y + 1, z, COL.BODY_D);
+    if (x === -1 || x === TW + 1 || z === -1 || z === TD + 1) vox(x, DECK_Y + 2, z, COL.BODY_DD);
+  }
+
+// ====== 4 FAN HOUSINGS — VOXEL BASE (replaced by CylinderGeometry below) ======
+const fanCenters = [
+  [Math.floor(TW * 0.25), Math.floor(TD * 0.3)],
+  [Math.floor(TW * 0.25), Math.floor(TD * 0.7)],
+  [Math.floor(TW * 0.75), Math.floor(TD * 0.3)],
+  [Math.floor(TW * 0.75), Math.floor(TD * 0.7)],
+];
+const FR = 6;
+fanCenters.forEach(([fcx, fcz]) => {
+  // Voxel housing base (rim/guard only — replaced by cylinders below)
+  for (let x = fcx - FR - 1; x <= fcx + FR + 1; x++)
+    for (let z = fcz - FR - 1; z <= fcz + FR + 1; z++) {
+      const dx = x - fcx, dz = z - fcz, d2 = dx * dx + dz * dz;
+      if (d2 <= (FR + 1) * (FR + 1) && d2 >= FR * FR)
+        for (let dy = 2; dy <= 5; dy++) vox(x, DECK_Y + dy, z, dy < 5 ? COL.HOUSING : COL.HOUSING_D);
+      if (d2 <= FR * FR) {
+        const ang = Math.atan2(dz, dx), ri = Math.floor(((ang + Math.PI) / (Math.PI * 2)) * 12);
+        if (ri % 3 === 0 || Math.abs(Math.sqrt(d2) - FR * 0.5) < 1) vox(x, DECK_Y + 6, z, COL.RAIL);
+      }
+    }
+});
+
+// ====== GUARD RAILS ======
+const ry = DECK_Y + 2, rH = 6;
+for (let x = -2; x <= TW + 2; x += 3) { for (let dy = 0; dy < rH; dy++) { vox(x, ry + dy, -2, COL.RAIL); vox(x, ry + dy, TD + 2, COL.RAIL); } }
+for (let z = -2; z <= TD + 2; z += 3) { for (let dy = 0; dy < rH; dy++) { vox(-2, ry + dy, z, COL.RAIL); vox(TW + 2, ry + dy, z, COL.RAIL); } }
+for (let x = -2; x <= TW + 2; x++) { vox(x, ry + rH - 1, -2, COL.RAIL); vox(x, ry + rH - 1, TD + 2, COL.RAIL); vox(x, ry + 3, -2, COL.RAIL); vox(x, ry + 3, TD + 2, COL.RAIL); vox(x, ry, -2, COL.BODY_DD); vox(x, ry, TD + 2, COL.BODY_DD); }
+for (let z = -2; z <= TD + 2; z++) { vox(-2, ry + rH - 1, z, COL.RAIL); vox(TW + 2, ry + rH - 1, z, COL.RAIL); vox(-2, ry + 3, z, COL.RAIL); vox(TW + 2, ry + 3, z, COL.RAIL); vox(-2, ry, z, COL.BODY_DD); vox(TW + 2, ry, z, COL.BODY_DD); }
+
+// ====== PIPING ======
+const PX = TW + 4, PX2 = TW + 5;
+// Inlet riser
+for (let y = 4; y <= DECK_Y + 2; y++) { vox(PX, y, Math.floor(TD * 0.35), COL.PIPE); vox(PX2, y, Math.floor(TD * 0.35), COL.PIPE); vox(PX, y, Math.floor(TD * 0.35) + 1, COL.PIPE); vox(PX2, y, Math.floor(TD * 0.35) + 1, COL.PIPE); }
+for (let x = TW; x <= PX2; x++) { vox(x, DECK_Y + 1, Math.floor(TD * 0.35), COL.PIPE); vox(x, DECK_Y + 1, Math.floor(TD * 0.35) + 1, COL.PIPE); vox(x, DECK_Y, Math.floor(TD * 0.35), COL.PIPE); vox(x, DECK_Y, Math.floor(TD * 0.35) + 1, COL.PIPE_D); }
+for (let y = 8; y < DECK_Y; y += 7) { vox(TW + 1, y, Math.floor(TD * 0.35), COL.STEEL_D); vox(TW + 2, y, Math.floor(TD * 0.35), COL.STEEL_D); vox(TW + 3, y, Math.floor(TD * 0.35), COL.STEEL_D); }
+// Inlet valve
+const vY = Math.floor(LEG_H + BODY_H * 0.6);
+vox(PX - 1, vY, Math.floor(TD * 0.35), COL.VALVE); vox(PX - 1, vY + 1, Math.floor(TD * 0.35), COL.VALVE); vox(PX - 1, vY + 2, Math.floor(TD * 0.35), COL.VALVE); vox(PX - 1, vY + 1, Math.floor(TD * 0.35) - 1, COL.VALVE);
+// Secondary riser
+for (let y = 4; y <= DECK_Y; y++) { vox(PX, y, Math.floor(TD * 0.65), COL.PIPE); vox(PX2, y, Math.floor(TD * 0.65), COL.PIPE); }
+for (let x = TW; x <= PX2; x++) vox(x, DECK_Y, Math.floor(TD * 0.65), COL.PIPE);
+for (let y = 8; y < DECK_Y; y += 7) { vox(TW + 1, y, Math.floor(TD * 0.65), COL.STEEL_D); vox(TW + 2, y, Math.floor(TD * 0.65), COL.STEEL_D); vox(TW + 3, y, Math.floor(TD * 0.65), COL.STEEL_D); }
+// Outlet
+const outZ = Math.floor(TD * 0.5);
+for (let x = TW; x <= PX2 + 3; x++) { vox(x, LEG_H + 1, outZ, COL.PIPE); vox(x, LEG_H + 1, outZ + 1, COL.PIPE); vox(x, LEG_H, outZ, COL.PIPE_D); vox(x, LEG_H, outZ + 1, COL.PIPE_D); }
+for (let y = 3; y <= LEG_H + 1; y++) { vox(PX2 + 3, y, outZ, COL.PIPE); vox(PX2 + 3, y, outZ + 1, COL.PIPE); }
+for (let x = PX2 + 3; x <= PX2 + 8; x++) { vox(x, 3, outZ, COL.PIPE); vox(x, 3, outZ + 1, COL.PIPE); }
+vox(TW + 2, LEG_H + 2, outZ - 1, COL.VALVE); vox(TW + 3, LEG_H + 2, outZ - 1, COL.VALVE); vox(TW + 2, LEG_H + 3, outZ - 1, COL.VALVE);
+// Drain
+vox(Math.floor(TW * 0.3), LEG_H - 1, TD + 1, COL.PIPE_D); vox(Math.floor(TW * 0.3), LEG_H - 1, TD + 2, COL.PIPE_D); vox(Math.floor(TW * 0.3), LEG_H, TD + 2, COL.VALVE);
+
+// ====== LADDER ======
+const ladZ = Math.floor(TD * 0.5);
+for (let y = 2; y <= DECK_Y + rH + 1; y++) { vox(-4, y, ladZ - 1, COL.LADDER); vox(-4, y, ladZ + 1, COL.LADDER); }
+for (let y = 4; y <= DECK_Y + rH; y += 2) vox(-4, y, ladZ, COL.LADDER);
+for (let y = bodyY0; y <= DECK_Y + 2; y += 3)
+  for (let ang = 0; ang < 8; ang++) { const a = (ang / 8) * Math.PI - Math.PI / 2; vox(-4 + Math.round(Math.cos(a) * 2.5), y, ladZ + Math.round(Math.sin(a) * 2.5), COL.LADDER); }
+for (let x = -5; x <= -2; x++) for (let z = ladZ - 2; z <= ladZ + 2; z++) vox(x, DECK_Y + 1, z, COL.STEEL);
+
+// ====== MOTOR ======
+const mX = TW + 1, mY = bodyY0 + 3, mZ = Math.floor(TD * 0.15);
+for (let x = mX; x < mX + 4; x++) for (let y = mY; y < mY + 4; y++) for (let z = mZ; z < mZ + 3; z++)
+  vox(x, y, z, (x === mX || x === mX + 3 || y === mY || y === mY + 3 || z === mZ || z === mZ + 2) ? COL.MOTOR : COL.MOTOR_D);
+vox(mX + 2, mY + 2, mZ - 1, COL.STEEL_D); vox(mX + 2, mY + 2, mZ - 2, COL.STEEL_D);
+for (let z = mZ - 2; z <= mZ; z++) vox(TW, mY, z, COL.STEEL_D);
+
+// ====== ELECTRICAL PANEL ======
+const epX = TW + 1, epY = bodyY0 + 10, epZ = Math.floor(TD * 0.8);
+for (let y = epY; y < epY + 7; y++) for (let z = epZ; z < epZ + 5; z++) {
+  vox(epX, y, z, COL.ELEC);
+  if (y === epY || y === epY + 6 || z === epZ || z === epZ + 4) vox(epX, y, z, COL.ELEC_D);
+}
+vox(epX, epY + 2, epZ + 1, COL.STEEL); vox(epX, epY + 2, epZ + 2, COL.STEEL); vox(epX, epY + 2, epZ + 3, COL.STEEL);
+vox(epX, epY + 4, epZ + 2, COL.VALVE); vox(epX, epY + 5, epZ + 2, 0x00ff66);
+for (let y = epY + 7; y < DECK_Y; y++) vox(epX, y, epZ + 2, COL.STEEL_D);
+// Make-up water valve
+vox(Math.floor(TW * 0.7), LEG_H + 3, 3, COL.COPPER); vox(Math.floor(TW * 0.7) + 1, LEG_H + 3, 3, COL.COPPER); vox(Math.floor(TW * 0.7) + 2, LEG_H + 3, 3, COL.VALVE);
+
+// ====== DRIFT ELIMINATORS — improved wave-form geometry ======
+for (let x = 2; x < TW - 2; x++)
+  for (let z = 3; z < TD - 3; z++)
+    if (x !== Math.floor(TW / 2)) {
+      if ((x + z) % 2 === 0) vox(x, bodyY1 - 3, z, COL.FILL);
+      vox(x, bodyY1 - 4, z, COL.BODY_DD);
+    }
+// Wave-form eliminator blades (displaced rows)
+for (let x = 4; x < TW - 4; x++)
+  for (let z = 5; z < TD - 5; z++)
+    if (x !== Math.floor(TW / 2)) {
+      const wave = Math.sin((x / TW) * Math.PI * 3) * 0.5;
+      if (Math.abs(wave) < 0.6 && (x + z) % 3 === 0) vox(x, bodyY1 - 3, z, COL.FILL_H);
+    }
+
+// ====== INSTANCED MESHES (PBR via COL_MAT) ======
+const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+for (const k in voxData) {
+  const { color, positions } = voxData[k];
+  const matKey = COL_MAT[color];
+  let mat;
+  if (SHELL_MATS[color]) {
+    mat = TOWER_MATS.M07;
+  } else if (matKey) {
+    mat = TOWER_MATS[matKey];
+  } else {
+    // Fallback: infer from color family
+    mat = new THREE.MeshStandardMaterial({ color, roughness: 0.48, metalness: 0.58 });
+  }
+  const isShell = SHELL_MATS[color];
+  const mesh = new THREE.InstancedMesh(cubeGeo, mat, positions.length);
+  mesh.castShadow = !isShell; mesh.receiveShadow = true;
+  const m = new THREE.Matrix4();
+  positions.forEach((p, i) => { m.setPosition(p[0] + 0.5, p[1] + 0.5, p[2] + 0.5); mesh.setMatrixAt(i, m); });
+  mesh.instanceMatrix.needsUpdate = true;
+  scene.add(mesh);
+}
+
+// ====== SMOOTH GEOMETRY: FAN HOUSING CYLINDERS ======
+// Replace voxel fan housing with CylinderGeometry rings
+const fanRingGeo = new THREE.CylinderGeometry(FR + 0.8, FR + 0.8, 1, 32);
+const fanRingInnerGeo = new THREE.CylinderGeometry(FR - 0.5, FR - 0.5, 1, 32);
+const boltGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.4, 8);
+const couplingGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
+
+fanCenters.forEach(([fcx, fcz]) => {
+  // 3 stacked housing rings
+  for (let layer = 0; layer < 3; layer++) {
+    const y = DECK_Y + 3 + layer;
+    const ring = new THREE.Mesh(fanRingGeo, layer < 2 ? TOWER_MATS.M09 : TOWER_MATS.M13);
+    ring.position.set(fcx + 0.5, y + 0.5, fcz + 0.5);
+    ring.castShadow = true; ring.receiveShadow = true;
+    scene.add(ring);
+  }
+  // Guard mesh top
+  const guard = new THREE.Mesh(fanRingInnerGeo, TOWER_MATS.M15);
+  guard.position.set(fcx + 0.5, DECK_Y + 7 + 0.5, fcz + 0.5);
+  guard.castShadow = true;
+  scene.add(guard);
+  // Bolt ring on housing perimeter (8 bolts)
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const bx = fcx + 0.5 + Math.cos(a) * (FR + 0.8);
+    const bz = fcz + 0.5 + Math.sin(a) * (FR + 0.8);
+    const bolt = new THREE.Mesh(boltGeo, TOWER_MATS.M10);
+    bolt.position.set(bx, DECK_Y + 4, bz);
+    bolt.castShadow = true;
+    scene.add(bolt);
+  }
+});
+
+// ====== SMOOTH GEOMETRY: BOLT RINGS ON BASIN RIM ======
+const basinBoltGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.4, 8);
+// Front basin rim bolts
+for (let i = 0; i < 8; i++) {
+  const a = (i / 8) * Math.PI * 2;
+  const bx = Math.floor(TW / 2) + Math.round(Math.cos(a) * (TW / 2 - 1));
+  const bolt = new THREE.Mesh(basinBoltGeo, TOWER_MATS.M10);
+  bolt.position.set(bx + 0.5, LEG_H + 2.5, -0.5);
+  scene.add(bolt);
+}
+// Back basin rim bolts
+for (let i = 0; i < 8; i++) {
+  const a = (i / 8) * Math.PI * 2;
+  const bx = Math.floor(TW / 2) + Math.round(Math.cos(a) * (TW / 2 - 1));
+  const bolt = new THREE.Mesh(basinBoltGeo, TOWER_MATS.M10);
+  bolt.position.set(bx + 0.5, LEG_H + 2.5, TD + 0.5);
+  scene.add(bolt);
+}
+
+// ====== SMOOTH GEOMETRY: PIPE COUPLINGS ======
+// Riser couplings at beam crossings
+const couplingY1 = LEG_H + BASIN_H;
+const couplingY2 = Math.floor(LEG_H * 0.5) + 2;
+const couplingPositions = [
+  [1, couplingY1, 1], [TW - 2, couplingY1, 1], [Math.floor(TW / 2), couplingY1, 1],
+  [1, couplingY2, 1], [TW - 2, couplingY2, 1], [Math.floor(TW / 2), couplingY2, 1],
+];
+couplingPositions.forEach(([cx, cy, cz]) => {
+  const c = new THREE.Mesh(couplingGeo, TOWER_MATS.M12);
+  c.position.set(cx + 0.5, cy + 0.5, cz + 0.5);
+  c.castShadow = true;
+  scene.add(c);
+});
+
+// ====== SMOOTH GEOMETRY: PUMP VOLUTE (TorusGeometry) ======
+const pumpGroup = new THREE.Group();
+pumpGroup.position.set(PX2 + 5, 4.5, outZ + 0.5);
+
+// TorusGeometry volute
+const voluteGeo = new THREE.TorusGeometry(3, 0.6, 12, 24);
+const volute = new THREE.Mesh(voluteGeo, TOWER_MATS.M08);
+volute.castShadow = true;
+pumpGroup.add(volute);
+
+// Impeller blades
+const pumpImpMat = TOWER_MATS.M08.clone();
+for (let i = 0; i < 12; i++) {
+  const a = (i / 12) * Math.PI * 2;
+  const c = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), pumpImpMat);
+  c.position.set(Math.cos(a) * 2, Math.sin(a) * 2, 0);
+  c.castShadow = true;
+  pumpGroup.add(c);
+}
+
+// Pump motor body
+const pMotor = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.5, 1.5, 3.5, 16),
+  TOWER_MATS.M13
+);
+pMotor.position.z = 4; pMotor.castShadow = true;
+pumpGroup.add(pMotor);
+
+// Pump coupling shaft
+const shaftGeo = new THREE.CylinderGeometry(0.3, 0.3, 1.5, 12);
+const shaft = new THREE.Mesh(shaftGeo, TOWER_MATS.M09);
+shaft.position.z = 1.8;
+pumpGroup.add(shaft);
+
+scene.add(pumpGroup);
+
+// ====== 4 ANIMATED AXIAL FANS ======
+const fanGroups = [], fanBladeMats = [];
+function makeAxialFan(cx, cz) {
+  const g = new THREE.Group();
+  g.position.set(cx + 0.5, DECK_Y + 4.2, cz + 0.5);
+  const bladeMat = TOWER_MATS.M04.clone();
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    for (let rr = 1; rr <= 5; rr++) {
+      const c = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.4, rr > 3 ? 1.6 : 1.2), bladeMat);
+      c.position.set(Math.cos(a) * rr, 0, Math.sin(a) * rr);
+      c.rotation.y = a + 0.3;
+      c.castShadow = true;
+      g.add(c);
+    }
+  }
+  g.add(new THREE.Mesh(
+    new THREE.BoxGeometry(2.2, 1.4, 2.2),
+    new THREE.MeshStandardMaterial({ color: 0x55555c, metalness: 0.85, roughness: 0.25 })
+  ));
+  const motor = new THREE.Mesh(
+    new THREE.BoxGeometry(1.4, 2.0, 1.4),
+    new THREE.MeshStandardMaterial({ color: 0x35353a, metalness: 0.7, roughness: 0.35 })
+  );
+  motor.position.y = -1.5; g.add(motor);
+  scene.add(g); fanGroups.push(g); fanBladeMats.push(bladeMat);
+}
+fanCenters.forEach(([cx, cz]) => makeAxialFan(cx, cz));
+
+// ====== FAN LEDS ======
+const fanLeds = [];
+fanCenters.forEach(([cx, cz]) => {
+  const mat = TOWER_MATS.M09.clone();
+  mat.color = new THREE.Color(0xff2233);
+  mat.emissive = new THREE.Color(0xff2233);
+  mat.emissiveIntensity = 1.4;
+  const led = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat);
+  led.position.set(cx + 0.5, DECK_Y + 7.5, cz + 0.5);
+  scene.add(led);
+  const pl = new THREE.PointLight(0xff2233, 1.0, 14);
+  pl.position.copy(led.position);
+  scene.add(pl);
+  fanLeds.push({ mat, light: pl });
+});
+
+// ====== PUMP STATE LED ======
+const pumpLedMat = TOWER_MATS.M09.clone();
+pumpLedMat.color = new THREE.Color(0xff2233);
+pumpLedMat.emissive = new THREE.Color(0xff2233);
+pumpLedMat.emissiveIntensity = 1.4;
+const pumpLedMesh = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), pumpLedMat);
+pumpLedMesh.position.set(PX2 + 5, 8, outZ + 0.5); scene.add(pumpLedMesh);
+const pumpPL = new THREE.PointLight(0xff2233, 0.8, 10);
+pumpPL.position.copy(pumpLedMesh.position); scene.add(pumpPL);
+
+// ====== STATE MACHINE ======
+const COLOR_OFF = new THREE.Color(0xff2233), COLOR_ON = new THREE.Color(0x00ff66);
+const state = { f1: false, f2: false, f3: false, f4: false, pump: false };
+
+// Fan state array for per-cell particle coupling
+function getFanState() { return [state.f1, state.f2, state.f3, state.f4]; }
+
+function applyState() {
+  const fS = getFanState();
+  fS.forEach((on, i) => {
+    fanBladeMats[i].color.copy(on ? COLOR_ON : COLOR_OFF);
+    fanBladeMats[i].emissive.copy(on ? COLOR_ON : COLOR_OFF);
+    fanBladeMats[i].emissiveIntensity = on ? 0.6 : 0.4;
+    fanLeds[i].mat.color.copy(on ? COLOR_ON : COLOR_OFF);
+    fanLeds[i].mat.emissive.copy(on ? COLOR_ON : COLOR_OFF);
+    fanLeds[i].mat.emissiveIntensity = on ? 1.7 : 1.2;
+    fanLeds[i].light.color.copy(on ? COLOR_ON : COLOR_OFF);
+    fanLeds[i].light.intensity = on ? 1.6 : 0.8;
+  });
+  pumpImpMat.color.copy(state.pump ? COLOR_ON : COLOR_OFF);
+  pumpImpMat.emissive.copy(state.pump ? COLOR_ON : COLOR_OFF);
+  pumpImpMat.emissiveIntensity = state.pump ? 0.6 : 0.4;
+  pumpLedMat.color.copy(state.pump ? COLOR_ON : COLOR_OFF);
+  pumpLedMat.emissive.copy(state.pump ? COLOR_ON : COLOR_OFF);
+  pumpLedMat.emissiveIntensity = state.pump ? 1.7 : 1.2;
+  pumpPL.color.copy(state.pump ? COLOR_ON : COLOR_OFF);
+  pumpPL.intensity = state.pump ? 1.4 : 0.7;
+}
+applyState();
+
+// ====== UI ======
+function bind(id, key) {
+  const btn = document.getElementById(id);
+  btn.onclick = () => { state[key] = !state[key]; btn.className = state[key] ? 'on' : 'off'; btn.textContent = state[key] ? 'ON' : 'OFF'; applyState(); };
+}
+bind('bF1', 'f1'); bind('bF2', 'f2'); bind('bF3', 'f3'); bind('bF4', 'f4'); bind('bPump', 'pump');
+document.getElementById('bRot').onclick = function () { controls.autoRotate = !controls.autoRotate; this.className = controls.autoRotate ? 'on' : 'off'; this.textContent = controls.autoRotate ? 'ON' : 'OFF'; };
+
+// ====== PARTICLES ======
+const pGeo = new THREE.BoxGeometry(0.55, 0.55, 0.55);
+const hotWaterP = [], coldWaterP = [];
+const cellCenters = [
+  [Math.floor(TW * 0.25), Math.floor(TD * 0.5)],
+  [Math.floor(TW * 0.75), Math.floor(TD * 0.5)],
+];
+
+// Hot water: 80 particles split across 2 cell groups (cell 0 = fans 1&2, cell 1 = fans 3&4)
+for (let i = 0; i < 80; i++) {
+  const p = new THREE.Mesh(pGeo, new THREE.MeshBasicMaterial({ color: 0xff5533, transparent: true, opacity: 0 }));
+  p.userData = { t: Math.random(), seed: Math.random() * 10, cell: i < 40 ? 0 : 1 };
+  scene.add(p); hotWaterP.push(p);
+}
+// Cold water: 30 particles coupled to pump state
+for (let i = 0; i < 30; i++) {
+  const p = new THREE.Mesh(pGeo, new THREE.MeshBasicMaterial({ color: 0x44bbff, transparent: true, opacity: 0 }));
+  p.userData = { t: Math.random(), seed: Math.random() * 10 };
+  scene.add(p); coldWaterP.push(p);
+}
+// Steam per fan cell (4 cells × 25 particles)
+const steamArrays = [[], [], [], []];
+for (let fi = 0; fi < 4; fi++)
+  for (let i = 0; i < 25; i++) {
+    const p = new THREE.Mesh(pGeo, new THREE.MeshBasicMaterial({ color: 0xddeeff, transparent: true, opacity: 0 }));
+    p.userData = { t: Math.random(), seed: Math.random() * 10 };
+    scene.add(p); steamArrays[fi].push(p);
+  }
+
+// ====== LIFECYCLE: FULL DISPOSAL ======
+let resizeObs = null;
+let disposed = false;
+let rafId = 0;
+
+function destroy() {
+  disposed = true;
+  cancelAnimationFrame(rafId);
+  // Dispose instanced meshes (geometries + materials via traverse)
+  scene.traverse(obj => {
+    if (obj.geometry && obj.geometry !== cubeGeo) obj.geometry.dispose();
+    if (obj.material) {
+      if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+      else if (obj.material.dispose) obj.material.dispose();
+    }
+  });
+  // Dispose standalone geometries
+  [cubeGeo, fanRingGeo, fanRingInnerGeo, boltGeo, basinBoltGeo, couplingGeo,
+   voluteGeo, pGeo].forEach(g => g.dispose());
+  // Dispose PMREMGenerator
+  pmrem.dispose();
+  // Remove resize listener (legacy)
+  window.removeEventListener('resize', resizeHandlerLegacy);
+  // Disconnect ResizeObserver
+  if (resizeObs) resizeObs.disconnect();
+  // Dispose renderer
+  renderer.dispose();
+  if (renderer.domElement.parentNode) {
+    renderer.domElement.parentNode.removeChild(renderer.domElement);
+  }
+}
+
+// Legacy resize handler (kept for safety, superseded by ResizeObserver)
+function resizeHandlerLegacy() {
+  // Handled by ResizeObserver below
+}
+
+// ====== RESIZE: ResizeObserver + Container Div ======
+function resizeHandler() {
+  const w = container.clientWidth || innerWidth;
+  const h = container.clientHeight || innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+const container = document.createElement('div');
+container.style.cssText = 'position:fixed;inset:0;';
+document.body.insertBefore(container, document.body.firstChild);
+container.appendChild(renderer.domElement);
+resizeObs = new ResizeObserver(resizeHandler);
+resizeObs.observe(container);
+
+// ====== ANIMATE ======
+const clock = new THREE.Clock();
+function animate() {
+  if (disposed) return;
+  rafId = requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+  const fS = getFanState();
+
+  // Fan rotation — per-cell state
+  fanGroups.forEach((g, i) => { if (fS[i]) g.rotation.y += dt * (7.5 + i * 0.3); });
+
+  // Pump — coupled to pump state
+  if (state.pump) { pumpGroup.rotation.z += dt * 11; pumpGroup.position.y = 4.5 + Math.sin(t * 28) * 0.05; }
+  else pumpGroup.position.y = 4.5;
+
+  // Hot water droplets — coupled to CELL fan state (cell 0 = f1+f2, cell 1 = f3+f4)
+  hotWaterP.forEach(p => {
+    const cellIdx = p.userData.cell;
+    const cellOn = cellIdx === 0 ? (state.f1 || state.f2) : (state.f3 || state.f4);
+    if (!cellOn) { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.2; if (p.userData.t > 1) p.userData.t = 0;
+    const tt = p.userData.t, s = p.userData.seed, cc = cellCenters[cellIdx];
+    p.position.x = cc[0] + (s - 5) * 2.2;
+    p.position.y = bodyY1 - 3 - tt * (BODY_H - 6);
+    p.position.z = cc[1] + Math.sin(s * 4 + tt * 6) * 8;
+    p.material.opacity = Math.sin(tt * Math.PI) * 0.82;
+  });
+
+  // Cold water — coupled to pump state
+  coldWaterP.forEach(p => {
+    if (!state.pump) { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.13; if (p.userData.t > 1) p.userData.t = 0;
+    const tt = p.userData.t, s = p.userData.seed;
+    p.position.x = 4 + tt * (TW + 10);
+    p.position.y = LEG_H + 2.5 + Math.sin(tt * 9 + s) * 0.2;
+    p.position.z = outZ + (s - 5) * 0.4;
+    p.material.opacity = Math.sin(tt * Math.PI) * 0.7;
+  });
+
+  // Steam — opacity coupled to per-fan-cell state
+  steamArrays.forEach((arr, fi) => {
+    const on = fS[fi], fc = fanCenters[fi];
+    arr.forEach(p => {
+      if (!on) { p.material.opacity = 0; return; }
+      p.userData.t += dt * 0.1; if (p.userData.t > 1) p.userData.t = 0;
+      const tt = p.userData.t, s = p.userData.seed;
+      p.position.x = fc[0] + Math.sin(s * 2 + tt * 2.5) * 4.5;
+      p.position.y = DECK_Y + 7 + tt * 22;
+      p.position.z = fc[1] + Math.cos(s * 3 + tt * 2) * 4.5;
+      p.material.opacity = (tt < 0.2 ? tt / 0.2 : (1 - tt) / 0.8) * 0.45;
+    });
+  });
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

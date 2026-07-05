@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>CHILLER ENFRIADO POR AIRE · Semi-Realista</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:10px; height:10px; display:inline-block; border-radius:2px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:240px; font-size:11px; backdrop-filter: blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:62px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel button.standby { color:#06080d; border-color:#3aa6ff; background:#3aa6ff; box-shadow:0 0 12px #3aa6ff55; }
+  #panel button.alarm   { color:#06080d; border-color:#ff2233; background:#ff2233; box-shadow:0 0 12px #ff223388; animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:0.55; } }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>CHILLER ENFRIADO POR AIRE</b><br>
+  <span>Scroll · Serpentín en V · Estructura abierta · Semi-Realista</span>
+</div>
+<div id="legend">
+  <div><i style="background:#55ccff"></i> Aire condensador</div>
+  <div><i style="background:#ffb347"></i> Refrigerante</div>
+  <div><i style="background:#2f6bc0"></i> Compresor scroll</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>VENTILADORES</label><button id="bFan" class="standby">STANDBY</button></div>
+  <div class="row"><label>COMPRESOR 1</label><button id="bC1" class="standby">STANDBY</button></div>
+  <div class="row"><label>COMPRESOR 2</label><button id="bC2" class="standby">STANDBY</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="off">OFF</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ============================================================
+// SCENE / RENDERER
+// ============================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 160, 400);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 900);
+camera.position.set(112, 64, 104);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(37, 18, 15);
+controls.autoRotate = false;            // arranca OFF: vista frontal 3/4 fija
+controls.autoRotateSpeed = 0.6;
+
+// ============================================================
+// LIGHTS
+// ============================================================
+scene.add(new THREE.AmbientLight(0xffffff, 0.24));
+const sun = new THREE.DirectionalLight(0xffffff, 1.55);
+sun.position.set(70, 130, 90);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left=-130; sc.right=130; sc.top=130; sc.bottom=-130; sc.near=1; sc.far=340;
+sun.shadow.bias = -0.0003;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.38);
+fill.position.set(-70, 50, -50);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.18);
+rim.position.set(0, 25, -90);
+scene.add(rim);
+
+// ============================================================
+// GROUND
+// ============================================================
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(700, 700),
+  new THREE.MeshStandardMaterial({ color:0x0a0e16, roughness:0.92, metalness:0.05 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(700, 116, 0x00d4aa, 0x142028);
+grid.material.opacity = 0.12;
+grid.material.transparent = true;
+grid.position.y = 0.01;
+scene.add(grid);
+
+// ============================================================
+// DIMENSIONS (world units) — proporciones tipo Trane RTAC/CGAM
+// ============================================================
+const NBAYS   = 5;
+const FAN_BAY = 15;
+const TOTAL   = NBAYS * FAN_BAY;   // 75
+const W       = 30;                // profundidad
+const BASE_Y  = 4;                 // skid
+const COMP_BASE = BASE_Y + 2;
+const COIL_RIDGE = 22;             // valle del V (centro de cada bahía)
+const COIL_TOP   = 34;             // pico del V (en los límites de bahía)
+const H_TOP      = 35;             // marco superior
+const FRONT = W;
+
+const fanCX = [];
+for (let i=0;i<NBAYS;i++) fanCX.push(Math.round(i*FAN_BAY + FAN_BAY/2));
+const fanCZ = W/2;
+const boundaries = [];
+for (let i=0;i<=NBAYS;i++) boundaries.push(i*FAN_BAY);
+
+const compCX = [6, 16, 26, 49, 59, 69];
+const compCZ = W - 8;                       // 22
+const compCircuit = ['c1','c1','c1','c2','c2','c2'];
+const CUTAWAY_IDX = -1;                       // sin cutaway: los 6 compresores van con domo sólido completo
+
+// ============================================================
+// MATERIALS (PBR palette)
+// ============================================================
+function finTexture(){
+  const c = document.createElement('canvas'); c.width = 96; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#c4c8cc'; g.fillRect(0,0,96,64);
+  g.strokeStyle = '#9398a0'; g.lineWidth = 1;
+  for (let x=0;x<96;x+=2){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,64); g.stroke(); }
+  g.strokeStyle = '#7d828a';
+  for (let x=0;x<96;x+=8){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,64); g.stroke(); }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4,2);
+  t.anisotropy = 8;
+  return t;
+}
+function nameplateTexture(){
+  const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#d8d8d2'; g.fillRect(0,0,256,128);
+  g.fillStyle = '#26282d';
+  g.fillRect(12,10,232,22);
+  g.fillStyle = '#d8d8d2'; g.font = 'bold 16px monospace';
+  g.fillText('AIR-COOLED CHILLER', 20, 27);
+  g.fillStyle = '#26282d';
+  for (let i=0;i<5;i++) g.fillRect(16, 44+i*15, 150+ (i*17)%70, 6);
+  g.strokeStyle = '#26282d'; g.lineWidth = 2; g.strokeRect(4,4,248,120);
+  return new THREE.CanvasTexture(c);
+}
+
+const M = {
+  galv:     new THREE.MeshStandardMaterial({ color:0xb9bdc6, roughness:0.45, metalness:0.82 }),
+  galvDark: new THREE.MeshStandardMaterial({ color:0x9296a0, roughness:0.52, metalness:0.78 }),
+  skid:     new THREE.MeshStandardMaterial({ color:0x8a8a90, roughness:0.68, metalness:0.55 }),
+  skidDark: new THREE.MeshStandardMaterial({ color:0x3a3a40, roughness:0.72, metalness:0.42 }),
+  coil:     new THREE.MeshStandardMaterial({ map:finTexture(), color:0xeef0f2, roughness:0.5, metalness:0.55 }),
+  coilFrame:new THREE.MeshStandardMaterial({ color:0x2a2c30, roughness:0.6, metalness:0.5 }),
+  copper:   new THREE.MeshStandardMaterial({ color:0xc0762e, roughness:0.32, metalness:0.92 }),
+  copperDk: new THREE.MeshStandardMaterial({ color:0x7a4a1f, roughness:0.45, metalness:0.85 }),
+  compBody: new THREE.MeshStandardMaterial({ color:0x303338, roughness:0.52, metalness:0.55 }),
+  compDark: new THREE.MeshStandardMaterial({ color:0x1d1f24, roughness:0.55, metalness:0.45 }),
+  compDome: new THREE.MeshPhysicalMaterial({ color:0x2f6bc0, roughness:0.28, metalness:0.45, clearcoat:0.6, clearcoatRoughness:0.3, emissive:0x2f6bc0, emissiveIntensity:0.0 }),
+  scrollAl: new THREE.MeshStandardMaterial({ color:0xb8bcc2, roughness:0.34, metalness:0.85, side:THREE.DoubleSide }),
+  panelBox: new THREE.MeshStandardMaterial({ color:0xe2e2dc, roughness:0.55, metalness:0.22 }),
+  panelDk:  new THREE.MeshStandardMaterial({ color:0xb6b6b0, roughness:0.5, metalness:0.3 }),
+  hmi:      new THREE.MeshStandardMaterial({ color:0x0a1018, roughness:0.2, metalness:0.4, emissive:0x06222a, emissiveIntensity:0.6 }),
+  plinth:   new THREE.MeshStandardMaterial({ color:0xcccfca, roughness:0.9, metalness:0.04 }),
+  spring:   new THREE.MeshStandardMaterial({ color:0x3a3d44, roughness:0.6, metalness:0.5 }),
+  insul:    new THREE.MeshStandardMaterial({ color:0x24272d, roughness:0.9, metalness:0.03 }),
+  water:    new THREE.MeshStandardMaterial({ color:0x2f7fb8, roughness:0.4, metalness:0.55 }),
+  tank:     new THREE.MeshStandardMaterial({ color:0x868c94, roughness:0.44, metalness:0.72 }),
+  warn:     new THREE.MeshStandardMaterial({ color:0xf2c200, roughness:0.6, metalness:0.1 }),
+  hose:     new THREE.MeshStandardMaterial({ color:0x6a6e74, roughness:0.6, metalness:0.4 }),
+  bolt:     new THREE.MeshStandardMaterial({ color:0x40444a, roughness:0.4, metalness:0.85 }),
+  glass:    new THREE.MeshPhysicalMaterial({ color:0x88ccee, roughness:0.05, metalness:0, transmission:0.9, transparent:true, opacity:0.5 }),
+};
+M.compDome.side = THREE.DoubleSide;   // el domo seccionado del cutaway debe mostrar su interior
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function box(w,h,d, mat, x,y,z){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.position.set(x,y,z); m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+function cyl(r1,r2,h, mat, x,y,z, seg=18){
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,seg), mat);
+  m.position.set(x,y,z); m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+// cilindro/tubo entre dos puntos 3D
+function tube(p0, p1, r, mat, seg=12){
+  const a = new THREE.Vector3(...p0), b = new THREE.Vector3(...p1);
+  const dir = new THREE.Vector3().subVectors(b,a); const len = dir.length();
+  if (len < 1e-3) return new THREE.Group();   // evita geometría degenerada / quaternion NaN
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,len,seg), mat);
+  m.position.copy(a).add(dir.clone().multiplyScalar(0.5));
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+// tubo siguiendo una polilínea (manifold de cobre)
+function pathTube(points, r, mat, seg=10){
+  const curve = new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)));
+  const g = new THREE.TubeGeometry(curve, Math.max(8, points.length*4), r, seg, false);
+  const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+
+// wrapper raíz
+const root = new THREE.Group();
+scene.add(root);
+
+// ============================================================
+// PLINTHS + SPRING ISOLATORS (apoyos del skid)
+// ============================================================
+boundaries.forEach(bx=>{
+  const px = Math.min(Math.max(bx, 2), TOTAL-2);
+  [2.5, W-2.5].forEach(pz=>{
+    root.add(box(4, BASE_Y-1, 4, M.plinth, px, (BASE_Y-1)/2, pz));
+    root.add(cyl(1.1,1.1,1.4, M.spring, px, BASE_Y-0.3, pz, 12));
+  });
+});
+
+// ============================================================
+// SKID / BASE PAN (channel steel)
+// ============================================================
+root.add(box(TOTAL+1, 1.2, W+1, M.skid, TOTAL/2, BASE_Y+0.6, W/2));
+[[-0.3,W/2,1,W+1],[TOTAL+0.3,W/2,1,W+1],[TOTAL/2,-0.3,TOTAL+1,1],[TOTAL/2,W+0.3,TOTAL+1,1]]
+  .forEach(([x,z,w,d])=> root.add(box(w,2.4,d, M.skidDark, x, BASE_Y+1.6, z)));
+for (let i=1;i<NBAYS;i++) root.add(box(0.8,1.0,W+1, M.skidDark, (TOTAL/NBAYS)*i, BASE_Y+0.4, W/2));
+
+// ============================================================
+// OPEN GALVANIZED STRUCTURAL FRAME
+// ============================================================
+function postTube(x,z){ root.add(box(1.4, H_TOP-BASE_Y, 1.4, M.galv, x, (H_TOP+BASE_Y)/2, z)); }
+boundaries.forEach(bx=>{
+  const x = Math.min(Math.max(bx,0.7), TOTAL-0.7);
+  postTube(x, 1); postTube(x, W-1);
+});
+// rieles perimetrales superior/inferior
+[BASE_Y+0.7, H_TOP+0.7].forEach(yy=>{
+  root.add(box(TOTAL, 1.4, 1.4, M.galv, TOTAL/2, yy, 1));
+  root.add(box(TOTAL, 1.4, 1.4, M.galv, TOTAL/2, yy, W-1));
+  root.add(box(1.4, 1.4, W, M.galv, 0.7, yy, W/2));
+  root.add(box(1.4, 1.4, W, M.galv, TOTAL-0.7, yy, W/2));
+});
+// travesaños superiores en cada límite (cuelgan el deck)
+boundaries.forEach(bx=>{
+  const x = Math.min(Math.max(bx,0.7), TOTAL-0.7);
+  root.add(box(1.2, 1.2, W, M.galvDark, x, H_TOP+0.7, W/2));
+});
+// arriostres diagonales en los extremos
+[0.9, TOTAL-0.9].forEach(xc=>{
+  root.add(tube([xc,BASE_Y+1,2],[xc,H_TOP,W-2], 0.5, M.galvDark));
+  root.add(tube([xc,H_TOP,2],[xc,BASE_Y+1,W-2], 0.5, M.galvDark));
+});
+
+// ============================================================
+// V-COIL CONDENSADOR (fin-and-tube, zigzag) + U-bends de cobre
+// ============================================================
+const COIL_Z0 = 3.5, COIL_Z1 = W-3.5, COIL_DEPTH = (W-3.5)-3.5;
+function coilSlab(xA,yA,xB,yB){
+  const dx = xB-xA, dy = yB-yA;
+  const len = Math.hypot(dx,dy) + 1.0;
+  const ang = Math.atan2(dy,dx);
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(len, 1.8, COIL_DEPTH), M.coil);
+  slab.position.set((xA+xB)/2, (yA+yB)/2, (COIL_Z0+COIL_Z1)/2);
+  slab.rotation.z = ang;
+  slab.castShadow = slab.receiveShadow = true;
+  root.add(slab);
+  // marcos laterales (chapa) en los bordes de profundidad
+  [COIL_Z0, COIL_Z1].forEach(zz=>{
+    const fr = new THREE.Mesh(new THREE.BoxGeometry(len, 2.0, 0.5), M.coilFrame);
+    fr.position.set((xA+xB)/2, (yA+yB)/2, zz);
+    fr.rotation.z = ang; fr.castShadow = true; root.add(fr);
+  });
+}
+for (let b=0;b<NBAYS;b++){
+  const x0=b*FAN_BAY, xc=Math.round(x0+FAN_BAY/2), x1=x0+FAN_BAY;
+  coilSlab(x0, COIL_TOP, xc, COIL_RIDGE);   // baja hacia el valle
+  coilSlab(xc, COIL_RIDGE, x1, COIL_TOP);   // sube hacia el pico
+}
+// U-bends de cobre en los cabezales (caras extremas del bloque de serpentín)
+function uBendColumn(xFace){
+  for (let b=0;b<NBAYS;b++){
+    const x0=b*FAN_BAY, xc=x0+FAN_BAY/2, x1=x0+FAN_BAY;
+    // muestrea pares de filas a lo largo del perfil en V
+    const ys = [];
+    for (let y=COIL_RIDGE+1; y<COIL_TOP-1; y+=2.2) ys.push(y);
+    ys.forEach(y=>{
+      // posición x del perfil para esa altura (lado izquierdo del valle)
+      const f = (COIL_TOP - y)/(COIL_TOP-COIL_RIDGE);
+      const xl = x0 + (xc-x0)*f;
+      const xr = x1 - (x1-xc)*f;
+      [xl,xr].forEach(xx=>{
+        const t = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.28, 6, 10, Math.PI), M.copper);
+        t.position.set(xx, y, xFace);
+        t.rotation.y = Math.PI/2; t.rotation.z = Math.PI/2;
+        t.castShadow = true; root.add(t);
+      });
+    });
+  }
+}
+uBendColumn(COIL_Z0 - 0.6);
+uBendColumn(COIL_Z1 + 0.6);
+
+// ============================================================
+// MANIFOLD DE COBRE (zigzag prominente siguiendo el V)
+// ============================================================
+function coilTopY(x){
+  const b = Math.min(Math.floor(x / FAN_BAY), NBAYS-1);
+  const x0=b*FAN_BAY, xc=x0+FAN_BAY/2, x1=x0+FAN_BAY;
+  if (x<=xc){ const f=(x-x0)/(xc-x0); return COIL_TOP - f*(COIL_TOP-COIL_RIDGE); }
+  const f=(x-xc)/(x1-xc); return COIL_RIDGE + f*(COIL_TOP-COIL_RIDGE);
+}
+[4.5, 6.5].forEach(zz=>{
+  const pts = [];
+  for (let x=1;x<=TOTAL-1;x+=1.5) pts.push([x, coilTopY(x)+1.4, zz]);
+  root.add(pathTube(pts, 0.55, M.copper, 10));
+});
+// crossovers en cada pico (frente -> fondo)
+boundaries.forEach(bx=>{
+  const x = Math.min(Math.max(bx,1), TOTAL-1);
+  root.add(tube([x, COIL_TOP+1.4, 4.5],[x, COIL_TOP+1.4, W-5.5], 0.55, M.copper));
+});
+// bajantes distribuidores en cada valle (bajo los fans)
+fanCX.forEach(cx=>{
+  root.add(tube([cx, COIL_RIDGE+3, 5.5],[cx, COIL_RIDGE, 5.5], 0.45, M.copper));
+  root.add(tube([cx, COIL_RIDGE+3, 7.5],[cx, COIL_RIDGE, 7.5], 0.45, M.copper));
+});
+// header de succión común uniendo risers de compresores
+root.add(tube([compCX[0], COIL_RIDGE+1.2, compCZ],[compCX[compCX.length-1], COIL_RIDGE+1.2, compCZ], 0.7, M.copper));
+
+// ============================================================
+// TOP FAN DECK + COWLS + GUARDS + FANS AXIALES
+// ============================================================
+// deck plate con recortes circulares (anillos entre fans)
+function buildDeck(){
+  const shape = new THREE.Shape();
+  shape.moveTo(0,0); shape.lineTo(TOTAL,0); shape.lineTo(TOTAL,W); shape.lineTo(0,W); shape.lineTo(0,0);
+  fanCX.forEach(cx=>{
+    const hole = new THREE.Path();
+    hole.absarc(cx, fanCZ, 6.2, 0, Math.PI*2, true);
+    shape.holes.push(hole);
+  });
+  const geo = new THREE.ExtrudeGeometry(shape, { depth:0.6, bevelEnabled:false });
+  geo.rotateX(Math.PI/2);   // (x,y,z)->(x,-z,y): profundidad cae en +Z [0,W], huecos alineados con los fans
+  const deck = new THREE.Mesh(geo, M.galv);
+  deck.position.y = H_TOP+1.6;
+  deck.castShadow = deck.receiveShadow = true;
+  root.add(deck);
+}
+buildDeck();
+
+const fanGroups = [];
+const fanMats = [];
+
+// Aspa scimitar con twist aerodinámico — portada tal cual de trane-rtu-realistic
+function makeAeroBlade(){
+  const shape = new THREE.Shape();
+  shape.moveTo(0.5, -0.30);
+  shape.quadraticCurveTo(1.6, -0.75, 3.1, -0.55);     // leading edge sweeping back
+  shape.quadraticCurveTo(3.9, -0.35, 4.15, 0.05);     // tip curl-around
+  shape.quadraticCurveTo(4.25, 0.38, 3.85, 0.58);
+  shape.quadraticCurveTo(2.8, 0.88, 1.4, 0.55);       // trailing edge (swept)
+  shape.quadraticCurveTo(0.8, 0.35, 0.5, 0.20);
+  shape.closePath();
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.2, bevelEnabled: true, bevelSegments: 2,
+    bevelSize: 0.04, bevelThickness: 0.04, steps: 1
+  });
+  geo.translate(0, 0, -0.1);
+  const pos = geo.attributes.position;
+  for (let i=0;i<pos.count;i++){
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const tParam = Math.max(0, Math.min(1, (x - 0.5) / 3.7));
+    const twist = 0.70 - tParam * 0.48;
+    const cy = y * Math.cos(twist) - z * Math.sin(twist);
+    const cz = y * Math.sin(twist) + z * Math.cos(twist);
+    pos.setXYZ(i, x, cy, cz);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+const aeroBladeGeo = makeAeroBlade();
+const BLADE_SCALE = 1.45;   // escala para llenar el aro (r tip ~6.0 dentro del hueco 6.2)
+
+function buildFan(cx, cz){
+  // venturi cowl (campana) — Lathe
+  const prof = [];
+  for (let i=0;i<=8;i++){ const t=i/8; prof.push(new THREE.Vector2(6.2 + Math.pow(t,1.6)*1.6, t*2.0)); }
+  const cowlGeo = new THREE.LatheGeometry(prof, 28);
+  const cowl = new THREE.Mesh(cowlGeo, M.galvDark);
+  cowl.position.set(cx, H_TOP-0.4, cz); cowl.castShadow = true; root.add(cowl);  // garganta al ras del deck (top ~36.6)
+
+  // motor housing bajo el hub (oculto debajo del deck)
+  root.add(cyl(1.7,1.7,2.4, M.compDark, cx, H_TOP-1.5, cz, 16));
+
+  // grupo animado de aspas (scimitar Trane) — recesadas dentro de la garganta
+  const g = new THREE.Group();
+  g.position.set(cx, H_TOP-0.5, cz);
+  const bladeMat = new THREE.MeshStandardMaterial({
+    color:0x3aa6ff, roughness:0.4, metalness:0.65, side:THREE.DoubleSide,
+    emissive:0x3aa6ff, emissiveIntensity:0.45
+  });
+  // hub
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(1.4,1.6,1.4,18),
+    new THREE.MeshStandardMaterial({color:0x45454a, roughness:0.4, metalness:0.85}));
+  g.add(hub);
+  // 5 aspas scimitar compartiendo geometría
+  const BLADES = 5;
+  for (let i=0;i<BLADES;i++){
+    const a = (i/BLADES)*Math.PI*2;
+    const blade = new THREE.Mesh(aeroBladeGeo, bladeMat);
+    blade.rotation.y = a;
+    blade.scale.setScalar(BLADE_SCALE);
+    blade.castShadow = true;
+    g.add(blade);
+  }
+  root.add(g);
+  fanGroups.push(g); fanMats.push(bladeMat);
+
+  // guard (wire grille) — AL RAS de la carcasa (nivel del deck), con las aspas debajo
+  const gy = H_TOP+1.6;           // = 36.6, top del deck
+  const guardMat = M.bolt;
+  for (const r of [1.5, 3, 4.5, 6]){
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.09, 5, 28), guardMat);
+    ring.position.set(cx, gy, cz); ring.rotation.x = Math.PI/2; root.add(ring);
+  }
+  for (let i=0;i<8;i++){
+    const a=(i/8)*Math.PI*2;
+    root.add(tube([cx, gy, cz],[cx+Math.cos(a)*6.0, gy, cz+Math.sin(a)*6.0], 0.09, guardMat, 6));
+  }
+}
+fanCX.forEach(cx => buildFan(cx, fanCZ));
+
+// ============================================================
+// SCROLL INVOLUTE (para el compresor en cutaway)
+// ============================================================
+function buildScrollSet(group, yTop){
+  const mk = (phase)=>{
+    const pts = [];
+    const turns = 2.6;
+    for (let a=0; a<=turns*Math.PI*2; a+=0.16){
+      const r = 0.4 + 0.30*a/(Math.PI*2);
+      pts.push([Math.cos(a+phase)*r, yTop, Math.sin(a+phase)*r]);
+    }
+    const curve = new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p)));
+    const g = new THREE.TubeGeometry(curve, 140, 0.19, 6, false);
+    const m = new THREE.Mesh(g, M.scrollAl); m.castShadow = true; group.add(m);
+  };
+  mk(0); mk(Math.PI);
+  // disco base machined
+  group.add(cyl(2.1,2.1,0.4, M.scrollAl, 0, yTop-0.35, 0, 24));
+}
+
+// ============================================================
+// SCROLL COMPRESSORS — cuerpo + domo azul (shimmy + pulse)
+// ============================================================
+const compressors = [];
+function buildCompressor(cx, cz, idx){
+  const cutaway = (idx === CUTAWAY_IDX);
+  const g = new THREE.Group();
+  g.position.set(cx, 0, cz);
+
+  // base ring + grommets de montaje
+  g.add(cyl(3.0,3.0,0.7, M.compDark, 0, COMP_BASE-0.1, 0, 22));
+  for (let i=0;i<3;i++){ const a=(i/3)*Math.PI*2; g.add(cyl(0.45,0.45,0.5, M.spring, Math.cos(a)*2.4, COMP_BASE+0.3, Math.sin(a)*2.4,10)); }
+
+  // cuerpo de fundición
+  g.add(cyl(2.3,2.4,7.0, M.compBody, 0, COMP_BASE+4.0, 0, 24));
+  // anillo de partición soldado
+  g.add(cyl(2.45,2.45,0.4, M.compDark, 0, COMP_BASE+7.3, 0, 24));
+
+  if (!cutaway){
+    // domo azul (media esfera) — material compartido para pulse de estado
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(2.45, 24, 16, 0, Math.PI*2, 0, Math.PI/2), M.compDome);
+    dome.position.set(0, COMP_BASE+7.5, 0); dome.castShadow = true; g.add(dome);
+    g.add(cyl(0.6,0.6,1.0, M.compDark, 0, COMP_BASE+10.3, 0, 12)); // muñón superior
+  } else {
+    // domo seccionado: hemisferio con una cuña abierta hacia la cámara (+x/+z)
+    // -> se ve completo e intencional (no un medio casco roto) y deja ver la voluta
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(2.45, 28, 18, Math.PI/2, 3*Math.PI/2, 0, Math.PI/2),
+      M.compDome
+    );
+    dome.position.set(0, COMP_BASE+7.5, 0); dome.castShadow = true; g.add(dome);
+    g.add(cyl(0.6,0.6,1.0, M.compDark, 0, COMP_BASE+10.3, 0, 12)); // muñón superior (igual que los demás)
+    buildScrollSet(g, COMP_BASE+7.9);
+  }
+
+  // caja de bornes (terminal box) + etiqueta de advertencia
+  g.add(box(1.8, 2.4, 1.0, M.compDark, 0, COMP_BASE+4.2, 2.6));
+  g.add(box(1.2, 0.9, 0.15, M.warn, 0, COMP_BASE+5.7, 3.15));
+
+  // stubs de cobre succión (gordo) + descarga (delgado)
+  g.add(tube([0, COMP_BASE+6.6, -1.6],[ -0.4, COMP_BASE+11, -1.6], 0.6, M.copper));     // succión
+  g.add(tube([1.3, COMP_BASE+6.6, 0.8],[1.6, COMP_BASE+11, 0.8], 0.4, M.copper));        // descarga
+  // tramo flexible (hose) en la base del riser
+  g.add(tube([0, COMP_BASE+10.8, -1.6],[0, COMP_BASE+12.5, -1.0], 0.55, M.hose));
+
+  root.add(g);
+  compressors.push({ g, restX:cx, restZ:cz, circuit: compCircuit[idx], cutaway });
+}
+compCX.forEach((cx, idx)=> buildCompressor(cx, compCZ, idx));
+
+// risers rígidos subiendo de cada compresor al header
+compCX.forEach(cx=>{
+  root.add(tube([cx-0.4, COMP_BASE+12.5, compCZ-1.6],[cx-0.4, COIL_RIDGE+1.2, compCZ-1.6], 0.55, M.copper));
+});
+
+// ============================================================
+// WATER SIDE: EVAPORADOR + TUBERÍA DE AGUA HELADA
+// ============================================================
+const EVAP_CY = 9, EVAP_CZ = 9, EVAP_R = 3.2;
+// casco aislado del evaporador (foam negro), eje X
+const evapShell = cyl(EVAP_R, EVAP_R, TOTAL-12, M.insul, TOTAL/2, EVAP_CY, EVAP_CZ, 28);
+evapShell.rotation.z = Math.PI/2; root.add(evapShell);
+// cabezales de acero expuestos en los extremos
+[6, TOTAL-6].forEach(xx=> root.add(cyl(EVAP_R-0.5, EVAP_R-0.5, 1.2, M.tank, xx, EVAP_CY, EVAP_CZ, 24).rotateZ(Math.PI/2)));
+// anillos victaulic
+[10, TOTAL-10].forEach(xx=>{ const r=new THREE.Mesh(new THREE.TorusGeometry(EVAP_R+0.1,0.35,8,24),M.skidDark); r.position.set(xx,EVAP_CY,EVAP_CZ); r.rotation.y=Math.PI/2; root.add(r); });
+
+function waterLine(cy){
+  // tramo aislado horizontal saliendo por el extremo derecho
+  const ins = cyl(2.0,2.0, 14, M.insul, TOTAL+1, cy, EVAP_CZ, 18); ins.rotation.z = Math.PI/2; root.add(ins);
+  // spool azul expuesto
+  const sp = cyl(2.1,2.1, 2.2, M.water, TOTAL+4.5, cy, EVAP_CZ, 18); sp.rotation.z = Math.PI/2; root.add(sp);
+  // brida de extremo
+  const fl = new THREE.Mesh(new THREE.TorusGeometry(2.4,0.6,8,20), M.tank);
+  fl.position.set(TOTAL+8, cy, EVAP_CZ); fl.rotation.y = Math.PI/2; root.add(fl);
+}
+waterLine(EVAP_CY);        // suministro
+waterLine(EVAP_CY+7);      // retorno
+// link vertical suministro->retorno
+const vlink = cyl(2.0,2.0, 7, M.insul, TOTAL+8, EVAP_CY+3.5, EVAP_CZ, 18); root.add(vlink);
+
+// ============================================================
+// TANQUES: SEPARADOR DE ACEITE + RECIBIDOR DE LÍQUIDO
+// ============================================================
+function vTank(cx, cz, h, r){
+  root.add(cyl(r, r, h, M.tank, cx, BASE_Y+2+h/2, cz, 20));
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(r,18,12,0,Math.PI*2,0,Math.PI/2), M.tank);
+  cap.position.set(cx, BASE_Y+2+h, cz); cap.castShadow = true; root.add(cap);
+  // línea de cobre subiendo al serpentín
+  root.add(tube([cx, BASE_Y+2+h+r, cz],[cx, COIL_RIDGE+1.5, cz], 0.5, M.copper));
+}
+vTank(40, 15, 14, 2.0);    // separador de aceite (centro, alto)
+vTank(72, 15, 10, 2.2);    // recibidor de líquido (extremo)
+
+// liquid line: filtro deshidratador horizontal + visor (sight glass) — al frente de los tanques
+const drier = cyl(1.0,1.0, 6, M.tank, 67, BASE_Y+8, 11, 14); drier.rotation.z = Math.PI/2; root.add(drier);
+const sight = new THREE.Mesh(new THREE.SphereGeometry(0.8,14,12), M.glass);
+sight.position.set(71.5, BASE_Y+8, 11); root.add(sight);
+root.add(tube([64, BASE_Y+8, 11],[67, BASE_Y+8, 11], 0.5, M.copper));
+root.add(tube([72, BASE_Y+8, 11],[72, BASE_Y+8, 14], 0.45, M.copper));   // conexión al recibidor
+
+// ============================================================
+// CONTROL PANEL (NEMA box, frente-centro)
+// ============================================================
+const PNL_X = 37.5, PNL_W = 13, PNL_H = 13;
+root.add(box(PNL_W, PNL_H, 2.6, M.panelBox, PNL_X, COMP_BASE + PNL_H/2, FRONT-0.4));
+// costilla / bisagra
+root.add(box(0.6, PNL_H, 0.4, M.panelDk, PNL_X-PNL_W/2+0.6, COMP_BASE+PNL_H/2, FRONT+0.9));
+root.add(box(0.6, PNL_H, 0.4, M.panelDk, PNL_X+PNL_W/2-0.6, COMP_BASE+PNL_H/2, FRONT+0.9));
+// manija
+root.add(box(0.4, 2.6, 0.5, M.bolt, PNL_X+PNL_W/2-1.4, COMP_BASE+PNL_H/2, FRONT+1.0));
+// HMI screen
+root.add(box(4.2, 3.0, 0.3, M.hmi, PNL_X-2.2, COMP_BASE+PNL_H-3.5, FRONT+1.0));
+// nameplate
+const np = new THREE.Mesh(new THREE.PlaneGeometry(4.0,2.0), new THREE.MeshStandardMaterial({ map:nameplateTexture(), roughness:0.5, metalness:0.3 }));
+np.position.set(PNL_X+3.0, COMP_BASE+PNL_H-3.5, FRONT+1.06); root.add(np);
+
+// ============================================================
+// LED INDICATORS (por circuito)
+// ============================================================
+const ledMats = [];
+function makeLed(x){
+  const mat = new THREE.MeshStandardMaterial({ color:0x3aa6ff, emissive:0x3aa6ff, emissiveIntensity:1.4, roughness:0.25, metalness:0.3 });
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.7,14,12), mat);
+  led.position.set(x, COMP_BASE+2.0, FRONT+1.0); root.add(led);
+  const pl = new THREE.PointLight(0x3aa6ff, 1.0, 14); pl.position.copy(led.position); root.add(pl);
+  ledMats.push({ mat, light:pl });
+}
+makeLed(PNL_X-3.0); makeLed(PNL_X+3.0);
+
+// ============================================================
+// STATE MACHINE (puntos independientes)
+// ============================================================
+const COLOR_STANDBY = new THREE.Color(0x3aa6ff);
+const COLOR_ON      = new THREE.Color(0x00ff66);
+const COLOR_ALARM   = new THREE.Color(0xff2233);
+const colorFor = s => s==='on' ? COLOR_ON : s==='alarm' ? COLOR_ALARM : COLOR_STANDBY;
+const intensityFor = s => s==='on' ? 0.6 : s==='alarm' ? 0.65 : 0.4;
+const state = { fan:'standby', c1:'standby', c2:'standby' };
+
+function applyState(){
+  const fc = colorFor(state.fan), fi = intensityFor(state.fan);
+  fanMats.forEach(m=>{ m.color.copy(fc); m.emissive.copy(fc); m.emissiveIntensity = fi; });
+  [state.c1, state.c2].forEach((s,i)=>{
+    ledMats[i].mat.color.copy(colorFor(s));
+    ledMats[i].mat.emissive.copy(colorFor(s));
+    ledMats[i].mat.emissiveIntensity = s==='standby' ? 1.2 : 1.7;
+    ledMats[i].light.color.copy(colorFor(s));
+    ledMats[i].light.intensity = s==='standby' ? 1.0 : 1.6;
+  });
+}
+applyState();
+
+const CYCLE = { standby:'on', on:'alarm', alarm:'standby' };
+function bind(id, key){
+  const btn = document.getElementById(id);
+  btn.onclick = ()=>{ state[key]=CYCLE[state[key]]; btn.className=state[key]; btn.textContent=state[key].toUpperCase(); applyState(); };
+}
+bind('bFan','fan'); bind('bC1','c1'); bind('bC2','c2');
+const bRot = document.getElementById('bRot');
+bRot.onclick = ()=>{ controls.autoRotate=!controls.autoRotate; bRot.className=controls.autoRotate?'on':'off'; bRot.textContent=controls.autoRotate?'ON':'OFF'; };
+
+// ============================================================
+// PARTICLES
+// ============================================================
+const pGeo  = new THREE.BoxGeometry(0.6,0.6,0.6);
+const pGeoS = new THREE.BoxGeometry(0.5,0.5,0.5);
+const NPF = 16;
+const exhaustP = [];
+const cyanMat = new THREE.MeshBasicMaterial({ color:0x55ccff, transparent:true, opacity:0.85 });
+for (let f=0; f<NBAYS; f++)
+  for (let i=0;i<NPF;i++){
+    const p = new THREE.Mesh(pGeo, cyanMat.clone());
+    p.userData = { t:Math.random(), seed:Math.random()*10, fan:f };
+    scene.add(p); exhaustP.push(p);
+  }
+const refrigP = [];
+const amberMat = new THREE.MeshBasicMaterial({ color:0xffb347, transparent:true, opacity:0.9 });
+compCX.forEach((cx, idx)=>{
+  for (let i=0;i<4;i++){
+    const p = new THREE.Mesh(pGeoS, amberMat.clone());
+    p.userData = { t:i/4, cx, cz:compCZ, circuit:compCircuit[idx] };
+    scene.add(p); refrigP.push(p);
+  }
+});
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ============================================================
+// ANIMATE
+// ============================================================
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t  = clock.elapsedTime;
+
+  const fanSpin = state.fan === 'on';
+  fanGroups.forEach((g,i)=>{ if (fanSpin) g.rotation.y += dt*(8 + i*0.5); });
+
+  compressors.forEach((c,i)=>{
+    const on = state[c.circuit] === 'on';
+    if (on){
+      c.g.position.x = c.restX + Math.sin(t*26 + i)*0.16;
+      c.g.position.z = c.restZ + Math.cos(t*31 + i*1.7)*0.12;
+    } else {
+      c.g.position.x = c.restX;
+      c.g.position.z = c.restZ;
+    }
+  });
+  // pulse del domo (material compartido)
+  const anyC1 = state.c1==='on', anyC2 = state.c2==='on';
+  const pulse = 0.45 + 0.32*(0.5 + 0.5*Math.sin(t*6));
+  if (anyC1 || anyC2) M.compDome.emissiveIntensity = pulse;
+  else M.compDome.emissiveIntensity = (state.c1==='alarm'||state.c2==='alarm') ? 0.25 : 0.0;
+
+  exhaustP.forEach((p)=>{
+    if (!fanSpin){ p.material.opacity = 0; return; }
+    p.userData.t += dt*0.5; if (p.userData.t > 1) p.userData.t = 0;
+    const tt = p.userData.t, seed = p.userData.seed;
+    const cx = fanCX[p.userData.fan];
+    const ang = seed + tt*2, rad = 1 + tt*4;
+    p.position.x = cx + Math.cos(ang)*rad;
+    p.position.z = fanCZ + Math.sin(ang)*rad;
+    p.position.y = H_TOP + 1.8 + tt*20;
+    p.material.opacity = Math.sin(tt*Math.PI)*0.8;
+  });
+
+  refrigP.forEach((p)=>{
+    const on = state[p.userData.circuit] === 'on';
+    if (!on){ p.material.opacity = 0; return; }
+    p.userData.t += dt*0.55; if (p.userData.t > 1) p.userData.t = 0;
+    const tt = p.userData.t;
+    p.position.x = p.userData.cx - 0.4;
+    p.position.z = p.userData.cz - 1.6;
+    p.position.y = (COMP_BASE+12.5) + tt*(COIL_RIDGE - (COMP_BASE+12.5));
+    p.material.opacity = Math.sin(tt*Math.PI)*0.95;
+  });
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

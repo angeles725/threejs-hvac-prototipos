@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>LIEBERT SPLIT DX · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:230px; font-size:11px; backdrop-filter: blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:54px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel button.standby { color:#06080d; border-color:#3aa6ff; background:#3aa6ff; box-shadow:0 0 12px #3aa6ff55; }
+  #panel button.alarm   { color:#06080d; border-color:#ff2233; background:#ff2233; box-shadow:0 0 12px #ff223388; animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:0.55; } }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>LIEBERT SPLIT DX · CRAC</b><br>
+  <span>Voxel Art · Sistema completo (interior + exterior)</span>
+</div>
+<div id="legend">
+  <div><i style="background:#ff4422"></i> Aire de retorno</div>
+  <div><i style="background:#44aaff"></i> Aire de suministro</div>
+  <div><i style="background:#9fb4c2"></i> Línea de succión (gas)</div>
+  <div><i style="background:#ffaa44"></i> Línea de líquido</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>SUPPLY FAN</label><button id="bFan" class="standby">STANDBY</button></div>
+  <div class="row"><label>COMPRESOR</label><button id="bC" class="standby">STANDBY</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="off">OFF</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 160, 420);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 900);
+camera.position.set(150, 100, 135);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(42, 22, 12);
+controls.autoRotate = false;          // OFF por default hasta confirmar layout (evita trampa de espejo)
+controls.autoRotateSpeed = 0.6;
+
+// ====== LIGHTS ======
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(70, 140, 80);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+const sc = sun.shadow.camera;
+sc.left=-150; sc.right=150; sc.top=150; sc.bottom=-150; sc.near=1; sc.far=400;
+sun.shadow.bias = -0.0003;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4).translateOnAxis(new THREE.Vector3(-1,0.5,-1).normalize(), 60));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2).translateOnAxis(new THREE.Vector3(0,0.3,-1).normalize(), 60));
+
+// ====== GROUND ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(700,700),
+  new THREE.MeshStandardMaterial({ color:0x0a0e16, roughness:0.92, metalness:0.05 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(700, 116, 0x00d4aa, 0x142028);
+grid.material.opacity = 0.12;
+grid.material.transparent = true;
+grid.position.y = 0.01;
+scene.add(grid);
+
+// ====== VOXEL BUILDER ======
+const voxData = {};
+function vox(x,y,z,color) {
+  const k = color.toString();
+  if (!voxData[k]) voxData[k] = { color, positions: [] };
+  voxData[k].positions.push([x,y,z]);
+}
+
+const COL = {
+  SHELL:    0xd8d4c4,   // gabinete Liebert (gris claro)
+  SHELL_D:  0xb4b0a2,
+  SKID:     0xa8a8ac,
+  DARK:     0x2a2a2e,
+  HOUSING:  0x6a6a72,
+  HOUSING_D:0x4a4a52,
+  COIL:     0x4a6878,
+  COIL_H:   0x6080a0,
+  COPPER:   0xb87333,
+  COMP:     0x3a3a40,
+  MOTOR:    0x55555c,
+  FRAME:    0x3a3a3e,
+  GRILLE:   0x1a1a1e,
+  FILTER:   0x4a4a3e,
+  INSUL:    0x9fb4c2,   // aislamiento de línea de succión
+  PANEL:    0x202028,   // panel iCOM
+};
+
+// ============================================================
+//  UNIDAD INTERIOR · EVAPORADOR (CRAC upflow, gabinete vertical)
+// ============================================================
+const IN_X0 = 0,  IN_W = 24, IN_D = 22, IN_H = 46;
+const IN_X1 = IN_X0 + IN_W - 1;
+const IN_Z1 = IN_D - 1;
+
+// Skid
+for (let x=-1; x<=IN_W; x++)
+  for (let z=-1; z<=IN_D; z++) {
+    vox(x, 0, z, COL.SKID);
+    if (x===-1 || x===IN_W || z===-1 || z===IN_D) vox(x, 1, z, COL.DARK);
+  }
+// Shell transparente: techo + pared trasera + 2 laterales (frente abierto = cutaway)
+for (let x=0; x<IN_W; x++)
+  for (let z=0; z<IN_D; z++) {
+    vox(x, IN_H,   z, COL.SHELL);
+    vox(x, IN_H+1, z, COL.SHELL_D);
+  }
+for (let y=2; y<=IN_H; y++) {
+  for (let z=0; z<IN_D; z++) vox(0,      y, z, COL.SHELL);      // lateral izq
+  for (let z=0; z<IN_D; z++) vox(IN_W-1, y, z, COL.SHELL);      // lateral der
+  for (let x=0; x<IN_W; x++) vox(x, y, IN_Z1, COL.SHELL);       // pared trasera
+}
+// Rejilla de retorno (frente inferior)
+for (let y=3; y<=13; y++)
+  for (let x=3; x<IN_W-3; x++)
+    if ((x+y)%2===0) vox(x, y, 0, COL.GRILLE);
+// Filtro (panel horizontal, el aire sube a través de él)
+for (let x=3; x<IN_W-3; x++)
+  for (let z=2; z<IN_D-2; z++)
+    if ((x+z)%2===0) vox(x, 6, z, COL.FILTER);
+// Bandeja de drenaje bajo el coil
+for (let x=2; x<IN_W-2; x++)
+  for (let z=2; z<IN_D-2; z++)
+    vox(x, 11, z, COL.SKID);
+// Coil evaporador (bloque horizontal, aire vertical lo atraviesa)
+for (let y=12; y<=20; y++)
+  for (let x=3; x<IN_W-3; x++)
+    for (let z=2; z<IN_D-2; z++) {
+      const isEdge = (y===12 || y===20);
+      vox(x, y, z, isEdge ? COL.COIL : COL.COIL_H);
+    }
+// Cabezales/U-bends de cobre (costado del coil)
+for (let i=0; i<6; i++) {
+  const z = 3 + i*3;
+  vox(2, 21, z,   COL.COPPER);
+  vox(2, 22, z,   COL.COPPER);
+  vox(2, 21, z+1, COL.COPPER);
+}
+// Panel de control iCOM (frente superior)
+for (let y=30; y<=37; y++)
+  for (let x=3; x<=8; x++)
+    vox(x, y, 0, COL.PANEL);
+vox(4, 35, 0, COL.COIL_H); vox(6, 35, 0, COL.COIL_H);   // displays
+vox(7, 32, 0, COL.COPPER);
+
+// --- Blower centrífugo interior (scroll, mitad trasera; descarga hacia arriba) ---
+const bcx = Math.floor(IN_W/2);      // 12
+const bcy = 34;
+const bcz = Math.floor(IN_D/2);      // 11
+const brOut = 8, brIn = 6;
+for (let x=bcx-brOut; x<=bcx+brOut; x++)
+  for (let y=bcy-brOut; y<=bcy+brOut; y++) {
+    const dx=x-bcx, dy=y-bcy, r2=dx*dx+dy*dy;
+    if (r2<=brOut*brOut && r2>=brIn*brIn)
+      for (let dz=0; dz<=7; dz++) vox(x, y, bcz+dz, COL.HOUSING);
+  }
+for (let x=bcx-brOut; x<=bcx+brOut; x++)
+  for (let y=bcy-brOut; y<=bcy+brOut; y++) {
+    const dx=x-bcx, dy=y-bcy;
+    if (dx*dx+dy*dy<=brOut*brOut) vox(x, y, bcz+8, COL.HOUSING_D);
+  }
+// Boca de descarga hacia el plenum superior
+for (let x=bcx-3; x<=bcx+3; x++)
+  for (let y=bcy+brOut; y<bcy+brOut+4; y++)
+    for (let z=bcz-5; z<=bcz+5; z++)
+      if (x===bcx-3||x===bcx+3||z===bcz-5||z===bcz+5) vox(x, y, z, COL.HOUSING);
+// Motor del blower
+for (let x=bcx+brOut+1; x<=bcx+brOut+4; x++)
+  for (let y=bcy-2; y<=bcy+1; y++)
+    for (let z=bcz-7; z<=bcz-4; z++) vox(x, y, z, COL.MOTOR);
+
+// ============================================================
+//  UNIDAD EXTERIOR · CONDENSADOR
+// ============================================================
+const OUT_X0 = 54, OUT_W = 30, OUT_D = 26, OUT_H = 22;
+const OUT_X1 = OUT_X0 + OUT_W - 1;
+const OUT_Z1 = OUT_D - 1;
+
+// Skid + patas
+for (let x=OUT_X0-1; x<=OUT_X1+1; x++)
+  for (let z=-1; z<=OUT_D; z++) {
+    vox(x, 0, z, COL.SKID);
+    if (x===OUT_X0-1||x===OUT_X1+1||z===-1||z===OUT_D) vox(x, 1, z, COL.DARK);
+  }
+// Shell transparente: techo + traseras/laterales (frente abierto)
+for (let x=OUT_X0; x<=OUT_X1; x++)
+  for (let z=0; z<OUT_D; z++) {
+    vox(x, OUT_H,   z, COL.SHELL);
+    vox(x, OUT_H+1, z, COL.SHELL_D);
+  }
+for (let y=2; y<=OUT_H; y++) {
+  for (let z=0; z<OUT_D; z++) vox(OUT_X0, y, z, COL.SHELL);   // lateral izq (hacia interior)
+  for (let z=0; z<OUT_D; z++) vox(OUT_X1, y, z, COL.SHELL);   // lateral der
+  for (let x=OUT_X0; x<=OUT_X1; x++) vox(x, y, OUT_Z1, COL.SHELL); // trasera
+}
+// Louvers del coil de condensación (laterales + trasera)
+for (let y=3; y<OUT_H-1; y++)
+  if (y%2===0) {
+    for (let z=2; z<OUT_D-2; z++) { vox(OUT_X0, y, z, COL.FRAME); vox(OUT_X1, y, z, COL.FRAME); }
+    for (let x=OUT_X0+2; x<OUT_X1-1; x++) vox(x, y, OUT_Z1, COL.FRAME);
+  }
+// Coil de condensación interno (banda perimetral azulada)
+for (let y=3; y<OUT_H-1; y++)
+  for (let x=OUT_X0+1; x<=OUT_X1-1; x++)
+    for (let z=1; z<OUT_D-1; z++)
+      if (x===OUT_X0+1||x===OUT_X1-1||z===1||z===OUT_D-2) vox(x, y, z, COL.COIL);
+
+// --- Compresor scroll (cilindro + domo) ---
+const compCx = OUT_X0 + 10, compCz = 13;
+(function buildCompressor(cx, cz) {
+  const r = 4;
+  for (let x=cx-r-1; x<=cx+r+1; x++)
+    for (let z=cz-r-1; z<=cz+r+1; z++) {
+      const dx=x-cx, dz=z-cz;
+      if (dx*dx+dz*dz<=(r+1)*(r+1)) vox(x, 2, z, COL.DARK);
+    }
+  for (let y=3; y<=11; y++)
+    for (let x=cx-r; x<=cx+r; x++)
+      for (let z=cz-r; z<=cz+r; z++) {
+        const dx=x-cx, dz=z-cz, d2=dx*dx+dz*dz;
+        if (d2<=r*r) vox(x, y, z, d2>=(r-1)*(r-1) ? COL.COMP : COL.DARK);
+      }
+  for (let dy=0; dy<=r; dy++) {
+    const rr = Math.sqrt(r*r - dy*dy);
+    for (let x=cx-r; x<=cx+r; x++)
+      for (let z=cz-r; z<=cz+r; z++) {
+        const dx=x-cx, dz=z-cz, d2=dx*dx+dz*dz;
+        if (d2<=rr*rr && (d2>=(rr-1)*(rr-1) || dy===r)) vox(x, 12+dy, z, COL.COMP);
+      }
+  }
+  for (let y=16; y<=18; y++) { vox(cx+1, y, cz, COL.COPPER); vox(cx-1, y, cz, COL.COPPER); }
+})(compCx, compCz);
+
+// Deck para ventiladores
+for (let x=OUT_X0+1; x<OUT_X1; x++)
+  for (let z=1; z<OUT_D-1; z++)
+    vox(x, OUT_H+2, z, COL.SHELL_D);
+
+// Housings estáticos de ventiladores de condensador
+function fanHousingVox(cx, cz) {
+  const r = 5;
+  for (let x=cx-r; x<=cx+r; x++)
+    for (let z=cz-r; z<=cz+r; z++) {
+      const dx=x-cx, dz=z-cz, d2=dx*dx+dz*dz;
+      if (d2<=r*r && d2>=(r-1)*(r-1)) {
+        vox(x, OUT_H+3, z, COL.HOUSING);
+        vox(x, OUT_H+4, z, COL.HOUSING);
+        vox(x, OUT_H+5, z, COL.HOUSING_D);
+      }
+      if (d2<(r-1)*(r-1) && d2>=(r-2)*(r-2)) vox(x, OUT_H+3, z, COL.DARK);
+    }
+}
+const fanPositions = [
+  [OUT_X0 + 8,  13],
+  [OUT_X0 + 21, 13],
+];
+fanPositions.forEach(([cx,cz]) => fanHousingVox(cx, cz));
+
+// ============================================================
+//  TUBERÍA DE INTERCONEXIÓN (succión aislada + líquido)
+// ============================================================
+const SUC_Y = 18, LIQ_Y = 13, PIPE_Z = 11;
+const PIPE_X0 = IN_W, PIPE_X1 = OUT_X0;
+// Línea de succión (aislada, bundle 2x2)
+for (let x=PIPE_X0; x<=PIPE_X1; x++) {
+  vox(x, SUC_Y,   PIPE_Z,   COL.INSUL);
+  vox(x, SUC_Y+1, PIPE_Z,   COL.INSUL);
+  vox(x, SUC_Y,   PIPE_Z+1, COL.INSUL);
+  vox(x, SUC_Y+1, PIPE_Z+1, COL.INSUL);
+}
+// Línea de líquido (cobre delgado)
+for (let x=PIPE_X0; x<=PIPE_X1; x++) vox(x, LIQ_Y, PIPE_Z, COL.COPPER);
+// Risers verticales (interior: del coil arriba; exterior: hacia compresor)
+for (let y=LIQ_Y; y<=SUC_Y+1; y++) { vox(IN_W-1, y, PIPE_Z, COL.INSUL); }
+for (let y=LIQ_Y; y<=SUC_Y+1; y++) { vox(OUT_X0, y, PIPE_Z, COL.INSUL); }
+for (let y=12; y<=LIQ_Y; y++) vox(compCx, y, compCz, COL.COPPER);  // riser al compresor
+
+// ============================================================
+//  INSTANCED MESHES (estáticos)
+// ============================================================
+const cubeGeo = new THREE.BoxGeometry(1,1,1);
+const SHELL_COLORS = new Set([COL.SHELL, COL.SHELL_D]);
+for (const k in voxData) {
+  const { color, positions } = voxData[k];
+  const isShell = SHELL_COLORS.has(color);
+  const mat = new THREE.MeshStandardMaterial({
+    color,
+    roughness: isShell ? 0.55 : 0.5,
+    metalness: isShell ? 0.15 : 0.55,
+    transparent: isShell,
+    opacity: isShell ? 0.2 : 1.0,
+    depthWrite: !isShell,
+    side: isShell ? THREE.DoubleSide : THREE.FrontSide,
+  });
+  const mesh = new THREE.InstancedMesh(cubeGeo, mat, positions.length);
+  mesh.castShadow = !isShell;
+  mesh.receiveShadow = true;
+  const m = new THREE.Matrix4();
+  positions.forEach((p, i) => {
+    m.setPosition(p[0]+0.5, p[1]+0.5, p[2]+0.5);
+    mesh.setMatrixAt(i, m);
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+  scene.add(mesh);
+}
+
+// ============================================================
+//  PARTES ANIMADAS (Groups fuera del InstancedMesh)
+// ============================================================
+// --- Rueda del blower interior (squirrel cage) ---
+const blowerGroup = new THREE.Group();
+blowerGroup.position.set(bcx+0.5, bcy+0.5, bcz+4.5);
+const wheelMat = new THREE.MeshStandardMaterial({
+  color:0x3aa6ff, roughness:0.45, metalness:0.6, emissive:0x3aa6ff, emissiveIntensity:0.45
+});
+const bladeGeo = new THREE.BoxGeometry(0.55, 1.1, 0.55);
+const bladeR = 4.0;
+for (let i=0; i<16; i++) {
+  const a = (i/16)*Math.PI*2;
+  for (let zOff=-3; zOff<=3; zOff++) {
+    const blade = new THREE.Mesh(bladeGeo, wheelMat);
+    blade.position.set(Math.cos(a)*bladeR, Math.sin(a)*bladeR, zOff);
+    blade.rotation.z = a;
+    blade.castShadow = true;
+    blowerGroup.add(blade);
+  }
+}
+const bhub = new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.3,7,14), wheelMat);
+bhub.rotation.x = Math.PI/2;
+blowerGroup.add(bhub);
+scene.add(blowerGroup);
+
+// --- Top del compresor (rota + vibra) ---
+const compTopMat = new THREE.MeshStandardMaterial({ color:0x55555c, roughness:0.35, metalness:0.85 });
+const compTop = new THREE.Group();
+compTop.position.set(compCx+0.5, 16.5, compCz+0.5);
+for (let ax=-2; ax<=2; ax++)
+  for (let az=-2; az<=2; az++)
+    if (ax*ax+az*az<=5) {
+      const c = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.6,0.9), compTopMat);
+      c.position.set(ax,0,az); c.castShadow = true; compTop.add(c);
+    }
+scene.add(compTop);
+
+// --- LED del compresor ---
+const ledMat = new THREE.MeshStandardMaterial({
+  color:0x3aa6ff, emissive:0x3aa6ff, emissiveIntensity:1.2, roughness:0.25, metalness:0.3
+});
+const led = new THREE.Mesh(new THREE.BoxGeometry(1.1,1.1,1.1), ledMat);
+led.position.set(compCx+0.5, 20, compCz+0.5);
+scene.add(led);
+const ledLight = new THREE.PointLight(0x3aa6ff, 1.0, 12);
+ledLight.position.copy(led.position);
+scene.add(ledLight);
+
+// --- Ventiladores de condensador (rotan en Y) ---
+const fanGroups = [];
+const fanMats = [];
+function makeCondenserFan(cx, cz) {
+  const g = new THREE.Group();
+  g.position.set(cx+0.5, OUT_H + 5.8, cz+0.5);
+  const bladeMat = new THREE.MeshStandardMaterial({
+    color:0x3aa6ff, roughness:0.45, metalness:0.6, emissive:0x3aa6ff, emissiveIntensity:0.4
+  });
+  for (let i=0; i<5; i++) {
+    const a = (i/5)*Math.PI*2;
+    for (let rr=0; rr<=4; rr++) {
+      const c = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.45,0.9), bladeMat);
+      c.position.set(Math.cos(a)*rr, 0, Math.sin(a)*rr);
+      c.castShadow = true; g.add(c);
+    }
+  }
+  const hub = new THREE.Mesh(new THREE.BoxGeometry(1.4,0.7,1.4), new THREE.MeshStandardMaterial({ color:0x55555c, metalness:0.8 }));
+  g.add(hub);
+  scene.add(g);
+  fanGroups.push(g); fanMats.push(bladeMat);
+}
+fanPositions.forEach(([cx,cz]) => makeCondenserFan(cx, cz));
+
+// ============================================================
+//  MÁQUINA DE ESTADOS (tri-estado: standby / on / alarm)
+// ============================================================
+const COLOR_STANDBY = new THREE.Color(0x3aa6ff);
+const COLOR_ON      = new THREE.Color(0x00ff66);
+const COLOR_ALARM   = new THREE.Color(0xff2233);
+const colorFor = s => s==='on' ? COLOR_ON : s==='alarm' ? COLOR_ALARM : COLOR_STANDBY;
+const intensityFor = s => s==='on' ? 0.65 : s==='alarm' ? 0.7 : 0.45;
+const state = { fan:'standby', comp:'standby' };
+
+function applyState() {
+  // Supply fan -> rueda del blower
+  wheelMat.color.copy(colorFor(state.fan));
+  wheelMat.emissive.copy(colorFor(state.fan));
+  wheelMat.emissiveIntensity = intensityFor(state.fan);
+  // Compresor -> ventiladores condensador + LED
+  fanMats.forEach(m => {
+    m.color.copy(colorFor(state.comp));
+    m.emissive.copy(colorFor(state.comp));
+    m.emissiveIntensity = intensityFor(state.comp);
+  });
+  ledMat.color.copy(colorFor(state.comp));
+  ledMat.emissive.copy(colorFor(state.comp));
+  ledMat.emissiveIntensity = state.comp==='standby' ? 1.2 : 1.7;
+  ledLight.color.copy(colorFor(state.comp));
+  ledLight.intensity = state.comp==='standby' ? 1.0 : 1.5;
+}
+applyState();
+
+const CYCLE = { standby:'on', on:'alarm', alarm:'standby' };
+function bind(id, key) {
+  const btn = document.getElementById(id);
+  btn.onclick = () => {
+    state[key] = CYCLE[state[key]];
+    btn.className = state[key];
+    btn.textContent = state[key].toUpperCase();
+    applyState();
+  };
+}
+bind('bFan','fan');
+bind('bC','comp');
+const bRot = document.getElementById('bRot');
+bRot.onclick = () => {
+  controls.autoRotate = !controls.autoRotate;
+  bRot.className = controls.autoRotate ? 'on' : 'off';
+  bRot.textContent = controls.autoRotate ? 'ON' : 'OFF';
+};
+
+// ============================================================
+//  PARTÍCULAS (BoxGeometry 0.6³)
+// ============================================================
+const pGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+const redMat   = new THREE.MeshBasicMaterial({ color:0xff5533, transparent:true, opacity:0.85 });
+const blueMat  = new THREE.MeshBasicMaterial({ color:0x44bbff, transparent:true, opacity:0.85 });
+const gasMat   = new THREE.MeshBasicMaterial({ color:0x9fb4c2, transparent:true, opacity:0.85 });
+const liqMat   = new THREE.MeshBasicMaterial({ color:0xffaa44, transparent:true, opacity:0.85 });
+
+const NIN = 40, NREF = 30;
+const returnP = [], supplyP = [], sucP = [], liqP = [];
+function spawn(arr, mat) {
+  for (let i=0;i<arr.cap;i++){
+    const p = new THREE.Mesh(pGeo, mat.clone());
+    p.userData = { t: Math.random(), seed: Math.random()*10 };
+    scene.add(p); arr.push(p);
+  }
+}
+returnP.cap = NIN; supplyP.cap = NIN; sucP.cap = NREF; liqP.cap = NREF;
+spawn(returnP, redMat); spawn(supplyP, blueMat); spawn(sucP, gasMat); spawn(liqP, liqMat);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ====== ANIMATE ======
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t  = clock.elapsedTime;
+
+  if (state.fan==='on') blowerGroup.rotation.z += dt * 7;
+  if (state.comp==='on') {
+    fanGroups.forEach((g,i) => g.rotation.y += dt * (9 + i*0.4));
+    compTop.rotation.y += dt * 12;
+    compTop.position.y = 16.5 + Math.sin(t*30)*0.15;
+  } else {
+    compTop.position.y = 16.5;
+  }
+
+  // Aire de retorno: sube por el frente (filtro -> coil)
+  returnP.forEach((p,i) => {
+    if (state.fan!=='on') { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.18; if (p.userData.t>1) p.userData.t = 0;
+    const tt = p.userData.t, seed = p.userData.seed;
+    const xOff = ((i%6)-2.5)*2.4, zOff = ((Math.floor(i/6)%3))*3 + 1;
+    p.position.x = 3 + ((i%6))*3 + Math.sin(tt*5+seed)*0.5;
+    p.position.y = 3 + tt*26;
+    p.position.z = 3 + zOff + Math.cos(tt*4+seed)*0.6;
+    p.material.opacity = Math.sin(tt*Math.PI)*0.85;
+  });
+  // Aire de suministro: del blower hacia arriba y fuera del techo
+  supplyP.forEach((p,i) => {
+    if (state.fan!=='on') { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.2; if (p.userData.t>1) p.userData.t = 0;
+    const tt = p.userData.t, seed = p.userData.seed;
+    const xOff = ((i%5)-2)*1.6, zOff = ((Math.floor(i/5)%4)-1.5)*1.6;
+    p.position.x = bcx + xOff + Math.sin(tt*4+seed)*0.6;
+    p.position.y = bcy + 6 + tt*14;
+    p.position.z = bcz + zOff + Math.cos(tt*4+seed)*0.6;
+    p.material.opacity = Math.sin(tt*Math.PI)*0.85;
+  });
+  // Refrigerante succión (gas): interior -> exterior por línea aislada
+  sucP.forEach((p,i) => {
+    if (state.comp!=='on') { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.22; if (p.userData.t>1) p.userData.t = 0;
+    const tt = p.userData.t;
+    p.position.x = PIPE_X0 + tt*(PIPE_X1-PIPE_X0);
+    p.position.y = SUC_Y + 0.5 + Math.sin(tt*8+i)*0.2;
+    p.position.z = PIPE_Z + 0.5;
+    p.material.opacity = 0.85;
+  });
+  // Refrigerante líquido: exterior -> interior
+  liqP.forEach((p,i) => {
+    if (state.comp!=='on') { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.22; if (p.userData.t>1) p.userData.t = 0;
+    const tt = p.userData.t;
+    p.position.x = PIPE_X1 - tt*(PIPE_X1-PIPE_X0);
+    p.position.y = LIQ_Y + 0.5 + Math.sin(tt*8+i)*0.15;
+    p.position.z = PIPE_Z + 0.5;
+    p.material.opacity = 0.85;
+  });
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
