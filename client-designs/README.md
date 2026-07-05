@@ -17,3 +17,15 @@ Not copied: Alser cuarto-3d.html (byte-identical to the corpus copy), dashboards
 Project split (owner decision, 2026-07-04): THIS repo creates 3D designs; client projects
 integrate them into dashboards. These copies inform the design library (G33) — the goal is that
 future client projects consume designs exported from here instead of hand-rolling scene modules.
+
+## bms-casino/ (added same day)
+
+| Here | Origin | What it is |
+|---|---|---|
+| CasinoHVAC3D.jsx | modules/BMS/casino/niagara-casino/src/ | full casino HVAC 3D scene — FIRST React-hosted design in the collection (three@0.183.2 per its package.json) |
+| RtuModel3D.jsx | .../src/layouts/ | RTU equipment 3D model as a React component |
+| CisternModel3D.jsx | .../src/layouts/ | cistern 3D model as a React component |
+
+Note: React/JSX hosting is an INTEGRATION choice; the design content (geometry, materials,
+lighting) is what this studio cares about. Useful contrast case for the G33 export contract:
+the same design should be consumable from vanilla HTML AND React hosts.
