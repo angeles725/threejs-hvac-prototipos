@@ -258,6 +258,91 @@ function pipeRun(a, b, color) {
     vox(a[0]+dx*i, a[1]+dy*i, a[2]+dz*i, color);
 }
 
+// ====== HERO VOXEL PIPELINE (v4) ======
+// Detailed equipment transplanted from the standalone hero scenes
+// (chiller-tornillo-agua-voxel-v1, bomba-centrifuga-voxel,
+// ahu-cuarto-maquinas-voxel, fcu-plafon-voxel). Each hero factory fills a
+// LOCAL cell map ("x,y,z" integer hero-voxel coords -> material name); the
+// pipeline culls interior cells (all 6 neighbors occupied by opaque cells =
+// never visible), then bakes survivors into per-hero-type material buckets in
+// hotel world units. All copies of a hero type share ONE InstancedMesh per
+// material, so 4 chillers cost the same draw count as 1.
+const NEIGH6 = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+const qTmp = new THREE.Quaternion(), eTmp = new THREE.Euler();
+function cullInterior(cells, isOpaque) {
+  const gone = [];
+  for (const [key, name] of cells) {
+    if (isOpaque && !isOpaque(name)) continue;
+    const [x, y, z] = key.split(',').map(Number);
+    let hidden = true;
+    for (const [dx, dy, dz] of NEIGH6) {
+      const n = cells.get((x+dx) + ',' + (y+dy) + ',' + (z+dz));
+      if (n === undefined || (isOpaque && !isOpaque(n))) { hidden = false; break; }
+    }
+    if (hidden) gone.push(key);
+  }
+  gone.forEach(k => cells.delete(k));
+  return gone.length;
+}
+// place: { x,y,z world origin, k hotel units per hero voxel, tx transform }
+// tx: 'std' | 'mz' (mirror z across local plane z=mzW) | 'rot' (180 deg about Y)
+function bakeHeroCells(cells, mats, place, buckets) {
+  for (const [key, name] of cells) {
+    const [cx, cy, cz] = key.split(',').map(Number);
+    const lx = (cx+0.5)*place.k, ly = (cy+0.5)*place.k, lz = (cz+0.5)*place.k;
+    let wx = place.x + lx, wz = place.z + lz;
+    if (place.tx === 'rot') { wx = place.x - lx; wz = place.z - lz; }
+    else if (place.tx === 'mz') { wz = place.z + place.mzW*place.k - lz; }
+    const b = buckets[name] || (buckets[name] = { props: mats[name], entries: [] });
+    b.entries.push([wx, place.y + ly, wz, place.k]);
+  }
+}
+// point transform for animated-part anchors (local hero coords, NOT cell-centered)
+function heroPoint(place, lx, ly, lz) {
+  let wx = place.x + lx*place.k, wz = place.z + lz*place.k;
+  if (place.tx === 'rot') { wx = place.x - lx*place.k; wz = place.z - lz*place.k; }
+  else if (place.tx === 'mz') { wz = place.z + (place.mzW - lz)*place.k; }
+  return new THREE.Vector3(wx, place.y + ly*place.k, wz);
+}
+// buckets -> InstancedMeshes (shared unit cube, per-instance scale = hero k)
+function buildHeroInstanced(buckets, parent, forceNoShadow) {
+  for (const name in buckets) {
+    const { props, entries } = buckets[name];
+    const mat = new THREE.MeshStandardMaterial({
+      color: props.c, roughness: props.r ?? 0.5, metalness: props.m ?? 0.55,
+      emissive: props.e ?? 0x000000, emissiveIntensity: props.ei ?? 0,
+    });
+    if (props.t) {   // transparent shell (FCU baked "corte" look)
+      mat.transparent = true; mat.opacity = props.t;
+      mat.depthWrite = false; mat.side = THREE.DoubleSide;
+    }
+    const mesh = new THREE.InstancedMesh(cubeGeo, mat, entries.length);
+    mesh.castShadow = !forceNoShadow && !props.t;
+    mesh.receiveShadow = true;
+    entries.forEach((e, i) => {
+      vPos.set(e[0], e[1], e[2]);
+      vScale.setScalar(e[3]);
+      m4.compose(vPos, qIdentity, vScale);
+      mesh.setMatrixAt(i, m4);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    parent.add(mesh);
+  }
+}
+// small animated assemblies: entries [px,py,pz, rotX, sx,sy,sz] in hero voxels
+function mkIM(entries, mat, k) {
+  const im = new THREE.InstancedMesh(cubeGeo, mat, entries.length);
+  entries.forEach((e, i) => {
+    m4.compose(vPos.set(e[0]*k, e[1]*k, e[2]*k),
+               qTmp.setFromEuler(eTmp.set(e[3], 0, 0)),
+               vScale.set(e[4]*k, e[5]*k, e[6]*k));
+    im.setMatrixAt(i, m4);
+  });
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = false;
+  return im;
+}
+
 // ====== MECHANICAL YARD PAD ======
 voxBox(2, 0, 4, 80, 0, 66, COL.SKID);
 
@@ -298,8 +383,217 @@ function buildTower(x0, z0) {
 buildTower(6, 10);
 buildTower(6, 38);
 
-// ====== CHILLERS (4, 5 m long x ~2.5 m tall) ======
-function buildChiller(cz) {
+// ====== CHILLERS (4 heroes: water-cooled screw chillers, ~5 m long) ======
+// Transplanted from chiller-tornillo-agua-voxel-v1.html (1 hero voxel = 0.1 m
+// -> k = 0.2). Static hull is baked into shared buckets; the screw compressor
+// + motor assembly gets per-unit buckets so each unit vibrates with its own
+// c1..c4 state (the source anti z-fight carve is kept).
+const CHILLER_K = 0.2;
+const CHILLER_MATS = {
+  GREEN:   { c:0x2e6b52, r:0.55, m:0.25 },   // industrial green barrels
+  GREEN_D: { c:0x224e3c, r:0.60, m:0.25 },
+  STEEL:   { c:0x9aa8b0, r:0.35, m:0.85 },   // metallic gray compressor
+  STEEL_D: { c:0x6b747e, r:0.40, m:0.80 },
+  FLANGE:  { c:0x8a949c, r:0.38, m:0.85 },
+  DARK:    { c:0x2b3036, r:0.70, m:0.40 },
+  BLACK:   { c:0x15181c, r:0.90, m:0.20 },
+  BLUE:    { c:0x1f6dff, r:0.45, m:0.30 },   // chilled water nozzles
+  RED:     { c:0xd93b34, r:0.45, m:0.30 },   // condenser water nozzles
+  COPPER:  { c:0xc07a3c, r:0.32, m:0.90 },   // refrigerant lines
+  YELLOW:  { c:0xffc22e, r:0.50, m:0.30 },
+  PANEL:   { c:0x3a4149, r:0.50, m:0.50 },
+  PANEL_D: { c:0x262c33, r:0.55, m:0.50 },
+  WHITE:   { c:0xe9eae4, r:0.40, m:0.10 },
+};
+const chillerBuckets = {};
+const chillerUnits = [];
+function buildHeroChiller(cz) {
+  const place = { x:30, y:1, z:cz-1.8, k:CHILLER_K, tx:'std' };
+  const voxStatic = new Map(), voxComp = new Map();
+  const put = (m, x, y, z, c) => m.set(x + ',' + y + ',' + z, c);
+  function box(m, x0, x1, y0, y1, z0, z1, c){
+    for (let x = x0; x <= x1; x++)
+      for (let y = y0; y <= y1; y++)
+        for (let z = z0; z <= z1; z++) put(m, x, y, z, c);
+  }
+  function discX(m, x, cy, cz2, r, c, rin = 0){          // disc perpendicular to X
+    for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++)
+      for (let z = Math.floor(cz2 - r); z <= Math.ceil(cz2 + r); z++){
+        const dy = y + 0.5 - cy, dz = z + 0.5 - cz2, d2 = dy*dy + dz*dz;
+        if (d2 <= r*r && d2 >= rin*rin) put(m, x, y, z, c);
+      }
+  }
+  function cylX(m, x0, x1, cy, cz2, r, c){ for (let x = x0; x <= x1; x++) discX(m, x, cy, cz2, r, c); }
+  function discZ(m, z, cx, cy, r, c, rin = 0){          // disc perpendicular to Z
+    for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++)
+      for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++){
+        const dx = x + 0.5 - cx, dy = y + 0.5 - cy, d2 = dx*dx + dy*dy;
+        if (d2 <= r*r && d2 >= rin*rin) put(m, x, y, z, c);
+      }
+  }
+  function cylZ(m, z0, z1, cx, cy, r, c){ for (let z = z0; z <= z1; z++) discZ(m, z, cx, cy, r, c); }
+  function discY(m, y, cx, cz2, r, c, rin = 0){          // disc perpendicular to Y
+    for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++)
+      for (let z = Math.floor(cz2 - r); z <= Math.ceil(cz2 + r); z++){
+        const dx = x + 0.5 - cx, dz = z + 0.5 - cz2, d2 = dx*dx + dz*dz;
+        if (d2 <= r*r && d2 >= rin*rin) put(m, x, y, z, c);
+      }
+  }
+  function cylY(m, y0, y1, cx, cz2, r, c){ for (let y = y0; y <= y1; y++) discY(m, y, cx, cz2, r, c); }
+  function boltRingX(m, x, cy, cz2, r, c, n){
+    for (let i = 0; i < n; i++){ const a = i / n * Math.PI * 2;
+      put(m, x, Math.floor(cy + Math.sin(a) * r), Math.floor(cz2 + Math.cos(a) * r), c); }
+  }
+  function boltRingZ(m, z, cx, cy, r, c, n){
+    for (let i = 0; i < n; i++){ const a = i / n * Math.PI * 2;
+      put(m, Math.floor(cx + Math.cos(a) * r), Math.floor(cy + Math.sin(a) * r), z, c); }
+  }
+  function boltRingY(m, y, cx, cz2, r, c, n){
+    for (let i = 0; i < n; i++){ const a = i / n * Math.PI * 2;
+      put(m, Math.floor(cx + Math.cos(a) * r), y, Math.floor(cz2 + Math.sin(a) * r), c); }
+  }
+
+  const V = voxStatic, C = voxComp;
+  const ZC = 9.0;                                   // barrel longitudinal axis
+  const EV = { x0:3, x1:41, cy:8.0,  r:4.5 };       // evaporator (bottom)
+  const CO = { x0:5, x1:39, cy:16.0, r:4.0 };       // condenser (top)
+  const CP = { cy:19.5, cz:12.5 };                  // compressor/motor axis
+
+  // neoprene isolators (y=0)
+  for (const X of [1, 21, 41]) for (const Z of [3, 14]) box(V, X, X+1, 0, 0, Z, Z+1, 'BLACK');
+  // skid / structural base
+  box(V, 1, 43, 1, 2, 3, 4, 'DARK');
+  box(V, 1, 43, 1, 2, 14, 15, 'DARK');
+  for (const X of [1, 21, 41]) box(V, X, X+1, 1, 2, 5, 13, 'DARK');
+  for (let x = 1; x <= 43; x++) put(V, x, 2, 15, (x % 4 < 2) ? 'YELLOW' : 'BLACK');  // hazard stripe
+  // evaporator mounts + barrel clamps (barrels overwrite)
+  for (const X of [6, 35]){
+    box(V, X, X+2, 2, 3, 5, 12, 'DARK');
+    for (const Z of [5, 12]) box(V, X, X+2, 4, 4, Z, Z, 'DARK');
+  }
+  for (const X of [9, 33]) for (const Z of [6, 11]) box(V, X, X+1, 11, 12, Z, Z, 'DARK');
+  // EVAPORATOR (bottom barrel)
+  cylX(V, EV.x0, EV.x1, EV.cy, ZC, EV.r, 'GREEN');
+  for (const wx of [10, 17, 24, 31, 38]) discX(V, wx, EV.cy, ZC, EV.r, 'GREEN_D', EV.r - 1.1);  // weld seams
+  discX(V, 2,  EV.cy, ZC, 5.0, 'FLANGE');   // head flanges
+  discX(V, 42, EV.cy, ZC, 5.0, 'FLANGE');
+  discX(V, 1,  EV.cy, ZC, 4.0, 'GREEN');    // water boxes
+  discX(V, 43, EV.cy, ZC, 4.0, 'GREEN');
+  discX(V, 0,  EV.cy, ZC, 2.8, 'GREEN_D');
+  discX(V, 44, EV.cy, ZC, 2.8, 'GREEN_D');
+  boltRingX(V, 1,  EV.cy, ZC, 4.6, 'BLACK', 12);  // head bolts
+  boltRingX(V, 43, EV.cy, ZC, 4.6, 'BLACK', 12);
+  put(V, 20, 3, 8, 'DARK'); put(V, 20, 3, 9, 'DARK');  // drain plug
+  // CONDENSER (top barrel)
+  cylX(V, CO.x0, CO.x1, CO.cy, ZC, CO.r, 'GREEN');
+  for (const wx of [12, 20, 28, 33]) discX(V, wx, CO.cy, ZC, CO.r, 'GREEN_D', CO.r - 1.1);
+  discX(V, 5,  CO.cy, ZC, 4.5, 'FLANGE');
+  discX(V, 39, CO.cy, ZC, 4.5, 'FLANGE');
+  discX(V, 4,  CO.cy, ZC, 3.5, 'GREEN');
+  discX(V, 40, CO.cy, ZC, 3.5, 'GREEN');
+  discX(V, 3,  CO.cy, ZC, 2.4, 'GREEN_D');
+  discX(V, 41, CO.cy, ZC, 2.4, 'GREEN_D');
+  boltRingX(V, 4,  CO.cy, ZC, 4.1, 'BLACK', 10);
+  boltRingX(V, 40, CO.cy, ZC, 4.1, 'BLACK', 10);
+  for (const X of [8, 35]) box(V, X, X+1, 20, 21, 9, 9, 'DARK');   // lifting lugs
+  put(V, 24, 20, 9, 'STEEL'); put(V, 24, 21, 9, 'YELLOW');          // relief valve
+  // WATER NOZZLES · EVAPORATOR (blue, toward -Z, drop to floor field piping)
+  for (const cx of [6, 13]){
+    cylZ(V, 2, 5, cx, EV.cy, 2.0, 'BLUE');            // horizontal spool
+    cylZ(V, 0, 1, cx, EV.cy, 2.0, 'BLUE');            // elbow
+    cylY(V, 2, 6, cx, 1.0, 2.0, 'BLUE');              // vertical drop
+    discY(V, 1, cx, 1.0, 2.9, 'FLANGE');              // floor flange
+    boltRingY(V, 0, cx, 1.0, 2.5, 'BLACK', 8);
+    discZ(V, 2, cx, EV.cy, 2.9, 'FLANGE');            // main flange
+    boltRingZ(V, 1, cx, EV.cy, 2.5, 'BLACK', 8);
+    box(V, cx, cx, 10, 11, 3, 3, 'DARK');             // service valve bonnet
+    put(V, cx, 12, 3, 'YELLOW'); put(V, cx-1, 12, 3, 'YELLOW'); put(V, cx+1, 12, 3, 'YELLOW');
+    put(V, cx, 12, 2, 'YELLOW'); put(V, cx, 12, 4, 'YELLOW');   // handwheel
+  }
+  put(V, 13, 10, 4, 'STEEL'); put(V, 13, 11, 4, 'DARK');        // thermowell (return)
+  // WATER NOZZLES · CONDENSER (red, toward -Z, rise to the tower mains)
+  for (const cx of [32, 37]){
+    cylZ(V, 2, 5, cx, CO.cy, 2.0, 'RED');
+    cylZ(V, 0, 1, cx, CO.cy, 2.0, 'RED');             // elbow
+    cylY(V, 17, 20, cx, 1.0, 2.0, 'RED');             // vertical rise
+    discY(V, 21, cx, 1.0, 2.9, 'FLANGE');             // top flange
+    boltRingY(V, 20, cx, 1.0, 2.5, 'BLACK', 8);
+    discZ(V, 2, cx, CO.cy, 2.9, 'FLANGE');
+    boltRingZ(V, 1, cx, CO.cy, 2.5, 'BLACK', 8);
+    box(V, cx, cx, 18, 19, 3, 3, 'DARK');             // service valve
+    put(V, cx, 20, 3, 'YELLOW'); put(V, cx-1, 20, 3, 'YELLOW'); put(V, cx+1, 20, 3, 'YELLOW');
+    put(V, cx, 20, 2, 'YELLOW'); put(V, cx, 20, 4, 'YELLOW');
+  }
+  // liquid line (condenser -> valve -> evaporator), +Z side
+  box(V, 7, 8, 14, 15, 13, 14, 'COPPER');   // condenser outlet
+  box(V, 7, 8, 5, 15, 14, 15, 'COPPER');    // vertical drop
+  box(V, 7, 8, 5, 6, 12, 15, 'COPPER');     // evaporator inlet
+  put(V, 7, 7, 15, 'WHITE'); put(V, 8, 7, 15, 'WHITE');   // sight glass
+  box(V, 7, 8, 10, 11, 16, 16, 'YELLOW');   // service valve handwheel
+  // suction line (evaporator -> compressor), rear end
+  box(V, 42, 43, 13, 19, 8, 9, 'COPPER');   // rise over the head
+  box(V, 42, 43, 18, 19, 10, 13, 'COPPER'); // jog toward compressor axis
+  box(V, 38, 43, 18, 19, 12, 13, 'COPPER'); // horizontal run to suction
+  put(V, 42, 16, 7, 'DARK');                // suction service valve
+  put(V, 42, 16, 6, 'YELLOW'); put(V, 42, 15, 6, 'YELLOW'); put(V, 42, 17, 6, 'YELLOW');
+  put(V, 41, 16, 6, 'YELLOW'); put(V, 43, 16, 6, 'YELLOW');
+  // discharge line (compressor -> condenser), front end
+  box(V, 18, 19, 14, 16, 13, 13, 'COPPER');
+  box(V, 18, 19, 14, 16, 12, 12, 'COPPER'); // condenser penetration
+  // electrical cabinet / control panel (side-mounted, +Z face toward camera)
+  box(V, 20, 34, 2, 17, 13, 15, 'PANEL');
+  box(V, 20, 34, 17, 17, 13, 15, 'PANEL_D');                       // top cover
+  for (let y = 3; y <= 16; y++) put(V, 27, y, 15, 'PANEL_D');      // door seam
+  for (let x = 21; x <= 33; x += 2){ put(V, x, 3, 15, 'PANEL_D'); put(V, x, 4, 15, 'PANEL_D'); }  // louvers
+  box(V, 25, 25, 8, 10, 16, 16, 'STEEL');                          // handle
+  box(V, 22, 31, 10, 15, 15, 15, 'BLACK');                         // screen bezel
+  put(V, 21, 12, 15, 'YELLOW'); put(V, 21, 13, 15, 'YELLOW');      // electrical hazard label
+  for (let x = 13; x <= 19; x++) put(V, x, 16, 13, 'DARK');        // conduit to the motor
+  put(V, 12, 16, 13, 'DARK'); put(V, 12, 16, 14, 'DARK');
+  // nameplate (+Z side of the evaporator)
+  box(V, 36, 40, 7, 9, 13, 13, 'DARK');
+  box(V, 37, 39, 8, 8, 13, 13, 'WHITE');
+  // beacon pedestal (baked; the pulsing beacon head is an animated mesh)
+  box(V, 32, 33, 18, 18, 14, 15, 'DARK');
+
+  // SCREW COMPRESSOR + MOTOR ASSEMBLY (voxComp: vibrating group)
+  // coupled electric motor
+  cylX(C, 6, 17, CP.cy, CP.cz, 2.98, 'STEEL_D');
+  for (const fx of [8, 10, 12, 14, 16]) discX(C, fx, CP.cy, CP.cz, 2.98, 'STEEL', 1.9);  // cooling fins
+  discX(C, 5, CP.cy, CP.cz, 2.4, 'STEEL_D');   // rear bell
+  discX(C, 4, CP.cy, CP.cz, 1.5, 'DARK');      // fan grille
+  box(C, 10, 12, 16, 17, 15, 16, 'DARK');      // junction box
+  // coupling guard (lower half-shell, open on top to see the coupling spin)
+  for (let x = 18; x <= 20; x++)
+    for (let y = 16; y <= 20; y++)
+      for (let z = 9; z <= 16; z++){
+        const dy = y + 0.5 - CP.cy, dz = z + 0.5 - CP.cz, d2 = dy*dy + dz*dz;
+        if (d2 <= 2.6*2.6 && d2 >= 1.9*1.9 && dy <= 0.3) put(C, x, y, z, 'STEEL');
+      }
+  // screw compressor body
+  cylX(C, 21, 36, CP.cy, CP.cz, 2.5, 'STEEL');
+  discX(C, 21, CP.cy, CP.cz, 2.9, 'FLANGE');                                  // coupling flange
+  for (const rx of [25, 29, 33]) discX(C, rx, CP.cy, CP.cz, 2.5, 'STEEL_D', 1.5);  // ribs
+  discX(C, 37, CP.cy, CP.cz, 2.0, 'STEEL_D');                                 // suction cover
+  box(C, 26, 28, 18, 20, 15, 16, 'DARK');                                     // slide (unloader) valve
+  put(C, 27, 21, 15, 'YELLOW');                                               // solenoid
+  box(C, 23, 25, 19, 20, 14, 14, 'WHITE');                                    // compressor nameplate
+  put(C, 31, 18, 14, 'YELLOW');                                               // oil sight glass
+
+  // anti z-fight between systems: the compressor assembly carves its socket
+  for (const key of voxComp.keys()) if (voxStatic.has(key)) voxStatic.delete(key);
+  cullInterior(voxStatic);
+  cullInterior(voxComp);
+  bakeHeroCells(voxStatic, CHILLER_MATS, place, chillerBuckets);
+  const compBuckets = {};
+  bakeHeroCells(voxComp, CHILLER_MATS, { x:0, y:0, z:0, k:CHILLER_K, tx:'std' }, compBuckets);
+  chillerUnits.push({ place, compBuckets });
+}
+// FALLBACK TIER (v4 budget): CH-1 (600 TR, the row farthest from the default
+// camera) keeps the v3 plain block so CH-2..CH-4 can stay full heroes under
+// the 600k tri gate. chillerUnits stays index-aligned with CZ / c1..c4.
+const CH_HERO = [false, true, true, true];
+function buildChillerBlock(cz) {
   voxBox(29, 1, cz-3, 40, 1, cz+3, COL.DARK);          // skid rail
   voxBox(30, 1, cz-2, 39, 2, cz+1, COL.CHILL);         // evaporator barrel
   voxBox(31, 3, cz-2, 38, 4, cz+1, COL.CHILL);         // condenser barrel
@@ -310,18 +604,329 @@ function buildChiller(cz) {
   voxBox(32, 1, cz+2, 33, 1, cz+2, COL.DARK);          // control panel base
   voxBox(32, 2, cz+2, 33, 3, cz+2, COL.SCREEN);        // HMI screen
 }
-CZ.forEach(cz => buildChiller(cz));
+CZ.forEach((cz, i) => {
+  if (CH_HERO[i]) buildHeroChiller(cz);
+  else { buildChillerBlock(cz); chillerUnits.push(null); }
+});
 
-// ====== PUMPS (1.5 m long) ======
-function buildPump(px, cz) {
+// ====== PUMPS (heroes: end-suction centrifugal, 1 hero voxel = 0.025 m -> k = 0.05) ======
+// Transplanted from bomba-centrifuga-voxel.html. Context stripped per the v4
+// plan: concrete pad + anchor bolts (pumps sit on the yard pad) and the field
+// piping beyond the suction gate valve (cut at local x >= -14) so the hotel
+// mains take over. Discharge riser kept up to its top flange, meeting the y=3
+// header stubs. One fill, culled once, baked per placement into shared buckets.
+const PUMP_K = 0.05;
+const PUMP_MATS = {
+  VOLUTE:  { c:0x2456a8, r:0.38, m:0.30 },   // industrial blue volute
+  VOLUTE_D:{ c:0x183d7c, r:0.42, m:0.30 },
+  MOTOR:   { c:0x3a3a40 },                   // unlisted r/m default to 0.5/0.55 (source)
+  MOTOR_D: { c:0x2c2c32 },
+  FIN:     { c:0x4a4a52 },
+  STEEL:   { c:0x8a8a92 },
+  STEEL_D: { c:0x62626a },
+  BAND:    { c:0x2f6fb5 },                   // chilled-water pipe band
+  FLANGE:  { c:0x74747c },
+  NUT:     { c:0xb7b7bc, r:0.35, m:0.85 },
+  SAFETY:  { c:0xf2c230, r:0.50, m:0.15 },   // yellow coupling guard
+  GRILLE:  { c:0x1a1a1e },
+  RED:     { c:0xc22a34, r:0.45, m:0.20 },   // valve handwheels
+  BRASS:   { c:0xb87333, r:0.35, m:0.80 },
+  FACE_S:  { c:0xcfe6ff, r:0.30, m:0.0, e:0xcfe6ff, ei:0.25 },   // suction gauge face
+  FACE_D:  { c:0xffe9c2, r:0.30, m:0.0, e:0xffe9c2, ei:0.25 },   // discharge gauge face
+  NEEDLE:  { c:0xd0242e, r:0.35, m:0.2, e:0xd0242e, ei:0.35 },
+  FRAME:   { c:0x3a3a3e },
+  DARK:    { c:0x24242a },
+  SHAFT:   { c:0x9aa0a8, r:0.28, m:0.90 },
+  PLATE:   { c:0xd9d4c0, r:0.35, m:0.60 },
+};
+const pumpCells = new Map();
+{
+  // shaft axis: X · centerline y=14, z=12 (hero local voxels)
+  const CY = 14, CZP = 12;
+  const addC = (x, y, z, c) => {
+    x = Math.round(x); y = Math.round(y); z = Math.round(z);
+    const key = x + ',' + y + ',' + z;
+    if (!pumpCells.has(key)) pumpCells.set(key, c);   // dedupe: first write wins
+  };
+  const S = (x, y, z, c) => { if (x < -14) return; addC(x, y, z, c); };  // field-piping cut
+  const A = S;   // motor-pump assembly: static at hotel scale (no vib toggle)
+  function diskX(P, x, r, color, holeR=0, cy=CY, cz=CZP) {
+    for (let y=Math.floor(cy-r); y<=Math.ceil(cy+r); y++)
+      for (let z=Math.floor(cz-r); z<=Math.ceil(cz+r); z++) {
+        const d = Math.hypot(y-cy, z-cz);
+        if (d<=r && d>=holeR) P(x,y,z,color);
+      }
+  }
+  function diskY(P, y, r, color, holeR=0, cx=12, cz=CZP) {
+    for (let x=Math.floor(cx-r); x<=Math.ceil(cx+r); x++)
+      for (let z=Math.floor(cz-r); z<=Math.ceil(cz+r); z++) {
+        const d = Math.hypot(x-cx, z-cz);
+        if (d<=r && d>=holeR) P(x,y,z,color);
+      }
+  }
+  function tubeX(P, x0, x1, r, colorFn, cy=CY, cz=CZP) {
+    for (let x=x0; x<=x1; x++)
+      for (let y=Math.floor(cy-r); y<=Math.ceil(cy+r); y++)
+        for (let z=Math.floor(cz-r); z<=Math.ceil(cz+r); z++) {
+          const d = Math.hypot(y-cy, z-cz);
+          if (d<=r && d>=r-1.5) P(x,y,z,colorFn(x));
+        }
+  }
+  function tubeY(P, y0, y1, r, colorFn, cx=12, cz=CZP) {
+    for (let y=y0; y<=y1; y++)
+      for (let x=Math.floor(cx-r); x<=Math.ceil(cx+r); x++)
+        for (let z=Math.floor(cz-r); z<=Math.ceil(cz+r); z++) {
+          const d = Math.hypot(x-cx, z-cz);
+          if (d<=r && d>=r-1.5) P(x,y,z,colorFn(y));
+        }
+  }
+  function boltRingX(P, x, r, color, cy=CY, cz=CZP) {
+    for (let i=0; i<8; i++) {
+      const a = i/8*Math.PI*2 + Math.PI/8;
+      P(x, Math.round(cy+Math.sin(a)*r), Math.round(cz+Math.cos(a)*r), color);
+    }
+  }
+  function boltRingY(P, y, r, color, cx=12, cz=CZP) {
+    for (let i=0; i<8; i++) {
+      const a = i/8*Math.PI*2 + Math.PI/8;
+      P(Math.round(cx+Math.sin(a)*r), y, Math.round(cz+Math.cos(a)*r), color);
+    }
+  }
+
+  // electric motor (front cap, finned body, rear bell + fan grille)
+  diskX(A, 34, 6, 'MOTOR_D', 1.3);
+  for (let x=35; x<=56; x++) {
+    const fin = (x % 2 === 1) && x>=37 && x<=55;
+    for (let y=CY-7; y<=CY+7; y++)
+      for (let z=CZP-7; z<=CZP+7; z++) {
+        const d2 = (y-CY)*(y-CY) + (z-CZP)*(z-CZP);
+        if (d2 <= 36 && d2 >= 21) A(x,y,z,'MOTOR');          // body shell
+        else if (fin && d2 > 36 && d2 <= 49) A(x,y,z,'FIN'); // cooling fin
+      }
+  }
+  tubeX(A, 57, 59, 6.8, () => 'STEEL_D');
+  for (let y=CY-7; y<=CY+7; y++)
+    for (let z=CZP-7; z<=CZP+7; z++) {
+      const d = Math.hypot(y-CY, z-CZP);
+      if (d <= 6.8) {
+        if (d <= 1.6) A(60,y,z,'DARK');
+        else if ((y+z) % 2 === 0) A(60,y,z,'GRILLE');
+      }
+    }
+  // motor feet
+  [[36,40],[50,54]].forEach(([fx0,fx1]) => {
+    for (let x=fx0; x<=fx1; x++)
+      for (let z=5; z<=18; z++)
+        for (let y=4; y<=5; y++)
+          A(x,y,z,'MOTOR_D');
+    for (let x=fx0+1; x<=fx1-1; x++)
+      for (let z=8; z<=15; z++)
+        A(x,6,z,'MOTOR_D');
+    for (let x=fx0+1; x<=fx1-1; x++)
+      for (let z=10; z<=13; z++)
+        A(x,7,z,'MOTOR_D');
+  });
+  // junction box (pedestal + sealed lid)
+  for (let x=44; x<=46; x++)
+    for (let y=20; y<=21; y++)
+      for (let z=10; z<=14; z++)
+        A(x,y,z,'MOTOR_D');
+  for (let x=42; x<=48; x++)
+    for (let y=21; y<=26; y++)
+      for (let z=8; z<=15; z++) {
+        const sh = (x===42 || x===48 || y===26 || z===8 || z===15);
+        if (!sh) continue;
+        A(x,y,z, (y===25) ? 'DARK' : 'MOTOR_D');
+      }
+  // electrical conduit to the base
+  for (let y=4; y<=21; y++) A(43, y, 4, 'DARK');
+  A(43,21,5,'DARK'); A(43,21,6,'DARK'); A(43,21,7,'DARK');
+  // lifting eye
+  A(38,21,12,'NUT');
+  A(38,22,12,'DARK');
+  A(38,23,11,'DARK'); A(38,23,13,'DARK');
+  A(38,24,12,'DARK');
+  // bearing frame + pedestal (nameplate on the front face)
+  tubeX(A, 19, 25, 3.6, () => 'STEEL_D');
+  diskX(A, 18, 3.6, 'STEEL_D', 1.3);
+  diskX(A, 26, 3.6, 'STEEL_D', 1.3);
+  for (let x=19; x<=25; x++)
+    for (let y=4; y<=10; y++)
+      for (let z=8; z<=15; z++) {
+        const plate = (z===15 && x>=20 && x<=24 && y>=6 && y<=8);
+        A(x,y,z, plate ? 'PLATE' : 'FRAME');
+      }
+  // shaft stubs toward the coupling
+  [[27],[33]].forEach(([sx]) => {
+    [[0,0],[1,0],[-1,0],[0,1],[0,-1]].forEach(([dy,dz]) => A(sx, CY+dy, CZP+dz, 'SHAFT'));
+  });
+  // spiral volute (industrial blue)
+  const rSpiral = a => 6.2 + 2.8 * (a / (Math.PI*2));
+  for (let x=8; x<=16; x++)
+    for (let y=4; y<=25; y++)
+      for (let z=2; z<=22; z++) {
+        const dy=y-CY, dz=z-CZP;
+        const d = Math.hypot(dy,dz);
+        let a = Math.atan2(dz, dy);
+        a = (a + Math.PI*2) % (Math.PI*2);
+        const r = rSpiral(a);
+        if (x===8 || x===16) {
+          if (d <= r) {
+            const hole = (x===8 && d<=3.2) || (x===16 && d<=1.6);
+            if (!hole) A(x,y,z,'VOLUTE_D');
+          }
+        } else {
+          if (d <= r && d >= r-1.6) A(x,y,z,'VOLUTE');
+          else if (d < r-1.6) A(x,y,z,'DARK');
+        }
+      }
+  // volute feet
+  for (let x=10; x<=14; x++)
+    for (let y=4; y<=6; y++)
+      for (let z=9; z<=15; z++)
+        A(x,y,z,'VOLUTE_D');
+  // drain plug
+  A(12,6,12,'BRASS'); A(12,5,12,'BRASS');
+  // vertical discharge nozzle + pump flange
+  tubeY(A, 20, 28, 3.2, () => 'VOLUTE');
+  diskY(A, 29, 5, 'FLANGE', 2.5);
+  diskY(A, 30, 5, 'FLANGE', 2.5);
+  boltRingY(A, 28, 3.9, 'NUT');
+  // horizontal suction nozzle + pump flange
+  tubeX(A, 4, 7, 3.2, () => 'VOLUTE');
+  diskX(A, 2, 5, 'FLANGE', 2.5);
+  diskX(A, 3, 5, 'FLANGE', 2.5);
+  boltRingX(A, 4, 3.9, 'NUT');
+  // coupling guard (yellow shell + dark mesh)
+  for (const gx of [27, 33])
+    for (let y=CY-8; y<=CY+8; y++)
+      for (let z=CZP-8; z<=CZP+8; z++) {
+        const d = Math.hypot(y-CY, z-CZP);
+        if (d >= 5.6 && d <= 7.2 && y >= 9) S(gx,y,z,'SAFETY');
+      }
+  for (let gx=28; gx<=32; gx++)
+    for (let y=CY-8; y<=CY+8; y++)
+      for (let z=CZP-8; z<=CZP+8; z++) {
+        const d = Math.hypot(y-CY, z-CZP);
+        if (d >= 5.8 && d <= 7.0 && y >= 9 && (gx+y+z) % 2 === 0)
+          S(gx,y,z,'GRILLE');
+      }
+  for (let gx=27; gx<=33; gx++)
+    for (let z=11; z<=13; z++)
+      S(gx,21,z,'SAFETY');
+  [[27,6],[27,18],[33,6],[33,18]].forEach(([lx,lz]) => {
+    for (let y=4; y<=9; y++) S(lx,y,lz,'SAFETY');
+  });
+  // discharge piping (vertical, banded) + gate valve + amber gauge
+  const bandY = y => (y===35 || y===36 || y===49 || y===50) ? 'BAND' : 'STEEL';
+  diskY(S, 31, 5, 'FLANGE', 2.5);
+  diskY(S, 32, 5, 'FLANGE', 2.5);
+  boltRingY(S, 33, 3.9, 'NUT');
+  tubeY(S, 33, 52, 3, bandY);
+  [3.8,4.6,5.2,4.6,3.8].forEach((r,i) => {
+    const y = 40+i;
+    for (let x=Math.floor(12-r); x<=Math.ceil(12+r); x++)
+      for (let z=Math.floor(CZP-r); z<=Math.ceil(CZP+r); z++) {
+        const d = Math.hypot(x-12, z-CZP);
+        if (d<=r && d>=r-1.5) S(x,y,z,'STEEL_D');
+      }
+  });
+  for (let z=17; z<=21; z++)
+    for (let x=10; x<=14; x++)
+      for (let y=40; y<=44; y++) {
+        const d = Math.hypot(x-12, y-42);
+        if (d <= 2) S(x,y,z,'STEEL_D');
+      }
+  S(12,42,22,'SHAFT'); S(12,42,23,'SHAFT');
+  for (let dx=-4; dx<=4; dx++)
+    for (let dy=-4; dy<=4; dy++) {
+      const d = Math.hypot(dx,dy);
+      if (d>=2.6 && d<=3.4) S(12+dx, 42+dy, 24, 'RED');
+      else if ((dx===0 || dy===0) && d>=1 && d<=2.4) S(12+dx, 42+dy, 24, 'RED');
+    }
+  S(12,42,24,'DARK');
+  S(12,36,16,'BRASS'); S(12,36,17,'BRASS');
+  for (let dx=-3; dx<=3; dx++)
+    for (let dy=-3; dy<=3; dy++) {
+      const d = Math.hypot(dx,dy);
+      if (d <= 2.6) {
+        S(12+dx, 36+dy, 18, 'DARK');
+        S(12+dx, 36+dy, 19, d>1.8 ? 'DARK' : 'FACE_D');
+        S(12+dx, 36+dy, 20, d>1.8 ? 'DARK' : 'FACE_D');
+      }
+    }
+  S(12,36,20,'DARK');
+  S(12,37,20,'NEEDLE'); S(13,38,20,'NEEDLE');
+  diskY(S, 53, 5, 'FLANGE', 2.5);
+  diskY(S, 54, 5, 'FLANGE', 2.5);
+  boltRingY(S, 55, 3.9, 'NUT');
+  boltRingY(S, 52, 3.9, 'NUT');
+  // suction piping (horizontal, banded) + gate valve + light-blue gauge
+  const bandX = x => (x===-5 || x===-4 || x===-17 || x===-16) ? 'BAND' : 'STEEL';
+  diskX(S, 0, 5, 'FLANGE', 2.5);
+  diskX(S, 1, 5, 'FLANGE', 2.5);
+  boltRingX(S, -1, 3.9, 'NUT');
+  tubeX(S, -20, -1, 3, bandX);
+  [3.8,4.6,5.2,4.6,3.8].forEach((r,i) => {
+    const x = -12+i;
+    for (let y=Math.floor(CY-r); y<=Math.ceil(CY+r); y++)
+      for (let z=Math.floor(CZP-r); z<=Math.ceil(CZP+r); z++) {
+        const d = Math.hypot(y-CY, z-CZP);
+        if (d<=r && d>=r-1.5) S(x,y,z,'STEEL_D');
+      }
+  });
+  for (let y=18; y<=23; y++)
+    for (let x=-12; x<=-8; x++)
+      for (let z=10; z<=14; z++) {
+        const d = Math.hypot(x+10, z-CZP);
+        if (d <= 2) S(x,y,z,'STEEL_D');
+      }
+  S(-10,24,12,'SHAFT'); S(-10,25,12,'SHAFT');
+  for (let dx=-4; dx<=4; dx++)
+    for (let dz=-4; dz<=4; dz++) {
+      const d = Math.hypot(dx,dz);
+      if (d>=2.6 && d<=3.4) S(-10+dx, 26, 12+dz, 'RED');
+      else if ((dx===0 || dz===0) && d>=1 && d<=2.4) S(-10+dx, 26, 12+dz, 'RED');
+    }
+  S(-10,26,12,'DARK');
+  S(-5,17,12,'BRASS'); S(-5,18,12,'BRASS'); S(-5,19,12,'BRASS');
+  for (let dx=-3; dx<=3; dx++)
+    for (let dy=-3; dy<=3; dy++) {
+      const d = Math.hypot(dx,dy);
+      if (d <= 2.6) {
+        S(-5+dx, 21+dy, 11, 'DARK');
+        S(-5+dx, 21+dy, 12, d>1.8 ? 'DARK' : 'FACE_S');
+        S(-5+dx, 21+dy, 13, d>1.8 ? 'DARK' : 'FACE_S');
+      }
+    }
+  S(-5,21,13,'DARK');
+  S(-5,22,13,'NEEDLE'); S(-4,23,13,'NEEDLE');
+  cullInterior(pumpCells);
+}
+// FALLBACK TIER (a): 8 hero pumps measured ~535k tris (~67k each) and blew the
+// 600k gate, so only the front row (pz=50, facing the default 3/4 camera) gets
+// heroes; the other positions keep the v3 plain blocks. y = 0.8 puts the hero
+// motor feet (local y=4) exactly on the pad top.
+const PUMP_PLACES = [
+  { x:22.9, y:0.8, z:49.4, k:PUMP_K, tx:'std', bank:'bc' },   // condenser pump, front row
+  { x:43.9, y:0.8, z:49.4, k:PUMP_K, tx:'std', bank:'bp' },   // primary pump, front row
+];
+const pumpBuckets = {};
+PUMP_PLACES.forEach(p => bakeHeroCells(pumpCells, PUMP_MATS, p, pumpBuckets));
+// plain-block pumps (v3) for the remaining positions
+function buildPumpBlock(px, cz) {
   vox(px, 1, cz-1, COL.HOUSING);
   vox(px, 1, cz,   COL.HOUSING);
   vox(px, 1, cz+1, COL.HOUSING);
   vox(px, 2, cz,   COL.HOUSING);
   voxBox(px+1, 1, cz, px+2, 1, cz, COL.MOTOR);
 }
-PCZ.forEach(cz => buildPump(23, cz));   // condenser pumps
-PCZ.forEach(cz => buildPump(44, cz));   // primary pumps
+const PLAIN_PUMPS = [
+  { px:23,  cz:14, bank:'bc' }, { px:23,  cz:32, bank:'bc' },
+  { px:44,  cz:14, bank:'bp' }, { px:44,  cz:32, bank:'bp' },
+  { px:212, cz:62, bank:'pool' }, { px:212, cz:68, bank:'pool' },
+];
+PLAIN_PUMPS.forEach(p => buildPumpBlock(p.px, p.cz));
 
 // ====== PIPES · CONDENSER COOLED (green) ======
 pipeRun([18,1,16],[21,1,16], COL.PIPE_G);
@@ -332,23 +937,36 @@ PCZ.forEach(pz => {
   pipeRun([24,3,pz],[27,3,pz], COL.PIPE_G);
   vox(28, 2, pz, COL.PIPE_G);
 });
-pipeRun([28,1,10],[28,1,52], COL.PIPE_G);
-CZ.forEach(cz => vox(29, 1, cz, COL.PIPE_G));
+pipeRun([28,1,8],[28,1,52], COL.PIPE_G);
+// floor run to each hero condenser inlet riser (nozzle pair at local x 32/37);
+// the plain CH-1 block keeps its v3 side inlet
+CZ.forEach((cz, i) => {
+  if (!CH_HERO[i]) { vox(29, 1, cz, COL.PIPE_G); return; }
+  // 0.03/0.04 offsets: hero cell planes land on 0.2 multiples, so integer-aligned
+  // stub faces would be coplanar with hero faces and z-fight (review W1)
+  pipeRun([29,1,cz-2.03],[35,1,cz-2.03], COL.PIPE_G);
+  pipeRun([36.03,1,cz-2.03],[36.03,2.96,cz-2.03], COL.PIPE_G);   // rise into the first red nozzle elbow
+});
 
 // ====== PIPES · CONDENSER HOT (red) ======
-CZ.forEach(cz => {
-  vox(31, 5, cz, COL.PIPE_R);
-  pipeRun([19,5,cz],[30,5,cz], COL.PIPE_R);
+// overhead run meets the second hero condenser riser top flange (~y 5.3)
+CZ.forEach((cz, i) => {
+  if (!CH_HERO[i]) { vox(31, 5, cz, COL.PIPE_R); pipeRun([19,5,cz],[30,5,cz], COL.PIPE_R); return; }
+  pipeRun([19,5,cz-2],[36,5,cz-2], COL.PIPE_R);
 });
-pipeRun([19,5,10],[19,5,52], COL.PIPE_R);
+pipeRun([19,5,8],[19,5,52], COL.PIPE_R);
 for (const tz of [16, 44]) {
   pipeRun([19,6,tz],[19,8,tz], COL.PIPE_R);
   pipeRun([14,8,tz],[18,8,tz], COL.PIPE_R);
 }
 
 // ====== PIPES · CHILLED WATER (blue) ======
-CZ.forEach(cz => vox(40, 1, cz, COL.PIPE_B));
-pipeRun([41,1,10],[41,1,52], COL.PIPE_B);
+// floor run under the hero evaporator floor flanges (local x 6/13) to the main
+CZ.forEach((cz, i) => {
+  if (!CH_HERO[i]) { vox(40, 1, cz, COL.PIPE_B); return; }
+  pipeRun([31,1,cz-3],[40,1,cz-3], COL.PIPE_B);
+});
+pipeRun([41,1,7],[41,1,52], COL.PIPE_B);
 PCZ.forEach(pz => {
   pipeRun([42,1,pz],[43,1,pz], COL.PIPE_B);
   vox(44, 3, pz, COL.PIPE_B);
@@ -362,13 +980,14 @@ pipeRun([48,1,53],[48,1,55], COL.PIPE_B);
 // riser to roof AHU (up east face)
 pipeRun([206,1,28],[206,1,56], COL.PIPE_B);
 pipeRun([206,1,27],[206,49,27], COL.PIPE_B);
-pipeRun([191,50,27],[206,50,27], COL.PIPE_B);
-pipeRun([191,50,22],[191,50,26], COL.PIPE_B);
+pipeRun([190,50,27],[206,50,27], COL.PIPE_B);
+pipeRun([189,50,22],[189,50,27], COL.PIPE_B);   // to the hero UMA-1 coil drops
 // branch to pool plate HX (into hut through north wall gap)
 pipeRun([217,1,58],[217,1,64], COL.PIPE_B);
-// branch to UMA-2 (west of the hut)
-pipeRun([208,1,58],[208,1,79], COL.PIPE_B);
-pipeRun([209,1,79],[211,1,79], COL.PIPE_B);
+// branch to UMA-2 (west of the hut, around to its south-face hero coil drops)
+pipeRun([208,1,58],[208,1,86], COL.PIPE_B);
+pipeRun([209,1,86],[215,1,86], COL.PIPE_B);
+vox(216, 1, 86, COL.PIPE_B); vox(216, 1, 85, COL.PIPE_B);
 
 // ====== HOTEL TOWER (8 floors x 3 m, 48 x 18 m footprint) ======
 voxBox(TWX0, 0, TWZ0, TWX1, 0, TWZ1, COL.PANEL);                 // plinth
@@ -423,19 +1042,370 @@ FLOORS.forEach(f => {
   voxBox(INT_X1-7, f+3, INT_MIDZ,   INT_X1-3, f+3, INT_MIDZ,   COL.DUCT);       // short duct run to corridor
 });
 
-// ====== ROOFTOP AHUs (4 m long x 2 m tall) ======
-function buildAHU(x0, z0, yBase) {
-  voxBox(x0-1, yBase, z0-1, x0+8, yBase, z0+4, COL.SKID);        // pad
-  voxBox(x0, yBase+1, z0, x0+2, yBase+3, z0+3, COL.BEIGE_D);     // intake section
-  voxBox(x0+3, yBase+1, z0, x0+4, yBase+3, z0+3, COL.COIL);      // coil section
-  voxBox(x0+5, yBase+1, z0, x0+7, yBase+3, z0+3, COL.BEIGE_D);   // fan section
-  vox(x0, yBase+1, z0, COL.GRILLE);                              // intake grille hint
+// ====== FCU SHOWCASE (hero: ceiling fan-coil, 1 hero voxel = 0.02 m -> k = 0.04) ======
+// Transplanted from fcu-plafon-voxel.html with the standalone context stripped
+// (slab, hanger rods, plafon, wall + thermostat, far drain tail). One unit
+// hangs flush under the piso-5 slab in a south room of floor 4, so the CORTE
+// TORRE cutaway reveals it. The galvanized shell keeps the baked transparent
+// "corte" look (no shadow casting, no depth write). Runs with VAV PISO 4.
+const FCU_K = 0.04;
+const FCU_PLACE = { x:146, y:22.92, z:31, k:FCU_K, tx:'std' };   // cabinet top flush at y=24
+const FCU_MATS = {
+  GALV:     { c:0xc4c8cc, r:0.45, m:0.55, t:0.18 },   // shell (baked corte)
+  GALV_D:   { c:0x9aa0a6, r:0.45, m:0.55, t:0.18 },   // shell seams / ribs
+  DARK:     { c:0x2a2a2e },
+  FRAME:    { c:0x3a3a3e },
+  GRILLE:   { c:0x1a1a1e },
+  HOUSING:  { c:0x6a6a72 },   // blower scrolls
+  HOUSING_D:{ c:0x4a4a52 },
+  MOTOR:    { c:0x55555c },
+  COIL:     { c:0x2f8a86 },   // teal coil lattice
+  COIL_H:   { c:0x49b3ad },
+  COPPER:   { c:0xb87333 },
+  TRAY:     { c:0x23262b },   // condensate tray
+  PIPE_B:   { c:0x2f5f96, r:0.5, m:0.4 },
+  VALVE:    { c:0xd23c3c },   // valve handwheels
+  FILT_A:   { c:0x9aa0aa },   // filter pleats (light)
+  FILT_B:   { c:0x6a7078 },   // filter pleats (dark)
+  CABLE:    { c:0x22262c },
+  DRAIN:    { c:0xd8d8dc },
+};
+const fcuBuckets = {};
+{
+  const fcuCells = new Map();
+  const fv = (x, y, z, c) => fcuCells.set(x + ',' + y + ',' + z, c);
+  const fpipe = (a, b, color) => {
+    const dx=Math.sign(b[0]-a[0]), dy=Math.sign(b[1]-a[1]), dz=Math.sign(b[2]-a[2]);
+    const len = Math.max(Math.abs(b[0]-a[0]), Math.abs(b[1]-a[1]), Math.abs(b[2]-a[2]));
+    for (let i=0;i<=len;i++)
+      fv(a[0]+dx*i, a[1]+dy*i, a[2]+dz*i, color);
+  };
+  const YB = 12;                  // shared with the wheel anchors below
+  const WCX = [15, 37];           // twin turbine centers
+  const u = (x, y, z, c) => fv(x, y+YB, z, c);   // cabinet local coords
+  // cabinet (galvanized shell, corte) · back wall z=0
+  for (let x=0; x<=54; x++)
+    for (let y=0; y<=14; y++)
+      u(x, y, 0, 'GALV');
+  // side walls x=0 and x=54 (pipe holes on x=54)
+  for (let z=1; z<=28; z++) {
+    const bot = z<=18 ? 0 : Math.round((z-18)*0.5);
+    const top = z<=18 ? 14 : 14 - Math.round((z-18)*0.5);
+    for (let y=bot; y<=top; y++) {
+      u(0, y, z, 'GALV');
+      const pipeHole = (z===16 && (y===3 || y===11));
+      if (!pipeHole) u(54, y, z, 'GALV');
+    }
+  }
+  // bottom y=0 with return opening + flat filter
+  for (let x=1; x<=53; x++)
+    for (let z=1; z<=18; z++) {
+      if (x===51 && z===17) continue;                 // drain hole
+      const inOpening = (x>=6 && x<=48 && z>=3 && z<=12);
+      if (inOpening) {
+        const isRim = (x===6 || x===48 || z===3 || z===12);
+        if (isRim) u(x, 0, z, 'FRAME');
+        else u(x, 0, z, (z%2===0) ? 'FILT_A' : 'FILT_B');  // filter pleats
+      } else {
+        const seam = (z===13 || z===18 || x===27);
+        u(x, 0, z, seam ? 'GALV_D' : 'GALV');
+      }
+    }
+  // top y=14 + ribs
+  for (let x=1; x<=53; x++)
+    for (let z=1; z<=18; z++)
+      u(x, 14, z, 'GALV');
+  for (const rx of [9, 18, 27, 36, 45])
+    for (let z=1; z<=18; z++)
+      u(rx, 15, z, 'GALV_D');
+  // discharge plenum (sloped panels)
+  for (let x=1; x<=53; x++)
+    for (let z=19; z<=28; z++) {
+      const bot = Math.round((z-18)*0.5);
+      u(x, bot, z, 'GALV');
+      u(x, 14-bot, z, 'GALV');
+    }
+  // linear supply grille (face z=29)
+  for (let x=0; x<=54; x++)
+    for (let y=4; y<=10; y++) {
+      const isRim = (y===4 || y===10 || x===0 || x===54);
+      if (isRim) u(x, y, 29, 'GALV_D');
+      else if (x%2===0) u(x, y, 29, 'GRILLE');        // grille bars
+    }
+  // twin centrifugal blowers (scroll housings)
+  const WCY = 7, WCZ = 8;
+  WCX.forEach(wc => {
+    for (let x=wc-5; x<=wc+5; x++)
+      for (let y=1; y<=13; y++)
+        for (let z=2; z<=13; z++) {
+          const dy=y-WCY, dz=z-WCZ;
+          const r2 = dy*dy + dz*dz;
+          if (r2 <= 36 && r2 >= 25) {
+            if (dy>=0 && dz>=1) continue;             // discharge opening (front-top)
+            u(x, y, z, 'HOUSING');
+          }
+        }
+    // side plates with suction eyes
+    for (const px of [wc-6, wc+6])
+      for (let y=1; y<=13; y++)
+        for (let z=2; z<=14; z++) {
+          const dy=y-WCY, dz=z-WCZ;
+          const r2 = dy*dy + dz*dz;
+          if (r2 <= 36 && r2 >= 9) u(px, y, z, 'HOUSING_D');
+          else if (r2 < 9 && r2 >= 5) u(px, y, z, 'DARK');  // suction ring
+        }
+  });
+  // central motor between the turbines
+  for (let x=23; x<=29; x++)
+    for (let y=4; y<=10; y++)
+      for (let z=5; z<=11; z++) {
+        const dy=y-WCY, dz=z-WCZ;
+        const d2 = dy*dy + dz*dz;
+        if (d2 <= 5) u(x, y, z, d2 >= 2 ? 'MOTOR' : 'DARK');
+      }
+  for (let x=25; x<=27; x++)
+    for (let y=1; y<=3; y++)
+      for (let z=7; z<=9; z++)
+        u(x, y, z, 'FRAME');                          // motor leg
+  // 2-pipe cooling coil (teal lattice)
+  for (let x=3; x<=51; x++)
+    for (let y=2; y<=12; y++)
+      for (let z=14; z<=16; z++) {
+        const isFrame = (x===3 || x===51 || y===2 || y===12);
+        if (isFrame) { u(x, y, z, 'FRAME'); continue; }
+        if (z===15) { u(x, y, z, 'COIL_H'); continue; }       // core
+        u(x, y, z, ((x+y)%2===0) ? 'COIL' : 'COIL_H');        // fin lattice
+      }
+  // copper U-bends (left side)
+  for (const y of [3, 5, 7, 9, 11]) {
+    u(2, y, 14, 'COPPER'); u(1, y, 14, 'COPPER');
+    u(1, y, 15, 'COPPER');
+    u(1, y, 16, 'COPPER'); u(2, y, 16, 'COPPER');
+  }
+  // copper header (right side) + wall spigots
+  for (let y=3; y<=11; y++) u(52, y, 16, 'COPPER');
+  u(53, 3, 16, 'COPPER'); u(53, 11, 16, 'COPPER');
+  // condensate tray + drain stub (far tail beyond the plenum dropped)
+  for (let x=2; x<=52; x++)
+    for (let z=13; z<=18; z++) {
+      u(x, 1, z, 'TRAY');
+      if (x===2 || x===52 || z===13 || z===18) u(x, 2, z, 'TRAY');  // lip
+    }
+  fv(51, YB-1, 17, 'DRAIN');
+  fv(51, YB-2, 17, 'DRAIN');
+  fpipe([51, YB-2, 18], [51, YB-2, 28], 'DRAIN');
+  // chilled-water piping + valves (risers pierce the slab above)
+  fpipe([55, YB+3, 16], [63, YB+3, 16], 'PIPE_B');    // supply (bottom)
+  fpipe([63, YB+4, 16], [63, 33, 16], 'PIPE_B');
+  fpipe([55, YB+11, 16], [58, YB+11, 16], 'PIPE_B');  // return (top, jog to z=18)
+  fv(59, YB+11, 17, 'PIPE_B');
+  fpipe([59, YB+11, 18], [63, YB+11, 18], 'PIPE_B');
+  fpipe([63, YB+12, 18], [63, 33, 18], 'PIPE_B');
+  fv(57, YB+4, 16, 'DARK'); fv(57, YB+5, 16, 'VALVE');    // valve bodies + handwheels
+  fv(57, YB+12, 16, 'DARK'); fv(57, YB+13, 16, 'VALVE');
+  // control box + conduit up into the slab
+  for (let x=55; x<=57; x++)
+    for (let y=15; y<=21; y++)
+      for (let z=20; z<=24; z++)
+        if (x===57 || y===15 || y===21 || z===20 || z===24)
+          fv(x, y, z, 'DARK');
+  fpipe([56, 22, 22], [56, 30, 22], 'CABLE');
+  cullInterior(fcuCells, n => !FCU_MATS[n].t);   // transparent shell never occludes
+  bakeHeroCells(fcuCells, FCU_MATS, FCU_PLACE, fcuBuckets);
 }
-buildAHU(186, 18, 49);   // UMA-1 (animated wheel)
-buildAHU(170, 18, 49);   // twin unit (static)
-// roof supply duct from UMA-1 to riser
-voxBox(194, 50, 19, 205, 51, 20, COL.DUCT);
-voxBox(206, 50, 19, 207, 51, 21, COL.DUCT);
+
+// ====== AHUs (heroes: air handling units, 1 hero voxel = 0.1 m -> k = 0.2) ======
+// Transplanted from ahu-cuarto-maquinas-voxel.html with the CORTE look baked
+// in (front door panels not ported, so the filter/coil/plug-fan interior reads
+// from outside). UMA-1 and the rooftop twin are mirrored in z so the open
+// front faces the camera side while the discharge keeps pointing +x into the
+// roof duct; UMA-2 is rotated 180 so its discharge meets the pool supply duct.
+const AHU_K = 0.2;
+const AHU_MATS = {
+  PANEL_L: { c:0xc9ccd1, r:0.6, m:0.3 },   // light gray outer panels
+  PANEL_D: { c:0x9a9ea6, r:0.6, m:0.3 },   // secondary panels / blank-offs
+  FRAME:   { c:0x33353b, r:0.4, m:0.7 },   // dark structural frames
+  DARK:    { c:0x24262b, r:0.6, m:0.3 },
+  SKID:    { c:0x7d8087, r:0.4, m:0.7 },
+  CREAM:   { c:0xe8e0c6, r:0.6, m:0.3 },   // pleated filters
+  COIL_T:  { c:0x2f8f86, r:0.6, m:0.3 },   // teal coil fins
+  COIL_T2: { c:0x3fae9f, r:0.6, m:0.3 },
+  COPPER:  { c:0xb87333, r:0.4, m:0.7 },
+  MOTOR:   { c:0x55555c, r:0.4, m:0.7 },
+  HOUSING: { c:0x6a6a72, r:0.4, m:0.7 },
+  DUCT:    { c:0x8a8f96, r:0.4, m:0.7 },
+  PIPE_S:  { c:0x9aa0a8, r:0.4, m:0.7 },   // steel piping
+  PIPE_B:  { c:0x2f5f96, r:0.4, m:0.7 },   // chilled-water bands
+  PAN:     { c:0x565a60, r:0.6, m:0.3 },   // condensate pan
+  FANF:    { c:0x2c4d78, r:0.6, m:0.3 },   // fan-section floor (blue)
+  DARKF:   { c:0x2e3136, r:0.6, m:0.3 },   // mixing-section floor
+  VALVE:   { c:0x8a3226, r:0.6, m:0.3 },
+};
+const ahuCells = new Map();
+{
+  const vox = (x, y, z, c) => ahuCells.set(x + ',' + y + ',' + z, c);
+  const L = 35, W = 16;                 // x 0..34 · z 0..15 · y 0..19
+  const BND = [0, 8, 13, 18, 29, 34];   // frame rings per section
+  // sections: MIXING 1..7 | FILTERS 9..12 | COIL 14..17 | FAN 19..28 | DISCHARGE 30..33
+  // base / skid
+  for (let x=0; x<L; x++)
+    for (let z=0; z<W; z++) {
+      const edge = (x===0 || x===L-1 || z===0 || z===W-1);
+      vox(x, 0, z, edge ? 'DARK' : 'SKID');
+    }
+  // structural skeleton (always visible)
+  for (let x=0; x<L; x++) {
+    vox(x, 1, 0, 'FRAME');   vox(x, 19, 0, 'FRAME');
+    vox(x, 1, W-1, 'FRAME'); vox(x, 19, W-1, 'FRAME');
+  }
+  BND.forEach(bx => {
+    for (let y=2; y<=18; y++) { vox(bx, y, 0, 'FRAME'); vox(bx, y, W-1, 'FRAME'); }
+    for (let z=1; z<=W-2; z++) { vox(bx, 19, z, 'FRAME'); vox(bx, 1, z, 'FRAME'); }
+  });
+  // interior floor (color per section)
+  const floorColor = x => {
+    if (x <= 7)  return 'DARKF';
+    if (x <= 12) return 'PANEL_D';
+    if (x <= 17) return 'PAN';
+    return 'FANF';
+  };
+  for (let x=1; x<=33; x++) {
+    if (BND.includes(x)) continue;
+    for (let z=1; z<=W-2; z++) vox(x, 1, z, floorColor(x));
+  }
+  // roof (with return-air opening)
+  for (let x=1; x<=33; x++) {
+    if (BND.includes(x)) continue;
+    for (let z=1; z<=W-2; z++) {
+      if (x>=2 && x<=7 && z>=4 && z<=11) {
+        if (x===2 || x===7 || z===4 || z===11) vox(x, 19, z, 'FRAME');
+      } else vox(x, 19, z, 'PANEL_L');
+    }
+  }
+  // return duct collar over the opening
+  for (const y of [20, 21])
+    for (let x=2; x<=7; x++)
+      for (let z=4; z<=11; z++)
+        if (x===2 || x===7 || z===4 || z===11) vox(x, y, z, 'DUCT');
+  for (let x=2; x<=7; x++)
+    for (let z=4; z<=11; z++)
+      if (x===2 || x===7 || z===4 || z===11) vox(x, 22, z, 'FRAME');
+  // back wall (with outside-air louver)
+  for (let x=1; x<=33; x++) {
+    if (BND.includes(x)) continue;
+    for (let y=2; y<=18; y++) {
+      if (x>=2 && x<=7 && y>=6 && y<=14) {
+        if (x===2 || x===7 || y===6 || y===14) vox(x, y, W-1, 'FRAME');
+      } else vox(x, y, W-1, 'PANEL_L');
+    }
+  }
+  // rain hood over the outside-air intake
+  for (let x=1; x<=8; x++) { vox(x, 15, 16, 'PANEL_D'); vox(x, 14, 17, 'PANEL_D'); }
+  // left end
+  for (let y=2; y<=18; y++)
+    for (let z=1; z<=W-2; z++)
+      vox(0, y, z, 'PANEL_L');
+  // right end (discharge opening)
+  for (let y=2; y<=18; y++)
+    for (let z=1; z<=W-2; z++) {
+      const inHole = (y>=8 && y<=13 && z>=5 && z<=10);
+      if (inHole) continue;
+      const inRing = (y>=7 && y<=14 && z>=4 && z<=11);
+      vox(34, y, z, inRing ? 'DUCT' : 'PANEL_L');
+    }
+  // transition + supply duct
+  const ringYZ = (x, y0, y1, z0, z1, color) => {
+    for (let y=y0; y<=y1; y++)
+      for (let z=z0; z<=z1; z++)
+        if (y===y0 || y===y1 || z===z0 || z===z1) vox(x, y, z, color);
+  };
+  ringYZ(35, 7, 14, 4, 11, 'DUCT');            // big transition
+  for (let x=36; x<=41; x++) ringYZ(x, 8, 13, 5, 10, 'DUCT');
+  ringYZ(42, 7, 14, 4, 11, 'FRAME');           // end flange
+  vox(39, 14, 7, 'DARK'); vox(39, 15, 7, 'FRAME');  // duct sensor
+  // fan bulkhead (inlet cone)
+  for (let y=2; y<=18; y++)
+    for (let z=1; z<=W-2; z++) {
+      const dy = y-10, dz = z-7.5;
+      const d2 = dy*dy + dz*dz;
+      if (d2 <= 27) continue;                        // open inlet eye
+      vox(18, y, z, d2 <= 40 ? 'HOUSING' : 'PANEL_D');
+    }
+  // pleated filter bank (cream zigzag)
+  for (let y=2; y<=17; y++)
+    for (let z=2; z<=13; z++) {
+      const px = 10 + (z % 2);                       // zigzag pleat
+      const isFrame = (y===10 || z===2 || z===13);   // center rail + module frames
+      vox(px, y, z, isFrame ? 'FRAME' : 'CREAM');
+    }
+  for (let y=2; y<=17; y++) {                        // rack guide posts
+    vox(9, y, 2, 'FRAME');  vox(9, y, 13, 'FRAME');
+    vox(12, y, 2, 'FRAME'); vox(12, y, 13, 'FRAME');
+  }
+  for (let z=2; z<=13; z++) vox(10, 18, z, 'PANEL_D');  // top blank-off
+  // cooling coil (teal fins + copper tube rows)
+  for (let x=14; x<=16; x++)
+    for (let y=2; y<=17; y++)
+      for (let z=2; z<=13; z++) {
+        if (y % 4 === 1) vox(x, y, z, 'COPPER');            // tube rows
+        else vox(x, y, z, ((y+z) % 2 === 0) ? 'COIL_T' : 'COIL_T2');
+      }
+  for (let y=2; y<=17; y++) { vox(14, y, 1, 'COPPER'); vox(16, y, 1, 'COPPER'); }  // front headers
+  for (let y=4; y<=17; y++) vox(15, y, 14, 'COPPER');                               // rear U-bends
+  for (let z=2; z<=13; z++) vox(15, 18, z, 'PANEL_D');                              // top blank-off
+  // chilled-water connections with blue bands
+  const bandedRun = cells => {
+    cells.forEach((p, i) => vox(p[0], p[1], p[2], (i % 3 === 0) ? 'PIPE_B' : 'PIPE_S'));
+  };
+  vox(16, 3, 0, 'COPPER');   // supply pass through the panel
+  vox(14, 15, 0, 'COPPER');  // return pass through the panel
+  bandedRun([[16,3,-1],[16,3,-2],[16,3,-3],[16,3,-4],[16,2,-4],[16,1,-4]]);
+  const retCells = [];
+  for (let y=15; y>=1; y--) retCells.push([14, y, -4]);
+  retCells.unshift([14,15,-1],[14,15,-2],[14,15,-3]);
+  bandedRun(retCells);
+  vox(16, 4, -2, 'DARK'); vox(16, 5, -2, 'VALVE');   // valve with handwheel
+  // condensate drain with P-trap
+  [[15,1,-1],[15,0,-1],[15,0,-2],[15,1,-2],[15,1,-3]].forEach(p => vox(p[0],p[1],p[2],'PIPE_S'));
+  // plug-fan motor + lattice pedestal
+  for (let x=26; x<=28; x++)
+    for (let y=9; y<=12; y++)
+      for (let z=6; z<=9; z++)
+        vox(x, y, z, (y % 2 === 0) ? 'MOTOR' : 'HOUSING');   // motor fins
+  for (let x=26; x<=28; x++)
+    for (let y=2; y<=8; y++)
+      for (let z=6; z<=9; z++)
+        if ((x+y+z) % 2 === 0 || y===8) vox(x, y, z, 'FRAME'); // lattice pedestal
+  vox(28, 10, 10, 'DARK');  // junction box
+  // side control panel
+  for (let x=30; x<=33; x++)
+    for (let y=6; y<=13; y++) {
+      const border = (x===30 || x===33 || y===6 || y===13);
+      vox(x, y, -1, border ? 'PANEL_D' : 'DARK');
+    }
+  for (let y=14; y<=20; y++) vox(31, y, -1, 'FRAME');  // conduit
+  vox(31, 20, 0, 'FRAME'); vox(31, 20, 1, 'FRAME');
+  cullInterior(ahuCells);
+}
+// FALLBACK TIER (v4 budget): only the two powered units are heroes; the
+// static rooftop twin keeps its v3 plain block (it was a dummy in v3 too).
+const AHU_PLACES = [
+  { x:186,   y:50, z:18,   k:AHU_K, tx:'mz', mzW:16 },   // UMA-1 (azotea, animated)
+  { x:219.6, y:1,  z:84.6, k:AHU_K, tx:'rot' },          // UMA-2 (pool area, animated)
+];
+const ahuBuckets = {};
+AHU_PLACES.forEach(p => bakeHeroCells(ahuCells, AHU_MATS, p, ahuBuckets));
+// UMA-1 rooftop pad (kept from v3, widened to catch the hero CHW stubs)
+voxBox(185, 49, 17, 194, 49, 23, COL.SKID);
+// twin unit (v3 plain block)
+voxBox(169, 49, 17, 178, 49, 22, COL.SKID);
+voxBox(170, 50, 18, 172, 52, 21, COL.BEIGE_D);
+voxBox(173, 50, 18, 174, 52, 21, COL.COIL);
+voxBox(175, 50, 18, 177, 52, 21, COL.BEIGE_D);
+vox(170, 50, 18, COL.GRILLE);
+// roof supply duct from UMA-1 to riser (raised to meet the hero discharge)
+voxBox(194, 51, 19.03, 205, 52, 20, COL.DUCT);   // 0.03 z-offset vs hero duct plane (review W1)
+voxBox(206, 51, 19.03, 207, 52, 21, COL.DUCT);
 
 // ====== SUPPLY RISER + VAV BOXES (east face) ======
 voxBox(206, 0, 22, 207, 52, 25, COL.DUCT);                       // riser duct
@@ -532,8 +1502,7 @@ voxBox(217, 2, 58, 217, 5, 58, COL.BEIGE);
 voxBox(210, 1, 74, 224, 5, 74, COL.BEIGE);      // south wall
 voxBox(224, 1, 59, 224, 5, 73, COL.BEIGE);      // east wall
 voxBox(209, 6, 57, 225, 6, 75, COL.BEIGE_D);    // roof
-buildPump(212, 62);
-buildPump(212, 68);
+// pool pumps: v3 plain blocks (PLAIN_PUMPS above; hero tier deferred for budget)
 voxBox(218, 1, 60, 220, 3, 62, COL.HOUSING);    // sand filter
 vox(219, 4, 61, COL.HOUSING);
 for (let z=65; z<=69; z++)                       // plate heat exchanger
@@ -547,13 +1516,11 @@ pipeRun([212,3,63],[212,3,67], COL.PIPE_T);
 pipeRun([213,3,61],[217,3,61], COL.PIPE_T);     // discharge to filter
 pipeRun([191,1,70],[217,1,70], COL.PIPE_T);     // return to pool
 
-// ====== UMA-2 (pool-area AHU, at grade, 4 m long x 2 m tall) ======
-voxBox(211, 0, 79, 220, 0, 84, COL.SKID);
-voxBox(212, 1, 80, 214, 4, 83, COL.BEIGE_D);
-voxBox(215, 1, 80, 216, 4, 83, COL.COIL);
-voxBox(217, 1, 80, 219, 4, 83, COL.BEIGE_D);
-voxBox(204, 2, 81, 211, 2, 82, COL.DUCT);       // supply duct toward pool area
-vox(203, 2, 81, COL.GRILLE); vox(203, 2, 82, COL.GRILLE);
+// ====== UMA-2 (pool-area AHU at grade: hero body, see AHU_PLACES) ======
+voxBox(211, 0, 79, 220, 0, 85, COL.SKID);
+voxBox(204, 2, 82, 210, 3, 83, COL.DUCT);       // supply duct toward pool area
+vox(203, 2, 82, COL.GRILLE); vox(203, 2, 83, COL.GRILLE);
+vox(203, 3, 82, COL.GRILLE); vox(203, 3, 83, COL.GRILLE);
 
 // ====== BOARDWALK (malecon) ======
 for (let x=100; x<=230; x++)
@@ -692,6 +1659,16 @@ for (const k in voxData) {
   if (FACADE_COLORS.has(color)) facadeMeshes.push(mesh);
 }
 
+// ====== HERO INSTANCED MESHES (v4, added before the one-shot shadow bake) ======
+buildHeroInstanced(chillerBuckets, scene);
+buildHeroInstanced(pumpBuckets, scene);
+buildHeroInstanced(ahuBuckets, scene);
+buildHeroInstanced(fcuBuckets, scene);
+const bucketTotal = b => Object.values(b).reduce((s, x) => s + x.entries.length, 0);
+console.log('[hotel v4] hero cells — chiller x3:', bucketTotal(chillerBuckets),
+  '| pump x2:', bucketTotal(pumpBuckets), '| ahu x2:', bucketTotal(ahuBuckets),
+  '| fcu x1:', bucketTotal(fcuBuckets));
+
 // ====== CAMERA / VIEWS (B37 Sec37.3 preset vocabulary) ======
 const CX = (sceneMinX+sceneMaxX)/2, CZC = (sceneMinZ+sceneMaxZ)/2;
 const heroTarget = new THREE.Vector3(152, 10, 58);
@@ -739,6 +1716,7 @@ makeLabel('TORRE HOTEL · 8 PISOS', 157, 56, 24, 28);
 makeLabel('UMA-1 · AZOTEA', 190, 57.5, 20, 13);
 makeLabel('UMA-2 · AREA ALBERCA', 215, 8.5, 82, 14);
 FLOORS.forEach((f, i) => makeLabel('VAV P' + (i+1), 212.5, f+3, 23.5, 5));
+makeLabel('FCU · HAB. PISO 4', 147.2, 23.4, 33, 8);   // below the piso-5 slab, next to the unit; occluded until CORTE TORRE
 makeLabel('ZONA ALBERCA', 154, 10, 83, 18);
 makeLabel('CUARTO MAQ. ALBERCA', 217, 10, 66, 14);
 makeLabel('MALECON', 165, 4.5, 112.5, 10);
@@ -775,47 +1753,192 @@ towerFanCenters.forEach(([cx,cz]) => {
   twFanGroups.push(g);
 });
 
-// chiller compressor couplings
-const compCoupGroups = [], compCoupMats = [];
-const COMP_Y = 6.3;
-CZ.forEach(cz => {
-  const mat = new THREE.MeshStandardMaterial({
-    color:0xff2233, roughness:0.35, metalness:0.8,
-    emissive:0xff2233, emissiveIntensity:0.4
-  });
-  const g = new THREE.Group();
-  g.position.set(35, COMP_Y, cz);
-  for (let i=0; i<6; i++) {
-    const a = (i/6)*Math.PI*2;
-    const c = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.3,0.4), mat);
-    c.position.set(Math.cos(a)*0.7, 0, Math.sin(a)*0.7);
-    g.add(c);
+// chiller hero animated parts: vibrating compressor assembly, coupling
+// spinner (hub + 6 spokes), HMI trend screen and rotating beacon per unit
+const compCoupGroups = [], compCoupMats = [], chCompGroups = [];
+const chScreenMats = [], chBeaconMats = [];
+chillerUnits.forEach((u, ui) => {
+  if (!u) {   // CH-1 plain block: v3 coupling ring on top of the compressor
+    const mat = stdMat();
+    const g = new THREE.Group();
+    g.position.set(35, 6.3, CZ[ui]);
+    g.userData.plain = true;
+    for (let i=0; i<6; i++) {
+      const a = (i/6)*Math.PI*2;
+      const c = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.3,0.4), mat);
+      c.position.set(Math.cos(a)*0.7, 0, Math.sin(a)*0.7);
+      g.add(c);
+    }
+    const hub = new THREE.Mesh(new THREE.BoxGeometry(0.6,0.4,0.6), mat);
+    g.add(hub);
+    scene.add(g);
+    g.traverse(o => o.castShadow = false);
+    compCoupGroups.push(g); compCoupMats.push(mat);
+    chCompGroups.push(null); chScreenMats.push(null); chBeaconMats.push(null);
+    return;
   }
-  const hub = new THREE.Mesh(new THREE.BoxGeometry(0.6,0.4,0.6), mat);
+  const { place } = u, k = place.k;
+  // vibrating screw compressor + motor (per-unit InstancedMesh buckets)
+  const cg = new THREE.Group();
+  cg.position.set(place.x, place.y, place.z);
+  buildHeroInstanced(u.compBuckets, cg, true);
+  scene.add(cg);
+  cg.traverse(o => o.castShadow = false);
+  chCompGroups.push(cg);
+  // motor-compressor coupling spinner (rides the vibrating assembly)
+  const mat = stdMat();
+  const g = new THREE.Group();
+  g.position.set(19.5*k, 19.5*k, 12.5*k);
+  const hub = new THREE.Mesh(
+    new THREE.BoxGeometry(1.6*k, 1.2*k, 1.2*k),
+    new THREE.MeshStandardMaterial({ color:0x6b747e, roughness:0.4, metalness:0.8 })
+  );
   g.add(hub);
-  scene.add(g);
+  const spokes = [];
+  for (let i=0; i<6; i++) spokes.push([0, 0, 0, i*Math.PI/3, 0.5, 0.5, 2.9]);
+  g.add(mkIM(spokes, mat, k));
   g.traverse(o => o.castShadow = false);
+  cg.add(g);
   compCoupGroups.push(g);
   compCoupMats.push(mat);
+  // panel screen: LED trend matrix + load bar (static, on the cabinet face)
+  const pxMat = new THREE.MeshStandardMaterial({
+    color:0x00d4aa, emissive:0x00d4aa, emissiveIntensity:0.12, roughness:0.4, metalness:0.1
+  });
+  const heights = [2, 3, 1, 4, 3, 2, 4, 3, 1, 3];
+  const px = [];
+  for (let cI = 0; cI < 10; cI++)
+    for (let rI = 0; rI < heights[cI]; rI++)
+      px.push([22.7 + cI*0.92, 12.3 + rI*0.92, 16.2, 0, 0.62, 0.62, 0.3]);
+  const segMat = new THREE.MeshStandardMaterial({
+    color:0x11231d, emissive:0x061109, emissiveIntensity:0.05, roughness:0.4, metalness:0.1
+  });
+  const sg = [];
+  for (let i = 0; i < 4; i++) sg.push([23.4 + i*2.3, 11.0, 16.2, 0, 1.9, 0.8, 0.3]);
+  const screen = new THREE.Group();
+  screen.position.set(place.x, place.y, place.z);
+  screen.add(mkIM(px, pxMat, k), mkIM(sg, segMat, k));
+  scene.add(screen);
+  chScreenMats.push({ px: pxMat, seg: segMat });
+  // beacon head above the cabinet (pulses while running)
+  const bMat = new THREE.MeshStandardMaterial({
+    color:0xff2233, emissive:0xff2233, emissiveIntensity:0.12, roughness:0.3, metalness:0.1
+  });
+  const beacon = new THREE.Mesh(new THREE.BoxGeometry(0.9*k, 1.0*k, 0.9*k), bMat);
+  beacon.position.set(place.x + 32.5*k, place.y + 19.0*k, place.z + 14.5*k);
+  beacon.castShadow = false;
+  scene.add(beacon);
+  chBeaconMats.push(bMat);
 });
 
-// chiller status LEDs
+// chiller status LEDs (hero: on the cabinet screen bezel · plain: v3 spot)
 const chLeds = [];
-CZ.forEach(cz => {
+chillerUnits.forEach((u, ui) => {
   const mat = new THREE.MeshStandardMaterial({
     color:0xff2233, emissive:0xff2233, emissiveIntensity:1.4,
     roughness:0.25, metalness:0.3
   });
-  const led = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.5,0.5), mat);
-  led.position.set(32.5, 3.9, cz+2.5);
+  const size = u ? 0.9*u.place.k : 0.5;
+  const led = new THREE.Mesh(new THREE.BoxGeometry(size, size, size*0.7), mat);
+  const pl = new THREE.PointLight(0xff2233, 0.8, u ? 6 : 8);
+  if (u) {
+    const { place } = u, k = place.k;
+    led.position.set(place.x + 23.0*k, place.y + 8.5*k, place.z + 16.15*k);
+    pl.position.set(place.x + 23.0*k, place.y + 8.5*k, place.z + 18.2*k);
+  } else {
+    led.position.set(32.5, 3.9, CZ[ui]+2.5);
+    pl.position.copy(led.position);
+  }
+  led.castShadow = false;
   scene.add(led);
-  const pl = new THREE.PointLight(0xff2233, 0.8, 8);
-  pl.position.copy(led.position);
   scene.add(pl);
   chLeds.push({ mat, light: pl });
 });
 
-// pump couplings
+// pump hero animated parts: spider coupling, motor fan behind the grille and
+// the yellow rotation-direction arrow (per unit; one InstancedMesh each)
+const pumpFanMat = new THREE.MeshStandardMaterial({ color:0x35353a, metalness:0.6, roughness:0.45 });
+function makeHeroPumpAnim(place, coupMat, arrowMat) {
+  const k = place.k, CY = 14, CZP = 12;
+  // spider coupling: 2 hubs + 24 lugs + 4 crossing spokes + shaft
+  const coup = new THREE.Group();
+  coup.position.set(place.x + 30.5*k, place.y + (CY+0.5)*k, place.z + (CZP+0.5)*k);
+  const CE = [];
+  for (const hx of [-1.8, 1.8]) {
+    for (let i=0; i<12; i++) {
+      const a = i/12*Math.PI*2;
+      CE.push([hx, Math.cos(a)*2.1, Math.sin(a)*2.1, a, 1.1, 0.85, 0.85]);
+    }
+    CE.push([hx, 0, 0, 0, 1.1, 1.7, 1.7]);
+  }
+  for (let i=0; i<4; i++) {
+    const a = i/4*Math.PI*2 + Math.PI/4;
+    CE.push([0, Math.cos(a)*1.5, Math.sin(a)*1.5, a, 3.0, 0.6, 0.6]);
+  }
+  CE.push([0, 0, 0, 0, 3.6, 1.1, 1.1]);
+  coup.add(mkIM(CE, coupMat, k));
+  scene.add(coup);
+  // rear motor fan (behind the grille)
+  const fan = new THREE.Group();
+  fan.position.set(place.x + 58.8*k, place.y + (CY+0.5)*k, place.z + (CZP+0.5)*k);
+  const FE = [];
+  for (let i=0; i<5; i++) {
+    const a = i/5*Math.PI*2;
+    for (let rr=1; rr<=4; rr++) FE.push([0, Math.cos(a)*rr, Math.sin(a)*rr, a, 0.7, 0.8, 0.8]);
+  }
+  FE.push([0, 0, 0, 0, 0.9, 1.5, 1.5]);
+  fan.add(mkIM(FE, pumpFanMat, k));
+  scene.add(fan);
+  // rotation-direction arrow (static, pulses with the bank state)
+  const AE = [];
+  for (let phi=-0.5; phi<=1.78; phi+=0.16)
+    AE.push([26.2, CY+0.5 + Math.cos(phi)*8.6, CZP+0.5 + Math.sin(phi)*8.6, 0, 0.55, 0.55, 0.55]);
+  const phiE = 1.9;
+  [[8.6-1.2, phiE],[8.6+1.2, phiE],[8.6, phiE+0.14]].forEach(([rr, ph]) => {
+    AE.push([26.2, CY+0.5 + Math.cos(ph)*rr, CZP+0.5 + Math.sin(ph)*rr, 0, 0.62, 0.62, 0.62]);
+  });
+  const arrow = new THREE.Group();
+  arrow.position.set(place.x, place.y, place.z);
+  arrow.add(mkIM(AE, arrowMat, k));
+  scene.add(arrow);
+  return { coup, fan };
+}
+function stdMat() {
+  return new THREE.MeshStandardMaterial({
+    color:0xff2233, emissive:0xff2233, emissiveIntensity:0.4,
+    roughness:0.35, metalness:0.8
+  });
+}
+function ledMat() {
+  return new THREE.MeshStandardMaterial({
+    color:0xff2233, emissive:0xff2233, emissiveIntensity:1.3, roughness:0.3
+  });
+}
+function arrowMatFor() {
+  return new THREE.MeshStandardMaterial({
+    color:0xf2c230, emissive:0xf2c230, emissiveIntensity:0.18,
+    roughness:0.5, metalness:0.15
+  });
+}
+const bcCoupMat = stdMat(), bpCoupMat = stdMat(), poolCoupMat = stdMat();
+const bcLedMat = ledMat(), bpLedMat = ledMat(), poolLedMat = ledMat();
+const bcArrowMat = arrowMatFor(), bpArrowMat = arrowMatFor(), poolArrowMat = arrowMatFor();
+const bcCoups = [], bpCoups = [], poolCoups = [];
+const PUMP_BANKS = {
+  bc:   { coup: bcCoupMat, led: bcLedMat, arrow: bcArrowMat, list: bcCoups },
+  bp:   { coup: bpCoupMat, led: bpLedMat, arrow: bpArrowMat, list: bpCoups },
+  pool: { coup: poolCoupMat, led: poolLedMat, arrow: poolArrowMat, list: poolCoups },
+};
+PUMP_PLACES.forEach(p => {
+  const bank = PUMP_BANKS[p.bank];
+  bank.list.push(makeHeroPumpAnim(p, bank.coup, bank.arrow));
+  // status LED on the junction box lid
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), bank.led);
+  led.position.set(p.x + 45.5*p.k, p.y + 27.2*p.k, p.z + 12*p.k);
+  led.castShadow = false;
+  scene.add(led);
+});
+// plain-block pump couplings + LEDs (v3 style, for the non-hero positions)
 function makePumpCoupling(px, cz, mat) {
   const g = new THREE.Group();
   g.position.set(px+1.0, 1.5, cz+0.5);
@@ -831,71 +1954,120 @@ function makePumpCoupling(px, cz, mat) {
   g.traverse(o => o.castShadow = false);
   return g;
 }
-function stdMat() {
-  return new THREE.MeshStandardMaterial({
-    color:0xff2233, emissive:0xff2233, emissiveIntensity:0.4,
-    roughness:0.35, metalness:0.8
-  });
-}
-function ledMat() {
-  return new THREE.MeshStandardMaterial({
-    color:0xff2233, emissive:0xff2233, emissiveIntensity:1.3, roughness:0.3
-  });
-}
-const bcCoupMat = stdMat(), bpCoupMat = stdMat(), poolCoupMat = stdMat();
-const bcLedMat = ledMat(), bpLedMat = ledMat(), poolLedMat = ledMat();
-const bcCoups = PCZ.map(cz => makePumpCoupling(23, cz, bcCoupMat));
-const bpCoups = PCZ.map(cz => makePumpCoupling(44, cz, bpCoupMat));
-const poolCoups = [62, 68].map(cz => makePumpCoupling(212, cz, poolCoupMat));
-PCZ.forEach(cz => {
-  const l1 = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.4,0.4), bcLedMat);
-  l1.position.set(23.5, 2.8, cz+0.5); scene.add(l1);
-  const l2 = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.4,0.4), bpLedMat);
-  l2.position.set(44.5, 2.8, cz+0.5); scene.add(l2);
-});
-[62, 68].forEach(cz => {
-  const l = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.4,0.4), poolLedMat);
-  l.position.set(212.5, 2.8, cz+0.5); scene.add(l);
+PLAIN_PUMPS.forEach(p => {
+  const bank = PUMP_BANKS[p.bank];
+  bank.list.push({ coup: makePumpCoupling(p.px, p.cz, bank.coup), fan: null });
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.4,0.4), bank.led);
+  led.position.set(p.px+0.5, 2.8, p.cz+0.5);
+  led.castShadow = false;
+  scene.add(led);
 });
 const poolLight = new THREE.PointLight(0xff2233, 0.9, 9);
 poolLight.position.set(213, 3, 65.5);
 scene.add(poolLight);
 
-// AHU blower wheels (horizontal, above the fan section)
-const umaWheelMats = [], umaWheels = [], umaLeds = [];
-const UMA_SPOTS = [
-  { wx: 192.5, wy: 53.4, wz: 20.0, lx: 186.5, ly: 51.5, lz: 22.6 },   // UMA-1 roof
-  { wx: 218.0, wy: 5.4,  wz: 81.5, lx: 212.5, ly: 3.5,  lz: 84.6 },   // UMA-2 pool area
-];
-UMA_SPOTS.forEach(s => {
-  const mat = new THREE.MeshStandardMaterial({
+// AHU hero animated parts: plug-fan wheel (30 blades + backplate + inlet ring
+// as two InstancedMeshes) and return/outside-air damper blades per unit
+const umaSteelMat = new THREE.MeshStandardMaterial({ color:0x50555e, roughness:0.4, metalness:0.8 });
+function buildPlugFanWheel(place, mat) {
+  const k = place.k;
+  const g = new THREE.Group();
+  g.position.copy(heroPoint(place, 23, 10.5, 8));
+  if (place.tx === 'rot') g.rotation.y = Math.PI;
+  const BE = [];
+  for (let i=0; i<10; i++) {
+    const a = (i/10) * Math.PI * 2;
+    for (const rr of [2.6, 3.5, 4.4]) BE.push([0, Math.cos(a)*rr, Math.sin(a)*rr, a, 3.4, 0.95, 0.6]);
+  }
+  g.add(mkIM(BE, mat, k));
+  const SE = [];
+  for (let ay=-4; ay<=4; ay++)                       // wheel backplate
+    for (let az=-4; az<=4; az++)
+      if (ay*ay + az*az <= 20) SE.push([1.9, ay, az, 0, 0.5, 1, 1]);
+  for (let i=0; i<14; i++) {                         // inlet ring
+    const a = (i/14) * Math.PI * 2;
+    SE.push([-1.9, Math.cos(a)*4.2, Math.sin(a)*4.2, a, 0.5, 0.9, 0.9]);
+  }
+  SE.push([0, 0, 0, 0, 1.8, 1.8, 1.8]);              // hub
+  SE.push([2.8, 0, 0, 0, 4.5, 0.8, 0.8]);            // shaft to the motor
+  g.add(mkIM(SE, umaSteelMat, k));
+  scene.add(g);
+  return g;
+}
+function buildAhuDampers(place, mat) {
+  const k = place.k;
+  const ret = [], oa = [];
+  const retGeo = new THREE.BoxGeometry(1.95*k, 0.16*k, 6.1*k);
+  [4, 6].forEach(cx => {                             // return (roof), pivot on z
+    const b = new THREE.Mesh(retGeo, mat);
+    b.position.copy(heroPoint(place, cx, 19.5, 8));
+    b.castShadow = false;
+    scene.add(b); ret.push(b);
+  });
+  const oaGeo = new THREE.BoxGeometry(3.9*k, 2.2*k, 0.16*k);
+  [8, 10.5, 13].forEach(cy => {                      // outside air (back wall), pivot on x
+    const b = new THREE.Mesh(oaGeo, mat);
+    b.position.copy(heroPoint(place, 5, cy, 15.5));
+    b.castShadow = false;
+    scene.add(b); oa.push(b);
+  });
+  return { ret, oa };
+}
+const umaWheelMats = [], umaWheels = [], umaLeds = [], umaDampMats = [], umaDampers = [];
+AHU_PLACES.forEach(p => {
+  const wm = new THREE.MeshStandardMaterial({
     color:0xff2233, roughness:0.45, metalness:0.6,
     emissive:0xff2233, emissiveIntensity:0.4
   });
-  const g = new THREE.Group();
-  g.position.set(s.wx, s.wy, s.wz);
-  for (let i=0; i<8; i++) {
-    const a = (i/8)*Math.PI*2;
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.35,0.25,0.7), mat);
-    b.position.set(Math.cos(a)*0.9, 0, Math.sin(a)*0.9);
-    b.rotation.y = -a;
-    g.add(b);
-  }
-  const hub = new THREE.Mesh(new THREE.BoxGeometry(0.7,0.35,0.7), mat);
-  g.add(hub);
-  scene.add(g);
-  g.traverse(o => o.castShadow = false);
-  umaWheels.push(g);
-  umaWheelMats.push(mat);
+  umaWheels.push(buildPlugFanWheel(p, wm));
+  umaWheelMats.push(wm);
+  const dm = new THREE.MeshStandardMaterial({
+    color:0xff2233, roughness:0.4, metalness:0.7,
+    emissive:0xff2233, emissiveIntensity:0.4
+  });
+  umaDampers.push(buildAhuDampers(p, dm));
+  umaDampMats.push(dm);
   const lm = ledMat();
-  const led = new THREE.Mesh(new THREE.BoxGeometry(0.45,0.45,0.45), lm);
-  led.position.set(s.lx, s.ly, s.lz);
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.14), lm);
+  led.position.copy(heroPoint(p, 31.9, 12, -1.6));
+  led.castShadow = false;
   scene.add(led);
-  const pl = new THREE.PointLight(0xff2233, 0.7, 8);
-  pl.position.copy(led.position);
+  const pl = new THREE.PointLight(0xff2233, 0.7, 6);
+  pl.position.copy(heroPoint(p, 31.9, 12, -3));
   scene.add(pl);
   umaLeds.push({ mat: lm, light: pl });
 });
+// FCU hero animated parts: twin centrifugal turbines (162 blades each as one
+// InstancedMesh + cylinder hub) + status LED; driven by the VAV PISO 4 state
+const fcuWheelMat = new THREE.MeshStandardMaterial({
+  color:0x3a7bd5, roughness:0.4, metalness:0.6,
+  emissive:0x1f5fc0, emissiveIntensity:0.15
+});
+const fcuLedMat = ledMat();
+const fcuWheels = [];
+{
+  const k = FCU_PLACE.k, YB = 12;
+  [15, 37].forEach(wc => {
+    const g = new THREE.Group();
+    g.position.copy(heroPoint(FCU_PLACE, wc+0.5, 7.5+YB, 8.5));
+    const BE = [];
+    for (let i=0; i<18; i++) {
+      const a = (i/18)*Math.PI*2;
+      for (let xo=-4; xo<=4; xo++) BE.push([xo, Math.cos(a)*4.2, Math.sin(a)*4.2, a, 0.5, 1.05, 0.5]);
+    }
+    g.add(mkIM(BE, fcuWheelMat, k));
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(1.1*k, 1.1*k, 9*k, 10), fcuWheelMat);
+    hub.rotation.z = Math.PI/2;
+    hub.castShadow = false;
+    g.add(hub);
+    scene.add(g);
+    fcuWheels.push(g);
+  });
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), fcuLedMat);
+  led.position.copy(heroPoint(FCU_PLACE, 56.5, 20, 25.2));
+  led.castShadow = false;
+  scene.add(led);
+}
 
 // VAV dampers + LEDs (east face, next to each VAV box)
 const vavMats = [], vavDampers = [], vavLedMats = [];
@@ -943,14 +2115,25 @@ function applyState() {
     l.light.color.copy(ch[i] ? COLOR_ON : COLOR_OFF);
     l.light.intensity = ch[i] ? 1.2 : 0.8;
   });
+  chScreenMats.forEach((s,i) => {
+    if (!s) return;   // plain CH-1 has no hero screen
+    s.px.emissiveIntensity = ch[i] ? 0.9 : 0.12;
+    s.seg.color.setHex(ch[i] ? 0x00ff66 : 0x11231d);
+    s.seg.emissive.setHex(ch[i] ? 0x00ff66 : 0x061109);
+    s.seg.emissiveIntensity = ch[i] ? 1.0 : 0.05;
+  });
   setMat(twFanMat, state.tw);
   setMat(bcCoupMat, state.bc); setMat(bcLedMat, state.bc, 1.5, 1.1);
   setMat(bpCoupMat, state.bp); setMat(bpLedMat, state.bp, 1.5, 1.1);
   setMat(poolCoupMat, state.pool); setMat(poolLedMat, state.pool, 1.5, 1.1);
+  bcArrowMat.emissiveIntensity = state.bc ? 0.8 : 0.18;
+  bpArrowMat.emissiveIntensity = state.bp ? 0.8 : 0.18;
+  poolArrowMat.emissiveIntensity = state.pool ? 0.8 : 0.18;
   poolLight.color.copy(state.pool ? COLOR_ON : COLOR_OFF);
   poolLight.intensity = state.pool ? 1.1 : 0.8;
   [state.u1, state.u2].forEach((on, i) => {
     setMat(umaWheelMats[i], on, 0.65, 0.4);
+    setMat(umaDampMats[i], on, 0.55, 0.4);
     setMat(umaLeds[i].mat, on, 1.6, 1.1);
     umaLeds[i].light.color.copy(on ? COLOR_ON : COLOR_OFF);
     umaLeds[i].light.intensity = on ? 1.0 : 0.7;
@@ -959,6 +2142,8 @@ function applyState() {
     setMat(vavMats[i], on, 0.7, 0.45);
     setMat(vavLedMats[i], on, 1.6, 1.1);
   });
+  fcuWheelMat.emissiveIntensity = state.v4 ? 0.6 : 0.15;   // FCU rides VAV PISO 4
+  setMat(fcuLedMat, state.v4, 1.6, 1.1);
 }
 applyState();
 
@@ -1024,20 +2209,33 @@ function animate() {
   if (state.tw) twFanGroups.forEach((g,i) => { g.rotation.y += dt * (8 + i*0.5); });
 
   compCoupGroups.forEach((g,i) => {
-    if (ch[i]) {
-      g.rotation.y += dt * 12;
-      g.position.y = COMP_Y + Math.sin(t*30 + i)*0.06;
+    if (!ch[i]) return;
+    if (g.userData.plain) { g.rotation.y += dt * 12; g.position.y = 6.3 + Math.sin(t*30)*0.06; }   // v3 ring coupling (CH-1), spin + bob
+    else g.rotation.x -= dt * 13;                    // hero spinner
+  });
+  chCompGroups.forEach((g,i) => {
+    if (!g) return;
+    if (ch[i]) {   // subtle assembly vibration (hero compGroup behavior)
+      g.position.y = 1 + Math.sin(t*30 + i)*0.02;
+      g.position.z = chillerUnits[i].place.z + Math.cos(t*22.7 + i)*0.012;
     } else {
-      g.position.y = COMP_Y;
+      g.position.y = 1;
+      g.position.z = chillerUnits[i].place.z;
     }
   });
+  chBeaconMats.forEach((m,i) => {
+    if (m) m.emissiveIntensity = ch[i] ? 0.55 + 0.45*Math.sin(t*5.5 + i) : 0.12;
+  });
 
-  if (state.bc) bcCoups.forEach((g,i) => { g.rotation.x += dt * (14 + i*0.5); });
-  if (state.bp) bpCoups.forEach((g,i) => { g.rotation.x += dt * (14 + i*0.5); });
-  if (state.pool) poolCoups.forEach((g,i) => { g.rotation.x += dt * (13 + i*0.6); });
+  if (state.bc) bcCoups.forEach((p,i) => { p.coup.rotation.x -= dt * (14 + i*0.5); if (p.fan) p.fan.rotation.x -= dt * (14 + i*0.5); });
+  if (state.bp) bpCoups.forEach((p,i) => { p.coup.rotation.x -= dt * (14 + i*0.5); if (p.fan) p.fan.rotation.x -= dt * (14 + i*0.5); });
+  if (state.pool) poolCoups.forEach((p,i) => { p.coup.rotation.x -= dt * (13 + i*0.6); if (p.fan) p.fan.rotation.x -= dt * (13 + i*0.6); });
 
   [state.u1, state.u2].forEach((on, i) => {
-    if (on) umaWheels[i].rotation.y += dt * 8;
+    if (on) umaWheels[i].rotation.x -= dt * 10;
+    const dTarget = on ? 1.25 : 0;                   // louver blades lerp open/closed
+    umaDampers[i].ret.forEach(b => { b.rotation.z += (dTarget - b.rotation.z) * Math.min(1, dt*4); });
+    umaDampers[i].oa.forEach(b =>  { b.rotation.x += (dTarget - b.rotation.x) * Math.min(1, dt*4); });
   });
 
   const vOn = vArr();
@@ -1045,6 +2243,8 @@ function animate() {
     const target = vOn[i] ? -1.35 : 0;
     d.rotation.y += (target - d.rotation.y) * Math.min(1, dt*4);
   });
+
+  if (vOn[3]) fcuWheels.forEach((g, i) => { g.rotation.x -= dt * (13 + i*0.4); });
 
   controls.update();
   renderer.render(scene, camera);
