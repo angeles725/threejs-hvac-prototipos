@@ -7,7 +7,7 @@ HVAC equipment prototype corpus in this directory (25 standalone HTML files: 7 r
 context7 MCP (`/mrdoob/three.js`), WebSearch/WebFetch over threejs.org + official wiki,
 fetch-doc.sh for preservation. Block style and markers: see `research-sdd/METHODOLOGY.md`.
 
-This index guides through the **30 blocks** of this research. Each block is an independent
+This index guides through the **31 blocks** of this research. Each block is an independent
 `.md`, linked to the rest with `[Block K]`. The auto-generated flat catalog lives in
 [CATALOG.md](CATALOG.md) (regenerate with `python3 tools/gen-catalog.py`).
 
@@ -28,7 +28,7 @@ This index guides through the **30 blocks** of this research. Each block is an i
 | 4 | Cross-cutting (perf, migration, upgrade paths) | 10-11, 13, 22-25, 28 | active | Versioning, performance, postprocessing, PBR value references, product lighting, cheap visual wins, asset optimization pipeline, Blender round-trip |
 | 5 | Synthesis: team workflow | 12 | done | Voxel-first → realistic-second pipeline doc (B12 + WORKFLOW.md) |
 | 6 | Dynamic phase & performance budgets (run 4) | 26-27 | active | Live-measured baseline (draws/triangles) + device-class budget tables derived from it |
-| 7 | HVAC domain (run 5) | 29-30 | active | Digital-twin/equipment-viewer conventions applied to this corpus; dashboard/telemetry data-binding layer |
+| 7 | HVAC domain (run 5) | 29-31 | active | Digital-twin/equipment-viewer conventions applied to this corpus; dashboard/telemetry data-binding layer; terrain/relief for site context |
 
 ---
 
@@ -98,6 +98,7 @@ This index guides through the **30 blocks** of this research. Each block is an i
 |---|--------|---------|------------|
 | 29 | HVAC/industrial equipment visualization domain | [block29](threejs-block29.md) | exploded-view technique (forum consensus + CAD-viewer explosion-value convention), X-ray/ghost mode (depthWrite/renderOrder/fresnel), ISA-101 status-color convention (neutral-default, color-on-abnormal), Blender-empty hotspot pattern (CSS2DObject), Viewer3D vanilla-three.js warehouse-SCADA precedent (InstancedMesh pools + baked vertex colors + render-on-demand), ranked HVAC-viewer feature checklist |
 | 30 | Dashboards: 3D scene + telemetry/data binding + charts | [block30](threejs-block30.md) | CSS2DRenderer/CSS2DObject as a second renderer (contract, pointerEvents, cost model) vs DOM overlays vs SlugText, data-binding recipe (emissiveIntensity/setColorAt mutation + on-demand render, 1Hz throttle, WebSocket transport), DOM chart libraries (uPlot/Chart.js/ECharts) around the canvas vs rare in-scene CanvasTexture sparklines, Monash BAS Graphics Standard layout (header/nav/main panes, alarm-console/priority convention, floor-selector ordering), camera-preset deep-links, standalone-HTML-vs-build-step verdict |
+| 31 | Terrain and relief for site context | [block31](threejs-block31.md) | CPU heightmap displacement (position attribute + computeVertexNormals) vs material displacementMap (with its "pair with a matching normal map" caveat), Mapbox Terrain-RGB decode formula, AWS Terrain Tiles/Terrarium free public-S3 decode formula, MapLibre native `terrain`+`raster-dem`+`TerrainControl` as an alternative to hand-built relief, cheap terrain texturing (vertex color by altitude/slope, CanvasTexture gradients, satellite draping), three ranked site-context recipes (stylized pad / real-relief patch / full MapLibre terrain) |
 
 ---
 
@@ -128,7 +129,7 @@ This index guides through the **30 blocks** of this research. Each block is an i
 - [x] G28 — Blender round-trip (medium, run 4) → [Block 28]
 - [x] G29 — HVAC equipment visualization domain → [Block 29]
 - [x] G30 — Dashboards & telemetry → [Block 30]
-- [ ] (run 5, queued) G31 — Terrain/relief
+- [x] G31 — Terrain/relief → [Block 31]
 - [ ] (run 5, queued) G32 — Buildings/BIM
 - [x] G21 — Forum intelligence → [Block 20]
 - [x] G16 — Rendering methods deep-dive → [Block 13]
@@ -144,4 +145,4 @@ This index guides through the **30 blocks** of this research. Each block is an i
 
 ## Estimated coverage
 
-30/32 — RUN 4 complete (design craft + optimization, G22-G28 all covered). RUN 5 open, G29-G30 covered (terrain/BIM — G31-G32 — remain). Auto mode, cap B22-B35.
+31/32 — RUN 4 complete (design craft + optimization, G22-G28 all covered). RUN 5 open, G29-G31 covered (BIM — G32 — remains). Auto mode, cap B22-B35.

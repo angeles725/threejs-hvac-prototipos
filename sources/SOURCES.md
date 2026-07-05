@@ -83,3 +83,7 @@ possible preserved from, threejs.org (fetch-doc.sh → web-snapshots/).
 | web-snapshots/www.tetranyde.com_blog_hotspot-threejs_.md | web-snapshot | https://www.tetranyde.com/blog/hotspot-threejs/ | 2026-07-04T23:48:16Z | cf7dd7a39070c1d4… | |
 | web-snapshots/github.com_leeoniya_uPlot.md | web-snapshot | https://github.com/leeoniya/uPlot | 2026-07-04T23:52:49Z | c18c042845d63305… | |
 | manuals/bas-graphics-standard-monash-v1.4.pdf | doc | https://www.monash.edu/__data/assets/pdf_file/0008/3884633/BAS-Graphics-Standard-V1.4.pdf | 2026-07-04T23:53:11Z | a4aaf621206ce496… | |
+| web-snapshots/docs.mapbox.com_data_tilesets_reference_mapbox-terrain-rgb-v1_.md | web-snapshot | https://docs.mapbox.com/data/tilesets/reference/mapbox-terrain-rgb-v1/ | 2026-07-04T23:57:48Z | 4d1ef8dcce60938c… | |
+| web-snapshots/maplibre.org_maplibre-gl-js_docs_examples_3d-terrain_.md | web-snapshot | https://maplibre.org/maplibre-gl-js/docs/examples/3d-terrain/ | 2026-07-04T23:57:49Z | e897839642549eb8… | |
+| web-snapshots/github.com_tilezen_joerd_blob_master_docs_formats.md.md | web-snapshot | https://github.com/tilezen/joerd/blob/master/docs/formats.md | 2026-07-04T23:57:50Z | 74b55a4d4bd55e65… | |
+| web-snapshots/registry.opendata.aws_terrain-tiles_.md | web-snapshot | https://registry.opendata.aws/terrain-tiles/ | 2026-07-04T23:58:50Z | 33335eeccd58dd12… | |
