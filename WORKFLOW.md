@@ -113,6 +113,38 @@ Ongoing source: discourse.threejs.org (Questions = gotchas with maintainer repli
 battle-tested techniques). Search: `site:discourse.threejs.org <topic>` or `/tag/<name>`.
 Fetch note: discourse serves crawler HTML directly; reddit needs old.reddit.com. [B20 §20.3]
 
+## Runs 4-5 additions — design craft, measured budgets, and the HVAC domain
+
+Design craft (make it LOOK right):
+- [ ] Apply the corrected PBR palette — 13 materials carry invalid mid-metalness; painted → 0,
+      committed metals → 1, water → dielectric; copper → measured F0. Table in [B22 §22.5]
+- [ ] Adopt the studio-lighting recipe (RectAreaLight softboxes; the house rig already sits at
+      ~3.75:1 key:fill). [B23]
+- [ ] Pick from the cheap-wins catalog per pass: matcap (voxel), baked aoMap (uv2!), blob
+      shadows, vertexColors, gradient backgrounds. None in use today. [B24]
+
+Measured performance (numbers, not vibes — probe: `tools/probe.mjs`):
+- Baseline [CERT-hw]: cuarto-frio-plano 2,747 draws/frame · trane-rtu-realistic 1,539 ·
+  cuarto-3d 1,013 (baked shadows visible in the counter) · voxel files 379-737 draws but
+  >500k tris/frame. [B26]
+- Inverted bottlenecks: realistic = draw-bound (→ BatchedMesh/merge, now measured priority #1);
+  voxel = triangle-bound (→ LOD/simplify/instanceColor). Budgets per device class in [B27].
+
+Publish pipeline: GLTFExporter → gltf-transform 4.4.1 / gltfpack 1.2 (both verified running
+via npx) → GLTFLoader legs. Recipes per destination in [B25]; Blender round-trip (bake AO to
+uv2, Principled→glTF mapping) in [B28].
+
+HVAC domain (run 5):
+- Equipment viewer checklist — top 4 items need ZERO new subsystems: exploded views (existing
+  Groups), X-ray (`depthWrite:false`+`renderOrder`), CSS2D hotspots, ISA-101 status colors
+  (gray default, color = abnormal ONLY). [B29]
+- Dashboard architecture: CSS2DRenderer layer + 1Hz telemetry → dirty-flag → render-on-demand +
+  DOM charts in side panels; layout/alarm tiers per the preserved Monash BAS standard. [B30]
+- Site context: 3 terrain recipes (stylized pad / real DEM patch via free AWS Terrarium tiles /
+  MapLibre native terrain). [B31]
+- Buildings: plan-extrusion (already practiced in cuarto-frio-plano!) vs web-ifc/@thatopen (real
+  BIM handoffs) vs OSM massing — decision table in [B32 §32.4].
+
 ## Corpus map
 
 `INDEX.md` → 19 blocks (`threejs-block*.md`) + `CATALOG.md` + `RESEARCH-STATE.md` +
