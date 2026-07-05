@@ -146,4 +146,4 @@ This index guides through the **32 blocks** of this research. Each block is an i
 
 ## Estimated coverage
 
-32/32 — ALL GAPS CLOSED across 5 runs. RUN 5 complete (G29-G32 all covered); RUN 5 STOPPED: read-only-investigable = 0.
+32/39 — RUN 6 queued (design craft completion, G33-G39) behind the WORKFLOW.md fix writers. RUN 5 complete (G29-G32 all covered); RUN 5 STOPPED: read-only-investigable = 0.

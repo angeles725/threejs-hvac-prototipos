@@ -10,6 +10,7 @@
 
 ## Coverage
 
+- **RUN 6 (REOPEN §8, 2026-07-04, AUTO/orchestrated — queued behind the WORKFLOW.md fix writers)**: design-craft completion from the graphic-designer + 3D-designer lens (G33-G39). Cap +7 (B33-B39). Order per driver recommendation: template-system first (multiplier), then motion/UX, then 2D tokens/accessibility, then art direction/deliverables/dataviz.
 - **Covered blocks**: 32 (B1-B32)
 - **Coverage metric**: 32 / 32 closed — **ALL GAPS COVERED across 5 runs**
 - **RUN 5 STOPPED (2026-07-04): read-only-investigable = 0 — ALL RUNS COMPLETE (32/32 gaps, 5 runs)**
@@ -48,6 +49,13 @@
 | high | G30 — Dashboards: three.js + telemetry/data binding, HTML/CSS2D overlays, charts integration (run 5) | context7 + web | **covered → [Block 30]** |
 | medium | G31 — Terrain/relief: heightmap displacement, DEM data sources, MapLibre terrain tie-in (run 5) | context7 + web + B16 | **covered → [Block 31]** |
 | medium | G32 — Buildings/BIM: IFC pipeline (web-ifc), floor-plan-to-3D, building shells for site context (run 5) | web + tool docs | **covered → [Block 32]** |
+| high | G33 — The template as a system: shared module (palette/rig/scaffolding) + parametric reusable equipment components (compressor, fan, coil) — architecture proposal (run 6) | corpus + web | queued (run 6) |
+| high | G34 — Motion design 3D: easing/timing with intent, cinematic camera (tours, preset transitions), animated exploded views, state micro-animations (run 6) | context7 + web | queued (run 6) |
+| high | G35 — 3D interaction UX: hover/select visual states, focus+context dimming, touch gestures, loading states, camera history (run 6) | context7 + web | queued (run 6) |
+| high | G36 — 2D design tokens + accessibility: typography scale, UI color system (vs PBR palette), iconography, WCAG contrast, colorblind-safe alarm states (run 6) | web + standards | queued (run 6) |
+| medium | G37 — Composition & art direction: focal lengths per shot type, staging, turntables, consistent catalog thumbnails (run 6) | web + corpus | queued (run 6) |
+| medium | G38 — High-quality deliverables + visual QA: 4K offscreen captures, transparent backgrounds, golden-screenshot regression via tools/probe.mjs (run 6) | context7 + local | queued (run 6) |
+| medium | G39 — Data-viz craft for the dashboards: visual hierarchy, pre-attentive attributes, alarm console UX beyond the Monash standard (run 6) | web + B30 | queued (run 6) |
 | high | G16 — Rendering methods deep-dive: render loop styles, on-demand rendering, render targets, WebGPURenderer/TSL status, alt renderers, path tracing (NEW, run 2) | context7 + web | **covered → [Block 13]** (path tracing deferred to G18 case block) |
 | high | G17 — Optimization compendium beyond B11: LOD, BVH, culling, KTX2, disposal/memory (NEW, run 2) | context7 + web | **covered → [Block 17]** |
 | high | G18 — External case studies: 18 showcase pages — techniques + applicability (NEW, run 2) | web sweeps (preserved) | **covered → [Block 14] + [Block 15]** |
