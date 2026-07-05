@@ -47,13 +47,12 @@ only content layers change; the pipeline layers persist.
 ## Punch list (from the research, with evidence)
 
 Correctness:
-- [ ] Glass: use `opacity: 1` with `transmission` (currently mixed — double attenuation). [B3 §3.4]
-- [ ] Add `texture.colorSpace = THREE.SRGBColorSpace` to color CanvasTextures. [B9 §9.3]
-- [ ] Rebuild the r128 legacy `data_center` voxel onto the current template. [B10 §10.3]
+- [x] Glass: `opacity:1` with transmission — DONE 2026-07-04 (8 sites/6 files, commit 2750b9d)
+- [x] CanvasTexture SRGBColorSpace — DONE 2026-07-04 (10 sites/7 files, commit 2750b9d)
+- [~] Rebuild r128 legacy data_center — IN PROGRESS (writer launched 2026-07-04)
 
 Performance (effort-ordered):
-- [ ] Backport `renderer.shadowMap.autoUpdate = false` (+ `needsUpdate = true`) to all
-      static-sun files — already proven in `cuarto-3d.html`. [B5 §5.4, B11 §11.4]
+- [x] Baked shadows backported — DONE 2026-07-04 (22 files + caster exclusions + re-bake on user toggles, commit d420dab)
 - [ ] Collapse voxel color groups with `setColorAt`/`instanceColor`. [B2 §2.3]
 - [ ] Evaluate per-palette `BatchedMesh` for realistic assemblies (available in r160). [B11 §11.3]
 
@@ -116,8 +115,7 @@ Fetch note: discourse serves crawler HTML directly; reddit needs old.reddit.com.
 ## Runs 4-5 additions — design craft, measured budgets, and the HVAC domain
 
 Design craft (make it LOOK right):
-- [ ] Apply the corrected PBR palette — 13 materials carry invalid mid-metalness; painted → 0,
-      committed metals → 1, water → dielectric; copper → measured F0. Table in [B22 §22.5]
+- [x] Corrected PBR palette applied — DONE 2026-07-04 (14 entries + copper F0 + 2 latent bugs fixed, commit e43e06f)
 - [ ] Adopt the studio-lighting recipe (RectAreaLight softboxes; the house rig already sits at
       ~3.75:1 key:fill). [B23]
 - [ ] Pick from the cheap-wins catalog per pass: matcap (voxel), baked aoMap (uv2!), blob
