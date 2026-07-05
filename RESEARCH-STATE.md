@@ -112,6 +112,7 @@ research-SDD run set: 32/32 gaps across 5 runs, no further iterations pending.**
 ## Pre-flight source existence (BOOTSTRAP e2)
 
 - Local prototypes: **25 HTML — 7 realistic at root + 18 voxel in `voxel/`** (recount 2026-07-04, §14 correction of the bootstrap's 8+15 miscount). `[CERT]`
+- Post-research addition (2026-07-04, after run-5 STOP): +2 new voxel files (`voxel/campus-hvac-voxel.html`, `-v2`) — house template (r0.160.0, InstancedMesh, animated fan groups). Corpus counts in blocks reflect the 25 known at research close; fixes pipeline covers 27.
 - context7 `/mrdoob/three.js` — resolved 2026-07-04, 21,432 snippets, High reputation. `[CERT-web]`
 - threejs.org docs/manual + migration guide (GitHub wiki) — web access permitted by user this run.
 - All 14 gaps have confirmed reachable sources → investigable.
