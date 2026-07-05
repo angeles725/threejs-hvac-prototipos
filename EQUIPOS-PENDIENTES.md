@@ -33,7 +33,8 @@
 - Minisplit / split / Liebert → `voxel/minisplit-voxel-v2 (4).html`, `split-system-voxel.html`, `liebert-split-voxel*.html`
 - Extractor de cocina → `voxel/extractor-cocina-voxel (2).html` · Generador → `voxel/generador-electrico-voxel (1).html`
 
-**✅ CATÁLOGO COMPLETO — 12/12 entregados.** Nada pendiente por crear.
+**✅ Equipos: 12/12 entregados.** **❌ Pendiente: 13 edificio torre hotel (arquitectura — feedback
+del equipo: la torre actual no lee como hotel real; cuartos y fachada incongruentes).**
 
 ## REGLAS DE CASA — pegar al FINAL de cada prompt
 
@@ -281,6 +282,40 @@ Leyenda: Agua helada / Agua condensados / Sentido de flujo.
 Panel CONTROL DE EQUIPO: VÁLVULAS ABRIR-CERRAR (rota volante de compuerta + palanca de
 mariposa + clapeta del check), ETIQUETAS ON-OFF (nombre flotante sobre cada pieza),
 AUTO-ROTATE.
+```
+
+## 🏨 ARQUITECTURA
+
+- [ ] **13. Edificio torre hotel** → `voxel/edificio-hotel-voxel.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: la TORRE DE UN
+HOTEL DE PLAYA de 8 pisos + planta baja, con arquitectura CREÍBLE de hotel real, alta densidad
+de micro-voxeles. Este edificio reemplazará la torre esquemática de una escena mayor — la
+FACHADA SUR es la cara protagonista (da a la alberca y al mar).
+Partes obligatorias:
+— PLANTA BAJA: lobby de doble altura con marquesina de acceso, ventanal corrido, recepción
+sugerida al interior, arcada/columnas, jardineras.
+— PISOS TIPO (8): ~11 módulos de cuarto por piso en fachada sur (módulo ~4 m); CADA cuarto con
+balcón (losa volada), barandal de cristal con pasamanos de aluminio, puerta corrediza de vidrio
+de 2 hojas, y una REJILLA LINEAL discreta de fan coil sobre la puerta (NO minisplits — el hotel
+usa agua helada central; la fachada va LIMPIA, sin equipos colgados).
+— CUARTOS EN CORTE: la fachada sur debe poder OCULTARSE por completo (toggle CORTE) revelando
+3-4 cuartos amueblados por piso: cama con cabecera, buró, TV en muro, clóset, puerta de baño,
+plafón con rejilla del FCU — el resto de cuartos como volúmenes sugeridos.
+— NÚCLEO: pasillo central iluminado, núcleo de 2 elevadores + escalera en el extremo norte.
+— FACHADAS ESTE/OESTE/NORTE: ventanería menor, escalera de emergencia exterior en la norte.
+— AZOTEA: pretil perimetral, cuarto de máquinas de elevadores, bases libres para equipos
+(una UMA y un extractor se colocarán después — dejar zona plana ~10×8 m).
+— Letrero del hotel en el pretil sur ("HOTEL FRENTE AL MAR" en voxeles emisivos).
+Dimensión real: ~44 m largo (sur) × 18 m fondo × 30 m alto (PB 4 m + 8 pisos de 3 m + pretil).
+// SCALE: 1 voxel = 0.25 m.
+Colores: cuerpo blanco arena con losas de balcón en blanco puro, barandales de cristal
+azul-verde translúcido con postes aluminio, ventanería vidrio azul, acentos de madera clara
+(marquesina, cenefa), letrero blanco cálido emisivo.
+Leyenda: Fachada / Balcones / Núcleo / Azotea.
+Panel CONTROL DE EQUIPO: CORTE FACHADA ON-OFF (oculta fachada sur y muestra cuartos),
+LUCES NOCHE ON-OFF (ventanas y letrero emisivos), AUTO-ROTATE.
 ```
 
 ---
