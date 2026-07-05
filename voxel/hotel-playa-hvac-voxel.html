@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Hotel frente al mar · Campus HVAC · Voxel Art</title>
+<title>Hotel frente al mar · Resort HVAC · Voxel Art</title>
 <style>
   body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
   #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); }
@@ -20,12 +20,13 @@
   #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:4px 12px; border:1px solid; background:transparent; cursor:pointer; min-width:52px; transition:all 0.2s; }
   #panel button.off { color:#ff4455; border-color:#ff4455; }
   #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel button.view { color:#00d4aa; border-color:#00d4aa; }
 </style>
 </head>
 <body>
 <div id="info">
-  <b>HOTEL FRENTE AL MAR · CAMPUS HVAC</b><br>
-  <span>Planta CHW · UMAs · Edificio 8 pisos · VAVs · Alberca · Playa · Voxel Art</span>
+  <b>HOTEL FRENTE AL MAR · RESORT HVAC</b><br>
+  <span>Planta CHW · Torre 8 pisos · VAVs · Alberca · Playa · Voxel Art</span>
 </div>
 <div id="legend">
   <div><i style="background:#ff6644"></i> Agua condensados (caliente a torres)</div>
@@ -34,7 +35,6 @@
   <div><i style="background:#44bbff"></i> Aire de suministro</div>
   <div><i style="background:#ff5533"></i> Aire de retorno</div>
   <div><i style="background:#4fd8c9"></i> Agua de alberca</div>
-  <div><i style="background:#cfe8ff"></i> Rocío en torres</div>
 </div>
 <div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
 <div id="panel">
@@ -61,6 +61,8 @@
   <div class="row"><label>BOMBAS ALBERCA</label><button id="bPool">OFF</button></div>
   <div class="sub">CÁMARA</div>
   <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+  <div class="row"><label>VISTA 3/4</label><button id="bView3Q" class="view">GO</button></div>
+  <div class="row"><label>VISTA PLANTA</label><button id="bViewTop" class="view">GO</button></div>
 </div>
 
 <script type="importmap">
@@ -75,12 +77,13 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 // ====== SCENE / RENDERER ======
+// Plan-scale scene (tower + pool + beach + mechanical yard): wider FOV than the usual 40deg hero shot (B37 Sec37.1/37.3).
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x06080d);
 scene.fog = new THREE.Fog(0x06080d, 460, 1900);
 
-const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 2800);
-camera.position.set(400, 250, 330);
+const camera = new THREE.PerspectiveCamera(58, innerWidth/innerHeight, 0.1, 2800);
+camera.position.set(440, 201, 342);
 
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
@@ -102,16 +105,14 @@ controls.target.set(140, 18, 62);
 controls.autoRotate = true;
 controls.autoRotateSpeed = 0.3;
 
-// ====== LIGHTS ======
+// ====== LIGHTS (3-light rig) ======
 scene.add(new THREE.AmbientLight(0xffffff, 0.25));
 const sun = new THREE.DirectionalLight(0xffffff, 1.5);
 sun.position.set(300, 340, 180);
 sun.castShadow = true;
-sun.shadow.mapSize.set(4096,4096);
+sun.shadow.mapSize.set(2048, 2048);
 const sc = sun.shadow.camera;
-sc.left=-260; sc.right=260; sc.top=260; sc.bottom=-260; sc.near=1; sc.far=900;
-sun.shadow.bias = -0.0005;
-sun.target.position.set(140, 0, 62);
+sun.shadow.bias = -0.0003;
 scene.add(sun); scene.add(sun.target);
 const fill = new THREE.DirectionalLight(0x88aaff, 0.35);
 fill.position.set(-100, 100, -80);
@@ -136,11 +137,30 @@ grid.position.set(134, 0.01, 80);
 scene.add(grid);
 
 // ====== VOXEL BUILDER ======
+// vox() places a unit cube. voxBox() merges a solid rectangular run into ONE scaled instance
+// (same shared BoxGeometry(1,1,1), bigger instance matrix) -- this is the "coarsen the grid"
+// budget lever (B27 Sec27.4): fewer, bigger instances cut triangle count without losing coverage.
 const voxData = {};
-function vox(x,y,z,color) {
+function pushEntry(color, cx, cy, cz, sx, sy, sz) {
   const k = color.toString();
-  if (!voxData[k]) voxData[k] = { color, positions: [] };
-  voxData[k].positions.push([x,y,z]);
+  if (!voxData[k]) voxData[k] = { color, entries: [] };
+  voxData[k].entries.push([cx, cy, cz, sx, sy, sz]);
+}
+function vox(x, y, z, color) {
+  pushEntry(color, x+0.5, y+0.5, z+0.5, 1, 1, 1);
+}
+function voxBox(x0, y0, z0, x1, y1, z1, color) {
+  const sx = x1-x0+1, sy = y1-y0+1, sz = z1-z0+1;
+  pushEntry(color, x0+sx/2, y0+sy/2, z0+sz/2, sx, sy, sz);
+}
+// Merge a contiguous solid run along Y (for a fixed x,z column) into one box.
+function voxColY(x, z, y0, y1, color, solidFn) {
+  let start = null;
+  for (let y = y0; y <= y1+1; y++) {
+    const solid = y <= y1 && solidFn(y);
+    if (solid && start === null) start = y;
+    if (!solid && start !== null) { voxBox(x, start, z, x, y-1, z, color); start = null; }
+  }
 }
 
 const COL = {
@@ -194,7 +214,6 @@ const CH_NAMES = ['CH-1 · 600 TR','CH-2 · 900 TR','CH-3 · 900 TR','CH-4 · 90
 const FLOORS = [0, 9, 18, 27, 36, 45, 54, 63];       // 8 pisos
 const DUCT_Y = FLOORS.map(f => [f+6, f+7]);
 const YPC    = FLOORS.map(f => f+7);
-const FALL_Y = FLOORS.map(f => f+2);
 const ROOM_X = [181, 198, 215, 232];
 const DIV_X  = [197, 214, 231];
 const DIFF_X = [188, 205, 222, 239];
@@ -516,77 +535,67 @@ DUCT_Y.forEach(pair => {
 });
 
 // ====== EDIFICIO DE HABITACIONES (8 pisos, corte) ======
-FLOORS.forEach(fY => {
-  for (let x=181; x<=249; x++)
-    for (let z=2; z<=33; z++)
-      vox(x, fY, z, COL.PANEL);
-});
-for (let x=180; x<=250; x++)
-  for (let z=2; z<=34; z++)
-    vox(x, 72, z, COL.BEIGE_D);
-for (let x=180; x<=250; x++) { vox(x,73,2,COL.BEIGE_D); vox(x,73,34,COL.BEIGE_D); }
-for (let z=3; z<34; z++) { vox(180,73,z,COL.BEIGE_D); vox(250,73,z,COL.BEIGE_D); }
-for (let x=180; x<=250; x++)
-  for (let y=1; y<=71; y++) {
-    let win = false;
+// Floor slabs, roof and parapet are solid rectangular fills -> merged into single boxes (voxBox),
+// same visual coverage as the original per-unit loop, far fewer instances.
+FLOORS.forEach(fY => voxBox(181, fY, 2, 249, fY, 33, COL.PANEL));
+voxBox(180, 72, 2, 250, 72, 34, COL.BEIGE_D);
+voxBox(180, 73, 2, 250, 73, 2, COL.BEIGE_D);
+voxBox(180, 73, 34, 250, 73, 34, COL.BEIGE_D);
+voxBox(180, 73, 3, 180, 73, 33, COL.BEIGE_D);
+voxBox(250, 73, 3, 250, 73, 33, COL.BEIGE_D);
+
+// Back wall with windows: per-column Y-run merge keeps the exact window pattern with far fewer instances.
+for (let x=180; x<=250; x++) {
+  voxColY(x, 34, 1, 71, COL.BEIGE, y => {
     for (const fY of FLOORS)
       if (y>=fY+3 && y<=fY+6)
         for (const rx of ROOM_X)
-          if (x>=rx+4 && x<=rx+10) { win = true; break; }
-    if (!win) vox(x, y, 34, COL.BEIGE);
+          if (x>=rx+4 && x<=rx+10) return false;
+    return true;
+  });
+}
+// Side walls: east face is fully solid (one box); west face has a duct pass-through at z 7-8.
+voxBox(250, 1, 2, 250, 71, 33, COL.BEIGE);
+for (let z=2; z<=33; z++) {
+  if (z < 7 || z > 8) {
+    voxBox(180, 1, z, 180, 71, z, COL.BEIGE);
+  } else {
+    voxColY(180, z, 1, 71, COL.BEIGE, y => !DUCT_Y.some(pair => y>=pair[0] && y<=pair[1]));
   }
-for (let z=2; z<=33; z++)
-  for (let y=1; y<=71; y++) {
-    let ductHole = false;
-    if (z>=7 && z<=8)
-      for (const pair of DUCT_Y)
-        if (y>=pair[0] && y<=pair[1]) { ductHole = true; break; }
-    if (!ductHole) vox(180, y, z, COL.BEIGE);
-    vox(250, y, z, COL.BEIGE);
-  }
+}
+// Front columns (merged per floor-band run) + railings (merged per contiguous x-run).
 for (const cx of DIV_X)
-  for (let y=1; y<=71; y++)
-    if (!FLOORS.includes(y)) vox(cx, y, 2, COL.FRAME);
+  voxColY(cx, 2, 1, 71, COL.FRAME, y => !FLOORS.includes(y));
 FLOORS.slice(1).forEach(fY => {
-  for (let x=181; x<=249; x++)
-    if (!DIV_X.includes(x)) vox(x, fY+2, 2, COL.FRAME);
+  let start = null;
+  for (let x=181; x<=250; x++) {
+    const solid = x<=249 && !DIV_X.includes(x);
+    if (solid && start===null) start = x;
+    if (!solid && start!==null) { voxBox(start, fY+2, 2, x-1, fY+2, 2, COL.FRAME); start = null; }
+  }
 });
+// Divider walls (internal), duct pass-through at z 16-17.
 for (const dx of DIV_X)
-  for (let z=3; z<=33; z++)
-    for (let y=1; y<=71; y++) {
-      if (FLOORS.includes(y)) continue;
-      let ductHole = false;
-      if (z>=16 && z<=17)
-        for (const pair of DUCT_Y)
-          if (y>=pair[0] && y<=pair[1]) { ductHole = true; break; }
-      if (ductHole) continue;
-      vox(dx, y, z, COL.PANEL);
+  for (let z=3; z<=33; z++) {
+    if (z < 16 || z > 17) {
+      voxColY(dx, z, 1, 71, COL.PANEL, y => !FLOORS.includes(y));
+    } else {
+      voxColY(dx, z, 1, 71, COL.PANEL, y => !FLOORS.includes(y) && !DUCT_Y.some(pair => y>=pair[0] && y<=pair[1]));
     }
+  }
+// Room furniture: all solid rectangular fills -> merged into single boxes per room.
 FLOORS.forEach(fY => {
   const b = fY + 1;
   ROOM_X.forEach(rx => {
-    for (let x=rx+3; x<=rx+9; x++)
-      for (let z=27; z<=32; z++) {
-        vox(x, b, z, COL.DARK);
-        vox(x, b+1, z, COL.LINEN);
-      }
-    for (let x=rx+4; x<=rx+8; x++)
-      vox(x, b+2, 32, COL.PANEL);
-    for (let x=rx+3; x<=rx+9; x++)
-      for (let y=b+1; y<=b+3; y++)
-        vox(x, y, 33, COL.FRAME);
+    voxBox(rx+3, b,   27, rx+9, b,   32, COL.DARK);    // bed base
+    voxBox(rx+3, b+1, 27, rx+9, b+1, 32, COL.LINEN);   // bed linen
+    voxBox(rx+4, b+2, 32, rx+8, b+2, 32, COL.PANEL);   // headboard
+    voxBox(rx+3, b+1, 33, rx+9, b+3, 33, COL.FRAME);   // headboard wall trim
     vox(rx+1, b, 31, COL.PANEL);  vox(rx+1, b+1, 31, COL.LAMP);
     vox(rx+11, b, 31, COL.PANEL); vox(rx+11, b+1, 31, COL.LAMP);
-    for (let z=12; z<=16; z++)
-      for (let y=b+3; y<=b+4; y++)
-        vox(rx, y, z, COL.GRILLE);
-    for (let x=rx+4; x<=rx+8; x++)
-      for (let z=18; z<=22; z++)
-        vox(x, b, z, COL.COIL_H);
-    for (let x=rx+12; x<=rx+14; x++)
-      for (let y=b; y<=b+5; y++)
-        for (let z=3; z<=5; z++)
-          vox(x, y, z, COL.PANEL);
+    voxBox(rx, b+3, 12, rx, b+4, 16, COL.GRILLE);      // TV
+    voxBox(rx+4, b, 18, rx+8, b, 22, COL.COIL_H);      // rug
+    voxBox(rx+12, b, 3, rx+14, b+5, 5, COL.PANEL);     // closet
   });
 });
 
@@ -611,22 +620,36 @@ function inJacuzzi(x, z) {
   const dx=x-222, dz=z-62;
   return dx*dx + dz*dz <= 16;
 }
-for (let x=138; x<=230; x++)
-  for (let z=50; z<=96; z++) {
-    if (inVaso(x,z) || inJacuzzi(x,z)) {
-      vox(x, 0, z, COL.TILE);
-      const isStep = (x>=211 && x<=213 && z>=72 && z<=75);
-      vox(x, 1, z, isStep ? COL.SAND : COL.WATER_P);
-    } else {
-      vox(x, 0, z, COL.SAND);
-      vox(x, 1, z, COL.SAND);
+const POOL_STEP = { x0:211, x1:213, z0:72, z1:75 };
+function isPoolStep(x, z) {
+  return x>=POOL_STEP.x0 && x<=POOL_STEP.x1 && z>=POOL_STEP.z0 && z<=POOL_STEP.z1;
+}
+// Deck (tile + sand) merged per z-row run: same cell occupancy as a per-unit loop, far fewer instances.
+for (let z=50; z<=96; z++) {
+  let start = null, mode = null;
+  for (let x=138; x<=231; x++) {
+    const inArea = x<=230;
+    const m = inArea ? ((inVaso(x,z) || inJacuzzi(x,z)) ? 'pool' : 'sand') : null;
+    if (m !== mode) {
+      if (mode === 'pool') voxBox(start, 0, z, x-1, 0, z, COL.TILE);
+      if (mode === 'sand') { voxBox(start, 0, z, x-1, 0, z, COL.SAND); voxBox(start, 1, z, x-1, 1, z, COL.SAND); }
+      mode = m; start = x;
     }
   }
+}
+// Pool water layer (y=1), excluding the shallow step patch.
+for (let z=50; z<=96; z++) {
+  let start = null;
+  for (let x=138; x<=231; x++) {
+    const water = x<=230 && (inVaso(x,z) || inJacuzzi(x,z)) && !isPoolStep(x,z);
+    if (water && start===null) start = x;
+    if (!water && start!==null) { voxBox(start, 1, z, x-1, 1, z, COL.WATER_P); start = null; }
+  }
+}
+voxBox(POOL_STEP.x0, 1, POOL_STEP.z0, POOL_STEP.x1, 1, POOL_STEP.z1, COL.SAND);
 for (let i=0; i<10; i++) {
   const cx = 146 + i*8;
-  for (let x=cx; x<=cx+3; x++)
-    for (let z=91; z<=92; z++)
-      vox(x, 2, z, COL.PANEL);
+  voxBox(cx, 2, 91, cx+3, 2, 92, COL.PANEL);
   vox(cx, 3, 91, COL.PANEL); vox(cx, 3, 92, COL.PANEL);
 }
 for (const ux of [152, 168, 184, 200, 216]) {
@@ -652,21 +675,15 @@ palm(140, 93); palm(226, 93);
 palm(176, 93); palm(204, 93);
 
 // ====== CUARTO DE MAQUINAS DE ALBERCA ======
-for (let x=238; x<=264; x++)
-  for (let z=56; z<=80; z++)
-    vox(x, 0, z, COL.SKID);
-for (let x=238; x<=264; x++)
-  for (let z=56; z<=80; z++)
-    vox(x, 12, z, COL.BEIGE);
+voxBox(238, 0, 56, 264, 0, 80, COL.SKID);
+voxBox(238, 12, 56, 264, 12, 80, COL.BEIGE);
+voxBox(238, 1, 56, 264, 11, 56, COL.BEIGE);
 for (let x=238; x<=264; x++)
   for (let y=1; y<=11; y++) {
-    vox(x, y, 56, COL.BEIGE);
     const gap = (x===252 && y===5) || (x===254 && y===2);
     if (!gap) vox(x, y, 80, COL.BEIGE);
   }
-for (let z=57; z<=79; z++)
-  for (let y=1; y<=11; y++)
-    vox(264, y, z, COL.BEIGE);
+voxBox(264, 1, 57, 264, 11, 79, COL.BEIGE);
 buildPump(242, 66, false);
 buildPump(242, 74, false);
 // Filtro de arena
@@ -721,21 +738,24 @@ function beachH(x, z) {
   const dune = Math.sin(x*0.16)*0.6 + Math.sin(x*0.05 + z*0.3)*0.5;
   return Math.max(0, Math.min(3, Math.round(slope + dune)));
 }
-for (let x=-8; x<=276; x++)
-  for (let z=104; z<=130; z++) {
-    const h = beachH(x, z);
-    for (let y=0; y<=h; y++) {
-      let c = COL.SAND;
-      if (y === h) {
-        if (z >= 127) c = COL.SAND_W;
-        else if ((x*7 + z*13) % 17 === 0) c = COL.SAND_D;
-      }
-      vox(x, y, z, c);
-    }
+// Beach: coarse-sampled cells (step 3) merged into boxes -- bulk architectural fill, low
+// per-cell informational value, exempt from ISA-101 (that rule targets HVAC equipment only).
+const BEACH_STEP = 3;
+for (let x=-8; x<=276; x+=BEACH_STEP) {
+  const x1 = Math.min(x+BEACH_STEP-1, 276);
+  for (let z=104; z<=130; z+=BEACH_STEP) {
+    const z1 = Math.min(z+BEACH_STEP-1, 130);
+    const h = beachH(Math.round((x+x1)/2), Math.round((z+z1)/2));
+    let topColor = COL.SAND;
+    if (z1 >= 127) topColor = COL.SAND_W;
+    else if (((x*7 + z*13) % 17) === 0) topColor = COL.SAND_D;
+    if (h > 0) voxBox(x, 0, z, x1, h-1, z1, COL.SAND);
+    voxBox(x, h, z, x1, h, z1, topColor);
   }
-for (let x=-8; x<=276; x++)
-  for (let z=131; z<=172; z++)
-    vox(x, 0, z, z<=140 ? COL.OCEAN_S : COL.OCEAN_D);
+}
+// Ocean: flat single-layer fill -> 2 boxes total (shallow/deep bands), zero visual loss.
+voxBox(-8, 0, 131, 276, 0, 140, COL.OCEAN_S);
+voxBox(-8, 0, 141, 276, 0, 172, COL.OCEAN_D);
 // Palmeras y mobiliario de playa
 palm(20, 107, beachH(20,107)+1);
 palm(90, 106, beachH(90,106)+1);
@@ -749,25 +769,27 @@ const TOWEL_COLORS = [COL.PIPE_R, COL.COIL_H, COL.LEAF];
     for (let dz=-3; dz<=3; dz++)
       if (dx*dx + dz*dz <= 9) vox(ux+dx, b+5, uz+dz, COL.BEIGE_D);
   const tb = beachH(ux+5, uz)+1;
-  for (let x=ux+5; x<=ux+6; x++)
-    for (let z=uz-2; z<=uz+1; z++)
-      vox(x, tb, z, TOWEL_COLORS[i]);
+  voxBox(ux+5, tb, uz-2, ux+6, tb, uz+1, TOWEL_COLORS[i]);
 });
 
 // ====== INSTANCED MESHES ======
+// One shared unit cube, one InstancedMesh per color group (B2 Sec2.3 house pattern).
 const cubeGeo = new THREE.BoxGeometry(1,1,1);
 const SHELL_COLORS = new Set([COL.BEIGE, COL.BEIGE_D]);
 const NO_CAST = new Set([COL.SAND, COL.SAND_D, COL.SAND_W, COL.OCEAN_S, COL.OCEAN_D, COL.WATER, COL.WATER_P, COL.TILE]);
 const WATERISH = new Set([COL.WATER, COL.WATER_P, COL.OCEAN_S, COL.OCEAN_D]);
+let sceneMinX=Infinity, sceneMaxX=-Infinity, sceneMinZ=Infinity, sceneMaxZ=-Infinity;
+const m4 = new THREE.Matrix4(), qIdentity = new THREE.Quaternion(), vPos = new THREE.Vector3(), vScale = new THREE.Vector3();
 for (const k in voxData) {
-  const { color, positions } = voxData[k];
+  const { color, entries } = voxData[k];
   const isShell = SHELL_COLORS.has(color);
   const isLamp = (color === COL.LAMP);
   const isWater = WATERISH.has(color);
   const mat = new THREE.MeshStandardMaterial({
     color,
-    roughness: isShell ? 0.55 : (isWater ? 0.2 : 0.5),
-    metalness: isShell ? 0.15 : (isWater ? 0.12 : 0.55),
+    // Dielectric water: metalness 0, not mirror-like (B22 Sec22.5).
+    roughness: isShell ? 0.55 : (isWater ? 0.22 : 0.5),
+    metalness: isShell ? 0.15 : (isWater ? 0 : 0.55),
     transparent: isShell,
     opacity: isShell ? 0.2 : 1.0,
     depthWrite: !isShell,
@@ -775,17 +797,39 @@ for (const k in voxData) {
     emissive: isLamp ? 0xffb860 : 0x000000,
     emissiveIntensity: isLamp ? 0.9 : 0,
   });
-  const mesh = new THREE.InstancedMesh(cubeGeo, mat, positions.length);
+  const mesh = new THREE.InstancedMesh(cubeGeo, mat, entries.length);
   mesh.castShadow = !isShell && !NO_CAST.has(color);
   mesh.receiveShadow = true;
-  const m = new THREE.Matrix4();
-  positions.forEach((p, i) => {
-    m.setPosition(p[0]+0.5, p[1]+0.5, p[2]+0.5);
-    mesh.setMatrixAt(i, m);
+  entries.forEach((e, i) => {
+    const [cx, cy, cz, sx, sy, sz] = e;
+    vPos.set(cx, cy, cz);
+    vScale.set(sx, sy, sz);
+    m4.compose(vPos, qIdentity, vScale);
+    mesh.setMatrixAt(i, m4);
+    const hx = sx/2, hz = sz/2;
+    sceneMinX = Math.min(sceneMinX, cx-hx); sceneMaxX = Math.max(sceneMaxX, cx+hx);
+    sceneMinZ = Math.min(sceneMinZ, cz-hz); sceneMaxZ = Math.max(sceneMaxZ, cz+hz);
   });
   mesh.instanceMatrix.needsUpdate = true;
   scene.add(mesh);
 }
+
+// ====== CAMARA / VISTAS (B37 Sec37.3 preset vocabulary) ======
+const CX = (sceneMinX+sceneMaxX)/2, CZ_ = (sceneMinZ+sceneMaxZ)/2;
+const heroTarget = new THREE.Vector3(140, 18, 62); // hotel + pool cluster (not the empty ocean)
+const VIEW_3Q  = { pos: new THREE.Vector3(heroTarget.x+300, heroTarget.y+183, heroTarget.z+280), tgt: heroTarget.clone() };
+const VIEW_TOP = { pos: new THREE.Vector3(CX, Math.max(sceneMaxX-sceneMinX, sceneMaxZ-sceneMinZ)*0.9, CZ_+0.1), tgt: new THREE.Vector3(CX, 0, CZ_) };
+function setView(v) { camera.position.copy(v.pos); controls.target.copy(v.tgt); controls.update(); }
+setView(VIEW_3Q);
+
+// Shadow frustum tuned tightly to the built scene bounds (baked once at init, B5 Sec5.4).
+sun.target.position.set(CX, 0, CZ_);
+const shadowHalf = Math.max(sceneMaxX-sceneMinX, sceneMaxZ-sceneMinZ)/2 + 20;
+sc.left = -shadowHalf; sc.right = shadowHalf; sc.top = shadowHalf; sc.bottom = -shadowHalf;
+sc.near = 1; sc.far = 500;
+sc.updateProjectionMatrix();
+renderer.shadowMap.autoUpdate = false;
+renderer.shadowMap.needsUpdate = true;
 
 // ====== ETIQUETAS ======
 function makeLabel(text, x, y, z, w) {
@@ -822,6 +866,11 @@ makeLabel('MALECON', 195, 8, 102.5, 14);
 makeLabel('PLAYA', 134, 10, 116, 18);
 makeLabel('MAR CARIBE', 134, 9, 152, 26);
 
+// ====== PARTES ANIMADAS (Groups fuera del InstancedMesh) ======
+// Fans, couplings, wheels and dampers are the only non-instanced meshes: small,
+// per-unit, individually rotating parts (B2 Sec2.3). Explicitly excluded from the
+// baked shadow map via traverse() since they move every frame (B5 Sec5.4).
+
 // ====== VENTILADORES DE TORRE ======
 const twFanMat = new THREE.MeshStandardMaterial({
   color:0xff2233, roughness:0.45, metalness:0.6,
@@ -836,7 +885,6 @@ towerFanCenters.forEach(([cx,cz]) => {
     for (let rr=0; rr<=3; rr++) {
       const b = new THREE.Mesh(new THREE.BoxGeometry(0.85,0.4,0.85), twFanMat);
       b.position.set(Math.cos(a)*rr, 0, Math.sin(a)*rr);
-      b.castShadow = true;
       g.add(b);
     }
   }
@@ -846,6 +894,7 @@ towerFanCenters.forEach(([cx,cz]) => {
   );
   g.add(hub);
   scene.add(g);
+  g.traverse(o => o.castShadow = false); // perf: animated fan excluded from baked shadow map
   twFanGroups.push(g);
 });
 
@@ -863,7 +912,6 @@ CZ.forEach(cz => {
       if (ax*ax + az*az <= 5) {
         const c = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.6,0.9), mat);
         c.position.set(ax, 0, az);
-        c.castShadow = true;
         g.add(c);
       }
   for (let i=0; i<4; i++) {
@@ -876,6 +924,7 @@ CZ.forEach(cz => {
     g.add(bolt);
   }
   scene.add(g);
+  g.traverse(o => o.castShadow = false); // perf: animated coupling excluded from baked shadow map
   compCoupGroups.push(g);
   compCoupMats.push(mat);
 });
@@ -904,12 +953,12 @@ function makePumpCoupling(px, cz, mat) {
     const a = (i/8)*Math.PI*2;
     const c = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.55,0.55), mat);
     c.position.set(0, Math.cos(a)*1.2, Math.sin(a)*1.2);
-    c.castShadow = true;
     g.add(c);
   }
   const shaft = new THREE.Mesh(new THREE.BoxGeometry(1.0,0.8,0.8), mat);
   g.add(shaft);
   scene.add(g);
+  g.traverse(o => o.castShadow = false); // perf: animated pump coupling excluded from baked shadow map
   return g;
 }
 function stdMat() {
@@ -960,10 +1009,11 @@ const umaWheelMats = [], umaWheels = [], umaLeds = [];
       g.add(b);
     }
   }
-  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.8,0.8,3,10), mat);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.8,0.8,3,8), mat);
   hub.rotation.x = Math.PI/2;
   g.add(hub);
   scene.add(g);
+  g.traverse(o => o.castShadow = false); // perf: animated blower wheel excluded from baked shadow map
   umaWheels.push(g);
   umaWheelMats.push(mat);
   const lm = ledMat();
@@ -985,6 +1035,7 @@ DUCT_Y.forEach(pair => {
   });
   const d = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.7, 1.7), mat);
   d.position.set(186, pair[0]+1, 17);
+  d.castShadow = false; // perf: animated damper excluded from baked shadow map
   scene.add(d);
   vavDampers.push(d);
   vavMats.push(mat);
@@ -994,20 +1045,6 @@ DUCT_Y.forEach(pair => {
   scene.add(led);
   vavLedMats.push(lm);
 });
-
-// ====== OLAS DEL MAR (espuma animada) ======
-const waves = [];
-for (let w=0; w<3; w++) {
-  const g = new THREE.Group();
-  const mat = new THREE.MeshBasicMaterial({ color:0xeafcff, transparent:true, opacity:0 });
-  for (let x=-4; x<=272; x+=4) {
-    const c = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.5, 1.2), mat);
-    c.position.set(x, 0.95, Math.sin(x*0.09 + w*2)*1.6);
-    g.add(c);
-  }
-  scene.add(g);
-  waves.push({ g, mat, t: w/3 });
-}
 
 // ====== MAQUINA DE ESTADOS ======
 const COLOR_ON  = new THREE.Color(0x00ff66);
@@ -1020,7 +1057,6 @@ const state = {
   pool:true
 };
 const chOn = () => [state.c1, state.c2, state.c3, state.c4];
-const anyCh = () => state.c1 || state.c2 || state.c3 || state.c4;
 const vArr = () => [state.v1, state.v2, state.v3, state.v4, state.v5, state.v6, state.v7, state.v8];
 
 function setMat(m, on, hi, lo) {
@@ -1077,212 +1113,14 @@ bRot.onclick = () => {
   bRot.className = controls.autoRotate ? 'on' : 'off';
   bRot.textContent = controls.autoRotate ? 'ON' : 'OFF';
 };
-
-// ====== TRAYECTORIAS ======
-function polyline(points) {
-  const pts = points.map(p => new THREE.Vector3(p[0], p[1], p[2]));
-  const segs = []; let total = 0;
-  for (let i=0; i<pts.length-1; i++) {
-    const l = pts[i].distanceTo(pts[i+1]);
-    segs.push({ a:pts[i], b:pts[i+1], l0:total, l });
-    total += l;
-  }
-  const v = new THREE.Vector3();
-  return {
-    at(t) {
-      const d = Math.min(t,1) * total;
-      for (const s of segs)
-        if (d <= s.l0 + s.l) return v.lerpVectors(s.a, s.b, s.l ? (d-s.l0)/s.l : 0);
-      return v.copy(pts[pts.length-1]);
-    }
-  };
-}
-
-const redPaths = [], greenPaths = [], bluePaths = [];
-CZ.forEach((cz, k) => {
-  const pz = PCZ[PK[k]] + 0.5, tz = TZ(cz) + 0.5, c = cz + 0.5;
-  redPaths.push(polyline([
-    [72.5,15.3,c],[72.5,18.5,c],[62.5,18.5,c],[62.5,18.5,tz],
-    [30.5,18.5,tz],[30.5,13.5,tz],[26,13.5,tz]
-  ]));
-  greenPaths.push(polyline([
-    [28.5,2.5,tz],[43.5,2.5,tz],[43.5,2.5,pz],[43.5,3.5,pz],[46.5,3.5,pz],
-    [46.5,7.5,pz],[61.5,7.5,pz],[61.5,7.5,c],[64.5,7.5,c],[64.5,12.5,c],[67,12.5,c]
-  ]));
-  bluePaths.push(polyline([
-    [95.5,3.5,4.5],[95.5,3.5,pz],[100.5,3.5,pz],[100.5,7.5,pz],[93,7.5,pz],
-    [92.5,7.5,c],[90.5,7.5,c],[90.5,5.5,c],[89.5,5.5,c],[70,5.5,c],
-    [68.5,5.5,c],[68.5,8.5,c],[108.5,8.5,c]
-  ]));
-});
-const supU1 = polyline([
-  [108.5,8.5,8.5],[134.5,8.5,8.5],[134.5,2.5,8.5],[146.5,2.5,8.5],[146.5,5.5,8.5],[148,6,8.5]
-]);
-const supU2 = polyline([
-  [108.5,8.5,30.5],[134.5,8.5,30.5],[134.5,2.5,30.5],[146.5,2.5,30.5],[146.5,5.5,30.5],[148,6,30.5]
-]);
-const supHX = polyline([
-  [108.5,8.5,98.5],[108.5,2.5,98.5],[252.5,2.5,98.5],[252.5,2.5,82],
-  [252.5,4.5,81.5],[252.5,5.5,79],[252.5,5.5,69.5],[252.5,4.5,68.5]
-]);
-const retU1 = polyline([
-  [146.5,2.5,11.5],[112.5,2.5,11.5],[112.5,2.5,4.5],[96,2.5,4.5],[95.5,3.5,6],[95.5,3.5,9.5]
-]);
-const retU2 = polyline([
-  [146.5,2.5,33.5],[112.5,2.5,33.5],[112.5,2.5,4.5],[96,2.5,4.5],[95.5,3.5,6],[95.5,3.5,9.5]
-]);
-const retHX = polyline([
-  [254.5,3,69.5],[254.5,2.5,71],[254.5,2.5,99.5],[113,2.5,99.5],
-  [112.5,2.5,99.5],[112.5,2.5,4.5],[96,2.5,4.5],[95.5,3.5,7]
-]);
-const poolA = polyline([
-  [210,1.7,78.5],[216,2.5,78.5],[240.5,2.5,78.5],[240.5,2.5,74.5],
-  [241.5,3.5,74.5],[242.5,4.5,74.5],[242.5,6.5,74.5],[242.5,7.5,72],
-  [242.5,7.5,62],[243.8,7.5,61.5]
-]);
-const poolB = polyline([
-  [250.5,2.5,60.5],[250.5,2.7,61.5],[251.5,3.5,62.5]
-]);
-const poolC = polyline([
-  [250,3,67.5],[249.5,2.5,68.5],[249.5,2.5,72.5],[217,2.5,72.5],
-  [214.5,1.8,72.5],[205,1.7,74]
-]);
-const airB = [];
-for (let p=0; p<FLOORS.length; p++)
-  for (const xd of DIFF_X)
-    airB.push({ p, path: polyline([
-      [147,5.5,8.5],[153,5.5,8.5],[157.5,6.5,9.5],[157.5,15.5,7.5],
-      [177.5,15.5,7.5],[178.9,15.5,7.5],[178.9,YPC[p],7.5],[182,YPC[p],7.5],
-      [183.5,YPC[p],12],[183.5,YPC[p],16.5],[186,YPC[p],16.5],
-      [xd+1,YPC[p],16.5],[xd+1,YPC[p]-2,16.5],[xd+1,FALL_Y[p],16.5]
-    ])});
-const airU2Path = polyline([
-  [147,5.5,30.5],[153,5.5,30.5],[157.5,6.5,31.5],[157.5,15.5,30],
-  [156.5,15.5,48],[156.5,12,50.5],[156.5,9,50.5],[156.5,4,51.5],[156.5,2.8,53.5]
-]);
-const airRet1 = polyline([[130,5.5,8.5],[137,5.5,8.5],[141,5.5,8.5],[142.5,5.5,8.5]]);
-const airRet2 = polyline([[130,5.5,30.5],[137,5.5,30.5],[141,5.5,30.5],[142.5,5.5,30.5]]);
-
-// ====== PARTICULAS ======
-function spawn(n, colorHex, size) {
-  const arr = [];
-  const geo = new THREE.BoxGeometry(size||0.6, size||0.6, size||0.6);
-  for (let i=0; i<n; i++) {
-    const p = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:colorHex, transparent:true, opacity:0 }));
-    p.userData = { t: Math.random(), seed: Math.random()*10 };
-    scene.add(p);
-    arr.push(p);
-  }
-  return arr;
-}
-const redP   = CZ.map(() => spawn(9,  0xff6644));
-const greenP = CZ.map(() => spawn(9,  0x44cc77));
-const blueP  = CZ.map(() => spawn(12, 0x66ccff));
-const supU1P = spawn(8, 0x66ccff), supU2P = spawn(8, 0x66ccff), supHXP = spawn(14, 0x66ccff);
-const retU1P = spawn(7, 0x66ccff), retU2P = spawn(7, 0x66ccff), retHXP = spawn(14, 0x66ccff);
-const poolAP = spawn(9, 0x4fd8c9), poolBP = spawn(4, 0x4fd8c9), poolCP = spawn(8, 0x4fd8c9);
-const airBP  = airB.map(() => spawn(5, 0x44bbff, 0.55));
-const airU2P = spawn(10, 0x44bbff, 0.55);
-const airR1P = spawn(5, 0xff5533, 0.55);
-const airR2P = spawn(5, 0xff5533, 0.55);
-function spawnSpray(n, z0) {
-  const arr = spawn(n, 0xcfe8ff, 0.45);
-  arr.forEach(p => {
-    p.userData.x = 3 + Math.random()*22;
-    p.userData.z = z0 + 3 + Math.random()*12;
-  });
-  return arr;
-}
-const sprayA = spawnSpray(22, 0);
-const sprayB = spawnSpray(22, 30);
-const shimmer = spawn(22, 0x9fe8f0, 0.4);
-const oceanGlint = spawn(26, 0xbfeaf4, 0.45);
-const bubbles = spawn(7, 0xdff6f8, 0.35);
-bubbles.forEach(p => {
-  p.userData.x = 220.5 + Math.random()*3;
-  p.userData.z = 60.5 + Math.random()*3;
-});
-
-function updateFlow(list, path, speed, active, dt, jit) {
-  const j = jit || 0.15;
-  for (const p of list) {
-    if (!active) { p.material.opacity = 0; continue; }
-    p.userData.t += dt * speed;
-    if (p.userData.t > 1) p.userData.t -= 1;
-    const tt = p.userData.t, s = p.userData.seed;
-    const pos = path.at(tt);
-    p.position.set(
-      pos.x + Math.sin(tt*9 + s)*j,
-      pos.y + Math.cos(tt*7 + s)*j,
-      pos.z + Math.sin(tt*5 + s)*j
-    );
-    p.material.opacity = Math.sin(tt*Math.PI) * 0.85;
-  }
-}
-function updateSpray(list, active, dt, z0) {
-  for (const p of list) {
-    if (!active) { p.material.opacity = 0; continue; }
-    p.userData.t += dt * 0.5;
-    if (p.userData.t > 1) {
-      p.userData.t = 0;
-      p.userData.x = 3 + Math.random()*22;
-      p.userData.z = z0 + 3 + Math.random()*12;
-    }
-    const tt = p.userData.t;
-    p.position.set(
-      p.userData.x,
-      13.2 - tt*10.2,
-      p.userData.z + Math.sin(tt*6 + p.userData.seed)*0.3
-    );
-    p.material.opacity = Math.sin(tt*Math.PI) * 0.7;
-  }
-}
-function updateShimmer(list, active, t) {
-  for (const p of list) {
-    if (!active) { p.material.opacity = 0; continue; }
-    const s = p.userData.seed;
-    p.position.set(
-      180 + Math.sin(t*0.22 + s)*30,
-      1.7 + Math.sin(t*2 + s*3)*0.06,
-      73 + Math.cos(t*0.18 + s*2)*13
-    );
-    p.material.opacity = 0.4 + Math.sin(t*1.5 + s)*0.2;
-  }
-}
-function updateOceanGlint(list, t) {
-  for (const p of list) {
-    const s = p.userData.seed;
-    p.position.set(
-      134 + Math.sin(t*0.15 + s)*136,
-      1.15 + Math.sin(t*2.2 + s*3)*0.05,
-      151 + Math.cos(t*0.12 + s*2)*18
-    );
-    p.material.opacity = 0.28 + Math.sin(t*1.8 + s)*0.18;
-  }
-}
-function updateBubbles(list, active, dt) {
-  for (const p of list) {
-    if (!active) { p.material.opacity = 0; continue; }
-    p.userData.t += dt * 0.9;
-    if (p.userData.t > 1) {
-      p.userData.t = 0;
-      p.userData.x = 220.5 + Math.random()*3;
-      p.userData.z = 60.5 + Math.random()*3;
-    }
-    const tt = p.userData.t;
-    p.position.set(
-      p.userData.x + Math.sin(tt*8 + p.userData.seed)*0.2,
-      1.4 + tt*1.1,
-      p.userData.z
-    );
-    p.material.opacity = Math.sin(tt*Math.PI) * 0.75;
-  }
-}
+document.getElementById('bView3Q').onclick = () => { controls.autoRotate = false; bRot.className='off'; bRot.textContent='OFF'; setView(VIEW_3Q); };
+document.getElementById('bViewTop').onclick = () => { controls.autoRotate = false; bRot.className='off'; bRot.textContent='OFF'; setView(VIEW_TOP); };
 
 // ====== RESIZE ======
 addEventListener('resize', () => {
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight);
 });
 
@@ -1317,47 +1155,6 @@ function animate() {
   vavDampers.forEach((d, i) => {
     const target = vOn[i] ? -1.35 : 0;
     d.rotation.y += (target - d.rotation.y) * Math.min(1, dt*4);
-  });
-
-  CZ.forEach((cz, k) => {
-    const condOn = state.bc && ch[k];
-    const chwOn  = state.bp && ch[k];
-    updateFlow(redP[k],   redPaths[k],   0.14, condOn, dt);
-    updateFlow(greenP[k], greenPaths[k], 0.12, condOn, dt);
-    updateFlow(blueP[k],  bluePaths[k],  0.10, chwOn,  dt);
-  });
-
-  const chwAvail = state.bp && anyCh();
-  updateFlow(supU1P, supU1, 0.16, chwAvail && state.u1, dt);
-  updateFlow(retU1P, retU1, 0.14, chwAvail && state.u1, dt);
-  updateFlow(supU2P, supU2, 0.16, chwAvail && state.u2, dt);
-  updateFlow(retU2P, retU2, 0.14, chwAvail && state.u2, dt);
-  updateFlow(supHXP, supHX, 0.09, chwAvail && state.pool, dt);
-  updateFlow(retHXP, retHX, 0.08, chwAvail && state.pool, dt);
-
-  airB.forEach((ab, i) => {
-    updateFlow(airBP[i], ab.path, 0.10, state.u1 && vOn[ab.p], dt, 0.28);
-  });
-  updateFlow(airU2P, airU2Path, 0.13, state.u2, dt, 0.35);
-  updateFlow(airR1P, airRet1, 0.2, state.u1, dt, 0.4);
-  updateFlow(airR2P, airRet2, 0.2, state.u2, dt, 0.4);
-
-  updateFlow(poolAP, poolA, 0.12, state.pool, dt);
-  updateFlow(poolBP, poolB, 0.14, state.pool, dt);
-  updateFlow(poolCP, poolC, 0.12, state.pool, dt);
-  updateShimmer(shimmer, state.pool, t);
-  updateOceanGlint(oceanGlint, t);
-  updateBubbles(bubbles, state.pool, dt);
-
-  updateSpray(sprayA, state.bc && (state.c1 || state.c2), dt, 0);
-  updateSpray(sprayB, state.bc && (state.c3 || state.c4), dt, 30);
-
-  // Olas rompiendo hacia la orilla
-  waves.forEach(wv => {
-    wv.t += dt * 0.08;
-    if (wv.t > 1) wv.t = 0;
-    wv.g.position.z = 148 - wv.t * 17;
-    wv.mat.opacity = Math.sin(wv.t * Math.PI) * 0.75;
   });
 
   controls.update();
