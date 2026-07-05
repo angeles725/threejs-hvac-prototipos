@@ -258,56 +258,119 @@ function pipeRun(a, b, color) {
     vox(a[0]+dx*i, a[1]+dy*i, a[2]+dz*i, color);
 }
 
-// ====== HERO VOXEL PIPELINE (v4) ======
+// ====== HERO VOXEL PIPELINE (v5: exposed-face greedy mesher) ======
 // Detailed equipment transplanted from the standalone hero scenes
 // (chiller-tornillo-agua-voxel-v1, bomba-centrifuga-voxel,
 // ahu-cuarto-maquinas-voxel, fcu-plafon-voxel). Each hero factory fills a
-// LOCAL cell map ("x,y,z" integer hero-voxel coords -> material name); the
-// pipeline culls interior cells (all 6 neighbors occupied by opaque cells =
-// never visible), then bakes survivors into per-hero-type material buckets in
-// hotel world units. All copies of a hero type share ONE InstancedMesh per
-// material, so 4 chillers cost the same draw count as 1.
-const NEIGH6 = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+// LOCAL cell map ("x,y,z" integer hero-voxel coords -> material name). The v4
+// pipeline baked every surviving cell into an InstancedMesh cube (12 tris per
+// cell, all 6 faces, even between adjacent cells). v5 replaces that with
+// exposed-face greedy meshing: emit only faces exposed to empty or transparent
+// space, merge coplanar same-material faces into maximal rectangles (2 tris
+// each), and bake ONE merged BufferGeometry per material per store,
+// instantiated for every placement. This subsumes the v4 interior-cell cull
+// (interior faces are simply never emitted) and keeps the v4 draw count (one
+// Mesh per material ~= one InstancedMesh per material) while cutting hero
+// triangles by roughly an order of magnitude.
 const qTmp = new THREE.Quaternion(), eTmp = new THREE.Euler();
-function cullInterior(cells, isOpaque) {
-  const gone = [];
+// Occlusion rules (transparent = mats[name].t, the FCU translucent shell):
+// - an opaque cell occludes the shared face; a transparent cell never does;
+// - opaque faces are emitted where the neighbor is empty or transparent;
+// - transparent faces are emitted where the neighbor is empty, opaque, or a
+//   DIFFERENT transparent material; same-material transparent-to-transparent
+//   faces are dropped (edge-on interior walls, invisible at opacity 0.18).
+// places: array of { x,y,z world origin, k units per hero voxel, tx } where
+// tx is 'std' | 'mz' (mirror z across local plane z=mzW) | 'rot' (180 deg
+// about Y) — exactly the v4 bakeHeroCells transforms. Returns telemetry
+// { cells, faces, rects, places }; faces/rects counted once per store copy.
+function buildExposedMesh(cells, mats, places, parent, opts = {}) {
+  const isT = name => !!mats[name].t;
+  const visible = (a, b) => {   // a: emitter material · b: neighbor material | undefined
+    if (b === undefined) return true;
+    if (!isT(a)) return isT(b);
+    return !isT(b) || b !== a;
+  };
+  // pass 1: collect exposed faces into per-direction slice masks
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  const parsed = [];
   for (const [key, name] of cells) {
-    if (isOpaque && !isOpaque(name)) continue;
-    const [x, y, z] = key.split(',').map(Number);
-    let hidden = true;
-    for (const [dx, dy, dz] of NEIGH6) {
-      const n = cells.get((x+dx) + ',' + (y+dy) + ',' + (z+dz));
-      if (n === undefined || (isOpaque && !isOpaque(n))) { hidden = false; break; }
+    const p = key.split(',').map(Number);
+    for (let i = 0; i < 3; i++) { if (p[i] < lo[i]) lo[i] = p[i]; if (p[i] > hi[i]) hi[i] = p[i]; }
+    parsed.push([p, name]);
+  }
+  // dirs[d][si]: Map<slice coord along d, Map<'u,v', material>> · si 0:+d 1:-d
+  const dirs = [[new Map(), new Map()], [new Map(), new Map()], [new Map(), new Map()]];
+  let faces = 0;
+  for (const [p, name] of parsed)
+    for (let d = 0; d < 3; d++)
+      for (let si = 0; si < 2; si++) {
+        const nx = p[0] + (d === 0 ? (si === 0 ? 1 : -1) : 0);
+        const ny = p[1] + (d === 1 ? (si === 0 ? 1 : -1) : 0);
+        const nz = p[2] + (d === 2 ? (si === 0 ? 1 : -1) : 0);
+        if (!visible(name, cells.get(nx + ',' + ny + ',' + nz))) continue;
+        const u = (d + 1) % 3, v = (d + 2) % 3;
+        let mask = dirs[d][si].get(p[d]);
+        if (!mask) dirs[d][si].set(p[d], mask = new Map());
+        mask.set(p[u] + ',' + p[v], name);
+        faces++;
+      }
+  // pass 2: greedy-merge each slice mask into maximal same-material rectangles
+  const built = {};   // material name -> { pos: [], nrm: [] }
+  let rects = 0;
+  const c0 = [0,0,0], c1 = [0,0,0], c2 = [0,0,0], c3 = [0,0,0];
+  const pushCorner = (place, c, pos) => {
+    const k = place.k;
+    let wx = place.x + c[0]*k, wz = place.z + c[2]*k;
+    if (place.tx === 'rot') { wx = place.x - c[0]*k; wz = place.z - c[2]*k; }
+    else if (place.tx === 'mz') { wz = place.z + (place.mzW - c[2])*k; }
+    pos.push(wx, place.y + c[1]*k, wz);
+  };
+  for (let d = 0; d < 3; d++) {
+    const u = (d + 1) % 3, v = (d + 2) % 3;
+    for (let si = 0; si < 2; si++) {
+      const sgn = si === 0 ? 1 : -1;
+      for (const [slice, mask] of dirs[d][si]) {
+        const plane = slice + (si === 0 ? 1 : 0);   // face plane in cell units
+        for (let vv = lo[v]; vv <= hi[v]; vv++)
+          for (let uu = lo[u]; uu <= hi[u]; uu++) {
+            const name = mask.get(uu + ',' + vv);
+            if (name === undefined) continue;
+            let w = 1;
+            while (mask.get((uu + w) + ',' + vv) === name) w++;
+            let h = 1;
+            scan: for (;;) {
+              for (let du = 0; du < w; du++)
+                if (mask.get((uu + du) + ',' + (vv + h)) !== name) break scan;
+              h++;
+            }
+            for (let du = 0; du < w; du++)
+              for (let dv = 0; dv < h; dv++) mask.delete((uu + du) + ',' + (vv + dv));
+            rects++;
+            // rect corners in local cell units, CCW around the +/-d face normal
+            c0[d] = c1[d] = c2[d] = c3[d] = plane;
+            c0[u] = uu;     c0[v] = vv;
+            c1[u] = uu + w; c1[v] = vv;
+            c2[u] = uu + w; c2[v] = vv + h;
+            c3[u] = uu;     c3[v] = vv + h;
+            const quad = si === 0 ? [c0, c1, c2, c3] : [c0, c3, c2, c1];
+            const b = built[name] || (built[name] = { pos: [], nrm: [] });
+            for (const place of places) {
+              let nx = d === 0 ? sgn : 0, ny = d === 1 ? sgn : 0, nz = d === 2 ? sgn : 0;
+              if (place.tx === 'rot') { nx = -nx; nz = -nz; }
+              else if (place.tx === 'mz') nz = -nz;
+              // the z-mirror flips winding: reverse triangles to stay front-facing
+              const tri = place.tx === 'mz' ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3];
+              for (const ti of tri) pushCorner(place, quad[ti], b.pos);
+              for (let i = 0; i < 6; i++) b.nrm.push(nx, ny, nz);
+            }
+            uu += w - 1;
+          }
+      }
     }
-    if (hidden) gone.push(key);
   }
-  gone.forEach(k => cells.delete(k));
-  return gone.length;
-}
-// place: { x,y,z world origin, k hotel units per hero voxel, tx transform }
-// tx: 'std' | 'mz' (mirror z across local plane z=mzW) | 'rot' (180 deg about Y)
-function bakeHeroCells(cells, mats, place, buckets) {
-  for (const [key, name] of cells) {
-    const [cx, cy, cz] = key.split(',').map(Number);
-    const lx = (cx+0.5)*place.k, ly = (cy+0.5)*place.k, lz = (cz+0.5)*place.k;
-    let wx = place.x + lx, wz = place.z + lz;
-    if (place.tx === 'rot') { wx = place.x - lx; wz = place.z - lz; }
-    else if (place.tx === 'mz') { wz = place.z + place.mzW*place.k - lz; }
-    const b = buckets[name] || (buckets[name] = { props: mats[name], entries: [] });
-    b.entries.push([wx, place.y + ly, wz, place.k]);
-  }
-}
-// point transform for animated-part anchors (local hero coords, NOT cell-centered)
-function heroPoint(place, lx, ly, lz) {
-  let wx = place.x + lx*place.k, wz = place.z + lz*place.k;
-  if (place.tx === 'rot') { wx = place.x - lx*place.k; wz = place.z - lz*place.k; }
-  else if (place.tx === 'mz') { wz = place.z + (place.mzW - lz)*place.k; }
-  return new THREE.Vector3(wx, place.y + ly*place.k, wz);
-}
-// buckets -> InstancedMeshes (shared unit cube, per-instance scale = hero k)
-function buildHeroInstanced(buckets, parent, forceNoShadow) {
-  for (const name in buckets) {
-    const { props, entries } = buckets[name];
+  // pass 3: one merged Mesh per material (same MeshStandardMaterial props as v4)
+  for (const name in built) {
+    const props = mats[name];
     const mat = new THREE.MeshStandardMaterial({
       color: props.c, roughness: props.r ?? 0.5, metalness: props.m ?? 0.55,
       emissive: props.e ?? 0x000000, emissiveIntensity: props.ei ?? 0,
@@ -316,18 +379,22 @@ function buildHeroInstanced(buckets, parent, forceNoShadow) {
       mat.transparent = true; mat.opacity = props.t;
       mat.depthWrite = false; mat.side = THREE.DoubleSide;
     }
-    const mesh = new THREE.InstancedMesh(cubeGeo, mat, entries.length);
-    mesh.castShadow = !forceNoShadow && !props.t;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(built[name].pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(built[name].nrm, 3));
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = !opts.noShadow && !props.t;
     mesh.receiveShadow = true;
-    entries.forEach((e, i) => {
-      vPos.set(e[0], e[1], e[2]);
-      vScale.setScalar(e[3]);
-      m4.compose(vPos, qIdentity, vScale);
-      mesh.setMatrixAt(i, m4);
-    });
-    mesh.instanceMatrix.needsUpdate = true;
     parent.add(mesh);
   }
+  return { cells: cells.size, faces, rects, places: places.length };
+}
+// point transform for animated-part anchors (local hero coords, NOT cell-centered)
+function heroPoint(place, lx, ly, lz) {
+  let wx = place.x + lx*place.k, wz = place.z + lz*place.k;
+  if (place.tx === 'rot') { wx = place.x - lx*place.k; wz = place.z - lz*place.k; }
+  else if (place.tx === 'mz') { wz = place.z + (place.mzW - lz)*place.k; }
+  return new THREE.Vector3(wx, place.y + ly*place.k, wz);
 }
 // small animated assemblies: entries [px,py,pz, rotX, sx,sy,sz] in hero voxels
 function mkIM(entries, mat, k) {
@@ -385,10 +452,12 @@ buildTower(6, 38);
 
 // ====== CHILLERS (4 heroes: water-cooled screw chillers, ~5 m long) ======
 // Transplanted from chiller-tornillo-agua-voxel-v1.html (1 hero voxel = 0.1 m
-// -> k = 0.2). Static hull is baked into shared buckets; the screw compressor
-// + motor assembly gets per-unit buckets so each unit vibrates with its own
-// c1..c4 state (the source anti z-fight carve is kept).
+// -> k = 0.2). The static hull is greedy-meshed once and instanced per unit
+// into shared per-material Meshes; the screw compressor + motor assembly gets
+// its own merged meshes inside each unit's vibrating Group so each unit moves
+// with its own c1..c4 state (the source anti z-fight carve is kept).
 const CHILLER_K = 0.2;
+const CHILLER_COMP_PLACE = { x:0, y:0, z:0, k:CHILLER_K, tx:'std' };   // comp meshes live in each unit's Group
 const CHILLER_MATS = {
   GREEN:   { c:0x2e6b52, r:0.55, m:0.25 },   // industrial green barrels
   GREEN_D: { c:0x224e3c, r:0.60, m:0.25 },
@@ -405,8 +474,8 @@ const CHILLER_MATS = {
   PANEL_D: { c:0x262c33, r:0.55, m:0.50 },
   WHITE:   { c:0xe9eae4, r:0.40, m:0.10 },
 };
-const chillerBuckets = {};
-const chillerUnits = [];
+let chillerStaticCells = null, chillerCompCells = null;
+const chillerStaticPlaces = [], chillerUnits = [];
 function buildHeroChiller(cz) {
   const place = { x:30, y:1, z:cz-1.8, k:CHILLER_K, tx:'std' };
   const voxStatic = new Map(), voxComp = new Map();
@@ -582,12 +651,11 @@ function buildHeroChiller(cz) {
 
   // anti z-fight between systems: the compressor assembly carves its socket
   for (const key of voxComp.keys()) if (voxStatic.has(key)) voxStatic.delete(key);
-  cullInterior(voxStatic);
-  cullInterior(voxComp);
-  bakeHeroCells(voxStatic, CHILLER_MATS, place, chillerBuckets);
-  const compBuckets = {};
-  bakeHeroCells(voxComp, CHILLER_MATS, { x:0, y:0, z:0, k:CHILLER_K, tx:'std' }, compBuckets);
-  chillerUnits.push({ place, compBuckets });
+  // v5: every hero chiller fills identical LOCAL cell maps — keep one copy of
+  // each and greedy-mesh once, instancing the merged geometry per placement.
+  if (!chillerStaticCells) { chillerStaticCells = voxStatic; chillerCompCells = voxComp; }
+  chillerStaticPlaces.push(place);
+  chillerUnits.push({ place });
 }
 // FALLBACK TIER (v4 budget): CH-1 (600 TR, the row farthest from the default
 // camera) keeps the v3 plain block so CH-2..CH-4 can stay full heroes under
@@ -614,7 +682,7 @@ CZ.forEach((cz, i) => {
 // plan: concrete pad + anchor bolts (pumps sit on the yard pad) and the field
 // piping beyond the suction gate valve (cut at local x >= -14) so the hotel
 // mains take over. Discharge riser kept up to its top flange, meeting the y=3
-// header stubs. One fill, culled once, baked per placement into shared buckets.
+// header stubs. One fill, greedy-meshed once, instanced per placement (v5).
 const PUMP_K = 0.05;
 const PUMP_MATS = {
   VOLUTE:  { c:0x2456a8, r:0.38, m:0.30 },   // industrial blue volute
@@ -901,7 +969,6 @@ const pumpCells = new Map();
     }
   S(-5,21,13,'DARK');
   S(-5,22,13,'NEEDLE'); S(-4,23,13,'NEEDLE');
-  cullInterior(pumpCells);
 }
 // FALLBACK TIER (a): 8 hero pumps measured ~535k tris (~67k each) and blew the
 // 600k gate, so only the front row (pz=50, facing the default 3/4 camera) gets
@@ -911,8 +978,6 @@ const PUMP_PLACES = [
   { x:22.9, y:0.8, z:49.4, k:PUMP_K, tx:'std', bank:'bc' },   // condenser pump, front row
   { x:43.9, y:0.8, z:49.4, k:PUMP_K, tx:'std', bank:'bp' },   // primary pump, front row
 ];
-const pumpBuckets = {};
-PUMP_PLACES.forEach(p => bakeHeroCells(pumpCells, PUMP_MATS, p, pumpBuckets));
 // plain-block pumps (v3) for the remaining positions
 function buildPumpBlock(px, cz) {
   vox(px, 1, cz-1, COL.HOUSING);
@@ -1070,9 +1135,8 @@ const FCU_MATS = {
   CABLE:    { c:0x22262c },
   DRAIN:    { c:0xd8d8dc },
 };
-const fcuBuckets = {};
+const fcuCells = new Map();
 {
-  const fcuCells = new Map();
   const fv = (x, y, z, c) => fcuCells.set(x + ',' + y + ',' + z, c);
   const fpipe = (a, b, color) => {
     const dx=Math.sign(b[0]-a[0]), dy=Math.sign(b[1]-a[1]), dz=Math.sign(b[2]-a[2]);
@@ -1210,8 +1274,8 @@ const fcuBuckets = {};
         if (x===57 || y===15 || y===21 || z===20 || z===24)
           fv(x, y, z, 'DARK');
   fpipe([56, 22, 22], [56, 30, 22], 'CABLE');
-  cullInterior(fcuCells, n => !FCU_MATS[n].t);   // transparent shell never occludes
-  bakeHeroCells(fcuCells, FCU_MATS, FCU_PLACE, fcuBuckets);
+  // meshed at build time; the mesher's occlusion rule already treats the
+  // transparent GALV shell as never occluding (v4's special-cased cull)
 }
 
 // ====== AHUs (heroes: air handling units, 1 hero voxel = 0.1 m -> k = 0.2) ======
@@ -1385,7 +1449,6 @@ const ahuCells = new Map();
     }
   for (let y=14; y<=20; y++) vox(31, y, -1, 'FRAME');  // conduit
   vox(31, 20, 0, 'FRAME'); vox(31, 20, 1, 'FRAME');
-  cullInterior(ahuCells);
 }
 // FALLBACK TIER (v4 budget): only the two powered units are heroes; the
 // static rooftop twin keeps its v3 plain block (it was a dummy in v3 too).
@@ -1393,8 +1456,6 @@ const AHU_PLACES = [
   { x:186,   y:50, z:18,   k:AHU_K, tx:'mz', mzW:16 },   // UMA-1 (azotea, animated)
   { x:219.6, y:1,  z:84.6, k:AHU_K, tx:'rot' },          // UMA-2 (pool area, animated)
 ];
-const ahuBuckets = {};
-AHU_PLACES.forEach(p => bakeHeroCells(ahuCells, AHU_MATS, p, ahuBuckets));
 // UMA-1 rooftop pad (kept from v3, widened to catch the hero CHW stubs)
 voxBox(185, 49, 17, 194, 49, 23, COL.SKID);
 // twin unit (v3 plain block)
@@ -1659,15 +1720,20 @@ for (const k in voxData) {
   if (FACADE_COLORS.has(color)) facadeMeshes.push(mesh);
 }
 
-// ====== HERO INSTANCED MESHES (v4, added before the one-shot shadow bake) ======
-buildHeroInstanced(chillerBuckets, scene);
-buildHeroInstanced(pumpBuckets, scene);
-buildHeroInstanced(ahuBuckets, scene);
-buildHeroInstanced(fcuBuckets, scene);
-const bucketTotal = b => Object.values(b).reduce((s, x) => s + x.entries.length, 0);
-console.log('[hotel v4] hero cells — chiller x3:', bucketTotal(chillerBuckets),
-  '| pump x2:', bucketTotal(pumpBuckets), '| ahu x2:', bucketTotal(ahuBuckets),
-  '| fcu x1:', bucketTotal(fcuBuckets));
+// ====== HERO MERGED MESHES (v5 greedy mesher, added before the one-shot shadow bake) ======
+const heroStats = {
+  chiller: buildExposedMesh(chillerStaticCells, CHILLER_MATS, chillerStaticPlaces, scene),
+  pump:    buildExposedMesh(pumpCells, PUMP_MATS, PUMP_PLACES, scene),
+  ahu:     buildExposedMesh(ahuCells, AHU_MATS, AHU_PLACES, scene),
+  fcu:     buildExposedMesh(fcuCells, FCU_MATS, [FCU_PLACE], scene),
+};
+// hero telemetry: cells -> exposed faces -> greedy rects (per copy) and the
+// resulting tri cost across all placements (v4 cost was cells x 12 x places)
+const meshStat = t =>
+  `${t.cells}c -> ${t.faces}f -> ${t.rects}r x${t.places} = ${t.rects * 2 * t.places} tris (v4 ~${t.cells * 12 * t.places})`;
+console.log('[hotel v5] hero mesher — chiller static:', meshStat(heroStats.chiller),
+  '| pump:', meshStat(heroStats.pump), '| ahu:', meshStat(heroStats.ahu),
+  '| fcu:', meshStat(heroStats.fcu));
 
 // ====== CAMERA / VIEWS (B37 Sec37.3 preset vocabulary) ======
 const CX = (sceneMinX+sceneMaxX)/2, CZC = (sceneMinZ+sceneMaxZ)/2;
@@ -1778,10 +1844,11 @@ chillerUnits.forEach((u, ui) => {
     return;
   }
   const { place } = u, k = place.k;
-  // vibrating screw compressor + motor (per-unit InstancedMesh buckets)
+  // vibrating screw compressor + motor: per-unit merged meshes (local coords)
+  // inside the unit's own Group so the assembly vibrates as one piece (v5)
   const cg = new THREE.Group();
   cg.position.set(place.x, place.y, place.z);
-  buildHeroInstanced(u.compBuckets, cg, true);
+  heroStats.comp = buildExposedMesh(chillerCompCells, CHILLER_MATS, [CHILLER_COMP_PLACE], cg, { noShadow: true });
   scene.add(cg);
   cg.traverse(o => o.castShadow = false);
   chCompGroups.push(cg);
@@ -1830,6 +1897,8 @@ chillerUnits.forEach((u, ui) => {
   scene.add(beacon);
   chBeaconMats.push(bMat);
 });
+console.log('[hotel v5] hero mesher — chiller comp (per unit x'
+  + chillerUnits.filter(Boolean).length + '):', meshStat(heroStats.comp));
 
 // chiller status LEDs (hero: on the cabinet screen bezel · plain: v3 spot)
 const chLeds = [];
