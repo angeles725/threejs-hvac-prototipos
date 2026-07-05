@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Hotel frente al mar · Campus HVAC · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:262px; font-size:11px; backdrop-filter: blur(6px); max-height:78vh; overflow-y:auto; }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .sub { color:#3f7a84; font-size:9px; letter-spacing:0.2em; margin:9px 0 3px; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:6px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.06em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:4px 12px; border:1px solid; background:transparent; cursor:pointer; min-width:52px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>HOTEL FRENTE AL MAR · CAMPUS HVAC</b><br>
+  <span>Planta CHW · UMAs · Edificio 8 pisos · VAVs · Alberca · Playa · Voxel Art</span>
+</div>
+<div id="legend">
+  <div><i style="background:#ff6644"></i> Agua condensados (caliente a torres)</div>
+  <div><i style="background:#44cc77"></i> Agua condensados (enfriada a chillers)</div>
+  <div><i style="background:#66ccff"></i> Agua helada (planta a consumidores)</div>
+  <div><i style="background:#44bbff"></i> Aire de suministro</div>
+  <div><i style="background:#ff5533"></i> Aire de retorno</div>
+  <div><i style="background:#4fd8c9"></i> Agua de alberca</div>
+  <div><i style="background:#cfe8ff"></i> Rocío en torres</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE PLANTA</div>
+  <div class="sub">PLANTA CHW</div>
+  <div class="row"><label>CHILLER 1 · 600 TR</label><button id="bC1">OFF</button></div>
+  <div class="row"><label>CHILLER 2 · 900 TR</label><button id="bC2">OFF</button></div>
+  <div class="row"><label>CHILLER 3 · 900 TR</label><button id="bC3">OFF</button></div>
+  <div class="row"><label>CHILLER 4 · 900 TR</label><button id="bC4">OFF</button></div>
+  <div class="row"><label>BOMBAS CONDENSADOS</label><button id="bBC">OFF</button></div>
+  <div class="row"><label>BOMBAS PRIMARIAS</label><button id="bBP">OFF</button></div>
+  <div class="row"><label>VENT. TORRES</label><button id="bTW">OFF</button></div>
+  <div class="sub">DISTRIBUCIÓN / ZONAS</div>
+  <div class="row"><label>UMA-1 · EDIFICIO</label><button id="bU1">OFF</button></div>
+  <div class="row"><label>UMA-2 · ÁREA ALBERCA</label><button id="bU2">OFF</button></div>
+  <div class="row"><label>VAV PISO 1</label><button id="bV1">OFF</button></div>
+  <div class="row"><label>VAV PISO 2</label><button id="bV2">OFF</button></div>
+  <div class="row"><label>VAV PISO 3</label><button id="bV3">OFF</button></div>
+  <div class="row"><label>VAV PISO 4</label><button id="bV4">OFF</button></div>
+  <div class="row"><label>VAV PISO 5</label><button id="bV5">OFF</button></div>
+  <div class="row"><label>VAV PISO 6</label><button id="bV6">OFF</button></div>
+  <div class="row"><label>VAV PISO 7</label><button id="bV7">OFF</button></div>
+  <div class="row"><label>VAV PISO 8</label><button id="bV8">OFF</button></div>
+  <div class="row"><label>BOMBAS ALBERCA</label><button id="bPool">OFF</button></div>
+  <div class="sub">CÁMARA</div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 460, 1900);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 2800);
+camera.position.set(400, 250, 330);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(140, 18, 62);
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.3;
+
+// ====== LIGHTS ======
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(300, 340, 180);
+sun.castShadow = true;
+sun.shadow.mapSize.set(4096,4096);
+const sc = sun.shadow.camera;
+sc.left=-260; sc.right=260; sc.top=260; sc.bottom=-260; sc.near=1; sc.far=900;
+sun.shadow.bias = -0.0005;
+sun.target.position.set(140, 0, 62);
+scene.add(sun); scene.add(sun.target);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.35);
+fill.position.set(-100, 100, -80);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rim.position.set(140, 50, -160);
+scene.add(rim);
+
+// ====== GROUND ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(2400,2400),
+  new THREE.MeshStandardMaterial({ color:0x0a0e16, roughness:0.92, metalness:0.05 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.position.set(134, 0, 80);
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(2400, 400, 0x00d4aa, 0x142028);
+grid.material.opacity = 0.1;
+grid.material.transparent = true;
+grid.position.set(134, 0.01, 80);
+scene.add(grid);
+
+// ====== VOXEL BUILDER ======
+const voxData = {};
+function vox(x,y,z,color) {
+  const k = color.toString();
+  if (!voxData[k]) voxData[k] = { color, positions: [] };
+  voxData[k].positions.push([x,y,z]);
+}
+
+const COL = {
+  BEIGE:    0xc8c2a8,
+  BEIGE_D:  0xa8a290,
+  SKID:     0xa8a8ac,
+  DARK:     0x2a2a2e,
+  HOUSING:  0x6a6a72,
+  HOUSING_D:0x4a4a52,
+  COIL:     0x4a6878,
+  COIL_H:   0x6080a0,
+  COPPER:   0xb87333,
+  COMP:     0x3a3a40,
+  MOTOR:    0x55555c,
+  FRAME:    0x3a3a3e,
+  GRILLE:   0x1a1a1e,
+  PANEL:    0xb0aa92,
+  CHILL:    0x3f8a55,
+  WATER:    0x16455f,
+  WATER_P:  0x1e6f8f,
+  TILE:     0x9fd4d8,
+  SAND:     0xd4c49a,
+  SAND_D:   0xc4b285,
+  SAND_W:   0xb0997a,
+  OCEAN_S:  0x2a7a96,
+  OCEAN_D:  0x155068,
+  TRUNK:    0x7a5634,
+  WOOD_D:   0x64452a,
+  LEAF:     0x2f8a3e,
+  LINEN:    0xe8e4da,
+  LAMP:     0xffd890,
+  DUCT:     0x8a8a92,
+  ZONE:     0x16323d,
+  SCREEN:   0x0e3844,
+  PIPE_R:   0x8a3226,
+  PIPE_G:   0x2e7a45,
+  PIPE_B:   0x2f5f96,
+  PIPE_T:   0x2f8a86,
+};
+
+// ====== LAYOUT GENERAL ======
+// Torres x 0..27 (z0 0/30) · B.Cond px=46 · Chillers x 64..89 · B.Prim px=100
+// UMAs x 138..161 (z0 4/26) · Edificio x 180..250 z 2..34 (8 pisos)
+// Alberca deck x 138..230 z 50..96 · Caseta x 238..264 z 56..80
+// Malecon z 102..103 · Playa z 104..130 · Mar z 131..172
+const CZ  = [6, 21, 36, 51];
+const PCZ = [10, 28, 46];
+const PK  = [0, 1, 1, 2];
+const TZ  = cz => (cz < 28 ? 9 : 39);
+const CH_NAMES = ['CH-1 · 600 TR','CH-2 · 900 TR','CH-3 · 900 TR','CH-4 · 900 TR'];
+const FLOORS = [0, 9, 18, 27, 36, 45, 54, 63];       // 8 pisos
+const DUCT_Y = FLOORS.map(f => [f+6, f+7]);
+const YPC    = FLOORS.map(f => f+7);
+const FALL_Y = FLOORS.map(f => f+2);
+const ROOM_X = [181, 198, 215, 232];
+const DIV_X  = [197, 214, 231];
+const DIFF_X = [188, 205, 222, 239];
+
+// ====== HELPERS ======
+function pipeRun(a, b, color) {
+  const dx=Math.sign(b[0]-a[0]), dy=Math.sign(b[1]-a[1]), dz=Math.sign(b[2]-a[2]);
+  const len = Math.max(Math.abs(b[0]-a[0]), Math.abs(b[1]-a[1]), Math.abs(b[2]-a[2]));
+  for (let i=0;i<=len;i++)
+    vox(a[0]+dx*i, a[1]+dy*i, a[2]+dz*i, color);
+}
+function zoneFrame(x0, z0, x1, z1) {
+  for (let x=x0; x<=x1; x++) { vox(x,0,z0,COL.ZONE); vox(x,0,z1,COL.ZONE); }
+  for (let z=z0+1; z<z1; z++) { vox(x0,0,z,COL.ZONE); vox(x1,0,z,COL.ZONE); }
+}
+
+// ====== MARCOS DE ZONA ======
+zoneFrame(-2,-2, 31,49);
+zoneFrame(42,6, 55,50);
+zoneFrame(60,-1, 95,58);
+zoneFrame(97,2, 110,52);
+zoneFrame(135,1, 166,38);
+zoneFrame(177,0, 254,39);
+zoneFrame(135,47, 270,101);
+
+// ====== TORRES DE ENFRIAMIENTO ======
+const towerFanCenters = [];
+function buildTower(x0, z0) {
+  const x1 = x0+27, z1 = z0+17;
+  for (let x=x0; x<=x1; x++)
+    for (let z=z0; z<=z1; z++) {
+      vox(x, 0, z, COL.SKID);
+      const isWall = (x===x0 || x===x1 || z===z0 || z===z1);
+      if (isWall) { vox(x,1,z,COL.DARK); vox(x,2,z,COL.DARK); vox(x,3,z,COL.DARK); }
+      else vox(x, 2, z, COL.WATER);
+    }
+  [[x0,z0],[x1,z0],[x0,z1],[x1,z1]].forEach(([cx,cz]) => {
+    for (let y=4; y<=14; y++) vox(cx,y,cz,COL.FRAME);
+  });
+  for (const y of [4,6,8]) {
+    for (let x=x0+1; x<x1; x++) { vox(x,y,z0,COL.FRAME); vox(x,y,z1,COL.FRAME); }
+    for (let z=z0+1; z<z1; z++) { vox(x0,y,z,COL.FRAME); vox(x1,y,z,COL.FRAME); }
+  }
+  for (let y=4; y<=9; y++)
+    for (let x=x0+2; x<=x1-2; x++)
+      for (let z=z0+2; z<=z1-2; z++)
+        if ((x+z+y) % 4 === 0) vox(x,y,z,COL.PANEL);
+  for (let y=10; y<=14; y++) {
+    for (let x=x0+1; x<x1; x++) { vox(x,y,z0,COL.BEIGE); vox(x,y,z1,COL.BEIGE); }
+    for (let z=z0+1; z<z1; z++) { vox(x0,y,z,COL.BEIGE); vox(x1,y,z,COL.BEIGE); }
+  }
+  const hx = [x0+5, x0+14, x0+23], hz = z0+9;
+  for (let x=x0; x<=x1; x++)
+    for (let z=z0; z<=z1; z++) {
+      let open = false;
+      for (const cx of hx) {
+        const dx=x-cx, dz=z-hz;
+        if (dx*dx + dz*dz <= 12.5) { open = true; break; }
+      }
+      if (!open) vox(x, 15, z, COL.BEIGE_D);
+    }
+  for (const cx of hx) {
+    towerFanCenters.push([cx, hz]);
+    const r = 4;
+    for (let x=cx-r; x<=cx+r; x++)
+      for (let z=hz-r; z<=hz+r; z++) {
+        const dx=x-cx, dz=z-hz, d2=dx*dx+dz*dz;
+        if (d2 <= r*r && d2 >= (r-1)*(r-1)) {
+          vox(x, 16, z, COL.HOUSING);
+          vox(x, 17, z, COL.HOUSING);
+          vox(x, 18, z, COL.HOUSING_D);
+        }
+        if (d2 < (r-1)*(r-1) && d2 >= (r-2)*(r-2)) vox(x, 16, z, COL.DARK);
+      }
+  }
+}
+buildTower(0, 0);
+buildTower(0, 30);
+
+// ====== CHILLERS ======
+function barrelX(x0, x1, cy, cz, r, shellC) {
+  for (let x=x0; x<=x1; x++)
+    for (let y=cy-r; y<=cy+r; y++)
+      for (let z=cz-r; z<=cz+r; z++) {
+        const dy=y-cy, dz=z-cz, d2=dy*dy+dz*dz;
+        if (d2 <= r*r) {
+          const isShell = d2 >= (r-1)*(r-1);
+          vox(x, y, z, isShell ? shellC : COL.DARK);
+        }
+      }
+}
+function capDisk(x, cy, cz, r) {
+  for (let y=cy-r; y<=cy+r; y++)
+    for (let z=cz-r; z<=cz+r; z++) {
+      const dy=y-cy, dz=z-cz;
+      if (dy*dy+dz*dz <= r*r) vox(x, y, z, COL.DARK);
+    }
+}
+function buildChiller(cz) {
+  for (let x=64; x<=89; x++)
+    for (let z=cz-5; z<=cz+5; z++) {
+      vox(x, 0, z, COL.SKID);
+      if (x===64 || x===89 || z===cz-5 || z===cz+5) vox(x, 1, z, COL.DARK);
+    }
+  barrelX(66, 87, 4,  cz, 3, COL.CHILL);
+  barrelX(66, 87, 12, cz, 3, COL.CHILL);
+  capDisk(65, 4, cz, 3);  capDisk(88, 4, cz, 3);
+  capDisk(65, 12, cz, 3); capDisk(88, 12, cz, 3);
+  for (const x of [68, 78, 86]) vox(x, 8, cz, COL.FRAME);
+  for (let x=76; x<=82; x++)
+    for (let z=cz-2; z<=cz+2; z++) {
+      if (z !== cz) vox(x, 15, z, COL.MOTOR);
+      for (let y=16; y<=19; y++)
+        vox(x, y, z, (x===76 || x===82) ? COL.COMP : COL.MOTOR);
+    }
+  for (let y=3; y<=16; y++) vox(78, y, cz-4, COL.COPPER);
+  vox(78, 16, cz-3, COL.COPPER);
+  for (let x=78; x<=82; x++)
+    for (let y=2; y<=10; y++) {
+      const isScreen = (x>=79 && x<=81 && y>=6 && y<=9);
+      vox(x, y, cz-5, isScreen ? COL.SCREEN : COL.DARK);
+    }
+}
+CZ.forEach(cz => buildChiller(cz));
+
+// ====== BOMBAS CENTRIFUGAS ======
+function buildPump(px, cz, withSkid) {
+  if (withSkid !== false)
+    for (let x=px-1; x<=px+6; x++)
+      for (let z=cz-2; z<=cz+2; z++)
+        vox(x, 0, z, COL.SKID);
+  for (let y=1; y<=6; y++)
+    for (let z=cz-3; z<=cz+3; z++) {
+      const dy=y-3, dz=z-cz, r2=dy*dy+dz*dz;
+      if (r2 <= 6.8 && r2 >= 2) vox(px, y, z, COL.HOUSING);
+      else if (r2 < 2) vox(px, y, z, COL.DARK);
+    }
+  for (let x=px+2; x<=px+5; x++)
+    for (let y=2; y<=4; y++)
+      for (let z=cz-1; z<=cz+1; z++)
+        vox(x, y, z, x===px+5 ? COL.DARK : COL.MOTOR);
+}
+PCZ.forEach(cz => buildPump(46, cz));
+PCZ.forEach(cz => buildPump(100, cz));
+
+// ====== TUBERIAS · CONDENSADOS ENFRIADA (verde) ======
+pipeRun([28,2,9],[42,2,9], COL.PIPE_G);
+pipeRun([28,2,39],[42,2,39], COL.PIPE_G);
+pipeRun([43,2,9],[43,2,46], COL.PIPE_G);
+PCZ.forEach(pz => {
+  vox(43, 3, pz, COL.PIPE_G);
+  pipeRun([44,3,pz],[45,3,pz], COL.PIPE_G);
+  vox(46, 6, pz, COL.PIPE_G);
+  pipeRun([46,7,pz],[60,7,pz], COL.PIPE_G);
+});
+pipeRun([61,7,6],[61,7,51], COL.PIPE_G);
+CZ.forEach(cz => {
+  pipeRun([62,7,cz],[64,7,cz], COL.PIPE_G);
+  pipeRun([64,8,cz],[64,12,cz], COL.PIPE_G);
+});
+
+// ====== TUBERIAS · CONDENSADOS CALIENTE (rojo) ======
+CZ.forEach(cz => {
+  pipeRun([72,16,cz],[72,17,cz], COL.PIPE_R);
+  pipeRun([63,18,cz],[72,18,cz], COL.PIPE_R);
+});
+pipeRun([62,18,6],[62,18,51], COL.PIPE_R);
+for (const tz of [9, 39]) {
+  pipeRun([30,18,tz],[61,18,tz], COL.PIPE_R);
+  pipeRun([30,13,tz],[30,17,tz], COL.PIPE_R);
+}
+
+// ====== TUBERIAS · AGUA HELADA (azul) ======
+pipeRun([95,3,4],[95,3,50], COL.PIPE_B);
+PCZ.forEach(pz => {
+  pipeRun([96,3,pz],[99,3,pz], COL.PIPE_B);
+  vox(100, 6, pz, COL.PIPE_B);
+  pipeRun([93,7,pz],[99,7,pz], COL.PIPE_B);
+});
+pipeRun([92,7,4],[92,7,52], COL.PIPE_B);
+CZ.forEach(cz => {
+  pipeRun([90,7,cz],[91,7,cz], COL.PIPE_B);
+  pipeRun([90,5,cz],[90,6,cz], COL.PIPE_B);
+  vox(89, 5, cz, COL.PIPE_B);
+  pipeRun([68,8,cz],[107,8,cz], COL.PIPE_B);
+});
+pipeRun([108,8,4],[108,8,98], COL.PIPE_B);
+for (const zz of [8, 30]) {
+  pipeRun([109,8,zz],[134,8,zz], COL.PIPE_B);
+  pipeRun([134,3,zz],[134,7,zz], COL.PIPE_B);
+  pipeRun([134,2,zz],[146,2,zz], COL.PIPE_B);
+  pipeRun([146,3,zz],[146,5,zz], COL.PIPE_B);
+}
+pipeRun([113,2,11],[146,2,11], COL.PIPE_B);
+pipeRun([113,2,33],[146,2,33], COL.PIPE_B);
+pipeRun([112,2,4],[112,2,99], COL.PIPE_B);
+pipeRun([95,2,4],[111,2,4], COL.PIPE_B);
+// Ramal al intercambiador de alberca (rodea el sitio por el sur)
+pipeRun([108,2,98],[108,7,98], COL.PIPE_B);
+pipeRun([109,2,98],[252,2,98], COL.PIPE_B);
+pipeRun([252,2,81],[252,2,97], COL.PIPE_B);
+pipeRun([252,3,81],[252,5,81], COL.PIPE_B);
+pipeRun([252,5,69],[252,5,80], COL.PIPE_B);
+vox(254, 2, 69, COL.PIPE_B);
+pipeRun([254,2,70],[254,2,99], COL.PIPE_B);
+pipeRun([113,2,99],[253,2,99], COL.PIPE_B);
+
+// ====== MANEJADORAS (UMAs) ======
+function buildUMA(x0, z0) {
+  const x1 = x0+23, zc = z0+4;
+  for (let x=x0; x<=x1; x++)
+    for (let z=z0; z<=z0+9; z++)
+      vox(x, 0, z, COL.SKID);
+  for (let x=x0; x<=x1; x++)
+    for (let z=z0; z<=z0+9; z++)
+      if (!(x>=x0+17 && x<=x0+20 && z>=z0+2 && z<=z0+5))
+        vox(x, 11, z, COL.BEIGE);
+  for (let x=x0; x<=x1; x++)
+    for (let y=1; y<=10; y++)
+      vox(x, y, z0+9, COL.BEIGE);
+  for (let z=z0; z<=z0+8; z++)
+    for (let y=1; y<=10; y++)
+      vox(x1, y, z, COL.BEIGE);
+  for (let y=1; y<=10; y++)
+    for (let z=z0; z<=z0+8; z++) {
+      if (y===2 && z===zc) continue;
+      if (y===1 || y===10 || z===z0 || z===z0+8) vox(x0, y, z, COL.FRAME);
+      else if ((y+z) % 2 === 0) vox(x0, y, z, COL.GRILLE);
+    }
+  for (let x=x0+8; x<=x0+13; x++)
+    for (let z=z0+1; z<=z0+8; z++)
+      vox(x, 1, z, COL.SKID);
+  for (let x=x0+4; x<=x0+5; x++)
+    for (let y=2; y<=9; y++)
+      for (let z=z0+1; z<=z0+8; z++) {
+        if (y===2 && (z===zc || z===z0+7)) continue;
+        vox(x, y, z, ((y+z)%2===0) ? COL.PANEL : COL.FRAME);
+      }
+  for (let x=x0+9; x<=x0+12; x++)
+    for (let y=2; y<=9; y++)
+      for (let z=z0+2; z<=z0+7; z++)
+        vox(x, y, z, (x===x0+9 || x===x0+12) ? COL.COIL : COL.COIL_H);
+  for (let y=2; y<=9; y++) {
+    vox(x0+8, y, z0+2, COL.FRAME); vox(x0+8, y, z0+7, COL.FRAME);
+    vox(x0+13, y, z0+2, COL.FRAME); vox(x0+13, y, z0+7, COL.FRAME);
+  }
+  for (let i=0; i<4; i++) {
+    const yy = 3 + i*2;
+    vox(x0+8, yy, z0+1, COL.COPPER);
+    vox(x0+8, yy+1, z0+1, COL.COPPER);
+  }
+  const bcx = x0+18, bcy = 5;
+  for (let x=bcx-4; x<=bcx+4; x++)
+    for (let y=bcy-4; y<=bcy+4; y++) {
+      const dx=x-bcx, dy=y-bcy, r2=dx*dx+dy*dy;
+      if (r2 >= 9 && r2 <= 16)
+        for (let dz=0; dz<=3; dz++) vox(x, y, z0+4+dz, COL.HOUSING);
+      if (r2 <= 16) vox(x, y, z0+8, COL.HOUSING_D);
+    }
+}
+buildUMA(138, 4);
+buildUMA(138, 26);
+
+// ====== DUCTOS DE AIRE ======
+for (let x=155; x<=158; x++)
+  for (let z=6; z<=9; z++)
+    for (let y=12; y<=13; y++)
+      vox(x, y, z, COL.DUCT);
+for (let x=155; x<=177; x++)
+  for (let z=6; z<=9; z++)
+    for (let y=14; y<=17; y++)
+      vox(x, y, z, COL.DUCT);
+// Riser del edificio (8 pisos)
+for (let x=178; x<=179; x++)
+  for (let z=6; z<=9; z++)
+    for (let y=3; y<=70; y++)
+      vox(x, y, z, COL.DUCT);
+DUCT_Y.forEach(pair => {
+  for (const y of pair) {
+    for (let x=180; x<=183; x++) for (let z=7; z<=8; z++) vox(x, y, z, COL.DUCT);
+    for (let z=9; z<=17; z++) vox(183, y, z, COL.DUCT);
+    for (let x=188; x<=246; x++) for (let z=16; z<=17; z++) vox(x, y, z, COL.DUCT);
+  }
+});
+DUCT_Y.forEach(pair => {
+  const yd = pair[0]-1;
+  for (const xd of DIFF_X)
+    for (let x=xd; x<=xd+1; x++)
+      for (let z=16; z<=17; z++)
+        vox(x, yd, z, COL.GRILLE);
+});
+// UMA-2 hacia el area de alberca
+for (let x=155; x<=158; x++) {
+  for (let z=28; z<=31; z++)
+    for (let y=12; y<=13; y++)
+      vox(x, y, z, COL.DUCT);
+  for (let z=32; z<=49; z++)
+    for (let y=14; y<=17; y++)
+      vox(x, y, z, COL.DUCT);
+  for (let z=50; z<=51; z++)
+    for (let y=10; y<=17; y++)
+      vox(x, y, z, COL.DUCT);
+  for (let z=50; z<=51; z++)
+    if ((x+z) % 2 === 0) vox(x, 9, z, COL.GRILLE);
+}
+
+// ====== CAJAS VAV ======
+DUCT_Y.forEach(pair => {
+  const y0 = pair[0]-1, y1 = pair[1]+1;
+  for (let x=184; x<=187; x++)
+    for (let y=y0; y<=y1; y++)
+      for (let z=15; z<=18; z++) {
+        const isBorder = (x===184 || x===187 || y===y0 || y===y1 || z===18);
+        if (!isBorder) continue;
+        const isOpening = (z>=16 && z<=17) && (y>=pair[0] && y<=pair[1]) && (x===184 || x===187);
+        if (isOpening) continue;
+        vox(x, y, z, COL.HOUSING_D);
+      }
+});
+
+// ====== EDIFICIO DE HABITACIONES (8 pisos, corte) ======
+FLOORS.forEach(fY => {
+  for (let x=181; x<=249; x++)
+    for (let z=2; z<=33; z++)
+      vox(x, fY, z, COL.PANEL);
+});
+for (let x=180; x<=250; x++)
+  for (let z=2; z<=34; z++)
+    vox(x, 72, z, COL.BEIGE_D);
+for (let x=180; x<=250; x++) { vox(x,73,2,COL.BEIGE_D); vox(x,73,34,COL.BEIGE_D); }
+for (let z=3; z<34; z++) { vox(180,73,z,COL.BEIGE_D); vox(250,73,z,COL.BEIGE_D); }
+for (let x=180; x<=250; x++)
+  for (let y=1; y<=71; y++) {
+    let win = false;
+    for (const fY of FLOORS)
+      if (y>=fY+3 && y<=fY+6)
+        for (const rx of ROOM_X)
+          if (x>=rx+4 && x<=rx+10) { win = true; break; }
+    if (!win) vox(x, y, 34, COL.BEIGE);
+  }
+for (let z=2; z<=33; z++)
+  for (let y=1; y<=71; y++) {
+    let ductHole = false;
+    if (z>=7 && z<=8)
+      for (const pair of DUCT_Y)
+        if (y>=pair[0] && y<=pair[1]) { ductHole = true; break; }
+    if (!ductHole) vox(180, y, z, COL.BEIGE);
+    vox(250, y, z, COL.BEIGE);
+  }
+for (const cx of DIV_X)
+  for (let y=1; y<=71; y++)
+    if (!FLOORS.includes(y)) vox(cx, y, 2, COL.FRAME);
+FLOORS.slice(1).forEach(fY => {
+  for (let x=181; x<=249; x++)
+    if (!DIV_X.includes(x)) vox(x, fY+2, 2, COL.FRAME);
+});
+for (const dx of DIV_X)
+  for (let z=3; z<=33; z++)
+    for (let y=1; y<=71; y++) {
+      if (FLOORS.includes(y)) continue;
+      let ductHole = false;
+      if (z>=16 && z<=17)
+        for (const pair of DUCT_Y)
+          if (y>=pair[0] && y<=pair[1]) { ductHole = true; break; }
+      if (ductHole) continue;
+      vox(dx, y, z, COL.PANEL);
+    }
+FLOORS.forEach(fY => {
+  const b = fY + 1;
+  ROOM_X.forEach(rx => {
+    for (let x=rx+3; x<=rx+9; x++)
+      for (let z=27; z<=32; z++) {
+        vox(x, b, z, COL.DARK);
+        vox(x, b+1, z, COL.LINEN);
+      }
+    for (let x=rx+4; x<=rx+8; x++)
+      vox(x, b+2, 32, COL.PANEL);
+    for (let x=rx+3; x<=rx+9; x++)
+      for (let y=b+1; y<=b+3; y++)
+        vox(x, y, 33, COL.FRAME);
+    vox(rx+1, b, 31, COL.PANEL);  vox(rx+1, b+1, 31, COL.LAMP);
+    vox(rx+11, b, 31, COL.PANEL); vox(rx+11, b+1, 31, COL.LAMP);
+    for (let z=12; z<=16; z++)
+      for (let y=b+3; y<=b+4; y++)
+        vox(rx, y, z, COL.GRILLE);
+    for (let x=rx+4; x<=rx+8; x++)
+      for (let z=18; z<=22; z++)
+        vox(x, b, z, COL.COIL_H);
+    for (let x=rx+12; x<=rx+14; x++)
+      for (let y=b; y<=b+5; y++)
+        for (let z=3; z<=5; z++)
+          vox(x, y, z, COL.PANEL);
+  });
+});
+
+// ====== ZONA ALBERCA (escala resort) ======
+const POOL = { x0:146, x1:214, z0:58, z1:88, r:9 };
+function inVaso(x, z) {
+  if (x < POOL.x0 || x > POOL.x1 || z < POOL.z0 || z > POOL.z1) return false;
+  const r = POOL.r;
+  const cx0 = POOL.x0+r, cx1 = POOL.x1-r, cz0 = POOL.z0+r, cz1 = POOL.z1-r;
+  let cx = null, czc = null;
+  if (x < cx0 && z < cz0) { cx = cx0; czc = cz0; }
+  else if (x > cx1 && z < cz0) { cx = cx1; czc = cz0; }
+  else if (x < cx0 && z > cz1) { cx = cx0; czc = cz1; }
+  else if (x > cx1 && z > cz1) { cx = cx1; czc = cz1; }
+  if (cx !== null) {
+    const dx=x-cx, dz=z-czc;
+    if (dx*dx + dz*dz > r*r) return false;
+  }
+  return true;
+}
+function inJacuzzi(x, z) {
+  const dx=x-222, dz=z-62;
+  return dx*dx + dz*dz <= 16;
+}
+for (let x=138; x<=230; x++)
+  for (let z=50; z<=96; z++) {
+    if (inVaso(x,z) || inJacuzzi(x,z)) {
+      vox(x, 0, z, COL.TILE);
+      const isStep = (x>=211 && x<=213 && z>=72 && z<=75);
+      vox(x, 1, z, isStep ? COL.SAND : COL.WATER_P);
+    } else {
+      vox(x, 0, z, COL.SAND);
+      vox(x, 1, z, COL.SAND);
+    }
+  }
+for (let i=0; i<10; i++) {
+  const cx = 146 + i*8;
+  for (let x=cx; x<=cx+3; x++)
+    for (let z=91; z<=92; z++)
+      vox(x, 2, z, COL.PANEL);
+  vox(cx, 3, 91, COL.PANEL); vox(cx, 3, 92, COL.PANEL);
+}
+for (const ux of [152, 168, 184, 200, 216]) {
+  for (let y=2; y<=6; y++) vox(ux, y, 53, COL.TRUNK);
+  for (let dx=-3; dx<=3; dx++)
+    for (let dz=-3; dz<=3; dz++)
+      if (dx*dx + dz*dz <= 9) vox(ux+dx, 7, 53+dz, COL.BEIGE_D);
+}
+function palm(tx, tz, baseY) {
+  const y0 = baseY || 2;
+  for (let i=0; i<7; i++) vox(tx + Math.floor(i/3), y0+i, tz, COL.TRUNK);
+  const cx = tx+2, cy = y0+7;
+  vox(cx, cy+1, tz, COL.LEAF);
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]];
+  dirs.forEach(([dx,dz]) => {
+    vox(cx+dx, cy, tz+dz, COL.LEAF);
+    vox(cx+2*dx, cy, tz+2*dz, COL.LEAF);
+    vox(cx+3*dx, cy-1, tz+3*dz, COL.LEAF);
+  });
+}
+palm(140, 52); palm(226, 52);
+palm(140, 93); palm(226, 93);
+palm(176, 93); palm(204, 93);
+
+// ====== CUARTO DE MAQUINAS DE ALBERCA ======
+for (let x=238; x<=264; x++)
+  for (let z=56; z<=80; z++)
+    vox(x, 0, z, COL.SKID);
+for (let x=238; x<=264; x++)
+  for (let z=56; z<=80; z++)
+    vox(x, 12, z, COL.BEIGE);
+for (let x=238; x<=264; x++)
+  for (let y=1; y<=11; y++) {
+    vox(x, y, 56, COL.BEIGE);
+    const gap = (x===252 && y===5) || (x===254 && y===2);
+    if (!gap) vox(x, y, 80, COL.BEIGE);
+  }
+for (let z=57; z<=79; z++)
+  for (let y=1; y<=11; y++)
+    vox(264, y, z, COL.BEIGE);
+buildPump(242, 66, false);
+buildPump(242, 74, false);
+// Filtro de arena
+for (let y=1; y<=8; y++)
+  for (let x=243; x<=249; x++)
+    for (let z=57; z<=63; z++) {
+      const dx=x-246, dz=z-60, d2=dx*dx+dz*dz;
+      if (d2 <= 9) vox(x, y, z, d2 >= 4.5 ? COL.HOUSING : COL.DARK);
+    }
+for (let dy=0; dy<=2; dy++) {
+  const rr = Math.sqrt(9 - dy*dy);
+  for (let x=243; x<=249; x++)
+    for (let z=57; z<=63; z++) {
+      const dx=x-246, dz=z-60;
+      if (dx*dx + dz*dz <= rr*rr) vox(x, 9+dy, z, COL.HOUSING);
+    }
+}
+// Intercambiador de placas
+for (let x=250; x<=255; x++)
+  for (let y=2; y<=8; y++)
+    for (let z=62; z<=68; z++)
+      vox(x, y, z, (z%2===0) ? COL.COIL : COL.FRAME);
+// Tanque dosificador
+for (let y=1; y<=5; y++)
+  for (let x=258; x<=262; x++)
+    for (let z=72; z<=76; z++) {
+      const dx=x-260, dz=z-74, d2=dx*dx+dz*dz;
+      if (d2 <= 4) vox(x, y, z, d2 >= 1.5 ? COL.HOUSING_D : COL.DARK);
+    }
+vox(260, 6, 74, COL.HOUSING_D);
+// Tuberia de alberca (turquesa)
+pipeRun([215,2,78],[239,2,78], COL.PIPE_T);
+pipeRun([240,2,66],[240,2,78], COL.PIPE_T);
+vox(240,3,66, COL.PIPE_T); vox(240,3,74, COL.PIPE_T);
+vox(241,3,66, COL.PIPE_T); vox(241,3,74, COL.PIPE_T);
+vox(242,6,66, COL.PIPE_T); vox(242,6,74, COL.PIPE_T);
+pipeRun([242,7,61],[242,7,74], COL.PIPE_T);
+vox(243,7,61, COL.PIPE_T);
+vox(250,2,60, COL.PIPE_T);
+vox(250,2,61, COL.PIPE_T);
+vox(249,2,67, COL.PIPE_T);
+pipeRun([249,2,68],[249,2,72], COL.PIPE_T);
+pipeRun([216,2,72],[248,2,72], COL.PIPE_T);
+
+// ====== MALECON + PLAYA + MAR ======
+for (let x=150; x<=240; x++)
+  for (let z=102; z<=103; z++)
+    for (let y=0; y<=1; y++)
+      vox(x, y, z, (x%2===0) ? COL.TRUNK : COL.WOOD_D);
+function beachH(x, z) {
+  const slope = 2.4 - (z - 104) * 0.1;
+  const dune = Math.sin(x*0.16)*0.6 + Math.sin(x*0.05 + z*0.3)*0.5;
+  return Math.max(0, Math.min(3, Math.round(slope + dune)));
+}
+for (let x=-8; x<=276; x++)
+  for (let z=104; z<=130; z++) {
+    const h = beachH(x, z);
+    for (let y=0; y<=h; y++) {
+      let c = COL.SAND;
+      if (y === h) {
+        if (z >= 127) c = COL.SAND_W;
+        else if ((x*7 + z*13) % 17 === 0) c = COL.SAND_D;
+      }
+      vox(x, y, z, c);
+    }
+  }
+for (let x=-8; x<=276; x++)
+  for (let z=131; z<=172; z++)
+    vox(x, 0, z, z<=140 ? COL.OCEAN_S : COL.OCEAN_D);
+// Palmeras y mobiliario de playa
+palm(20, 107, beachH(20,107)+1);
+palm(90, 106, beachH(90,106)+1);
+palm(250, 107, beachH(250,107)+1);
+palm(268, 109, beachH(268,109)+1);
+const TOWEL_COLORS = [COL.PIPE_R, COL.COIL_H, COL.LEAF];
+[[160,112],[192,114],[224,112]].forEach(([ux,uz], i) => {
+  const b = beachH(ux,uz)+1;
+  for (let y=b; y<=b+4; y++) vox(ux, y, uz, COL.TRUNK);
+  for (let dx=-3; dx<=3; dx++)
+    for (let dz=-3; dz<=3; dz++)
+      if (dx*dx + dz*dz <= 9) vox(ux+dx, b+5, uz+dz, COL.BEIGE_D);
+  const tb = beachH(ux+5, uz)+1;
+  for (let x=ux+5; x<=ux+6; x++)
+    for (let z=uz-2; z<=uz+1; z++)
+      vox(x, tb, z, TOWEL_COLORS[i]);
+});
+
+// ====== INSTANCED MESHES ======
+const cubeGeo = new THREE.BoxGeometry(1,1,1);
+const SHELL_COLORS = new Set([COL.BEIGE, COL.BEIGE_D]);
+const NO_CAST = new Set([COL.SAND, COL.SAND_D, COL.SAND_W, COL.OCEAN_S, COL.OCEAN_D, COL.WATER, COL.WATER_P, COL.TILE]);
+const WATERISH = new Set([COL.WATER, COL.WATER_P, COL.OCEAN_S, COL.OCEAN_D]);
+for (const k in voxData) {
+  const { color, positions } = voxData[k];
+  const isShell = SHELL_COLORS.has(color);
+  const isLamp = (color === COL.LAMP);
+  const isWater = WATERISH.has(color);
+  const mat = new THREE.MeshStandardMaterial({
+    color,
+    roughness: isShell ? 0.55 : (isWater ? 0.2 : 0.5),
+    metalness: isShell ? 0.15 : (isWater ? 0.12 : 0.55),
+    transparent: isShell,
+    opacity: isShell ? 0.2 : 1.0,
+    depthWrite: !isShell,
+    side: isShell ? THREE.DoubleSide : THREE.FrontSide,
+    emissive: isLamp ? 0xffb860 : 0x000000,
+    emissiveIntensity: isLamp ? 0.9 : 0,
+  });
+  const mesh = new THREE.InstancedMesh(cubeGeo, mat, positions.length);
+  mesh.castShadow = !isShell && !NO_CAST.has(color);
+  mesh.receiveShadow = true;
+  const m = new THREE.Matrix4();
+  positions.forEach((p, i) => {
+    m.setPosition(p[0]+0.5, p[1]+0.5, p[2]+0.5);
+    mesh.setMatrixAt(i, m);
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+  scene.add(mesh);
+}
+
+// ====== ETIQUETAS ======
+function makeLabel(text, x, y, z, w) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 96;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(6,8,13,0.55)';
+  g.fillRect(36, 16, 440, 64);
+  g.font = '600 34px "JetBrains Mono", ui-monospace, monospace';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = '#bfe9dc';
+  g.fillText(text, 256, 50);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true, depthWrite:false }));
+  sp.position.set(x, y, z);
+  sp.scale.set(w, w*96/512, 1);
+  scene.add(sp);
+}
+makeLabel('CASA DE MAQUINAS · PLANTA CHW', 66, 34, 26, 38);
+makeLabel('TORRES DE ENFRIAMIENTO', 14, 27, 24, 26);
+makeLabel('BOMBAS CONDENSADOS', 48.5, 13, 28, 20);
+CZ.forEach((cz,i) => makeLabel(CH_NAMES[i], 77, 24, cz+0.5, 14));
+makeLabel('BOMBAS PRIMARIAS', 102.5, 13, 27, 20);
+makeLabel('AGUA HELADA A CONSUMIDORES', 122, 13, 34, 24);
+makeLabel('MANEJADORAS (UMA)', 150, 23, 19, 22);
+makeLabel('UMA-1 · EDIFICIO', 150, 19.5, 9, 13);
+makeLabel('UMA-2 · AREA ALBERCA', 150, 19.5, 31, 15);
+makeLabel('EDIFICIO HABITACIONES · 8 PISOS', 215, 80, 18, 34);
+YPC.forEach((y, i) => makeLabel('VAV P' + (i+1), 185.5, y, 0.8, 7));
+makeLabel('ZONA ALBERCA', 182, 18, 73, 26);
+makeLabel('CUARTO MAQ. ALBERCA', 251, 17, 68, 18);
+makeLabel('MALECON', 195, 8, 102.5, 14);
+makeLabel('PLAYA', 134, 10, 116, 18);
+makeLabel('MAR CARIBE', 134, 9, 152, 26);
+
+// ====== VENTILADORES DE TORRE ======
+const twFanMat = new THREE.MeshStandardMaterial({
+  color:0xff2233, roughness:0.45, metalness:0.6,
+  emissive:0xff2233, emissiveIntensity:0.4
+});
+const twFanGroups = [];
+towerFanCenters.forEach(([cx,cz]) => {
+  const g = new THREE.Group();
+  g.position.set(cx+0.5, 17.6, cz+0.5);
+  for (let i=0; i<5; i++) {
+    const a = (i/5)*Math.PI*2;
+    for (let rr=0; rr<=3; rr++) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(0.85,0.4,0.85), twFanMat);
+      b.position.set(Math.cos(a)*rr, 0, Math.sin(a)*rr);
+      b.castShadow = true;
+      g.add(b);
+    }
+  }
+  const hub = new THREE.Mesh(
+    new THREE.BoxGeometry(1.3,0.7,1.3),
+    new THREE.MeshStandardMaterial({ color:0x55555c, metalness:0.8 })
+  );
+  g.add(hub);
+  scene.add(g);
+  twFanGroups.push(g);
+});
+
+// ====== COUPLINGS DE COMPRESOR ======
+const compCoupGroups = [], compCoupMats = [];
+CZ.forEach(cz => {
+  const mat = new THREE.MeshStandardMaterial({
+    color:0xff2233, roughness:0.35, metalness:0.8,
+    emissive:0xff2233, emissiveIntensity:0.4
+  });
+  const g = new THREE.Group();
+  g.position.set(79.5, 20.4, cz+0.5);
+  for (let ax=-2; ax<=2; ax++)
+    for (let az=-2; az<=2; az++)
+      if (ax*ax + az*az <= 5) {
+        const c = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.6,0.9), mat);
+        c.position.set(ax, 0, az);
+        c.castShadow = true;
+        g.add(c);
+      }
+  for (let i=0; i<4; i++) {
+    const a = (i/4)*Math.PI*2;
+    const bolt = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5,0.5,0.5),
+      new THREE.MeshStandardMaterial({ color:0x202024, metalness:0.7 })
+    );
+    bolt.position.set(Math.cos(a)*1.4, 0.5, Math.sin(a)*1.4);
+    g.add(bolt);
+  }
+  scene.add(g);
+  compCoupGroups.push(g);
+  compCoupMats.push(mat);
+});
+
+// ====== LEDS DE CHILLER ======
+const chLeds = [];
+CZ.forEach(cz => {
+  const mat = new THREE.MeshStandardMaterial({
+    color:0xff2233, emissive:0xff2233, emissiveIntensity:1.4,
+    roughness:0.25, metalness:0.3
+  });
+  const led = new THREE.Mesh(new THREE.BoxGeometry(1.1,1.1,1.1), mat);
+  led.position.set(80.5, 11.6, cz-4.4);
+  scene.add(led);
+  const pl = new THREE.PointLight(0xff2233, 1.0, 12);
+  pl.position.copy(led.position);
+  scene.add(pl);
+  chLeds.push({ mat, light: pl });
+});
+
+// ====== COUPLINGS DE BOMBAS ======
+function makePumpCoupling(px, cz, mat) {
+  const g = new THREE.Group();
+  g.position.set(px+1.5, 3.5, cz+0.5);
+  for (let i=0; i<8; i++) {
+    const a = (i/8)*Math.PI*2;
+    const c = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.55,0.55), mat);
+    c.position.set(0, Math.cos(a)*1.2, Math.sin(a)*1.2);
+    c.castShadow = true;
+    g.add(c);
+  }
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(1.0,0.8,0.8), mat);
+  g.add(shaft);
+  scene.add(g);
+  return g;
+}
+function stdMat() {
+  return new THREE.MeshStandardMaterial({
+    color:0xff2233, emissive:0xff2233, emissiveIntensity:0.4,
+    roughness:0.35, metalness:0.8
+  });
+}
+function ledMat() {
+  return new THREE.MeshStandardMaterial({
+    color:0xff2233, emissive:0xff2233, emissiveIntensity:1.3, roughness:0.3
+  });
+}
+const bcCoupMat = stdMat(), bpCoupMat = stdMat(), poolCoupMat = stdMat();
+const bcLedMat = ledMat(), bpLedMat = ledMat(), poolLedMat = ledMat();
+const bcCoups = PCZ.map(cz => makePumpCoupling(46, cz, bcCoupMat));
+const bpCoups = PCZ.map(cz => makePumpCoupling(100, cz, bpCoupMat));
+const poolCoups = [66, 74].map(cz => makePumpCoupling(242, cz, poolCoupMat));
+PCZ.forEach(cz => {
+  const l1 = new THREE.Mesh(new THREE.BoxGeometry(0.7,0.7,0.7), bcLedMat);
+  l1.position.set(49.5, 5.6, cz+0.5); scene.add(l1);
+  const l2 = new THREE.Mesh(new THREE.BoxGeometry(0.7,0.7,0.7), bpLedMat);
+  l2.position.set(103.5, 5.6, cz+0.5); scene.add(l2);
+});
+[66, 74].forEach(cz => {
+  const l = new THREE.Mesh(new THREE.BoxGeometry(0.8,0.8,0.8), poolLedMat);
+  l.position.set(245.5, 5.6, cz+0.5); scene.add(l);
+});
+const poolLight = new THREE.PointLight(0xff2233, 1.1, 14);
+poolLight.position.set(245.5, 6, 70.5);
+scene.add(poolLight);
+
+// ====== RUEDAS DE BLOWER UMA ======
+const umaWheelMats = [], umaWheels = [], umaLeds = [];
+[[138,4],[138,26]].forEach(([x0,z0]) => {
+  const mat = new THREE.MeshStandardMaterial({
+    color:0xff2233, roughness:0.45, metalness:0.6,
+    emissive:0xff2233, emissiveIntensity:0.4
+  });
+  const g = new THREE.Group();
+  g.position.set(x0+18.5, 5.5, z0+5.5);
+  for (let i=0; i<12; i++) {
+    const a = (i/12)*Math.PI*2;
+    for (let zOff=-1; zOff<=1; zOff++) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.9,0.5), mat);
+      b.position.set(Math.cos(a)*2.2, Math.sin(a)*2.2, zOff);
+      b.rotation.z = a;
+      g.add(b);
+    }
+  }
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.8,0.8,3,10), mat);
+  hub.rotation.x = Math.PI/2;
+  g.add(hub);
+  scene.add(g);
+  umaWheels.push(g);
+  umaWheelMats.push(mat);
+  const lm = ledMat();
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.9,0.9), lm);
+  led.position.set(x0+14.5, 12.5, z0+1.5);
+  scene.add(led);
+  const pl = new THREE.PointLight(0xff2233, 0.9, 11);
+  pl.position.copy(led.position);
+  scene.add(pl);
+  umaLeds.push({ mat: lm, light: pl });
+});
+
+// ====== DAMPERS VAV ======
+const vavMats = [], vavDampers = [], vavLedMats = [];
+DUCT_Y.forEach(pair => {
+  const mat = new THREE.MeshStandardMaterial({
+    color:0xff2233, emissive:0xff2233, emissiveIntensity:0.5,
+    roughness:0.4, metalness:0.6, side:THREE.DoubleSide
+  });
+  const d = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.7, 1.7), mat);
+  d.position.set(186, pair[0]+1, 17);
+  scene.add(d);
+  vavDampers.push(d);
+  vavMats.push(mat);
+  const lm = ledMat();
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.7,0.7,0.7), lm);
+  led.position.set(185.5, pair[0]+1, 14.4);
+  scene.add(led);
+  vavLedMats.push(lm);
+});
+
+// ====== OLAS DEL MAR (espuma animada) ======
+const waves = [];
+for (let w=0; w<3; w++) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color:0xeafcff, transparent:true, opacity:0 });
+  for (let x=-4; x<=272; x+=4) {
+    const c = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.5, 1.2), mat);
+    c.position.set(x, 0.95, Math.sin(x*0.09 + w*2)*1.6);
+    g.add(c);
+  }
+  scene.add(g);
+  waves.push({ g, mat, t: w/3 });
+}
+
+// ====== MAQUINA DE ESTADOS ======
+const COLOR_ON  = new THREE.Color(0x00ff66);
+const COLOR_OFF = new THREE.Color(0xff2233);
+const state = {
+  c1:true, c2:true, c3:true, c4:false,
+  bc:true, bp:true, tw:true,
+  u1:true, u2:true,
+  v1:true, v2:true, v3:true, v4:true, v5:true, v6:true, v7:false, v8:false,
+  pool:true
+};
+const chOn = () => [state.c1, state.c2, state.c3, state.c4];
+const anyCh = () => state.c1 || state.c2 || state.c3 || state.c4;
+const vArr = () => [state.v1, state.v2, state.v3, state.v4, state.v5, state.v6, state.v7, state.v8];
+
+function setMat(m, on, hi, lo) {
+  m.color.copy(on ? COLOR_ON : COLOR_OFF);
+  m.emissive.copy(on ? COLOR_ON : COLOR_OFF);
+  m.emissiveIntensity = on ? (hi ?? 0.6) : (lo ?? 0.4);
+}
+function applyState() {
+  const ch = chOn();
+  compCoupMats.forEach((m,i) => setMat(m, ch[i]));
+  chLeds.forEach((l,i) => {
+    setMat(l.mat, ch[i], 1.7, 1.2);
+    l.light.color.copy(ch[i] ? COLOR_ON : COLOR_OFF);
+    l.light.intensity = ch[i] ? 1.5 : 1.0;
+  });
+  setMat(twFanMat, state.tw);
+  setMat(bcCoupMat, state.bc); setMat(bcLedMat, state.bc, 1.5, 1.1);
+  setMat(bpCoupMat, state.bp); setMat(bpLedMat, state.bp, 1.5, 1.1);
+  setMat(poolCoupMat, state.pool); setMat(poolLedMat, state.pool, 1.5, 1.1);
+  poolLight.color.copy(state.pool ? COLOR_ON : COLOR_OFF);
+  poolLight.intensity = state.pool ? 1.4 : 1.0;
+  [state.u1, state.u2].forEach((on, i) => {
+    setMat(umaWheelMats[i], on, 0.65, 0.4);
+    setMat(umaLeds[i].mat, on, 1.6, 1.1);
+    umaLeds[i].light.color.copy(on ? COLOR_ON : COLOR_OFF);
+    umaLeds[i].light.intensity = on ? 1.3 : 0.9;
+  });
+  vArr().forEach((on, i) => {
+    setMat(vavMats[i], on, 0.7, 0.45);
+    setMat(vavLedMats[i], on, 1.6, 1.1);
+  });
+}
+applyState();
+
+// ====== UI ======
+function bind(id, key) {
+  const btn = document.getElementById(id);
+  const paint = () => {
+    btn.className = state[key] ? 'on' : 'off';
+    btn.textContent = state[key] ? 'ON' : 'OFF';
+  };
+  paint();
+  btn.onclick = () => { state[key] = !state[key]; paint(); applyState(); };
+}
+bind('bC1','c1'); bind('bC2','c2'); bind('bC3','c3'); bind('bC4','c4');
+bind('bBC','bc'); bind('bBP','bp'); bind('bTW','tw');
+bind('bU1','u1'); bind('bU2','u2');
+bind('bV1','v1'); bind('bV2','v2'); bind('bV3','v3'); bind('bV4','v4');
+bind('bV5','v5'); bind('bV6','v6'); bind('bV7','v7'); bind('bV8','v8');
+bind('bPool','pool');
+const bRot = document.getElementById('bRot');
+bRot.onclick = () => {
+  controls.autoRotate = !controls.autoRotate;
+  bRot.className = controls.autoRotate ? 'on' : 'off';
+  bRot.textContent = controls.autoRotate ? 'ON' : 'OFF';
+};
+
+// ====== TRAYECTORIAS ======
+function polyline(points) {
+  const pts = points.map(p => new THREE.Vector3(p[0], p[1], p[2]));
+  const segs = []; let total = 0;
+  for (let i=0; i<pts.length-1; i++) {
+    const l = pts[i].distanceTo(pts[i+1]);
+    segs.push({ a:pts[i], b:pts[i+1], l0:total, l });
+    total += l;
+  }
+  const v = new THREE.Vector3();
+  return {
+    at(t) {
+      const d = Math.min(t,1) * total;
+      for (const s of segs)
+        if (d <= s.l0 + s.l) return v.lerpVectors(s.a, s.b, s.l ? (d-s.l0)/s.l : 0);
+      return v.copy(pts[pts.length-1]);
+    }
+  };
+}
+
+const redPaths = [], greenPaths = [], bluePaths = [];
+CZ.forEach((cz, k) => {
+  const pz = PCZ[PK[k]] + 0.5, tz = TZ(cz) + 0.5, c = cz + 0.5;
+  redPaths.push(polyline([
+    [72.5,15.3,c],[72.5,18.5,c],[62.5,18.5,c],[62.5,18.5,tz],
+    [30.5,18.5,tz],[30.5,13.5,tz],[26,13.5,tz]
+  ]));
+  greenPaths.push(polyline([
+    [28.5,2.5,tz],[43.5,2.5,tz],[43.5,2.5,pz],[43.5,3.5,pz],[46.5,3.5,pz],
+    [46.5,7.5,pz],[61.5,7.5,pz],[61.5,7.5,c],[64.5,7.5,c],[64.5,12.5,c],[67,12.5,c]
+  ]));
+  bluePaths.push(polyline([
+    [95.5,3.5,4.5],[95.5,3.5,pz],[100.5,3.5,pz],[100.5,7.5,pz],[93,7.5,pz],
+    [92.5,7.5,c],[90.5,7.5,c],[90.5,5.5,c],[89.5,5.5,c],[70,5.5,c],
+    [68.5,5.5,c],[68.5,8.5,c],[108.5,8.5,c]
+  ]));
+});
+const supU1 = polyline([
+  [108.5,8.5,8.5],[134.5,8.5,8.5],[134.5,2.5,8.5],[146.5,2.5,8.5],[146.5,5.5,8.5],[148,6,8.5]
+]);
+const supU2 = polyline([
+  [108.5,8.5,30.5],[134.5,8.5,30.5],[134.5,2.5,30.5],[146.5,2.5,30.5],[146.5,5.5,30.5],[148,6,30.5]
+]);
+const supHX = polyline([
+  [108.5,8.5,98.5],[108.5,2.5,98.5],[252.5,2.5,98.5],[252.5,2.5,82],
+  [252.5,4.5,81.5],[252.5,5.5,79],[252.5,5.5,69.5],[252.5,4.5,68.5]
+]);
+const retU1 = polyline([
+  [146.5,2.5,11.5],[112.5,2.5,11.5],[112.5,2.5,4.5],[96,2.5,4.5],[95.5,3.5,6],[95.5,3.5,9.5]
+]);
+const retU2 = polyline([
+  [146.5,2.5,33.5],[112.5,2.5,33.5],[112.5,2.5,4.5],[96,2.5,4.5],[95.5,3.5,6],[95.5,3.5,9.5]
+]);
+const retHX = polyline([
+  [254.5,3,69.5],[254.5,2.5,71],[254.5,2.5,99.5],[113,2.5,99.5],
+  [112.5,2.5,99.5],[112.5,2.5,4.5],[96,2.5,4.5],[95.5,3.5,7]
+]);
+const poolA = polyline([
+  [210,1.7,78.5],[216,2.5,78.5],[240.5,2.5,78.5],[240.5,2.5,74.5],
+  [241.5,3.5,74.5],[242.5,4.5,74.5],[242.5,6.5,74.5],[242.5,7.5,72],
+  [242.5,7.5,62],[243.8,7.5,61.5]
+]);
+const poolB = polyline([
+  [250.5,2.5,60.5],[250.5,2.7,61.5],[251.5,3.5,62.5]
+]);
+const poolC = polyline([
+  [250,3,67.5],[249.5,2.5,68.5],[249.5,2.5,72.5],[217,2.5,72.5],
+  [214.5,1.8,72.5],[205,1.7,74]
+]);
+const airB = [];
+for (let p=0; p<FLOORS.length; p++)
+  for (const xd of DIFF_X)
+    airB.push({ p, path: polyline([
+      [147,5.5,8.5],[153,5.5,8.5],[157.5,6.5,9.5],[157.5,15.5,7.5],
+      [177.5,15.5,7.5],[178.9,15.5,7.5],[178.9,YPC[p],7.5],[182,YPC[p],7.5],
+      [183.5,YPC[p],12],[183.5,YPC[p],16.5],[186,YPC[p],16.5],
+      [xd+1,YPC[p],16.5],[xd+1,YPC[p]-2,16.5],[xd+1,FALL_Y[p],16.5]
+    ])});
+const airU2Path = polyline([
+  [147,5.5,30.5],[153,5.5,30.5],[157.5,6.5,31.5],[157.5,15.5,30],
+  [156.5,15.5,48],[156.5,12,50.5],[156.5,9,50.5],[156.5,4,51.5],[156.5,2.8,53.5]
+]);
+const airRet1 = polyline([[130,5.5,8.5],[137,5.5,8.5],[141,5.5,8.5],[142.5,5.5,8.5]]);
+const airRet2 = polyline([[130,5.5,30.5],[137,5.5,30.5],[141,5.5,30.5],[142.5,5.5,30.5]]);
+
+// ====== PARTICULAS ======
+function spawn(n, colorHex, size) {
+  const arr = [];
+  const geo = new THREE.BoxGeometry(size||0.6, size||0.6, size||0.6);
+  for (let i=0; i<n; i++) {
+    const p = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:colorHex, transparent:true, opacity:0 }));
+    p.userData = { t: Math.random(), seed: Math.random()*10 };
+    scene.add(p);
+    arr.push(p);
+  }
+  return arr;
+}
+const redP   = CZ.map(() => spawn(9,  0xff6644));
+const greenP = CZ.map(() => spawn(9,  0x44cc77));
+const blueP  = CZ.map(() => spawn(12, 0x66ccff));
+const supU1P = spawn(8, 0x66ccff), supU2P = spawn(8, 0x66ccff), supHXP = spawn(14, 0x66ccff);
+const retU1P = spawn(7, 0x66ccff), retU2P = spawn(7, 0x66ccff), retHXP = spawn(14, 0x66ccff);
+const poolAP = spawn(9, 0x4fd8c9), poolBP = spawn(4, 0x4fd8c9), poolCP = spawn(8, 0x4fd8c9);
+const airBP  = airB.map(() => spawn(5, 0x44bbff, 0.55));
+const airU2P = spawn(10, 0x44bbff, 0.55);
+const airR1P = spawn(5, 0xff5533, 0.55);
+const airR2P = spawn(5, 0xff5533, 0.55);
+function spawnSpray(n, z0) {
+  const arr = spawn(n, 0xcfe8ff, 0.45);
+  arr.forEach(p => {
+    p.userData.x = 3 + Math.random()*22;
+    p.userData.z = z0 + 3 + Math.random()*12;
+  });
+  return arr;
+}
+const sprayA = spawnSpray(22, 0);
+const sprayB = spawnSpray(22, 30);
+const shimmer = spawn(22, 0x9fe8f0, 0.4);
+const oceanGlint = spawn(26, 0xbfeaf4, 0.45);
+const bubbles = spawn(7, 0xdff6f8, 0.35);
+bubbles.forEach(p => {
+  p.userData.x = 220.5 + Math.random()*3;
+  p.userData.z = 60.5 + Math.random()*3;
+});
+
+function updateFlow(list, path, speed, active, dt, jit) {
+  const j = jit || 0.15;
+  for (const p of list) {
+    if (!active) { p.material.opacity = 0; continue; }
+    p.userData.t += dt * speed;
+    if (p.userData.t > 1) p.userData.t -= 1;
+    const tt = p.userData.t, s = p.userData.seed;
+    const pos = path.at(tt);
+    p.position.set(
+      pos.x + Math.sin(tt*9 + s)*j,
+      pos.y + Math.cos(tt*7 + s)*j,
+      pos.z + Math.sin(tt*5 + s)*j
+    );
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.85;
+  }
+}
+function updateSpray(list, active, dt, z0) {
+  for (const p of list) {
+    if (!active) { p.material.opacity = 0; continue; }
+    p.userData.t += dt * 0.5;
+    if (p.userData.t > 1) {
+      p.userData.t = 0;
+      p.userData.x = 3 + Math.random()*22;
+      p.userData.z = z0 + 3 + Math.random()*12;
+    }
+    const tt = p.userData.t;
+    p.position.set(
+      p.userData.x,
+      13.2 - tt*10.2,
+      p.userData.z + Math.sin(tt*6 + p.userData.seed)*0.3
+    );
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.7;
+  }
+}
+function updateShimmer(list, active, t) {
+  for (const p of list) {
+    if (!active) { p.material.opacity = 0; continue; }
+    const s = p.userData.seed;
+    p.position.set(
+      180 + Math.sin(t*0.22 + s)*30,
+      1.7 + Math.sin(t*2 + s*3)*0.06,
+      73 + Math.cos(t*0.18 + s*2)*13
+    );
+    p.material.opacity = 0.4 + Math.sin(t*1.5 + s)*0.2;
+  }
+}
+function updateOceanGlint(list, t) {
+  for (const p of list) {
+    const s = p.userData.seed;
+    p.position.set(
+      134 + Math.sin(t*0.15 + s)*136,
+      1.15 + Math.sin(t*2.2 + s*3)*0.05,
+      151 + Math.cos(t*0.12 + s*2)*18
+    );
+    p.material.opacity = 0.28 + Math.sin(t*1.8 + s)*0.18;
+  }
+}
+function updateBubbles(list, active, dt) {
+  for (const p of list) {
+    if (!active) { p.material.opacity = 0; continue; }
+    p.userData.t += dt * 0.9;
+    if (p.userData.t > 1) {
+      p.userData.t = 0;
+      p.userData.x = 220.5 + Math.random()*3;
+      p.userData.z = 60.5 + Math.random()*3;
+    }
+    const tt = p.userData.t;
+    p.position.set(
+      p.userData.x + Math.sin(tt*8 + p.userData.seed)*0.2,
+      1.4 + tt*1.1,
+      p.userData.z
+    );
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.75;
+  }
+}
+
+// ====== RESIZE ======
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ====== ANIMATE ======
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t  = clock.elapsedTime;
+  const ch = chOn();
+
+  if (state.tw) twFanGroups.forEach((g,i) => { g.rotation.y += dt * (8 + (i%3)*0.5); });
+
+  compCoupGroups.forEach((g,i) => {
+    if (ch[i]) {
+      g.rotation.y += dt * 12;
+      g.position.y = 20.4 + Math.sin(t*30 + i)*0.12;
+    } else {
+      g.position.y = 20.4;
+    }
+  });
+
+  if (state.bc) bcCoups.forEach((g,i) => { g.rotation.x += dt * (14 + i*0.5); });
+  if (state.bp) bpCoups.forEach((g,i) => { g.rotation.x += dt * (14 + i*0.5); });
+  if (state.pool) poolCoups.forEach((g,i) => { g.rotation.x += dt * (13 + i*0.6); });
+
+  [state.u1, state.u2].forEach((on, i) => {
+    if (on) umaWheels[i].rotation.z += dt * 8;
+  });
+
+  const vOn = vArr();
+  vavDampers.forEach((d, i) => {
+    const target = vOn[i] ? -1.35 : 0;
+    d.rotation.y += (target - d.rotation.y) * Math.min(1, dt*4);
+  });
+
+  CZ.forEach((cz, k) => {
+    const condOn = state.bc && ch[k];
+    const chwOn  = state.bp && ch[k];
+    updateFlow(redP[k],   redPaths[k],   0.14, condOn, dt);
+    updateFlow(greenP[k], greenPaths[k], 0.12, condOn, dt);
+    updateFlow(blueP[k],  bluePaths[k],  0.10, chwOn,  dt);
+  });
+
+  const chwAvail = state.bp && anyCh();
+  updateFlow(supU1P, supU1, 0.16, chwAvail && state.u1, dt);
+  updateFlow(retU1P, retU1, 0.14, chwAvail && state.u1, dt);
+  updateFlow(supU2P, supU2, 0.16, chwAvail && state.u2, dt);
+  updateFlow(retU2P, retU2, 0.14, chwAvail && state.u2, dt);
+  updateFlow(supHXP, supHX, 0.09, chwAvail && state.pool, dt);
+  updateFlow(retHXP, retHX, 0.08, chwAvail && state.pool, dt);
+
+  airB.forEach((ab, i) => {
+    updateFlow(airBP[i], ab.path, 0.10, state.u1 && vOn[ab.p], dt, 0.28);
+  });
+  updateFlow(airU2P, airU2Path, 0.13, state.u2, dt, 0.35);
+  updateFlow(airR1P, airRet1, 0.2, state.u1, dt, 0.4);
+  updateFlow(airR2P, airRet2, 0.2, state.u2, dt, 0.4);
+
+  updateFlow(poolAP, poolA, 0.12, state.pool, dt);
+  updateFlow(poolBP, poolB, 0.14, state.pool, dt);
+  updateFlow(poolCP, poolC, 0.12, state.pool, dt);
+  updateShimmer(shimmer, state.pool, t);
+  updateOceanGlint(oceanGlint, t);
+  updateBubbles(bubbles, state.pool, dt);
+
+  updateSpray(sprayA, state.bc && (state.c1 || state.c2), dt, 0);
+  updateSpray(sprayB, state.bc && (state.c3 || state.c4), dt, 30);
+
+  // Olas rompiendo hacia la orilla
+  waves.forEach(wv => {
+    wv.t += dt * 0.08;
+    if (wv.t > 1) wv.t = 0;
+    wv.g.position.z = 148 - wv.t * 17;
+    wv.mat.opacity = Math.sin(wv.t * Math.PI) * 0.75;
+  });
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

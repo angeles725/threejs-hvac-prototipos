@@ -11,8 +11,8 @@
 ## Coverage
 
 - **RUN 6 (REOPEN §8, 2026-07-04, AUTO/orchestrated — queued behind the WORKFLOW.md fix writers)**: design-craft completion from the graphic-designer + 3D-designer lens (G33-G39). Cap +7 (B33-B39). Order per driver recommendation: template-system first (multiplier), then motion/UX, then 2D tokens/accessibility, then art direction/deliverables/dataviz.
-- **Covered blocks**: 33 (B1-B33)
-- **Coverage metric**: 33 / 39 closed — RUN 6 opened (G33 closed this iteration; G34-G39 queued)
+- **Covered blocks**: 39 (B1-B39)
+- **Coverage metric**: 39 / 39 closed — **RUN 6 COMPLETE (investigable=0). Terminal deliverable pending: Spanish designer handbook.**
 - **RUN 5 STOPPED (2026-07-04): read-only-investigable = 0 — ALL RUNS COMPLETE (32/32 gaps, 5 runs)**
 - **RUN 5 (2026-07-04, AUTO/orchestrated)**: HVAC-domain design (G29-G32) — G29 (HVAC/industrial equipment visualization domain, B29), G30 (dashboards & telemetry, B30), G31 (terrain/relief, B31), and G32 (buildings/BIM, B32) covered — **RUN 5 COMPLETE, all 4 gaps closed**. User authorized auto-chaining incl. emergent gaps; RUN 5 ran to exhaustion of the backlog with no new gaps left. Hard-stops: failed self-report, cap, exhaustion, destructive step.
 - **RUN 4 (REOPEN §8, 2026-07-04, AUTO/orchestrated)**: 3D-design craft + optimization (G22-G28) — **RUN 4 COMPLETE**, all 7 gaps covered (B22-B28).
@@ -100,6 +100,12 @@
 | 31 | 2026-07-04 | G31 terrain/relief (run 5) | B31 | yes · sonnet (full iteration) | 0 |
 | 32 | 2026-07-04 | G32 buildings/BIM (run-5 final) | B32 | yes · sonnet (full iteration) | 0 |
 | 33 | 2026-07-04 | G33 template as a system (run 6) | B33 | yes · sonnet (full iteration) | 0 |
+| 34 | 2026-07-04 | G34 motion design (run 6, parallel) | B34 | yes · sonnet (parallel block-writer, central archive) | 0 |
+| 35 | 2026-07-04 | G35 interaction UX (run 6, parallel) | B35 | yes · sonnet (parallel block-writer, central archive) | 0 |
+| 36 | 2026-07-04 | G36 tokens + accessibility (run 6, parallel) | B36 | yes · sonnet (parallel block-writer, central archive) | 0 |
+| 37 | 2026-07-04 | G37 art direction (run 6, parallel) | B37 | yes · sonnet (parallel block-writer, central archive) | 0 |
+| 38 | 2026-07-04 | G38 deliverables + visual QA (run 6, parallel) | B38 + tools/capture.mjs | yes · sonnet (parallel block-writer, central archive) | 0 |
+| 39 | 2026-07-04 | G39 dataviz craft (run 6, parallel) | B39 | yes · sonnet (parallel block-writer, central archive) | 0 |
 
 **RUN 4 gaps complete** (G22-G28, all covered). **RUN 5 COMPLETE** (G29-G32 — HVAC domain,
 dashboards, terrain, buildings/BIM) — G29 (B29), G30 (B30), G31 (B31), and G32 (B32) all covered,
@@ -112,7 +118,7 @@ iteration) covered, template-as-a-system architecture proposal. 6 gaps remain qu
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 6 (G34-G39 queued, run 6; G33 closed this iteration). Budget cap run 6: +7 blocks (B33-B39), used 1 (B33), cap not exceeded. Execution: ORCHESTRATED-AUTO (one fresh sub-agent per iteration; driver gatekeeps via §11 self-reports).
+- **Open gaps — read-only investigable**: 0 — **RUN 6 STOP** (parallel block-writers B34-B39 + central archive)
 - **Open gaps — requires-execution**: 0
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2

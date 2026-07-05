@@ -107,6 +107,12 @@ This index guides through the **33 blocks** of this research. Each block is an i
 | # | Block | File | Key topics |
 |---|--------|---------|------------|
 | 33 | The template as a system: a design-library architecture proposal | [block33](threejs-block33.md) | copy-paste quantification across 27 prototypes + 4 independent client-integration reinventions (Tridium, Honeywell UpDetail/CarcamoDetail, bms-casino React), `lib/` proposal (scene-kit/palette/rig/equipment/viewer), composite-scene shell kits (room/datacenter/plant), export contract (.glb vs versioned module) with the React-hosted contrast case, migration path ranked by leverage |
+| 34 | Motion design with intent | [block34](threejs-block34.md) | easing/duration bands, tween-vs-mixer (corpus uses zero mixers), camera transition patterns, shadow re-bake gotcha, motion vocabulary |
+| 35 | 3D interaction UX | [block35](threejs-block35.md) | picking pipeline + drag threshold, hover/focus states, touch mapping, zero-loading-screens finding, camera UX recipes |
+| 36 | 2D design tokens + accessibility | [block36](threejs-block36.md) | overlay census (26/27 hardcoded), lib/theme.css proposal, WCAG contrast violation found, ISA-101 status tokens, reduced-motion |
+| 37 | Composition & art direction | [block37](threejs-block37.md) | FOV↔focal mapping, diagonal grammar measured (19/21 at 38-48° azimuth), plan-scale FOV gap, preset vocabulary, catalog thumbnail spec |
+| 38 | Deliverables + visual QA | [block38](threejs-block38.md) | 4K capture contract (tested live), transparent captures, tools/capture.mjs, pixelmatch golden regression, delivery kit table |
+| 39 | Dataviz craft | [block39](threejs-block39.md) | Cleveland-McGill ranking, chart discipline (no gauges), Monash red/green ramp flagged colorblind-risky, per-widget style contract |
 
 ---
 
@@ -154,4 +160,4 @@ This index guides through the **33 blocks** of this research. Each block is an i
 
 ## Estimated coverage
 
-33/39 — RUN 6 opened (design craft completion, G33-G39): G33 covered this iteration (template-as-a-system, [Block 33]); G34-G39 remain queued.
+39/39 — RUN 6 COMPLETE. All research gaps closed across 6 runs. Terminal: Spanish designer handbook.

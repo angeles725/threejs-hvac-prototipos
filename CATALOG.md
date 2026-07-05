@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **33 blocks**
+Total: **39 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -39,3 +39,9 @@ Total: **33 blocks**
 | 31 | [threejs-block31.md](threejs-block31.md) | Terrain and relief for site context |
 | 32 | [threejs-block32.md](threejs-block32.md) | Buildings/BIM: building shells and floor plans as context for HVAC equipment |
 | 33 | [threejs-block33.md](threejs-block33.md) | The template as a system: a design-library architecture proposal |
+| 34 | [threejs-block34.md](threejs-block34.md) | Motion design 3D with intent: easing, animation machinery, cinematic camera, state micro-animations |
+| 35 | [threejs-block35.md](threejs-block35.md) | 3D interaction UX: picking, selection states, touch, loading, camera navigation |
+| 36 | [threejs-block36.md](threejs-block36.md) | 2D design tokens and accessibility for the overlays/dashboards |
+| 37 | [threejs-block37.md](threejs-block37.md) | Composition & art direction for equipment/facility shots |
+| 38 | [threejs-block38.md](threejs-block38.md) | High-quality deliverables and visual QA |
+| 39 | [threejs-block39.md](threejs-block39.md) | Data-viz craft for the HVAC dashboards |
