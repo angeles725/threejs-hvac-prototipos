@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EXTRACTOR TIPO HONGO · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; color:#7a8a98; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:230px; font-size:11px; backdrop-filter: blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:54px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>EXTRACTOR DE AIRE TIPO HONGO</b><br>
+  <span>Azotea &middot; &Oslash; 1.20 m &times; 1.10 m &middot; Voxel Art &middot; 1 vox = 2.5 cm</span>
+</div>
+<div id="legend">
+  <div><i style="background:#ff3344"></i> Aire de extracci&oacute;n</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;&middot;&nbsp; WHEEL: Zoom &nbsp;&middot;&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>EXTRACTOR</label><button id="bExt" class="on">ON</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script>
+// Inyección dinámica de importmap (evita que Cloudflare corrompa "package@version")
+(function(){
+  var AT = String.fromCharCode(64);
+  var map = { imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }};
+  var s = document.createElement('script');
+  s.type = 'importmap';
+  s.textContent = JSON.stringify(map);
+  document.currentScript.after(s);
+})();
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 voxel = 0.025 m  (micro-voxel: 4x la densidad del estándar 0.1 m,
+//        requerido por "alta densidad de micro-voxeles" en un equipo de 1.2 m)
+// Campana:  Ø 48 vox  ≈ 1.20 m
+// Altura:   44 vox (y = 0 base curb → y = 43 tope capuchón) ≈ 1.10 m
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 140, 380);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.set(78, 50, 82);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0.5, 15, 0.5);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.6;
+controls.minDistance = 25;
+controls.maxDistance = 280;
+controls.maxPolarAngle = Math.PI * 0.66;
+
+// ====== RIG DE LUCES ======
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(60, 95, 45);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -70; sun.shadow.camera.right = 70;
+sun.shadow.camera.top = 70;   sun.shadow.camera.bottom = -70;
+sun.shadow.camera.near = 10;  sun.shadow.camera.far = 250;
+sun.shadow.bias = -0.0004;
+scene.add(sun);
+
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-55, 40, -35);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rim.position.set(-30, 20, 70);
+scene.add(rim);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+
+// ====== PALETA ======
+const PAL = {
+  ALUM:    { c:0xb9c2cb, rough:0.35, metal:0.75, shell:true },  // campana aluminio (shell)
+  ALUM_D:  { c:0x99a3ad, rough:0.40, metal:0.75, shell:true },  // escalones del domo
+  CAP:     { c:0xaab3bc, rough:0.35, metal:0.70 },              // capuchón del motor
+  CAP_D:   { c:0x8d969f, rough:0.40, metal:0.70 },
+  STEEL:   { c:0x9aa4ae, rough:0.45, metal:0.60 },              // garganta / charola
+  STEEL_D: { c:0x6f7982, rough:0.50, metal:0.60 },
+  MESH:    { c:0x5c666f, rough:0.55, metal:0.55 },              // rejilla anti-pájaros
+  CURB:    { c:0x3a3f46, rough:0.80, metal:0.15 },              // curb gris oscuro
+  CURB_D:  { c:0x2d3138, rough:0.85, metal:0.15 },
+  IMPER:   { c:0x17191d, rough:0.95, metal:0.00 },              // impermeabilizante
+  IMPER_H: { c:0x24272d, rough:0.90, metal:0.05 },
+  DUCT:    { c:0x7d858e, rough:0.45, metal:0.65 },              // ducto galvanizado
+  DUCT_D:  { c:0x5d656e, rough:0.50, metal:0.65 },
+  ROOF:    { c:0x24272c, rough:0.95, metal:0.00 },              // losa de azotea
+  ROOF_H:  { c:0x2d3137, rough:0.95, metal:0.00 },              // gravilla
+  MOTOR:   { c:0x33383f, rough:0.60, metal:0.45 },
+  MOTOR_D: { c:0x22262b, rough:0.65, metal:0.45 },
+  BOX:     { c:0x4a525c, rough:0.55, metal:0.40 },              // desconectador
+  BOX_D:   { c:0x394049, rough:0.60, metal:0.40 },
+  RED:     { c:0xd23434, rough:0.50, metal:0.20 },              // palanca
+  COND:    { c:0x8a939c, rough:0.40, metal:0.70 }               // conduit EMT
+};
+
+// ====== VOXEL BUILDER (Map => 0 celdas duplicadas por construcción) ======
+const cells = new Map(); // "x,y,z" -> colorKey (última escritura gana)
+function vox(x, y, z, c){ cells.set(x + ',' + y + ',' + z, c); }
+function slab(x0, x1, y0, y1, z0, z1, c){
+  for(let x=x0; x<=x1; x++) for(let y=y0; y<=y1; y++) for(let z=z0; z<=z1; z++) vox(x, y, z, c);
+}
+function ringY(y, rOut, rIn, c){
+  const R = Math.ceil(rOut);
+  for(let x=-R; x<=R; x++) for(let z=-R; z<=R; z++){
+    const d = Math.hypot(x, z);
+    if(d <= rOut && d > rIn) vox(x, y, z, typeof c === 'function' ? c(x, z) : c);
+  }
+}
+function discY(y, r, c){ ringY(y, r, -1, c); }
+
+// ====== LOSA DE AZOTEA ======
+function buildRoof(){
+  const H = 32;
+  for(let x=-H; x<=H; x++) for(let z=-H; z<=H; z++){
+    if(Math.abs(x) <= 13 && Math.abs(z) <= 13) continue; // hueco del ducto
+    vox(x, -3, z, 'ROOF');
+    vox(x, -2, z, 'ROOF');
+    const g = ((x*73856093 ^ z*19349663) >>> 0) % 13 === 0;
+    vox(x, -1, z, g ? 'ROOF_H' : 'ROOF');
+  }
+}
+
+// ====== DUCTO CORTO DE CONEXIÓN (bajo el curb) ======
+function buildDuct(){
+  for(let y=-14; y<=-1; y++)
+    for(let x=-13; x<=13; x++) for(let z=-13; z<=13; z++){
+      const m = Math.max(Math.abs(x), Math.abs(z));
+      if(m !== 13) continue;
+      vox(x, y, z, (x === 0 || z === 0) ? 'DUCT_D' : 'DUCT'); // costuras verticales
+    }
+  // brida inferior + rigidizador intermedio
+  for(const y of [-14, -8])
+    for(let x=-14; x<=14; x++) for(let z=-14; z<=14; z++){
+      if(Math.max(Math.abs(x), Math.abs(z)) === 14) vox(x, y, z, 'DUCT_D');
+    }
+}
+
+// ====== CURB + IMPERMEABILIZANTE MARCADO ======
+function buildCurb(){
+  for(let y=0; y<=11; y++)
+    for(let x=-17; x<=17; x++) for(let z=-17; z<=17; z++){
+      const m = Math.max(Math.abs(x), Math.abs(z));
+      if(m < 14 || m > 17) continue;
+      vox(x, y, z, ((x*3 + y*5 + z*7) & 7) === 0 ? 'CURB_D' : 'CURB');
+    }
+  // tapa metálica del curb con vuelo
+  for(let x=-18; x<=18; x++) for(let z=-18; z<=18; z++){
+    const m = Math.max(Math.abs(x), Math.abs(z));
+    if(m >= 13 && m <= 18) vox(x, 11, z, 'CURB_D');
+  }
+  // impermeabilizante: faldón bituminoso con traslapes horizontales marcados
+  for(let y=0; y<=4; y++)
+    for(let x=-18; x<=18; x++) for(let z=-18; z<=18; z++){
+      const m = Math.max(Math.abs(x), Math.abs(z));
+      if(m >= 16 && m <= 18) vox(x, y, z, y % 2 === 0 ? 'IMPER' : 'IMPER_H');
+    }
+  // chaflán del impermeabilizante sobre la losa
+  for(let x=-22; x<=22; x++) for(let z=-22; z<=22; z++){
+    const m = Math.max(Math.abs(x), Math.abs(z));
+    if(m >= 19 && m <= 22) vox(x, 0, z, 'IMPER');
+  }
+}
+
+// ====== CHAROLA BASE + GARGANTA ======
+function buildThroat(){
+  // charola cuadrada del equipo sobre el curb (abertura circular al centro)
+  for(let x=-16; x<=16; x++) for(let z=-16; z<=16; z++){
+    const m = Math.max(Math.abs(x), Math.abs(z)), d = Math.hypot(x, z);
+    if(m <= 16 && d > 10.4) vox(x, 12, z, m >= 15 ? 'STEEL' : 'STEEL_D');
+  }
+  // garganta cilíndrica con costuras a 90°
+  for(let y=13; y<=21; y++)
+    ringY(y, 12, 10.4, (x, z) => (x === 0 || z === 0) ? 'STEEL_D' : 'STEEL');
+  // aro venturi superior
+  ringY(21, 13, 10, 'STEEL_D');
+}
+
+// ====== REJILLA ANTI-PÁJAROS + MONTANTES ======
+function buildScreen(){
+  const R = 16;
+  for(let k=0; k<28; k++){
+    const a = k * Math.PI * 2 / 28;
+    const x = Math.round(Math.cos(a) * R), z = Math.round(Math.sin(a) * R);
+    for(let y=13; y<=23; y++) vox(x, y, z, 'MESH');
+  }
+  ringY(13, 16.5, 15.5, 'MESH'); // aro inferior
+  ringY(23, 16.5, 15.5, 'MESH'); // aro superior
+  // 4 montantes estructurales a 45°
+  for(const [sx, sz] of [[11,11], [-11,11], [11,-11], [-11,-11]])
+    for(let y=13; y<=24; y++){
+      vox(sx, y, sz, 'STEEL_D');
+      vox(sx + Math.sign(sx), y, sz, 'STEEL_D');
+      vox(sx, y, sz + Math.sign(sz), 'STEEL_D');
+    }
+}
+
+// ====== CAMPANA HONGO — DOMO ESCALONADO (shell transparente) ======
+function buildHood(){
+  // bandas verticales (faldón + anillos del domo)
+  const bands = [ [24,24,26], [21,27,28], [18,29,30], [15,31,32], [12,33,34], [9,35,36], [6.5,37,38] ];
+  for(const [R, y0, y1] of bands)
+    for(let y=y0; y<=y1; y++) ringY(y, R, R - 1.6, 'ALUM');
+  // huellas horizontales de los escalones (tono oscuro)
+  const treads = [ [27,21,24], [29,18,21], [31,15,18], [33,12,15], [35,9,12], [37,6.5,9] ];
+  for(const [y, rIn, rOut] of treads) ringY(y, rOut, rIn, 'ALUM_D');
+  discY(39, 6.5, 'ALUM_D'); // tapa del domo
+}
+
+// ====== CAPUCHÓN DEL MOTOR (sólido, sobre el domo) ======
+function buildCap(){
+  for(let y=40; y<=41; y++) discY(y, 5, 'CAP');
+  ringY(41, 5, 3.4, 'CAP_D'); // ranura de ventilación
+  discY(42, 4, 'CAP_D');
+  discY(43, 2.6, 'CAP');
+}
+
+// ====== MOTOR (estático, visible a través del shell) ======
+function buildMotor(){
+  // araña de montaje (4 brazos)
+  for(let x=-9; x<=9; x++){ vox(x, 30, 0, 'MOTOR_D'); vox(x, 30, 1, 'MOTOR_D'); }
+  for(let z=-9; z<=9; z++){ vox(0, 30, z, 'MOTOR_D'); vox(1, 30, z, 'MOTOR_D'); }
+  // cuerpo con aletas de enfriamiento
+  for(let y=31; y<=35; y++)
+    discY(y, y % 2 === 0 ? 4.6 : 4.0, y % 2 === 0 ? 'MOTOR_D' : 'MOTOR');
+  // caja de conexiones del motor
+  slab(4, 6, 32, 34, -1, 1, 'BOX_D');
+}
+
+// ====== DESCONECTADOR ELÉCTRICO + CONDUIT ======
+function buildDisconnect(){
+  // conduit: bajante, tendido sobre losa, subida por el curb, caja de registro
+  for(let y=0; y<=5; y++) vox(26, y, 9, 'COND');
+  for(let x=19; x<=25; x++) vox(x, 0, 9, 'COND');
+  for(let y=1; y<=12; y++) vox(18, y, 9, 'COND');
+  slab(17, 18, 12, 14, 8, 10, 'BOX_D');
+  // postes de montaje
+  for(let y=0; y<=6; y++){ vox(26, y, 6, 'STEEL_D'); vox(26, y, 12, 'STEEL_D'); }
+  // gabinete
+  slab(25, 27, 6, 14, 5, 13, 'BOX');
+  // costura de puerta + louvers en cara frontal (+X)
+  for(let y=7; y<=13; y++) vox(27, y, 9, 'BOX_D');
+  for(const y of [8, 10, 12]) for(let z=6; z<=8; z++) vox(27, y, z, 'BOX_D');
+  // palanca roja lateral
+  for(let y=9; y<=11; y++) vox(28, y, 12, 'RED');
+}
+
+buildRoof();
+buildDuct();
+buildCurb();
+buildThroat();
+buildScreen();
+buildHood();
+buildCap();
+buildMotor();
+buildDisconnect();
+
+// ====== INSTANCED MESHES POR COLOR ======
+const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+const byColor = new Map();
+for(const [k, c] of cells){
+  if(!byColor.has(c)) byColor.set(c, []);
+  byColor.get(c).push(k);
+}
+const m4 = new THREE.Matrix4();
+const voxRoot = new THREE.Group();
+scene.add(voxRoot);
+for(const [c, list] of byColor){
+  const p = PAL[c];
+  const mat = new THREE.MeshStandardMaterial({ color:p.c, roughness:p.rough, metalness:p.metal });
+  if(p.shell){
+    mat.transparent = true; mat.opacity = 0.2;
+    mat.depthWrite = false; mat.side = THREE.DoubleSide;
+  }
+  const im = new THREE.InstancedMesh(cubeGeo, mat, list.length);
+  list.forEach((k, i) => {
+    const [x, y, z] = k.split(',').map(Number);
+    m4.makeTranslation(x + 0.5, y + 0.5, z + 0.5);
+    im.setMatrixAt(i, m4);
+  });
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = !p.shell;
+  im.receiveShadow = true;
+  if(p.shell) im.renderOrder = 2;
+  voxRoot.add(im);
+}
+
+// ====== RODETE CENTRÍFUGO (Group animado, FUERA del InstancedMesh) ======
+const wheelMat = new THREE.MeshStandardMaterial({ color:0x1f6fe6, roughness:0.40, metalness:0.35 });
+const hubMat   = new THREE.MeshStandardMaterial({ color:0x164ea6, roughness:0.45, metalness:0.35 });
+const wheel = new THREE.Group();
+wheel.position.set(0.5, 26, 0.5); // eje alineado al centro de la retícula voxel
+
+function addBox(group, w, h, d, x, y, z, mat){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  group.add(m);
+  return m;
+}
+// disco por scanlines (estética voxel sin cilindros)
+function scanDisc(group, R, holeR, h, y, mat){
+  const Rf = Math.floor(R);
+  for(let iz=-Rf; iz<=Rf; iz++){
+    const half = Math.floor(Math.sqrt(Math.max(0, R*R - iz*iz)));
+    const hi = (holeR > 0 && Math.abs(iz) <= holeR)
+      ? Math.floor(Math.sqrt(holeR*holeR - iz*iz)) : -1;
+    if(hi < 0){
+      addBox(group, 2*half + 1, h, 1, 0, y, iz, mat);
+    } else {
+      const w = half - hi;
+      if(w > 0){
+        addBox(group, w, h, 1, -(hi + 1 + half) / 2, y, iz, mat);
+        addBox(group, w, h, 1,  (hi + 1 + half) / 2, y, iz, mat);
+      }
+    }
+  }
+}
+scanDisc(wheel, 9.5, 0, 1, 3.5, wheelMat);    // plato superior sólido
+scanDisc(wheel, 9.5, 5.5, 1, -3.5, wheelMat); // aro inferior con boca de succión
+const BLADES = 12;
+for(let i=0; i<BLADES; i++){
+  const a = i * Math.PI * 2 / BLADES;
+  const b = addBox(wheel, 0.9, 5, 5.5, Math.cos(a)*6.75, 0, Math.sin(a)*6.75, wheelMat);
+  b.rotation.y = Math.PI/2 - a + 0.62; // inclinación backward
+}
+addBox(wheel, 5, 2, 5, 0, -2, 0, hubMat);   // cono del hub
+addBox(wheel, 4, 2, 4, 0,  0, 0, hubMat);
+addBox(wheel, 3, 2, 3, 0,  2, 0, hubMat);
+addBox(wheel, 1.4, 7, 1.4, 0, 5.5, 0, hubMat); // flecha hacia el motor
+scene.add(wheel);
+
+// ====== LED DE ESTADO (desconectador) ======
+const COLOR_ON = 0x00ff66, COLOR_OFF = 0xff2233;
+const ledMat = new THREE.MeshStandardMaterial({ color:COLOR_ON, emissive:COLOR_ON, emissiveIntensity:1.7 });
+const led = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), ledMat);
+led.position.set(27.9, 9.5, 7.0);
+scene.add(led);
+const ledLight = new THREE.PointLight(COLOR_ON, 1.5, 18);
+ledLight.position.copy(led.position);
+scene.add(ledLight);
+
+// ====== PARTÍCULAS DE AIRE DE EXTRACCIÓN (rojas, voxel cubes) ======
+const pGeo = new THREE.BoxGeometry(0.7, 0.7, 0.7);
+const pMat = new THREE.MeshBasicMaterial({ color:0xff3344, transparent:true, opacity:0.9, depthWrite:false });
+const pGroup = new THREE.Group();
+pGroup.renderOrder = 3;
+scene.add(pGroup);
+const parts = [];
+for(let i=0; i<80; i++){
+  const m = new THREE.Mesh(pGeo, pMat);
+  parts.push({ m, t:Math.random(), th:Math.random()*Math.PI*2, r0:1 + Math.random()*5, sp:0.16 + Math.random()*0.08 });
+  pGroup.add(m);
+}
+function updateParticles(dt, flow){
+  for(const p of parts){
+    p.t += p.sp * dt * (0.35 + 0.65*flow);
+    if(p.t >= 1){ p.t -= 1; p.th = Math.random()*Math.PI*2; p.r0 = 1 + Math.random()*5; }
+    let r, y, s = 1;
+    if(p.t < 0.5){                                  // ascenso: ducto → garganta
+      const f = p.t / 0.5; y = -12 + f*36; r = p.r0;
+    } else if(p.t < 0.68){                          // expansión radial en el rodete
+      const f = (p.t - 0.5) / 0.18;
+      y = 24 + f*0.5; r = p.r0 + (13 - p.r0)*f;
+      p.th += dt * 3.2 * flow;
+    } else {                                        // descarga bajo la campana
+      const f = (p.t - 0.68) / 0.32;
+      r = 13 + f*17; y = 24.5 - f*7.5;
+      p.th += dt * 2.2 * flow;
+      s = 1 - Math.max(0, f - 0.55) / 0.45 * 0.9;
+    }
+    p.m.position.set(Math.cos(p.th)*r + 0.5, y, Math.sin(p.th)*r + 0.5);
+    p.m.scale.setScalar(Math.max(0.1, s));
+  }
+}
+
+// ====== MÁQUINA DE ESTADOS ======
+const state = { ext:true, rot:true };
+let speed = 0;
+const MAX_SPEED = 11;
+
+const bExt = document.getElementById('bExt');
+const bRot = document.getElementById('bRot');
+function paint(btn, on){ btn.className = on ? 'on' : 'off'; btn.textContent = on ? 'ON' : 'OFF'; }
+function applyState(){
+  paint(bExt, state.ext);
+  const c = state.ext ? COLOR_ON : COLOR_OFF;
+  ledMat.color.setHex(c);
+  ledMat.emissive.setHex(c);
+  ledMat.emissiveIntensity = state.ext ? 1.7 : 1.2;
+  ledLight.color.setHex(c);
+  ledLight.intensity = state.ext ? 1.5 : 1.0;
+}
+bExt.addEventListener('click', () => { state.ext = !state.ext; applyState(); });
+bRot.addEventListener('click', () => { state.rot = !state.rot; controls.autoRotate = state.rot; paint(bRot, state.rot); });
+applyState();
+
+// ====== VALIDACIÓN / STATS ======
+window.__VOX_STATS = (() => {
+  const colors = {};
+  let minX=1e9, maxX=-1e9, minY=1e9, maxY=-1e9, minZ=1e9, maxZ=-1e9;
+  for(const [k, c] of cells){
+    colors[c] = (colors[c] || 0) + 1;
+    const [x, y, z] = k.split(',').map(Number);
+    if(x<minX)minX=x; if(x>maxX)maxX=x;
+    if(y<minY)minY=y; if(y>maxY)maxY=y;
+    if(z<minZ)minZ=z; if(z>maxZ)maxZ=z;
+  }
+  return { total:cells.size, colors, bbox:{minX,maxX,minY,maxY,minZ,maxZ} };
+})();
+window.__VOX_DUMP = cells;
+
+// ====== LOOP ======
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  // inercia: arranque rápido, paro por desaceleración libre
+  const target = state.ext ? MAX_SPEED : 0;
+  const rate = target > speed ? 1.7 : 0.5;
+  speed += (target - speed) * Math.min(1, dt * rate);
+  if(Math.abs(target - speed) < 0.01) speed = target;
+  wheel.rotation.y += speed * dt;
+  const flow = speed / MAX_SPEED;
+  pMat.opacity = 0.9 * flow;
+  pGroup.visible = flow > 0.02;
+  if(pGroup.visible) updateParticles(dt, flow);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>

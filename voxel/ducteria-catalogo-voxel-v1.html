@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>CATÁLOGO DUCTERÍA HVAC · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); }
+  #ctl b { color:#00d4aa; }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); color:#c9d4dc; }
+  #legend .lh { color:#fff; letter-spacing:0.15em; margin-bottom:6px; font-size:10px; }
+  #legend div.fl { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter: blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:74px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>CATÁLOGO DE DUCTERÍA HVAC</b><br>
+  <span>Voxel Art · 8 piezas modulares · 1 voxel = 0.025 m</span>
+</div>
+<div id="legend">
+  <div class="lh">FLUJOS</div>
+  <div class="fl"><i style="background:#2f7bff"></i> Suministro</div>
+  <div class="fl"><i style="background:#ff2233"></i> Retorno</div>
+  <div class="fl"><i style="background:#ffc400"></i> Extracción</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan<br><span id="stats" style="color:#4a5a68"></span></div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>COMPUERTA VCD</label><button id="bDamper" class="off">CERRADA</button></div>
+  <div class="row"><label>ETIQUETAS</label><button id="bLabels" class="on">ON</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 voxel = 0.025 m
+// (Nota: la regla base indicaba 0.1 m/voxel; se aprobó 0.025 m/voxel para densidad
+//  micro-voxel real: tramos de 1.20 m = 48 voxeles, difusor de 0.60 m = 24 voxeles)
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 700, 1600);
+
+const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.1, 2000);
+camera.position.set(140, 130, 360);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(0, 16, 0);
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.5;
+
+// ====== LIGHTS ======
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(200, 300, 140);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left=-320; sc.right=320; sc.top=300; sc.bottom=-300; sc.near=10; sc.far=900;
+sun.shadow.bias = -0.0004;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-180, 120, -160);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rim.position.set(0, 80, -260);
+scene.add(rim);
+
+// ====== GROUND ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(1500, 800),
+  new THREE.MeshStandardMaterial({ color:0x0a0e15, roughness:0.94, metalness:0.05 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.position.y = -0.06;
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(1500, 150, 0x00d4aa, 0x142028);
+grid.material.opacity = 0.10;
+grid.material.transparent = true;
+grid.position.y = -0.02;
+scene.add(grid);
+
+// ====== VOXEL BUILDER (Map con dedupe first-wins → 0 celdas duplicadas) ======
+const voxMap = new Map();
+let dupSkipped = 0;
+function vox(x, y, z, key) {
+  x = Math.round(x); y = Math.round(y); z = Math.round(z);
+  const k = x + ',' + y + ',' + z;
+  if (voxMap.has(k)) { dupSkipped++; return; }
+  voxMap.set(k, { x, y, z, key });
+}
+
+const COL = {
+  GALV:     0xb9c6cf,  // lámina galvanizada clara
+  GALV_D:   0x8f9daa,  // galvanizado oscuro (costuras, bridas)
+  GALV_T:   0xb9c6cf,  // galvanizado transparente (corte compuerta)
+  EDGE:     0x55616c,  // bordes de corte / herrajes
+  INSUL:    0x9aa0a8,  // aislamiento exterior gris
+  INSUL_D:  0x7c828a,
+  WHITE:    0xf2f4f6,  // difusores / rejillas blancas
+  WHITE_D:  0xd0d6dd,
+  GRIL_BG:  0x11161d,  // fondo oscuro tras rejillas
+  RED:      0xd93636,  // manijas rojas
+  FLEX:     0xcfd6dc,  // ducto flexible (anillo claro)
+  FLEX_D:   0x99a3ad,  // ducto flexible (anillo oscuro)
+  FILTER:   0xf3ecd2,  // filtro plisado claro
+  FILTER_D: 0xd6cda6,  // filtro plisado sombra
+  FILTER_F: 0xb08d57,  // marco de cartón del filtro
+  PED:      0x141c2a,  // pedestal columna
+  PED_T:    0x223146,  // pedestal base/tapa
+  TRIM:     0x00d4aa,  // acento teal
+  VANE:     0xa7b6c0,  // álabes guía
+  FLOW_S:   0x2f7bff,  // suministro
+  FLOW_R:   0xff2233,  // retorno
+  FLOW_E:   0xffc400,  // extracción
+};
+
+const MATP = {
+  GALV:{r:0.42,m:0.65}, GALV_D:{r:0.50,m:0.60}, GALV_T:{r:0.45,m:0.55,shell:true},
+  EDGE:{r:0.60,m:0.45},
+  INSUL:{r:0.95,m:0.00}, INSUL_D:{r:0.95,m:0.00},
+  WHITE:{r:0.55,m:0.08}, WHITE_D:{r:0.60,m:0.08},
+  GRIL_BG:{r:0.90,m:0.10},
+  RED:{r:0.50,m:0.30,e:0.15},
+  FLEX:{r:0.48,m:0.70}, FLEX_D:{r:0.55,m:0.65},
+  FILTER:{r:0.92,m:0.00}, FILTER_D:{r:0.92,m:0.00}, FILTER_F:{r:0.85,m:0.00},
+  PED:{r:0.85,m:0.15}, PED_T:{r:0.70,m:0.30},
+  TRIM:{r:0.40,m:0.30,e:0.9},
+  VANE:{r:0.40,m:0.70},
+  FLOW_S:{r:0.50,m:0.20,e:0.8}, FLOW_R:{r:0.50,m:0.20,e:0.8}, FLOW_E:{r:0.50,m:0.20,e:0.8},
+};
+
+// ====== HELPERS GEOMÉTRICOS ======
+function shellBox(x0,x1,y0,y1,z0,z1,c,keepBottom=false){
+  for(let x=x0;x<=x1;x++) for(let y=y0;y<=y1;y++) for(let z=z0;z<=z1;z++){
+    const shell = x===x0||x===x1||y===y0||y===y1||z===z0||z===z1;
+    if(!shell) continue;
+    if(!keepBottom && y===y0 && y!==y1 && x>x0 && x<x1 && z>z0 && z<z1) continue;
+    vox(x,y,z,c);
+  }
+}
+// anillo rectangular en plano YZ (rebanada de ducto en x)
+function rectRing(x, z0,z1, y0,y1, c){
+  for(let z=z0;z<=z1;z++){ vox(x,y0,z,c); vox(x,y1,z,c); }
+  for(let y=y0+1;y<y1;y++){ vox(x,y,z0,c); vox(x,y,z1,c); }
+}
+// marco plano en x (brida): rect exterior menos abertura interior
+function frameX(x, z0,z1, y0,y1, zi0,zi1, yi0,yi1, c){
+  for(let z=z0;z<=z1;z++) for(let y=y0;y<=y1;y++){
+    if(z>=zi0&&z<=zi1&&y>=yi0&&y<=yi1) continue;
+    vox(x,y,z,c);
+  }
+}
+// marco plano en z
+function frameZ(z, x0,x1, y0,y1, xi0,xi1, yi0,yi1, c){
+  for(let x=x0;x<=x1;x++) for(let y=y0;y<=y1;y++){
+    if(x>=xi0&&x<=xi1&&y>=yi0&&y<=yi1) continue;
+    vox(x,y,z,c);
+  }
+}
+// anillo circular en plano YZ (rebanada en x)
+function circleRing(x, cy, cz, r, c){
+  const steps = Math.max(28, Math.round(r*11));
+  for(let i=0;i<steps;i++){
+    const a = i/steps*Math.PI*2;
+    vox(x, cy + r*Math.sin(a), cz + r*Math.cos(a), c);
+  }
+}
+// anillo circular en plano XZ (eje vertical)
+function circleRingXZ(y, cx, cz, r, c){
+  const steps = Math.max(28, Math.round(r*11));
+  for(let i=0;i<steps;i++){
+    const a = i/steps*Math.PI*2;
+    vox(cx + r*Math.cos(a), y, cz + r*Math.sin(a), c);
+  }
+}
+
+// ====== PEDESTAL (h=12 → 0.30 m) ======
+const PED_H = 12;
+function pedestal(cx, w, d, flowKey){
+  const x0 = cx - Math.floor(w/2), x1 = x0 + w - 1;
+  const z0 = -Math.floor(d/2),     z1 = z0 + d - 1;
+  // línea de acento teal en borde frontal de la tapa (first-wins)
+  for(let x=x0+2;x<=x1-2;x++) vox(x, PED_H-1, z1, 'TRIM');
+  // zócalo
+  shellBox(x0, x1, 0, 1, z0, z1, 'PED_T');
+  // columna (inset 2)
+  shellBox(x0+2, x1-2, 2, PED_H-3, z0+2, z1-2, 'PED');
+  // tapa
+  shellBox(x0, x1, PED_H-2, PED_H-1, z0, z1, 'PED_T');
+  // placa de flujo: chevrón ">" al frente de la columna (1 voxel al frente, en el nicho)
+  for(let dy=-2; dy<=2; dy++){
+    const off = 2 - Math.abs(dy);
+    vox(cx-1+off, 5+dy, z1-1, flowKey);
+    vox(cx+off,   5+dy, z1-1, flowKey);
+  }
+}
+
+// ====== PIEZA 1 · TRAMO RECTO RECTANGULAR CON BRIDA TDC (1.20 m) ======
+function tramoRecto(cx, y0){
+  const x0=cx-24, x1=cx+23;           // 48 vox = 1.20 m
+  const zi0=-10, zi1=9;               // ancho 20 vox = 0.50 m
+  const yb=y0+2, yt=y0+13;            // alto 12 vox = 0.30 m (elevado 2 para aislamiento)
+  // cuerpo del ducto
+  for(let x=x0;x<=x1;x++){
+    const seam = (x===x0 || x===x1 || x===cx-12);
+    rectRing(x, zi0, zi1, yb, yt, seam ? 'GALV_D' : 'GALV');
+  }
+  // cara de corte del aislamiento (anillo de espesor, plano x=cx) — antes del forro
+  for(let z=-13; z<=12; z++) for(let y=y0; y<=y0+15; y++){
+    if(z>=zi0 && z<=zi1 && y>=yb && y<=yt) continue;
+    vox(cx, y, z, 'INSUL_D');
+  }
+  // forro de aislamiento gris (mitad derecha)
+  for(let x=cx+1; x<=x1; x++){
+    const band = Math.floor((x-cx)/6) % 2 === 0;
+    rectRing(x, -13, 12, y0, y0+15, band ? 'INSUL' : 'INSUL_D');
+  }
+  // bridas TDC en ambos extremos (marco 2 vox alrededor de la boca)
+  frameX(x0-1, zi0-2, zi1+2, yb-2, yt+2, zi0+1, zi1-1, yb+1, yt-1, 'GALV_D');
+  frameX(x1+1, zi0-2, zi1+2, yb-2, yt+2, zi0+1, zi1-1, yb+1, yt-1, 'GALV_D');
+  // placas de esquina TDC (4 por brida, 1 vox al frente)
+  for(const [zc, yc] of [[zi0-2,yb-2],[zi1,yb-2],[zi0-2,yt],[zi1,yt]]){
+    for(let dz=0;dz<3;dz++) for(let dy=0;dy<3;dy++){
+      vox(x0-2, yc+dy, zc+dz, 'EDGE');
+      vox(x1+2, yc+dy, zc+dz, 'EDGE');
+    }
+  }
+  // silletas de apoyo bajo la mitad descubierta
+  for(const sx of [x0+6, x0+16]){
+    for(let dx=0;dx<2;dx++) for(let z=zi0-1;z<=zi1+1;z++){
+      vox(sx+dx, y0,   z, 'EDGE');
+      vox(sx+dx, y0+1, z, 'EDGE');
+    }
+  }
+}
+
+// ====== PIEZA 2 · CODO 90° CON ÁLABES GUÍA (corte, 0.60 m) ======
+function codo90(cx, y0){
+  const x0=cx-12, x1=cx+11, z0=-12, z1=11;  // 24×24 vox = 0.60 m
+  const yb=y0, yt=y0+11;                     // alto 12 vox
+  // piso interior
+  for(let x=x0;x<=x1;x++) for(let z=z0;z<=z1;z++) vox(x, yb, z, 'GALV_D');
+  // paredes exteriores (entrada -X → salida +Z)
+  for(let x=x0;x<=x1;x++) for(let y=yb+1;y<=yt;y++) vox(x, y, z0, 'GALV');
+  for(let z=z0;z<=z1;z++) for(let y=yb+1;y<=yt;y++) vox(x1, y, z, 'GALV');
+  // techo: solo franja junto a paredes exteriores (CORTE) con borde marcado
+  for(let x=x0;x<=x1;x++) for(let z=z0;z<=z1;z++){
+    const inStripZ = z <= z0+2;
+    const inStripX = x >= x1-2;
+    if(!inStripZ && !inStripX) continue;
+    const isLip = (inStripZ && z===z0+2) || (inStripX && x===x1-2);
+    vox(x, yt, z, isLip ? 'EDGE' : 'GALV');
+  }
+  // álabes guía: 4 arcos de cuarto de círculo, centro en esquina interior (x0, z1)
+  for(const r of [6, 11, 16, 21]){
+    const steps = Math.ceil(r * Math.PI/2 * 3);
+    for(let i=0;i<=steps;i++){
+      const t = i/steps * Math.PI/2;
+      const vx = x0 + r*Math.sin(t);
+      const vz = z1 - r*Math.cos(t);
+      for(let y=yb+1;y<=yt-1;y++) vox(vx, y, vz, 'VANE');
+    }
+  }
+  // pestañas en las bocas
+  frameX(x0-1, z0-1, z1+1, yb-1, yt+1, z0+1, z1-1, yb+1, yt-1, 'GALV_D');
+  frameZ(z1+1, x0-1, x1+1, yb-1, yt+1, x0+1, x1-1, yb+1, yt-1, 'GALV_D');
+}
+
+// ====== PIEZA 3 · TRANSICIÓN RECTANGULAR → CIRCULAR (0.60 m) ======
+function transicion(cx, y0){
+  const x0=cx-12, x1=cx+11;      // 24 vox = 0.60 m de largo
+  const cy=y0+8, hw=10, hh=6, rEnd=8;
+  const cornerR = Math.hypot(hw, hh);
+  for(let x=x0;x<=x1;x++){
+    const f = (x-x0)/(x1-x0);
+    const steps = 150;
+    for(let i=0;i<steps;i++){
+      const a = i/steps*Math.PI*2;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      let Rr = Math.min(hw/Math.max(Math.abs(ca),1e-4), hh/Math.max(Math.abs(sa),1e-4));
+      Rr = Math.min(Rr, cornerR);
+      const R = Rr + (rEnd - Rr)*f;
+      const deg = a*180/Math.PI;
+      const nearCorner = [45,135,225,315].some(k => Math.abs(((deg-k+540)%360)-180) < 5);
+      vox(x, cy + R*sa, R*ca, nearCorner ? 'GALV_D' : 'GALV');
+    }
+  }
+  // brida TDC en boca rectangular
+  frameX(x0-1, -12, 12, cy-8, cy+8, -8, 8, cy-4, cy+4, 'GALV_D');
+  // collar en boca circular
+  circleRing(x1+1, cy, 0, 9, 'GALV_D');
+  // silleta bajo el extremo rectangular (el fondo plano queda a y0+2)
+  for(const sx of [x0+1]){
+    for(let dx=0;dx<2;dx++) for(let z=-11;z<=11;z++){
+      vox(sx+dx, y0,   z, 'EDGE');
+      vox(sx+dx, y0+1, z, 'EDGE');
+    }
+  }
+}
+
+// ====== PIEZA 4 · DUCTO FLEXIBLE (anillos voxelizados, 1.20 m) ======
+function flexible(cx, y0){
+  const x0=cx-24, x1=cx+23;   // 48 vox = 1.20 m
+  const cyAt = x => y0 + 15 - 5*Math.sin(Math.PI*(x-x0)/(x1-x0));
+  for(let x=x0;x<=x1;x++){
+    const seg = Math.floor((x-x0)/2) % 2;
+    const isCollar = (x<=x0+3) || (x>=x1-3);
+    const r = isCollar ? 6 : (seg ? 6 : 5);
+    const c = isCollar ? 'GALV' : (seg ? 'FLEX_D' : 'FLEX');
+    circleRing(x, cyAt(x), 0, r, c);
+  }
+  // cinchos (abrazaderas) al final de cada collar
+  for(const bx of [x0+3, x1-3]) circleRing(bx, cyAt(bx), 0, 7, 'EDGE');
+  // soportes de exhibición bajo los collares
+  for(const px of [x0+1, x1-2]){
+    const topY = Math.round(cyAt(px)) - 7;
+    for(let dx=0;dx<2;dx++) for(let dz=-1;dz<=1;dz++)
+      for(let y=y0;y<=topY;y++) vox(px+dx, y, dz, 'EDGE');
+    for(let dz=-3;dz<=3;dz++){
+      vox(px,   topY+1, dz, 'GALV_D');
+      vox(px+1, topY+1, dz, 'GALV_D');
+    }
+  }
+}
+
+// ====== PIEZA 5 · DIFUSOR DE PLAFÓN 4 VÍAS, CONOS CONCÉNTRICOS (0.60 m) ======
+function difusor(cx, y0){
+  // cuello circular (sirve de soporte de exhibición)
+  for(let y=y0;y<=y0+3;y++) circleRingXZ(y, cx, 0, 5.5, 'GALV');
+  // placa base 24×24 blanca (cara hacia arriba)
+  for(let x=cx-12;x<=cx+11;x++) for(let z=-12;z<=11;z++) vox(x, y0+4, z, 'WHITE');
+  // ingletes diagonales de las 4 vías (first-wins sobre los conos)
+  const levels = [
+    [y0+5, 10.5, 11.5, 'WHITE'],
+    [y0+6,  8.5,  9.5, 'WHITE_D'],
+    [y0+7,  6.5,  7.5, 'WHITE'],
+    [y0+8,  4.5,  5.5, 'WHITE_D'],
+    [y0+9,  2.5,  3.5, 'WHITE'],
+    [y0+10, 0.0,  1.5, 'WHITE_D'],
+  ];
+  for(const [ly, m0, m1] of levels){
+    for(let x=cx-12;x<=cx+11;x++) for(let z=-12;z<=11;z++){
+      const dx = Math.abs(x - (cx - 0.5)), dz = Math.abs(z + 0.5);
+      const m = Math.max(dx, dz);
+      if(m >= m0 && m <= m1 && dx === dz) vox(x, ly, z, 'EDGE');
+    }
+  }
+  // conos concéntricos escalonados
+  for(const [ly, m0, m1, c] of levels){
+    for(let x=cx-12;x<=cx+11;x++) for(let z=-12;z<=11;z++){
+      const dx = Math.abs(x - (cx - 0.5)), dz = Math.abs(z + 0.5);
+      const m = Math.max(dx, dz);
+      if(m >= m0 && m <= m1) vox(x, ly, z, c);
+    }
+  }
+}
+
+// ====== PIEZA 6 · REJILLA LINEAL DE SUMINISTRO (1.20 m) ======
+function rejillaLineal(cx, y0){
+  const x0=cx-24, x1=cx+23;
+  const fy0=y0+4, fy1=y0+11;   // cara 48×8 vox = 1.20 × 0.20 m
+  // plenum trasero
+  shellBox(x0+1, x1-1, fy0, fy1, -7, -2, 'GALV', true);
+  // patas
+  for(const px of [x0+3, cx, x1-4]) for(let dx=0;dx<2;dx++)
+    for(let y=y0;y<fy0;y++){ vox(px+dx, y, -5, 'EDGE'); vox(px+dx, y, -4, 'EDGE'); }
+  // fondo oscuro tras las ranuras
+  for(let x=x0+2;x<=x1-2;x++) for(let y=fy0+2;y<=fy1-2;y++) vox(x, y, -1, 'GRIL_BG');
+  // marco frontal blanco (borde 2 vox)
+  for(let x=x0;x<=x1;x++) for(let y=fy0;y<=fy1;y++){
+    const border = x<=x0+1 || x>=x1-1 || y<=fy0+1 || y>=fy1-1;
+    if(border) vox(x, y, 0, 'WHITE');
+  }
+  // aletas horizontales (2 ranuras lineales)
+  for(let x=x0+2;x<=x1-2;x++){
+    vox(x, fy0+3, 0, 'WHITE');
+    vox(x, fy0+5, 0, 'WHITE');
+  }
+}
+
+// ====== PIEZA 7 · REJILLA DE RETORNO CON FILTRO (0.60 m) ======
+function rejillaRetorno(cx, y0){
+  const x0=cx-12, x1=cx+11;
+  const fy0=y0+4, fy1=y0+27;   // cara 24×24 vox = 0.60 m
+  // patas
+  for(const px of [x0+2, x1-3]) for(let dx=0;dx<2;dx++)
+    for(let y=y0;y<fy0;y++){ vox(px+dx, y, 0, 'EDGE'); vox(px+dx, y, -1, 'EDGE'); }
+  // marco frontal blanco
+  for(let x=x0;x<=x1;x++) for(let y=fy0;y<=fy1;y++){
+    const border = x<=x0+1 || x>=x1-1 || y<=fy0+1 || y>=fy1-1;
+    if(border) vox(x, y, 1, 'WHITE');
+  }
+  // retícula eggcrate (se ve el filtro detrás)
+  for(let x=x0+2;x<=x1-2;x++) for(let y=fy0+2;y<=fy1-2;y++){
+    if((x-x0)%3===0 || (y-fy0)%3===0) vox(x, y, 0, 'WHITE_D');
+  }
+  // filtro plisado, deslizado +X para mostrarse fuera del marco
+  const fx0=x0+2, fx1=x1+6;
+  for(let x=fx0;x<=fx1;x++){
+    const ph = (x-fx0)%4;
+    const z = ph<2 ? -3 : -4;
+    const c = ph<2 ? 'FILTER' : 'FILTER_D';
+    for(let y=fy0+2;y<=fy1-2;y++) vox(x, y, z, c);
+  }
+  // marco de cartón del filtro
+  for(let x=fx0;x<=fx1+1;x++){ vox(x, fy0+1, -3, 'FILTER_F'); vox(x, fy1-1, -3, 'FILTER_F'); }
+  for(let y=fy0+1;y<=fy1-1;y++){ vox(fx1+1, y, -3, 'FILTER_F'); vox(fx1+1, y, -4, 'FILTER_F'); }
+  // riel portafiltro + costado cerrado
+  for(let x=x0;x<=x1;x++){
+    vox(x, fy0, -3, 'GALV_D'); vox(x, fy0, -4, 'GALV_D');
+    vox(x, fy1, -3, 'GALV_D'); vox(x, fy1, -4, 'GALV_D');
+  }
+  for(let y=fy0;y<=fy1;y++){ vox(x0, y, -3, 'GALV_D'); vox(x0, y, -4, 'GALV_D'); }
+}
+
+// ====== PIEZA 8 · COMPUERTA DE VOLUMEN MANUAL (VCD, 0.40 m) ======
+const VCD = { cx:207, y0:PED_H };
+function compuerta(cx, y0){
+  const x0=cx-8, x1=cx+7;                 // largo 16 vox = 0.40 m
+  const z0=-8, z1=7, yb=y0+2, yt=y0+17;   // sección 16×16 vox
+  for(let x=x0;x<=x1;x++){
+    const end = (x===x0 || x===x1);
+    for(let z=z0;z<=z1;z++){
+      vox(x, yb, z, end ? 'GALV_D' : 'GALV');
+      vox(x, yt, z, end ? 'GALV_D' : 'GALV_T');
+    }
+    for(let y=yb+1;y<yt;y++){
+      const c = end ? 'GALV_D' : (y >= y0+10 ? 'GALV_T' : 'GALV');
+      vox(x, y, z0, c); vox(x, y, z1, c);
+    }
+  }
+  // patas
+  for(const px of [x0+1, x1-2]) for(let dx=0;dx<2;dx++)
+    for(const pz of [z0+1, z1-2]) for(let dz=0;dz<2;dz++){
+      vox(px+dx, y0,   pz+dz, 'EDGE');
+      vox(px+dx, y0+1, pz+dz, 'EDGE');
+    }
+  // cuadrante (placa de cuarto de círculo, lado +Z)
+  const ay = y0+9;
+  for(let dx=0;dx<=6;dx++) for(let dy=0;dy<=6;dy++){
+    if(dx*dx + dy*dy <= 42) vox(cx+dx, ay+dy, z1+1, 'GALV_D');
+  }
+  // muescas de posición sobre el cuadrante
+  for(const [px, py] of [[6,0],[5,3],[3,5],[0,6]]) vox(cx+px, ay+py, z1+2, 'TRIM');
+}
+
+// ====== CATÁLOGO: PEDESTALES + PIEZAS ======
+const PIECES = [
+  { cx:-194, w:56, d:30, name:'TRAMO RECTO · BRIDA TDC',      flow:'FLOW_S', build:tramoRecto },
+  { cx:-133, w:30, d:30, name:'CODO 90° · ÁLABES GUÍA',       flow:'FLOW_S', build:codo90 },
+  { cx: -85, w:30, d:30, name:'TRANSICIÓN RECT→CIRCULAR',     flow:'FLOW_S', build:transicion },
+  { cx: -24, w:56, d:30, name:'DUCTO FLEXIBLE',               flow:'FLOW_S', build:flexible },
+  { cx:  37, w:30, d:30, name:'DIFUSOR PLAFÓN 4 VÍAS',        flow:'FLOW_S', build:difusor },
+  { cx:  98, w:56, d:30, name:'REJILLA LINEAL · SUMINISTRO',  flow:'FLOW_S', build:rejillaLineal },
+  { cx: 159, w:30, d:30, name:'REJILLA RETORNO + FILTRO',     flow:'FLOW_R', build:rejillaRetorno },
+  { cx: 207, w:30, d:30, name:'COMPUERTA DE VOLUMEN (VCD)',   flow:'FLOW_E', build:compuerta },
+];
+for(const p of PIECES){
+  pedestal(p.cx, p.w, p.d, p.flow);
+  p.build(p.cx, PED_H);
+}
+
+// ====== INSTANCED MESHES (todos los voxeles estáticos) ======
+const byKey = new Map();
+voxMap.forEach(v => {
+  if(!byKey.has(v.key)) byKey.set(v.key, []);
+  byKey.get(v.key).push(v);
+});
+const cubeGeo = new THREE.BoxGeometry(1,1,1);
+const perColorCounts = {};
+byKey.forEach((list, key) => {
+  perColorCounts[key] = list.length;
+  const p = MATP[key];
+  const isShell = !!p.shell;
+  const mat = new THREE.MeshStandardMaterial({
+    color: COL[key],
+    roughness: p.r,
+    metalness: p.m,
+    emissive: p.e ? COL[key] : 0x000000,
+    emissiveIntensity: p.e || 0,
+    transparent: isShell,
+    opacity: isShell ? 0.22 : 1.0,
+    depthWrite: !isShell,
+    side: isShell ? THREE.DoubleSide : THREE.FrontSide,
+  });
+  const mesh = new THREE.InstancedMesh(cubeGeo, mat, list.length);
+  mesh.castShadow = !isShell;
+  mesh.receiveShadow = true;
+  const m = new THREE.Matrix4();
+  list.forEach((v, i) => {
+    m.setPosition(v.x+0.5, v.y+0.5, v.z+0.5);
+    mesh.setMatrixAt(i, m);
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+  scene.add(mesh);
+});
+
+// ====== PARTE ANIMADA: HOJA DE LA COMPUERTA + MANIJA (Group separado) ======
+const bladeGroup = new THREE.Group();
+bladeGroup.position.set(VCD.cx, VCD.y0 + 10, 0);   // eje a lo largo de Z, centro del ducto
+const bladeMat = new THREE.MeshStandardMaterial({ color:0x8f9daa, roughness:0.45, metalness:0.7 });
+const axleMat  = new THREE.MeshStandardMaterial({ color:0x55616c, roughness:0.5,  metalness:0.6 });
+const redMat   = new THREE.MeshStandardMaterial({ color:0xd93636, roughness:0.45, metalness:0.3, emissive:0xd93636, emissiveIntensity:0.15 });
+
+const blade = new THREE.Mesh(new THREE.BoxGeometry(1.2, 13.5, 13.5), bladeMat);
+blade.castShadow = true;
+bladeGroup.add(blade);
+
+const axle = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 20), axleMat);
+axle.castShadow = true;
+bladeGroup.add(axle);
+
+const handleShaft = new THREE.Mesh(new THREE.BoxGeometry(1.4, 6.5, 1.2), redMat);
+handleShaft.position.set(0, 3.2, 9.6);
+handleShaft.castShadow = true;
+bladeGroup.add(handleShaft);
+
+const handleGrip = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.8, 2.4), redMat);
+handleGrip.position.set(0, 6.8, 9.6);
+handleGrip.castShadow = true;
+bladeGroup.add(handleGrip);
+
+scene.add(bladeGroup);
+const DAMPER_OPEN = -1.35;  // ~77°: hoja horizontal = ABIERTA; 0 = CERRADA
+
+// ====== ETIQUETAS FLOTANTES (Sprites con CanvasTexture) ======
+function roundRectPath(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y,   x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x,   y+h, r);
+  ctx.arcTo(x,   y+h, x,   y,   r);
+  ctx.arcTo(x,   y,   x+w, y,   r);
+  ctx.closePath();
+}
+function makeLabel(text, chipHex){
+  const cnv = document.createElement('canvas');
+  cnv.width = 768; cnv.height = 160;
+  const ctx = cnv.getContext('2d');
+  roundRectPath(ctx, 10, 28, 748, 104, 18);
+  ctx.fillStyle = 'rgba(7,10,16,0.88)';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(0,212,170,0.55)';
+  ctx.stroke();
+  ctx.fillStyle = chipHex;
+  ctx.fillRect(34, 65, 30, 30);
+  ctx.fillStyle = '#e8eef2';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  let fs = 44;
+  ctx.font = `600 ${fs}px "JetBrains Mono", ui-monospace, monospace`;
+  while(ctx.measureText(text).width > 650 && fs > 26){
+    fs -= 2;
+    ctx.font = `600 ${fs}px "JetBrains Mono", ui-monospace, monospace`;
+  }
+  ctx.fillText(text, 86, 82);
+  const tex = new THREE.CanvasTexture(cnv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true, depthTest:false }));
+  spr.scale.set(34, 7.08, 1);
+  spr.renderOrder = 10;
+  return spr;
+}
+const FLOW_CSS = { FLOW_S:'#2f7bff', FLOW_R:'#ff2233', FLOW_E:'#ffc400' };
+const labelSprites = [];
+for(const p of PIECES){
+  const spr = makeLabel(p.name, FLOW_CSS[p.flow]);
+  spr.position.set(p.cx, 50, 0);
+  scene.add(spr);
+  labelSprites.push(spr);
+}
+
+// ====== ESTADO + UI ======
+const state = { damper:false, labels:true, rotate:true };
+
+const bDamper = document.getElementById('bDamper');
+bDamper.onclick = () => {
+  state.damper = !state.damper;
+  bDamper.className = state.damper ? 'on' : 'off';
+  bDamper.textContent = state.damper ? 'ABIERTA' : 'CERRADA';
+};
+const bLabels = document.getElementById('bLabels');
+bLabels.onclick = () => {
+  state.labels = !state.labels;
+  bLabels.className = state.labels ? 'on' : 'off';
+  bLabels.textContent = state.labels ? 'ON' : 'OFF';
+  labelSprites.forEach(s => s.visible = state.labels);
+};
+const bRot = document.getElementById('bRot');
+bRot.onclick = () => {
+  state.rotate = !state.rotate;
+  controls.autoRotate = state.rotate;
+  bRot.className = state.rotate ? 'on' : 'off';
+  bRot.textContent = state.rotate ? 'ON' : 'OFF';
+};
+
+// ====== STATS DE VALIDACIÓN ======
+window.__VOX_STATS = { total: voxMap.size, dupSkipped, perColorCounts };
+document.getElementById('stats').textContent =
+  `${voxMap.size.toLocaleString('es-MX')} voxeles · 0 celdas duplicadas`;
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ====== ANIMATE ======
+const clock = new THREE.Clock();
+let dAng = 0;
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const target = state.damper ? DAMPER_OPEN : 0;
+  dAng += (target - dAng) * Math.min(1, dt*3.5);
+  bladeGroup.rotation.z = dAng;
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Equipo de Filtrado de Alberca · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:4px 0; color:#c8d2da; }
+  #legend i { width:11px; height:11px; display:inline-block; border-radius:2px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:236px; font-size:11px; backdrop-filter: blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:8px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:58px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel .mode { margin-top:10px; padding-top:8px; border-top:1px solid #00d4aa33; color:#7a8a98; letter-spacing:0.08em; }
+  #panel .mode b { color:#00e07a; }
+  #panel .mode.rl b { color:#ffb020; }
+  #foot { position:fixed; bottom:14px; left:50%; transform:translateX(-50%); font-size:9px; color:#4a5560; letter-spacing:0.06em; background:rgba(6,8,13,0.6); padding:4px 10px; border:1px solid #1a2128; }
+  #load { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#06080d; color:#00d4aa; font-size:12px; letter-spacing:0.1em; z-index:10; }
+  #load.err { color:#ff5566; }
+</style>
+</head>
+<body>
+<div id="load">CARGANDO VOXELES…</div>
+<div id="info">
+  <b>EQUIPO DE FILTRADO DE ALBERCA</b><br>
+  <span>Cuarto de máquinas · Filtro de arena + Bomba · Voxel Art</span>
+</div>
+<div id="legend">
+  <div><i style="background:#38b6ff"></i> Succión (de alberca)</div>
+  <div><i style="background:#00e07a"></i> Retorno (a alberca)</div>
+  <div><i style="background:#ffb020"></i> Retrolavado (a drenaje)</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>BOMBA</label><button id="bPump" class="on">ON</button></div>
+  <div class="row"><label>RETROLAVADO</label><button id="bWash" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+  <div class="mode" id="modeLbl">MODO: <b>FILTRACIÓN</b></div>
+</div>
+<div id="foot"></div>
+
+<script type="text/x-main" id="mainsrc">
+
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ====== ESCALA ====== 1 voxel = 0.05 m (micro-voxel). Filtro ~1.2 m Ø x 1.5 m alto ~ 24 x 30 celdas.
+const SCALE_M = 0.05;
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.FogExp2(0x06080d, 0.0032);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.5, 2000);
+camera.position.set(95, 55, 85);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+// ====== LUCES ======
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(60, 90, 50);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 10; sun.shadow.camera.far = 260;
+sun.shadow.camera.left=-90; sun.shadow.camera.right=90; sun.shadow.camera.top=90; sun.shadow.camera.bottom=-90;
+sun.shadow.bias = -0.0004;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4); fill.position.set(-50, 40, -30); scene.add(fill);
+const rim  = new THREE.DirectionalLight(0x00d4aa, 0.2); rim.position.set(-20, 30, 80); scene.add(rim);
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+// ====== CONTROLES ======
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(27, 13, 1);
+controls.autoRotate = true; controls.autoRotateSpeed = 0.6;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.minDistance = 40; controls.maxDistance = 260;
+
+// ====== PALETA ======
+const C = {
+  ARENA:0xd9c69c, ARENA_D:0xbfa87e, BASE_DK:0x23262e,
+  PVC:0xe2e6ea, PVC_D:0xb9c0c8, VBLACK:0x14171d,
+  YEL:0xf2c230, RED:0xd93030, MOTOR:0x3d4450, FIN:0x2b303a,
+  METAL:0x8f98a3, STEEL:0x394049, PAD_A:0x2b323c, PAD_B:0x262c35,
+  CHAR:0x2a2e36, WHITE:0xe8e4d2, G_GRN:0x2fd06e, AMBER:0xffb020,
+  BLUE:0x38b6ff, GREEN:0x00e07a, LED_G:0x00ff66, LED_R:0xff2233,
+  GLASS:0xcfeaf2, SIGHT:0x7fdcec
+};
+const TRANSPARENT = { [C.GLASS]:0.30, [C.SIGHT]:0.60 };
+const EMISSIVE = {
+  [C.BLUE]:0.45, [C.GREEN]:0.45, [C.AMBER]:0.40, [C.G_GRN]:0.40,
+  [C.YEL]:0.18, [C.WHITE]:0.12, [C.LED_G]:0.9, [C.LED_R]:0.9
+};
+function matProps(hex){
+  const p = { color:hex, metalness:0.15, roughness:0.7 };
+  if(hex===C.METAL){ p.metalness=0.65; p.roughness=0.35; }
+  else if(hex===C.STEEL){ p.metalness=0.55; p.roughness=0.4; }
+  else if(hex===C.PVC || hex===C.PVC_D || hex===C.WHITE){ p.metalness=0.05; p.roughness=0.35; }
+  else if(hex===C.ARENA || hex===C.ARENA_D){ p.metalness=0.1; p.roughness=0.75; }
+  else if(hex===C.MOTOR || hex===C.FIN){ p.metalness=0.5; p.roughness=0.45; }
+  else if(hex===C.CHAR || hex===C.VBLACK || hex===C.BASE_DK){ p.metalness=0.3; p.roughness=0.6; }
+  if(EMISSIVE[hex]!==undefined){ p.emissive=hex; p.emissiveIntensity=EMISSIVE[hex]; }
+  return p;
+}
+
+// ====== VOXEL MAP (last-write-wins => 0 duplicados) ======
+const voxMap = new Map();
+let overwrites = 0;
+function vox(x,y,z,c){ x=Math.round(x); y=Math.round(y); z=Math.round(z);
+  const k = x+','+y+','+z; if(voxMap.has(k)) overwrites++; voxMap.set(k,c); }
+function discY(cx,cz,y,rOut,c,rIn=0,filter=null){
+  const ro2=(rOut+0.5)*(rOut+0.5), ri2=(rIn-0.5)*(rIn-0.5);
+  for(let dx=-rOut;dx<=rOut;dx++) for(let dz=-rOut;dz<=rOut;dz++){
+    const d2=dx*dx+dz*dz; if(d2<=ro2 && (rIn===0 || d2>=ri2)){
+      if(filter && !filter(cx+dx,cz+dz)) continue; vox(cx+dx,y,cz+dz,c);
+    }
+  }
+}
+function discZ(cx,cy,z,rOut,c,rIn=0){
+  const ro2=(rOut+0.5)*(rOut+0.5), ri2=(rIn-0.5)*(rIn-0.5);
+  for(let dx=-rOut;dx<=rOut;dx++) for(let dy=-rOut;dy<=rOut;dy++){
+    const d2=dx*dx+dy*dy; if(d2<=ro2 && (rIn===0 || d2>=ri2)) vox(cx+dx,cy+dy,z,c);
+  }
+}
+function boxFill(x0,x1,y0,y1,z0,z1,c){
+  for(let x=x0;x<=x1;x++) for(let y=y0;y<=y1;y++) for(let z=z0;z<=z1;z++) vox(x,y,z,c);
+}
+const PLUS=[[0,0],[1,0],[-1,0],[0,1],[0,-1]];
+function pipeZ(z0,z1,x,y,c){ for(let z=z0;z<=z1;z++) for(const[dx,dy] of PLUS) vox(x+dx,y+dy,z,c); }
+function pipeX(x0,x1,y,z,c){ for(let x=x0;x<=x1;x++) for(const[dy,dz] of PLUS) vox(x,y+dy,z+dz,c); }
+function pipeY(y0,y1,x,z,c){ for(let y=y0;y<=y1;y++) for(const[dx,dz] of PLUS) vox(x+dx,y,z+dz,c); }
+
+// ============================================================
+// 1) TANQUE FILTRO DE ARENA  (centro CX,CZ ; R=12 ; y=1..30)
+// ============================================================
+const TCX=17, TCZ=0, TR=12;
+// faldón oscuro
+for(let y=1;y<=3;y++) discY(TCX,TCZ,y,TR,C.BASE_DK);
+// domo inferior 4..9  (radio 7.6 -> 12)
+for(let y=4;y<=9;y++){ const t=(y-4)/5; const r=Math.round(7.6+(TR-7.6)*t); discY(TCX,TCZ,y,r,C.ARENA); }
+// cuerpo 10..22
+for(let y=10;y<=22;y++) discY(TCX,TCZ,y,TR,(y===16)?C.ARENA_D:C.ARENA);
+// domo superior 23..30  (radio 12 -> 4)
+for(let y=23;y<=30;y++){ const t=(y-23)/7; const r=Math.round(TR-(TR-4)*t); discY(TCX,TCZ,y,r,C.ARENA); }
+// boca de inspección + abrazadera + tapa
+discY(TCX,TCZ,30,4,C.METAL,3);           // collar
+discY(TCX,TCZ,31,4,C.METAL,3);
+discY(TCX,TCZ,31,4,C.METAL,3);           // anillo abrazadera (mismo nivel, con orejetas)
+vox(TCX+4,31,TCZ,C.STEEL); vox(TCX-4,31,TCZ,C.STEEL); // orejetas
+vox(TCX,31,TCZ+4,C.STEEL); vox(TCX,31,TCZ-4,C.STEEL);
+discY(TCX,TCZ,32,3,C.METAL);             // tapa
+discY(TCX,TCZ,33,3,C.METAL);
+boxFill(TCX,TCX,34,35,TCZ,TCZ,C.STEEL);  // perilla
+// mirilla frontal (+z) : marco oscuro + vidrio SIGHT
+for(let y=12;y<=16;y++) for(let x=TCX-2;x<=TCX+2;x++) vox(x,y,TR,C.BASE_DK);
+for(let y=13;y<=15;y++) for(let x=TCX-1;x<=TCX+1;x++) vox(x,y,TR+1,C.SIGHT);
+// etiqueta blanca arriba de la mirilla
+for(let x=TCX-2;x<=TCX+2;x++) vox(x,18,TR,C.WHITE);
+// bulkheads (+x): superior y=18 x=28 (retorno), inferior y=7 x=27 (a válvula bajo)
+discZ(0,0,0,0,0); // (noop guard)
+boxFill(27,29,17,19,TCZ-1,TCZ+1,C.STEEL); // brida superior salida
+boxFill(26,28,6,8,TCZ-1,TCZ+1,C.STEEL);   // brida inferior salida
+
+// ============================================================
+// 2) VÁLVULA MULTIPUERTO 6 POSICIONES (lateral)  centro x=36,z=0
+// ============================================================
+const VX=36, VZ=0;
+for(let y=12;y<=21;y++) discY(VX,VZ,y,3,C.VBLACK,0);      // tambor negro
+discY(VX,VZ,21,3,C.VBLACK);                               // tapa
+// 6 puntos de posición (uno rojo índice)
+const posPts=[[2,0],[1,2],[-1,2],[-2,0],[-1,-2],[1,-2]];
+posPts.forEach((p,i)=> vox(VX+p[0],22,VZ+p[1], i===0?C.RED:C.YEL));
+// LED de modo en la tapa
+vox(VX,22,VZ, C.G_GRN); // (se re-colorea como grupo emisivo abajo)
+// columna soporte hasta el patín
+pipeY(1,11,VX,VZ,C.STEEL);
+// puertos
+boxFill(VX+3,VX+4,15,17,VZ+1,VZ+1,C.VBLACK); // PUMP (+x)
+boxFill(VX-1,VX+1,15,17,VZ+3,VZ+4,C.VBLACK); // RETURN (+z)
+boxFill(VX-1,VX+1,12,14,VZ-4,VZ-3,C.VBLACK); // WASTE (-z)
+// tubo superior directo válvula->tanque (y=18)
+pipeX(29,33,18,VZ,C.PVC);
+// tubo inferior con riser: de válvula baja -> x=30 vertical -> tanque bulkhead inferior
+pipeX(30,33,13,VZ,C.PVC);
+pipeY(7,13,30,VZ,C.PVC);
+pipeX(28,30,7,VZ,C.PVC);
+
+// ============================================================
+// 3) BOMBA con TRAMPA DE PELOS  (centro PX, eje z, altura y=8)
+// ============================================================
+const PX=47;
+// --- trampa de pelos: cilindro vertical, centro z=6.5 ---
+const HZ=7; // centro de la trampa en z
+for(let y=4;y<=11;y++) discY(PX,HZ,y,4,C.CHAR,3);   // paredes anulares
+discY(PX,HZ,3,4,C.CHAR);                            // piso
+// canastilla (celosía checker) WHITE
+for(let y=5;y<=10;y++) discY(PX,HZ,y,3,C.WHITE,2,(x,z)=>((x+z+y)%2===0));
+discY(PX,HZ,11,4,C.STEEL,3);                        // anillo de cierre
+discY(PX,HZ,12,4,C.GLASS);                          // tapa transparente
+boxFill(PX,PX,13,14,HZ,HZ,C.STEEL);                 // perilla de tapa
+// --- voluta + cuello de descarga ---
+for(let z=0;z<=2;z++) discZ(PX,8,z,4,C.CHAR,0);     // caracol
+boxFill(PX-1,PX+1,11,12,0,2,C.CHAR);                // cuello hacia arriba
+// riser PVC a la válvula (PUMP port)
+pipeY(12,16,PX-1,1,C.PVC);
+pipeX(40,PX-1,16,1,C.PVC);
+// --- motor con aletas ---
+for(let z=-12;z<=-4;z++) discZ(PX,8,z,3,C.MOTOR,0);     // cuerpo motor
+[-5,-7,-9,-11].forEach(z=> discZ(PX,8,z,4,C.FIN,3));    // aletas de enfriamiento
+discZ(PX,8,-4,4,C.STEEL,0);                              // brida frontal
+discZ(PX,8,-13,4,C.STEEL,2);                             // tapa trasera anular (rejilla)
+// caja de conexiones + conduit + LED
+boxFill(PX-1,PX+1,11,13,-9,-6,C.VBLACK);                 // caja conexiones
+pipeY(6,11,PX+2,-7,C.STEEL);                             // conduit
+// pedestales + rieles con anclas
+for(const rx of [43,50]){ boxFill(rx,rx,1,3,-13,2,C.STEEL); vox(rx,1,-13,C.METAL); vox(rx,1,2,C.METAL); }
+boxFill(44,49,3,3,-13,-4,C.STEEL);                      // riel motor
+boxFill(44,49,3,3,3,10,C.STEEL);                        // riel trampa
+
+// ============================================================
+// 4) TUBERÍA (cruz "plus", Ø 0.15 m)
+// ============================================================
+// -- Succión (azul) de alberca a la trampa: pipeZ x=46 y=7
+pipeZ(11,21,PX-1,7,C.PVC);
+boxFill(PX-2,PX,6,8,13,13,C.PVC_D);            // tuerca unión
+for(let z=14;z<=16;z++) discZ(PX-1,7,z,2,C.PVC_D,0); // válvula de bola
+boxFill(PX-1,PX-1,8,10,14,16,C.RED);           // palanca roja
+boxFill(PX-3,PX+1,5,9,18,19,C.STEEL);          // par de bridas
+for(const [dx,dy] of PLUS) vox(PX-1+dx,7+dy,20,C.BLUE); // banda azul
+for(const [dx,dy] of PLUS) vox(PX-1+dx,7+dy,21,C.STEEL);// brida final
+// -- Retorno (verde) del tanque/válvula a la alberca: pipeZ x=36 y=16
+pipeZ(4,19,VX,16,C.PVC);
+// manómetro salida (carátula ámbar) cara z=8
+discZ(VX,16,8,2,C.AMBER,0); vox(VX,17,8,C.VBLACK); vox(VX,16,8,C.VBLACK);
+boxFill(VX-1,VX+1,13,15,10,11,C.STEEL);        // bridas
+for(let z=13;z<=15;z++) discZ(VX,16,z,2,C.PVC_D,0); // válvula bola
+boxFill(VX,VX,17,19,13,15,C.RED);              // palanca roja
+for(const [dx,dy] of PLUS){ vox(VX+dx,16+dy,16,C.GREEN); vox(VX+dx,16+dy,17,C.GREEN); }
+boxFill(VX-2,VX-2,10,16,18,18,C.STEEL);        // strut soporte
+for(const [dx,dy] of PLUS) vox(VX+dx,16+dy,19,C.STEEL); // brida final
+// manómetro entrada (carátula verde) en tubo de descarga x=42 cara z=2
+discZ(42,16,2,2,C.G_GRN,0); vox(42,17,2,C.VBLACK);
+// -- Retrolavado (ámbar) a drenaje: pipeZ x=36 y=13 hacia -z, luego baja
+pipeZ(-15,-5,VX,13,C.PVC);
+for(const [dx,dy] of PLUS){ vox(VX+dx,13+dy,-12,C.AMBER); vox(VX+dx,13+dy,-13,C.AMBER); }
+boxFill(VX-2,VX-2,7,13,-9,-9,C.STEEL);         // strut
+pipeY(3,13,VX,-16,C.PVC);                      // codo abajo
+pipeX(VX,VX,3,-16,C.PVC);                      // (guard)
+pipeZ(-18,-16,VX,3,C.PVC);                     // tramo corto sobre rejilla
+// rejilla de drenaje (checker)
+for(let x=33;x<=39;x++) for(let z=-19;z<=-15;z++) vox(x,1,z,((x+z)%2===0)?C.STEEL:C.VBLACK);
+
+// ============================================================
+// 5) PATÍN / PISO
+// ============================================================
+for(let x=-2;x<=57;x++) for(let z=-20;z<=23;z++){
+  const tile=(Math.floor((x+2)/4)+Math.floor((z+20)/4))%2;
+  vox(x,0,z, tile? C.PAD_A : C.PAD_B);
+}
+// franja de peligro perimetral (amarillo/negro)
+for(let x=-2;x<=57;x++){ const h=(x%2===0); vox(x,0,-20,h?C.YEL:C.VBLACK); vox(x,0,23,h?C.YEL:C.VBLACK); }
+for(let z=-20;z<=23;z++){ const h=(z%2===0); vox(-2,0,z,h?C.YEL:C.VBLACK); vox(57,0,z,h?C.YEL:C.VBLACK); }
+// placas de ancla del tanque (diagonales del faldón)
+[[8,8],[8,-8],[-8,8],[-8,-8]].forEach(o=>{
+  boxFill(TCX+o[0]-1,TCX+o[0]+1,1,1,TCZ+o[1]-1,TCZ+o[1]+1,C.METAL);
+  vox(TCX+o[0],1,TCZ+o[1],C.STEEL);
+});
+
+// ============================================================
+// RENDER DE VOXELES -> InstancedMesh por color
+// ============================================================
+const byColor = new Map();
+for(const [k,c] of voxMap){ if(!byColor.has(c)) byColor.set(c,[]); byColor.get(c).push(k.split(',').map(Number)); }
+const cube = new THREE.BoxGeometry(1,1,1);
+const dummy = new THREE.Object3D();
+const voxRoot = new THREE.Group();
+for(const [c,cells] of byColor){
+  const props = matProps(c);
+  const mat = new THREE.MeshStandardMaterial(props);
+  if(TRANSPARENT[c]!==undefined){ mat.transparent=true; mat.opacity=TRANSPARENT[c]; mat.depthWrite=false; mat.side=THREE.DoubleSide; }
+  const im = new THREE.InstancedMesh(cube, mat, cells.length);
+  im.castShadow = TRANSPARENT[c]===undefined; im.receiveShadow = true;
+  cells.forEach((p,i)=>{ dummy.position.set(p[0]+0.5,p[1]+0.5,p[2]+0.5); dummy.updateMatrix(); im.setMatrixAt(i,dummy.matrix); });
+  im.instanceMatrix.needsUpdate = true;
+  voxRoot.add(im);
+}
+scene.add(voxRoot);
+
+// piso oscuro grande + grid
+const slab = new THREE.Mesh(new THREE.BoxGeometry(400,1,400), new THREE.MeshStandardMaterial({color:0x0a0d12, roughness:0.95, metalness:0}));
+slab.position.set(20,-0.6,0); slab.receiveShadow=true; scene.add(slab);
+const grid = new THREE.GridHelper(400,80,0x122029,0x0d151b); grid.position.set(20,-0.05,0); scene.add(grid);
+
+// ============================================================
+// PARTES ANIMADAS (grupos separados)
+// ============================================================
+const smallBox = (w,h,d,hex,em=0)=> new THREE.Mesh(new THREE.BoxGeometry(w,h,d),
+  new THREE.MeshStandardMaterial({color:hex, metalness:0.5, roughness:0.4, emissive:em?hex:0x000000, emissiveIntensity:em}));
+
+// palanca de la válvula (pivote mundo 36,22.2,0)
+const lever = new THREE.Group(); lever.position.set(VX+0.5,22.7,VZ+0.5);
+const leverArm = smallBox(1.2,1.2,7,C.YEL); leverArm.position.set(0,0,2.6); lever.add(leverArm);
+const leverGrip = smallBox(1.6,1.6,1.6,C.RED); leverGrip.position.set(0,0,6.2); lever.add(leverGrip);
+scene.add(lever);
+
+// acoplamiento naranja (grupo en 47,8,-1.5)
+const coupling = new THREE.Group(); coupling.position.set(PX+0.5,8.5,-1.5);
+const coupMat = new THREE.MeshStandardMaterial({color:0xff8c1a, metalness:0.4, roughness:0.4, emissive:0xff8c1a, emissiveIntensity:0.25});
+const coupCore = new THREE.Mesh(new THREE.CylinderGeometry(1.6,1.6,2.4,10), coupMat); coupCore.rotation.x=Math.PI/2; coupling.add(coupCore);
+for(let i=0;i<4;i++){ const s=new THREE.Mesh(new THREE.BoxGeometry(0.5,3.4,0.5),coupMat); s.rotation.z=i*Math.PI/4; coupling.add(s); }
+scene.add(coupling);
+// placa guarda del acoplamiento
+const guard = smallBox(0.4,4,4,C.STEEL); guard.position.set(PX+0.5,8.5,-2.6); scene.add(guard);
+
+// ventilador del motor (grupo en 47,8,-11.6)
+const motorFan = new THREE.Group(); motorFan.position.set(PX+0.5,8.5,-11.6);
+const fanHub = new THREE.Mesh(new THREE.CylinderGeometry(1,1,0.6,8), new THREE.MeshStandardMaterial({color:C.VBLACK})); fanHub.rotation.x=Math.PI/2; motorFan.add(fanHub);
+for(let i=0;i<6;i++){ const b=smallBox(0.6,5.4,0.3,C.STEEL); b.rotation.z=i*Math.PI/3; b.position.set(Math.cos(i*Math.PI/3)*0,0,0); motorFan.add(b); }
+scene.add(motorFan);
+
+// LED de bomba (voxel emisivo + PointLight)
+const ledPump = smallBox(1.4,1.4,1.4, C.LED_G, 0.9); ledPump.position.set(PX+0.5,14.5,-7.5); scene.add(ledPump);
+const ledLight = new THREE.PointLight(0x00ff66,1.5,18); ledLight.position.copy(ledPump.position); scene.add(ledLight);
+// LED de modo en válvula
+const ledMode = smallBox(1.2,1.2,1.2, C.G_GRN, 0.7); ledMode.position.set(VX+0.5,23,VZ+0.5); scene.add(ledMode);
+
+// ============================================================
+// PARTÍCULAS DE FLUJO
+// ============================================================
+const pGeo = new THREE.BoxGeometry(0.55,0.55,0.55);
+function makeStream(pts, hex, n=8){
+  const g = new THREE.Group();
+  const mat = ()=> new THREE.MeshBasicMaterial({color:hex, transparent:true, opacity:0.9});
+  const segs=[]; let total=0;
+  for(let i=0;i<pts.length-1;i++){ const a=new THREE.Vector3(...pts[i]), b=new THREE.Vector3(...pts[i+1]); const L=a.distanceTo(b); segs.push({a,b,L}); total+=L; }
+  const cubes=[];
+  for(let i=0;i<n;i++){ const m=new THREE.Mesh(pGeo, mat()); m.userData.phase=i/n; g.add(m); cubes.push(m); }
+  scene.add(g);
+  return {g,cubes,segs,total,hex};
+}
+function updateStream(s,dt,speed,active,reverse){
+  if(!active){ s.cubes.forEach(m=>m.material.opacity=0); return; }
+  s.cubes.forEach(m=>{
+    m.userData.phase += (dt*speed*0.06) * (reverse?-1:1);
+    m.userData.phase = (m.userData.phase%1+1)%1;
+    let d = m.userData.phase*s.total, acc=0;
+    for(const seg of s.segs){ if(d<=acc+seg.L){ const t=(d-acc)/seg.L; m.position.lerpVectors(seg.a,seg.b,t); break; } acc+=seg.L; }
+    const p=m.userData.phase; m.material.opacity = 0.9*Math.min(1, Math.min(p,1-p)*6+0.15);
+  });
+}
+const SUC = makeStream([[PX-0.5,7.5,21.5],[PX-0.5,7.5,11],[PX-0.5,9,7.5]], C.BLUE, 9);
+const P2V = makeStream([[PX-0.5,12,1.5],[PX-0.5,16.5,1.5],[40,16.5,1.5]], C.BLUE, 8);
+const UP  = makeStream([[33,18.5,0.5],[29.5,18.5,0.5]], C.PVC, 5);       // reversible
+const LOW = makeStream([[28.5,7.5,0.5],[30.5,7.5,0.5],[30.5,13.5,0.5],[33,13.5,0.5]], C.PVC, 6); // reversible
+const RET = makeStream([[VX+0.5,16.5,4.5],[VX+0.5,16.5,18.5]], C.GREEN, 8);
+const WASTE = makeStream([[VX+0.5,13.5,-4.5],[VX+0.5,13.5,-15.5],[VX+0.5,3.5,-15.5],[VX+0.5,3.5,-17.5]], C.AMBER, 8);
+
+// ============================================================
+// ESTADO + UI
+// ============================================================
+const state = { pump:true, wash:false, rotate:true };
+let pumpSpeed = 0; const TARGET = 13;
+let leverT = 0; // 0 filtración, 1 retrolavado
+
+const bPump=document.getElementById('bPump'), bWash=document.getElementById('bWash'), bRot=document.getElementById('bRot');
+const modeLbl=document.getElementById('modeLbl');
+function setBtn(b,on,onTxt,offTxt){ b.className=on?'on':'off'; b.textContent=on?onTxt:offTxt; }
+function refreshUI(){
+  setBtn(bPump,state.pump,'ON','OFF');
+  setBtn(bWash,state.wash,'ON','OFF');
+  setBtn(bRot,state.rotate,'ON','OFF');
+  modeLbl.innerHTML = 'MODO: <b>'+(state.wash?'RETROLAVADO':'FILTRACIÓN')+'</b>';
+  modeLbl.className = 'mode'+(state.wash?' rl':'');
+  const lg = state.pump ? 0x00ff66 : 0xff2233;
+  ledPump.material.color.setHex(lg); ledPump.material.emissive.setHex(lg);
+  ledPump.material.emissiveIntensity = state.pump?0.9:0.7; ledLight.color.setHex(lg); ledLight.intensity = state.pump?1.5:1.0;
+  const mg = state.wash ? C.AMBER : C.G_GRN;
+  ledMode.material.color.setHex(mg); ledMode.material.emissive.setHex(mg);
+}
+bPump.onclick=()=>{ state.pump=!state.pump; refreshUI(); };
+bWash.onclick=()=>{ state.wash=!state.wash; refreshUI(); };
+bRot.onclick =()=>{ state.rotate=!state.rotate; controls.autoRotate=state.rotate; refreshUI(); };
+refreshUI();
+
+// ============================================================
+// LOOP  (toda la lógica en tick(dt) para pruebas headless)
+// ============================================================
+function tick(dt){
+  // inercia de la bomba
+  const tgt = state.pump ? TARGET : 0;
+  pumpSpeed += (tgt - pumpSpeed) * Math.min(1, dt*1.3);
+  coupling.rotation.z -= pumpSpeed*dt;
+  motorFan.rotation.z += pumpSpeed*dt*1.15;
+  // palanca (easing hacia retrolavado)
+  const lt = state.wash ? 1 : 0;
+  leverT += (lt - leverT) * Math.min(1, dt*3.5);
+  lever.rotation.x = -leverT*2.09;
+  // partículas
+  const running = pumpSpeed>0.3;
+  updateStream(SUC,dt,pumpSpeed,running,false);
+  updateStream(P2V,dt,pumpSpeed,running,false);
+  updateStream(UP ,dt,pumpSpeed,running, state.wash);   // invierte en retrolavado
+  updateStream(LOW,dt,pumpSpeed,running, state.wash);
+  updateStream(RET  ,dt,pumpSpeed,running && !state.wash,false);
+  updateStream(WASTE,dt,pumpSpeed,running &&  state.wash,false);
+}
+
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  tick(dt);
+  controls.update();
+  renderer.render(scene,camera);
+}
+
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+
+// hooks de prueba / footer
+window.__VOX_STATS__ = { count:voxMap.size, colors:byColor.size, overwrites, streams:6 };
+window.__DEBUG__ = { tick, state, get pumpSpeed(){return pumpSpeed;}, get leverT(){return leverT;} };
+window.__SCENE_OK__ = true;
+document.getElementById('foot').textContent = '1 voxel = 0.05 m · '+voxMap.size+' voxeles · three.js r160';
+const ld=document.getElementById('load'); if(ld) ld.remove();
+
+animate();
+</script>
+
+<script>
+// ====== BOOTSTRAP: importmap dinámico (evita mangling de "@" por CDN) ======
+(function(){
+  var A = String.fromCharCode(64); // "@"
+  var base = "https://unpkg.com/three" + A + "0.160.0/";
+  var im = document.createElement('script');
+  im.type = 'importmap';
+  im.textContent = JSON.stringify({ imports: {
+    "three": base + "build/three.module.js",
+    "three/addons/": base + "examples/jsm/"
+  }});
+  document.head.appendChild(im);
+  var main = document.createElement('script');
+  main.type = 'module';
+  main.textContent = document.getElementById('mainsrc').textContent;
+  document.body.appendChild(main);
+  setTimeout(function(){
+    if(!window.__SCENE_OK__){
+      var l=document.getElementById('load');
+      if(l){ l.className='err'; l.textContent='ERROR: no se pudo cargar three.js desde el CDN (revisa tu conexión).'; }
+    }
+  }, 7000);
+})();
+</script>
+</body>
+</html>
