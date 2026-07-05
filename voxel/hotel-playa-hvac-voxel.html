@@ -79,7 +79,10 @@
   <div class="row"><label>CALDERA</label><button id="bCal">OFF</button></div>
   <div class="sub">DISTRIBUCIÓN / ZONAS</div>
   <div class="row"><label>UMA-1 · EDIFICIO</label><button id="bU1">OFF</button></div>
-  <div class="row"><label>UMA-2 · ÁREA ALBERCA</label><button id="bU2">OFF</button></div>
+  <!-- v6.1: UMA-2 was converted to an electric resistance pool water heater.
+       Button id bU2 and state key u2 are kept (renaming ids risks breakage);
+       only the display text changed. -->
+  <div class="row"><label>RESISTENCIAS ALBERCA</label><button id="bU2">OFF</button></div>
   <div class="row"><label>VAV PISO 1</label><button id="bV1">OFF</button></div>
   <div class="row"><label>VAV PISO 2</label><button id="bV2">OFF</button></div>
   <div class="row"><label>VAV PISO 3</label><button id="bV3">OFF</button></div>
@@ -285,7 +288,7 @@ const COL = {
 
 // ====== LAYOUT (voxels; 1 vox = 0.5 m) ======
 // Mechanical yard x 2..80 z 4..66 · Tower x 110..205 z 6..41 (8 floors, pitch 6)
-// Pool deck x 120..190 z 60..106 · Pool hut x 210..224 z 58..74 · UMA-2 x 212..219 z 80..83
+// Pool deck x 120..190 z 60..106 · Pool hut x 210..224 z 58..74 · Resistencias alberca x 212..219 z 80..83
 // Boardwalk z 111..114 · Beach z 115..175 · Shore z 176..186 · Sea plane beyond
 const CZ  = [10, 24, 38, 52];           // chiller centerlines
 const PCZ = [14, 32, 50];               // pump centerlines
@@ -1293,10 +1296,9 @@ pipeRun([190,50,27],[206,50,27], COL.PIPE_B);
 pipeRun([189,50,22],[189,50,27], COL.PIPE_B);   // to the hero UMA-1 coil drops
 // branch to pool plate HX (into hut through north wall gap)
 pipeRun([217,1,58],[217,1,64], COL.PIPE_B);
-// branch to UMA-2 (west of the hut, around to its south-face hero coil drops)
-pipeRun([208,1,58],[208,1,86], COL.PIPE_B);
-pipeRun([209,1,86],[215,1,86], COL.PIPE_B);
-vox(216, 1, 86, COL.PIPE_B); vox(216, 1, 85, COL.PIPE_B);
+// v6.1: the CHW branch to UMA-2 was removed — that unit is now the electric
+// resistance pool water heater (RESISTENCIAS · ALBERCA) and has no air/CHW
+// side; it ties into the pool-water circuit instead (see its section below).
 
 // ====== EXPANSION + BUFFER TANKS (hero: CHW yard, 1 hero voxel = 0.05 m -> k = 0.1) ======
 // Transplanted from tanques-expansion-buffer-voxel-v1.html (phase B3). The
@@ -2147,7 +2149,10 @@ const difCells = new Map();
 // in (front door panels not ported, so the filter/coil/plug-fan interior reads
 // from outside). UMA-1 and the rooftop twin are mirrored in z so the open
 // front faces the camera side while the discharge keeps pointing +x into the
-// roof duct; UMA-2 is rotated 180 so its discharge meets the pool supply duct.
+// roof duct; the pool unit is rotated 180 so its open front faces the beach.
+// v6.1: the pool unit is no longer an AHU — it is RESISTENCIAS · ALBERCA, an
+// electric resistance pool water heater reusing this cabinet hull through the
+// derived heaterCells map below (air-side externals stripped).
 const AHU_K = 0.2;
 const AHU_MATS = {
   PANEL_L: { c:0xc9ccd1, r:0.6, m:0.3 },   // light gray outer panels
@@ -2318,7 +2323,7 @@ const ahuCells = new Map();
 // static rooftop twin keeps its v3 plain block (it was a dummy in v3 too).
 const AHU_PLACES = [
   { x:186,   y:50, z:18,   k:AHU_K, tx:'mz', mzW:16 },   // UMA-1 (azotea, animated)
-  { x:219.6, y:1,  z:84.6, k:AHU_K, tx:'rot' },          // UMA-2 (pool area, animated)
+  { x:219.6, y:1,  z:84.6, k:AHU_K, tx:'rot' },          // RESISTENCIAS · ALBERCA (pool water heater, v6.1 — hull via heaterCells)
 ];
 // UMA-1 rooftop pad (kept from v3, widened to catch the hero CHW stubs)
 voxBox(185, 49, 17, 194, 49, 23, COL.SKID);
@@ -2334,6 +2339,40 @@ vox(170, 50, 18, COL.GRILLE);
 voxBox(194, 51, 19.03, 197.93, 52, 20, COL.DUCT);   // 0.03 z-offset vs hero duct plane (review W1)
 voxBox(201.07, 51, 19.03, 205, 52, 20, COL.DUCT);
 voxBox(206, 51, 19.03, 207, 52, 21, COL.DUCT);
+
+// ====== RESISTENCIAS · ALBERCA — derived heater cell map (v6.1) ======
+// The pool unit keeps the AHU hero cabinet STRUCTURE but is semantically an
+// electric resistance pool water heater, so its hull is baked from a DERIVED
+// copy of ahuCells with the air-side externals stripped (UMA-1 keeps the full
+// map). Dropped: discharge transition + supply duct + end flange + duct
+// sensor (local x>=35), return-air duct collar above the roof (x2..7 z4..11
+// y>=20), OA rain hood (z>=16), and the CHW banded stubs + coil valve +
+// condensate P-trap (z<0, x<=20 — the electrical panel/conduit at x30..33
+// stays: a resistance heater is all about the electrical feed). The three
+// openings those externals served are blanked off so the closed cabinet reads
+// water-side only: roof return opening (PANEL_L), back-wall OA louver
+// (PANEL_D blank-off) and the right-end discharge hole (PANEL_D plate inside
+// its DUCT flange ring). The interior (filters/coil/fan wheel) is untouched
+// per the team note ("estructura esta bien").
+const heaterCells = new Map();
+{
+  const dropped = (x, y, z) =>
+    x >= 35 ||
+    (y >= 20 && x >= 2 && x <= 7 && z >= 4 && z <= 11) ||
+    z >= 16 ||
+    (z < 0 && x <= 20);
+  for (const [key, name] of ahuCells) {
+    const [x, y, z] = key.split(',').map(Number);
+    if (!dropped(x, y, z)) heaterCells.set(key, name);
+  }
+  const hv = (x, y, z, c) => heaterCells.set(x + ',' + y + ',' + z, c);
+  for (let x = 3; x <= 6; x++)                         // blank the roof return opening
+    for (let z = 5; z <= 10; z++) hv(x, 19, z, 'PANEL_L');
+  for (let x = 3; x <= 6; x++)                         // blank the back-wall OA louver
+    for (let y = 7; y <= 13; y++) hv(x, y, 15, 'PANEL_D');
+  for (let y = 8; y <= 13; y++)                        // blank the old discharge hole
+    for (let z = 5; z <= 10; z++) hv(34, y, z, 'PANEL_D');
+}
 
 // ====== VCD INLINE DAMPER (hero: manual volume damper on the roof supply duct, k = 0.05) ======
 // Harvested from ducteria-catalogo-voxel-v1.html compuerta() + bladeGroup
@@ -2825,7 +2864,13 @@ voxBox(209, 0, 57, 225, 0, 75, COL.SKID);
 voxBox(210, 1, 58, 216, 5, 58, COL.BEIGE);      // north wall (gap at x217 y1 for CHW pipe)
 voxBox(218, 1, 58, 224, 5, 58, COL.BEIGE);
 voxBox(217, 2, 58, 217, 5, 58, COL.BEIGE);
-voxBox(210, 1, 74, 224, 5, 74, COL.BEIGE);      // south wall
+// south wall (v6.1: y1 gaps at x214/x220 for the heater pool-water pipes,
+// same pattern as the north-wall CHW gap at x217)
+voxBox(210, 1, 74, 213, 5, 74, COL.BEIGE);
+voxBox(215, 1, 74, 219, 5, 74, COL.BEIGE);
+voxBox(221, 1, 74, 224, 5, 74, COL.BEIGE);
+voxBox(214, 2, 74, 214, 5, 74, COL.BEIGE);
+voxBox(220, 2, 74, 220, 5, 74, COL.BEIGE);
 voxBox(224, 1, 59, 224, 5, 73, COL.BEIGE);      // east wall
 voxBox(209, 6, 57, 225, 6, 75, COL.BEIGE_D);    // roof
 // circulation pump: v3 plain block (PLAIN_PUMPS above); the other pool pump,
@@ -3142,11 +3187,26 @@ pushEntry(COL.PIPE_T, 216.87, 2.7, 67.6, 0.5, 0.5, 2.2);     // elevated run nor
 pushEntry(COL.PIPE_T, 217.28, 2.7, 66.73, 1.3, 0.5, 0.42);   // east connector over the blue floor run
 pushEntry(COL.PIPE_T, 217.8, 2.48, 66.73, 0.28, 1.7, 0.42);  // vertical header across both RED ports
 
-// ====== UMA-2 (pool-area AHU at grade: hero body, see AHU_PLACES) ======
+// ====== RESISTENCIAS · ALBERCA (v6.1: electric pool water heater at grade) ======
+// Hero cabinet placed via AHU_PLACES[1] with the derived heaterCells map.
+// The v5 air-side story (supply duct toward the pool deck + end grilles) was
+// removed — the pool has no air handler. Instead the unit is piped in series
+// with the pool-water circuit: filtered water off the return-main east end
+// feeds the heater, and the heated return tees back into the same main at
+// x214 on its way west to the pool (filtro -> calentador -> alberca).
 voxBox(211, 0, 79, 220, 0, 85, COL.SKID);
-voxBox(204, 2, 82, 210, 3, 83, COL.DUCT);       // supply duct toward pool area
-vox(203, 2, 82, COL.GRILLE); vox(203, 2, 83, COL.GRILLE);
-vox(203, 3, 82, COL.GRILLE); vox(203, 3, 83, COL.GRILLE);
+// supply: return-main east extension -> south col at x220 (through the new
+// machine-room south-wall gap) -> low entry stub into the east hull face.
+pipeRun([218,1,70],[220,1,70], COL.PIPE_T);
+pipeRun([220,1,71],[220,1,82], COL.PIPE_T);
+pushEntry(COL.PIPE_T, 219.785, 1.485, 82.5, 0.43, 0.97, 0.44);  // entry stub, buries 0.03 past the hull plane x=219.6 (house rule)
+// return: low exit stub out the north hull face -> col at x214 (through the
+// x214 wall gap) -> tee back into the return main at (214,1,70).
+pushEntry(COL.PIPE_T, 214.5, 1.485, 81.215, 0.5, 0.97, 0.43);   // exit stub, buries 0.03 past the hull plane z=81.4 (house rule)
+pipeRun([214,1,71],[214,1,80], COL.PIPE_T);
+// one shut-off valve per run (body + handwheel), flanking the unit at z77
+vox(220, 2, 77, COL.HOUSING_D); vox(220, 3, 77, COL.PIPE_R);    // supply valve
+vox(214, 2, 77, COL.HOUSING_D); vox(214, 3, 77, COL.PIPE_R);    // return valve
 
 // ====== BOARDWALK (malecon) ======
 for (let x=100; x<=230; x++)
@@ -3250,9 +3310,10 @@ palapa(230, 138);
 // InstancedMeshes + ground + sea). heroMeshSets: named object sets (merged
 // hero Meshes, animated Groups, sprite labels, LEDs/lights) toggled per
 // isolation target. Constraint: merged hero geometry is shared across
-// placements (v5 mesher), so the AHU body set ('ahu') is shared by UMA-1 and
-// UMA-2 — both bodies stay visible when either zone is isolated (same
-// TYPE-level rule as the 4 chillers sharing one Mesh per material).
+// placements (v5 mesher) — TYPE-level rule, e.g. the 4 chillers share one
+// Mesh per material. v6.1: the pool heater (ex UMA-2) bakes its OWN derived
+// cell map (heaterCells), so its hull registers under 'uma2' and the 'ahu'
+// set is UMA-1 only — each zone now isolates its own cabinet.
 const sceneryMeshes = [];
 const heroMeshSets = {
   chillers:[], bombas:[], torre:[], tanques:[], caldera:[], ahu:[],
@@ -3264,7 +3325,7 @@ const ISO_ZONES = {
   planta:  { label:'PLANTA CHW',         sets:['chillers','bombas','tanques','caldera','zplanta'] },
   torre:   { label:'TORRE ENFRIAMIENTO', sets:['torre'] },
   azotea:  { label:'AZOTEA',             sets:['ahu','uma1','extractor','vcd'] },
-  alberca: { label:'CUARTO ALBERCA',     sets:['ahu','uma2','hx','filtrado','poolpump','zalberca'] },
+  alberca: { label:'CUARTO ALBERCA',     sets:['uma2','hx','filtrado','poolpump','zalberca'] },   // v6.1: 'ahu' dropped — heater hull lives in 'uma2'
   piso4:   { label:'PISO 4 (CORTE)',     sets:['fcu','dif','vav4'] },
 };
 function regIso(key, ...objs) { heroMeshSets[key].push(...objs); }
@@ -3315,7 +3376,10 @@ for (const k in voxData) {
 const heroStats = {
   chiller: buildExposedMesh(chillerStaticCells, CHILLER_MATS, chillerStaticPlaces, scene),
   pump:    buildExposedMesh(pumpCells, PUMP_MATS, PUMP_PLACES, scene),
-  ahu:     buildExposedMesh(ahuCells, AHU_MATS, AHU_PLACES, scene),
+  // v6.1: the two cabinets no longer share one merged geometry — UMA-1 keeps
+  // the full AHU map; the pool heater bakes the derived heaterCells map.
+  ahu:     buildExposedMesh(ahuCells, AHU_MATS, [AHU_PLACES[0]], scene),
+  heater:  buildExposedMesh(heaterCells, AHU_MATS, [AHU_PLACES[1]], scene),
   fcu:     buildExposedMesh(fcuCells, FCU_MATS, [FCU_PLACE], scene),
   tower:   buildExposedMesh(towerCells, TOWER_MATS, [TOWER_PLACE], scene),
   vav:     buildExposedMesh(vavCells, VAVH_MATS, [VAVH_PLACE], scene),
@@ -3331,6 +3395,7 @@ const heroStats = {
 regIso('chillers',  ...heroStats.chiller.meshes);
 regIso('bombas',    ...heroStats.pump.meshes);
 regIso('ahu',       ...heroStats.ahu.meshes);
+regIso('uma2',      ...heroStats.heater.meshes);   // v6.1: heater hull isolates with the alberca zone
 regIso('fcu',       ...heroStats.fcu.meshes);
 regIso('torre',     ...heroStats.tower.meshes);
 regIso('vav4',      ...heroStats.vav.meshes);
@@ -3354,6 +3419,7 @@ console.log('[hotel v5 phase B] tanks:', meshStat(heroStats.tanks),
   '| ext:', meshStat(heroStats.ext), '| dif:', meshStat(heroStats.dif),
   '| vcd:', meshStat(heroStats.vcd));
 console.log('[hotel v6a] caldera+ACS:', meshStat(heroStats.cal));
+console.log('[hotel v6.1] resistencias alberca (heater hull):', meshStat(heroStats.heater));
 
 // ====== CAMERA / VIEWS (B37 Sec37.3 preset vocabulary) ======
 const CX = (sceneMinX+sceneMaxX)/2, CZC = (sceneMinZ+sceneMaxZ)/2;
@@ -3405,7 +3471,7 @@ makeLabel('BOMBAS PRIMARIAS', 46, 6.5, 56, 14, 'bombas');
 makeLabel('CALDERA + ACS', 64.5, 10, 45.2, 14, 'caldera');
 makeLabel('TORRE HOTEL · 8 PISOS', 157, 56, 24, 28, 'edificio');
 makeLabel('UMA-1 · AZOTEA', 190, 57.5, 20, 13, 'uma1');
-makeLabel('UMA-2 · AREA ALBERCA', 215, 8.5, 82, 14, 'uma2');
+makeLabel('RESISTENCIAS · ALBERCA', 215, 8.5, 82, 14, 'uma2');   // v6.1: ex UMA-2 — electric pool water heater
 FLOORS.forEach((f, i) => makeLabel('VAV P' + (i+1), i === 3 ? 213.5 : 212.5, f+3, 23.5, 5, i === 3 ? 'vav4' : 'edificio'));   // P4 nudged clear of the hero box
 makeLabel('FCU · HAB. PISO 4', 147.2, 23.4, 33, 8, 'fcu');   // below the piso-5 slab, next to the unit; occluded until CORTE TORRE
 makeLabel('ZONA ALBERCA', 154, 10, 83, 18);
@@ -3755,12 +3821,20 @@ AHU_PLACES.forEach((p, ui) => {
   });
   umaWheels.push(buildPlugFanWheel(p, wm));
   umaWheelMats.push(wm);
-  const dm = new THREE.MeshStandardMaterial({
-    color:0xff2233, roughness:0.4, metalness:0.7,
-    emissive:0xff2233, emissiveIntensity:0.4
-  });
-  umaDampers.push(buildAhuDampers(p, dm));
-  umaDampMats.push(dm);
+  if (ui === 0) {
+    const dm = new THREE.MeshStandardMaterial({
+      color:0xff2233, roughness:0.4, metalness:0.7,
+      emissive:0xff2233, emissiveIntensity:0.4
+    });
+    umaDampers.push(buildAhuDampers(p, dm));
+    umaDampMats.push(dm);
+  } else {
+    // v6.1: RESISTENCIAS · ALBERCA has no return/OA dampers (its roof and
+    // back-wall openings are blanked off in heaterCells) — empty lists keep
+    // the applyState/animate loops shape-stable without blades to drive.
+    umaDampers.push({ ret: [], oa: [] });
+    umaDampMats.push(null);
+  }
   const lm = ledMat();
   const led = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.14), lm);
   led.position.copy(heroPoint(p, 31.9, 12, -1.6));
@@ -3773,6 +3847,36 @@ AHU_PLACES.forEach((p, ui) => {
   const dmp = umaDampers[ui];
   regIso(ui === 0 ? 'uma1' : 'uma2', umaWheels[ui], led, pl, ...dmp.ret, ...dmp.oa);
 });
+
+// RESISTENCIAS · ALBERCA heating elements (v6.1): three horizontal
+// element-bundle bars + two support brackets inside the fan/discharge bays,
+// visible through the baked-corte open front (south face). Least invasive
+// faithful approach: the AHU hero transplant never ported the front door
+// panels, so the cabinet interior already reads from outside — no new hull
+// opening or grille plate is needed. The bar material glows orange-red when
+// state.u2 is ON and goes dark when OFF (driven in applyState).
+const heaterElemMat = new THREE.MeshStandardMaterial({
+  color:0xff5a1f, roughness:0.55, metalness:0.35,
+  emissive:0xff5a1f, emissiveIntensity:1.5
+});
+const heaterGroup = new THREE.Group();
+{
+  const p = AHU_PLACES[1];
+  heaterGroup.position.copy(heroPoint(p, 26, 9, 2.5));   // front third of the fan/discharge bays
+  if (p.tx === 'rot') heaterGroup.rotation.y = Math.PI;  // same convention as buildPlugFanWheel
+  heaterGroup.add(mkIM([                                 // 3 element bars (local x runs)
+    [0, -4, 0, 0, 13, 1.4, 1.4],
+    [0,  0, 0, 0, 13, 1.4, 1.4],
+    [0,  4, 0, 0, 13, 1.4, 1.4],
+  ], heaterElemMat, p.k));
+  heaterGroup.add(mkIM([                                 // 2 vertical support brackets, slightly behind
+    [-5.5, 0, 1.2, 0, 1.2, 10.5, 1.2],
+    [ 5.5, 0, 1.2, 0, 1.2, 10.5, 1.2],
+  ], umaSteelMat, p.k));
+  heaterGroup.traverse(o => { o.castShadow = false; });
+  scene.add(heaterGroup);
+  regIso('uma2', heaterGroup);
+}
 
 // extractor hero animated parts (B4): the source 65-mesh centrifugal wheel
 // rebuilt as two mkIMY InstancedMeshes (12 blades yawed about the vertical
@@ -4128,11 +4232,15 @@ function applyState() {
   if (!state.cal) calMirillaMat.emissiveIntensity = 0;   // glow only while firing (animate drives it)
   [state.u1, state.u2].forEach((on, i) => {
     setMat(umaWheelMats[i], on, 0.65, 0.4);
-    setMat(umaDampMats[i], on, 0.55, 0.4);
+    if (umaDampMats[i]) setMat(umaDampMats[i], on, 0.55, 0.4);   // v6.1: heater (i 1) has no dampers
     setMat(umaLeds[i].mat, on, 1.6, 1.1);
     umaLeds[i].light.color.copy(on ? COLOR_ON : COLOR_OFF);
     umaLeds[i].light.intensity = on ? 1.0 : 0.7;
   });
+  // v6.1: resistance heating elements — ON: orange-red glow, OFF: dark bars
+  // (no setMat: elements keep the heater identity, not the green/red LEDs)
+  heaterElemMat.emissiveIntensity = state.u2 ? 1.5 : 0.05;
+  heaterElemMat.color.setHex(state.u2 ? 0xff5a1f : 0x3a1c12);
   setMat(extLedMat, state.u1, 1.7, 1.2);   // extractor rides the azotea bank
   vArr().forEach((on, i) => {
     setMat(vavMats[i], on, 0.7, 0.45);
@@ -4237,8 +4345,11 @@ UNITS.push(
     bbox: heroBBox(AHU_PLACES[0], [0, 0, -4], [42, 23, 17]) },
   { id: 'extractor', label: 'EXTRACTOR HONGO · AZOTEA', zone: 'azotea', stateKey: 'u1', btn: 'bU1',
     bbox: heroBBox(EXT_PLACE, [-22, 0, -22], [28, 44, 22]) },
-  { id: 'uma2', label: 'UMA-2 · AREA ALBERCA', zone: 'alberca', stateKey: 'u2', btn: 'bU2',
-    bbox: heroBBox(AHU_PLACES[1], [0, 0, -4], [42, 23, 17]) },
+  // v6.1: ex UMA-2 — id/stateKey/btn kept (renaming risks breakage), display
+  // label converted; bbox trimmed to the hull now that the transition duct,
+  // return collar and rain hood are stripped from heaterCells.
+  { id: 'uma2', label: 'RESISTENCIAS · ALBERCA', zone: 'alberca', stateKey: 'u2', btn: 'bU2',
+    bbox: heroBBox(AHU_PLACES[1], [0, 0, -2], [35, 21, 17]) },
   { id: 'hx', label: 'INTERCAMBIADOR DE PLACAS', zone: 'alberca', stateKey: null, btn: null,
     bbox: heroBBox(HX_PLACE, [-9, 0, 0], [59, 54, 23]) },
   { id: 'filtrado', label: 'FILTRADO ALBERCA', zone: 'alberca', stateKey: 'pool', btn: 'bPool',
@@ -4377,8 +4488,9 @@ document.getElementById('dView').onclick = () => {
 document.getElementById('dIso').onclick = () => { if (selected) isolate(selected.zone); };
 
 // --- AISLAR: zone isolation. Hides scenery + every hero set outside the zone
-// (labels and lights ride their sets). Shared-mesh caveat documented at the
-// registry: 'ahu' bodies show for both azotea and alberca.
+// (labels and lights ride their sets). v6.1: the pool heater hull has its own
+// build under 'uma2', so 'ahu' is UMA-1 only (shared-mesh caveat resolved
+// for the cabinets; it still applies TYPE-level to the 4 chillers).
 const bIso = document.getElementById('bIso');
 function applyIsoVisibility() {
   const on = isoTarget ? ISO_ZONES[isoTarget].sets : null;
@@ -4506,7 +4618,10 @@ function animate() {
   });
 
   [state.u1, state.u2].forEach((on, i) => {
-    if (on) umaWheels[i].rotation.x -= dt * 10;
+    // v6.1: only UMA-1 (i 0) spins — the pool unit is a resistance heater
+    // (no supply fan); its wheel stays as static internals. Its damper lists
+    // are empty, so the lerps below are no-ops for i 1.
+    if (on && i === 0) umaWheels[i].rotation.x -= dt * 10;
     const dTarget = on ? 1.25 : 0;                   // louver blades lerp open/closed
     umaDampers[i].ret.forEach(b => { b.rotation.z += (dTarget - b.rotation.z) * Math.min(1, dt*4); });
     umaDampers[i].oa.forEach(b =>  { b.rotation.x += (dTarget - b.rotation.x) * Math.min(1, dt*4); });
