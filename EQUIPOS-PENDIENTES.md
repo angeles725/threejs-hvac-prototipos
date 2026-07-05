@@ -22,6 +22,7 @@
 | 11 | Filtro de arena + bomba alberca | `voxel/filtrado-alberca-voxel-v1.html` | 107 draws / 413,292 tris |
 | 5 | Caldera + tanque ACS | `voxel/caldera-acs-voxel.html` | 139 draws / 553,062 tris |
 | 7 | Tablero eléctrico + VFDs | `voxel/mcc-vfd-voxel-v1.html` | 229 draws / 1,289,844 tris |
+| 12 | Kit tubería hidráulica | `voxel/tuberia-hidraulica-catalogo-voxel-v1.html` | 269 draws / 2,298,469 tris |
 
 **📦 Ya existen en `voxel/` (era claude.ai — NO recrear; se auditan y rescatan al integrar):**
 
@@ -32,8 +33,7 @@
 - Minisplit / split / Liebert → `voxel/minisplit-voxel-v2 (4).html`, `split-system-voxel.html`, `liebert-split-voxel*.html`
 - Extractor de cocina → `voxel/extractor-cocina-voxel (2).html` · Generador → `voxel/generador-electrico-voxel (1).html`
 
-**❌ Faltan por crear (prompts abajo):** solo **12 kit tubería hidráulica** (spec para el kit
-realistic de red; opcional pero sube la fidelidad). (Todo lo demás entregado.)
+**✅ CATÁLOGO COMPLETO — 12/12 entregados.** Nada pendiente por crear.
 
 ## REGLAS DE CASA — pegar al FINAL de cada prompt
 
@@ -258,7 +258,7 @@ Leyenda: Agua helada / Aire precarga.
 Panel CONTROL DE EQUIPO: NIVEL/PRECARGA (sube-baja la banda de membrana), AUTO-ROTATE.
 ```
 
-- [ ] **12. Kit tubería hidráulica** → `voxel/kit-tuberia-voxel.html`
+- [x] **12. Kit tubería hidráulica** → entregado: `voxel/tuberia-hidraulica-catalogo-voxel-v1.html`
 
 ```
 Crea una ESCENA-CATÁLOGO de VOXEL ART 3D en un solo archivo HTML standalone: piezas modulares

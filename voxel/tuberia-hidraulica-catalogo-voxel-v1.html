@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Tubería Hidráulica HVAC · Catálogo Voxel</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #info .accent { color:#00d4aa; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); color:#c7d2da; }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #legend .ch { width:10px; display:inline-block; color:#eef6ff; font-weight:700; text-align:center; font-style:normal; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:240px; font-size:11px; backdrop-filter: blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:80px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #loader { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#06080d; color:#00d4aa; font-size:11px; letter-spacing:0.3em; z-index:100; transition:opacity 0.6s ease; }
+  #loader.hidden { opacity:0; pointer-events:none; }
+</style>
+</head>
+<body>
+<div id="loader">/// CARGANDO TUBERÍA ///</div>
+<div id="info">
+  <b>TUBERÍA HIDRÁULICA <span class="accent">/// CATÁLOGO VOXEL</span></b><br>
+  <span>Lado de agua · 13 piezas modulares · Ø4" base · <span id="vcount">—</span> voxeles</span>
+</div>
+<div id="legend">
+  <div><i style="background:#2f7bff"></i> Agua helada</div>
+  <div><i style="background:#ff2233"></i> Agua condensados</div>
+  <div><span class="ch">&raquo;</span> Sentido de flujo</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>VÁLVULAS</label><button id="bVal" class="off">CERRADAS</button></div>
+  <div class="row"><label>ETIQUETAS</label><button id="bLab" class="on">ON</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ============================================================
+// TUBERÍA HIDRÁULICA HVAC (LADO DE AGUA) — CATÁLOGO VOXEL 3D
+// SCALE: 1 voxel = 0.01 m  (override aprobado por el usuario;
+//        regla base del skill: 1 voxel = 0.1 m)
+//   Ø4" (0.10 m)  = 10 voxeles de diámetro
+//   Tramo 1.2 m   = 120 voxeles
+//   Válvulas      ≈ 0.35 m (~35 voxeles)
+// Patrón canónico: trane-rtu-voxel__6___3_.html /
+//                  ducteria-catalogo-voxel-v1.html (gemelo de ductería)
+// ============================================================
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 3200, 7800);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 1, 9000);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+// ====== LAYOUT DEL CATÁLOGO ======
+const R = 5;          // radio exterior tubo Ø4" (10 voxeles de diámetro)
+const TOPY = 13;      // cara superior del pedestal
+const CY = 21;        // línea de centro de tubería
+const CZ = 0;
+
+const DEFS = [
+  { id:'tramo',      w:150, name:'TRAMO BRIDADO Ø4"',    chip:'#ff2233', ly:40 },
+  { id:'codo',       w:110, name:'CODO 90° BRIDADO',      chip:'#00d4aa', ly:62 },
+  { id:'tee',        w:110, name:'TEE BRIDADA',           chip:'#00d4aa', ly:50 },
+  { id:'reduccion',  w:90,  name:'REDUCCIÓN CONCÉNTRICA', chip:'#00d4aa', ly:40 },
+  { id:'compuerta',  w:90,  name:'VÁLVULA COMPUERTA',     chip:'#d42a2a', ly:60 },
+  { id:'mariposa',   w:85,  name:'VÁLVULA MARIPOSA',      chip:'#d42a2a', ly:48 },
+  { id:'check',      w:95,  name:'VÁLVULA CHECK',         chip:'#d42a2a', ly:44 },
+  { id:'colador',    w:105, name:'COLADOR TIPO Y',        chip:'#00d4aa', ly:48 },
+  { id:'junta',      w:80,  name:'JUNTA FLEXIBLE',        chip:'#00d4aa', ly:40 },
+  { id:'manometro',  w:85,  name:'MANÓMETRO',             chip:'#00d4aa', ly:57 },
+  { id:'termometro', w:85,  name:'TERMÓMETRO',            chip:'#00d4aa', ly:52 },
+  { id:'soporte',    w:95,  name:'SOPORTE TRAPECIO',      chip:'#00d4aa', ly:52 },
+  { id:'aislado',    w:150, name:'TRAMO AISLADO Ø4"',     chip:'#2f7bff', ly:42 },
+];
+let runX = 0;
+for (const d of DEFS) { d.cx = Math.round(runX + d.w/2); runX += d.w; }
+const MIDX = Math.round(runX/2);
+
+camera.position.set(MIDX + 180, 330, 1450);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(MIDX, 20, 0);
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.35;
+controls.minDistance = 80;
+controls.maxDistance = 4200;
+
+// ====== LIGHTS ======
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+function aim(light, x, y, z) {
+  light.position.set(x, y, z);
+  light.target.position.set(MIDX, 10, 0);
+  scene.add(light.target);
+  scene.add(light);
+}
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left=-880; sc.right=880; sc.top=880; sc.bottom=-880; sc.near=1; sc.far=3200;
+sun.shadow.bias = -0.0003;
+aim(sun, MIDX + 380, 850, 620);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+aim(fill, MIDX - 520, 420, -340);
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+aim(rim, MIDX, 220, -700);
+
+// ====== GROUND ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(9000, 9000),
+  new THREE.MeshStandardMaterial({ color:0x0a0e16, roughness:0.92, metalness:0.05 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.position.x = MIDX;
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(9000, 150, 0x00d4aa, 0x142028);
+grid.material.opacity = 0.12;
+grid.material.transparent = true;
+grid.position.set(MIDX, 0.01, 0);
+scene.add(grid);
+
+// ====== VOXEL SYSTEM (dedupe first-wins) ======
+const voxData = {};
+const cellSet = new Set();
+let dupSkipped = 0;
+function vox(x, y, z, color) {
+  const xi = Math.round(x), yi = Math.round(y), zi = Math.round(z);
+  const key = xi + ',' + yi + ',' + zi;
+  if (cellSet.has(key)) { dupSkipped++; return; }
+  cellSet.add(key);
+  const k = color.toString();
+  if (!voxData[k]) voxData[k] = { color, positions: [] };
+  voxData[k].positions.push([xi, yi, zi]);
+}
+
+// ====== PALETA ======
+const STEEL   = 0x5d6d7c, STEEL_D = 0x47555f, STEEL_W = 0x39434c; // acero al carbón gris azulado
+const FLANGE  = 0x8a919b, FLANGE_D= 0x6b727c;                      // bridas gris medio
+const BOLT    = 0x23282e, NUT     = 0xc9ced6;                      // pernos oscuros / tuercas claras
+const RED     = 0xd42a2a;                                          // volantes / palancas
+const VBODY   = 0x1f5fa8, VBODY_D = 0x174a85;                      // azul industrial válvulas
+const GREENC  = 0x1e5c3a, GREENC_D= 0x154730;                      // colador verde oscuro
+const RUBBER  = 0x141519, RUBBER_H= 0x24262b;                      // junta de neopreno
+const INSUL   = 0xb4bac2, INSUL_D = 0x9aa1aa;                      // chaqueta de aislamiento
+const TAPE    = 0xdde3ea, FIBER   = 0xd9cfa4;                      // cinta plateada / fibra en corte
+const BRASS   = 0xb08d3e;                                          // latón (termopozo, tapón, aguja)
+const FLOW_B  = 0x2f7bff, FLOW_R  = 0xff2233, CHEV = 0xeef6ff;     // bandas de flujo + chevrones
+const CASE_D  = 0x30353c, FACE_W  = 0xf2f4f6;                      // carátulas
+const DIAL_BK = 0x14161a, BACK_D  = 0x1a1d22;
+const ARC_G   = 0x2fae4e, ARC_Y   = 0xe6b820, ARC_R2 = 0xcc2222, ARC_B = 0x3a86ff;
+const FRAME   = 0x3d434b;                                          // cunas / estructura
+const PED     = 0x272d35, PED_T   = 0x3a424c, ACCENT = 0x00d4aa;   // pedestales
+
+// ====== HELPERS DE GEOMETRÍA ======
+function P(axis, a, u, v) { return axis === 'x' ? [a,u,v] : axis === 'y' ? [u,a,v] : [u,v,a]; }
+
+function ringUV(axis, a, cu, cv, r, colFn) {
+  const ri = Math.ceil(r);
+  for (let du=-ri; du<=ri; du++) for (let dv=-ri; dv<=ri; dv++) {
+    const d = Math.hypot(du, dv);
+    if (d < r && d >= r-1) {
+      const c = colFn(du, dv, d);
+      if (c !== null && c !== undefined) { const p = P(axis, a, cu+du, cv+dv); vox(p[0], p[1], p[2], c); }
+    }
+  }
+}
+function tube(axis, a0, a1, cu, cv, r, colFn) {
+  for (let a=a0; a<a1; a++) ringUV(axis, a, cu, cv, r, (du,dv,d)=>colFn(a,du,dv,d));
+}
+const steel = (a,du,dv)=> du < -2 ? STEEL_D : STEEL;
+
+function flange(axis, a0, cu, cv, dir, rOut, boltR, bore) {
+  rOut = rOut || 8; boltR = boltR || 6.2; bore = bore || 3.2;
+  const ri = Math.ceil(rOut);
+  for (let s=0; s<2; s++) {
+    const a = a0 + s;
+    for (let du=-ri; du<=ri; du++) for (let dv=-ri; dv<=ri; dv++) {
+      const d = Math.hypot(du, dv);
+      if (d < rOut && d >= bore) {
+        const p = P(axis, a, cu+du, cv+dv);
+        vox(p[0], p[1], p[2], d >= rOut-1 ? FLANGE_D : FLANGE);
+      }
+    }
+  }
+  const headA = dir > 0 ? a0+2 : a0-1;   // cabeza oscura hacia afuera
+  const nutA  = dir > 0 ? a0-1 : a0+2;   // tuerca clara hacia el tubo
+  for (let k=0; k<8; k++) {
+    const ang = k*Math.PI/4 + Math.PI/8;
+    const bu = Math.round(Math.cos(ang)*boltR), bv = Math.round(Math.sin(ang)*boltR);
+    let p = P(axis, headA, cu+bu, cv+bv); vox(p[0], p[1], p[2], BOLT);
+    p = P(axis, nutA, cu+bu, cv+bv); vox(p[0], p[1], p[2], NUT);
+  }
+}
+
+function cradle(cx0, cyc, czc, r) {
+  const rr = Math.max(2, Math.round(r)-1);
+  for (let x=cx0-1; x<=cx0+1; x++)
+    for (let dz=-rr; dz<=rr; dz++) {
+      const lim = (r-0.4)*(r-0.4) - dz*dz;
+      const top = cyc - Math.ceil(Math.sqrt(Math.max(0, lim)));
+      for (let y=TOPY+1; y<=top; y++) vox(x, y, czc+dz, FRAME);
+    }
+}
+
+// ============================================================
+// PIEZA 1 — TRAMO RECTO BRIDADO (agua de condensados, banda ROJA)
+// ============================================================
+function buildTramo(cx) {
+  const x0 = cx - 60;
+  flange('x', x0-2, CY, CZ, -1);
+  flange('x', x0+120, CY, CZ, 1);
+  tube('x', x0, x0+120, CY, CZ, R, (x,dy,dz)=>{
+    const xr = x - x0;
+    if ((xr>=20&&xr<23)||(xr>=58&&xr<61)||(xr>=96&&xr<99)) return FLOW_R;
+    if (xr===40 || xr===80) return STEEL_W;                    // cordones de soldadura
+    if (dz>=3 && Math.abs(dy)<=3 && ((xr>=26&&xr<=54)||(xr>=64&&xr<=92))) {
+      const u = xr % 14;
+      if (u === 8-Math.abs(dy) || u === 9-Math.abs(dy)) return CHEV;  // sentido de flujo →
+    }
+    return dy<-2 ? STEEL_D : STEEL;
+  });
+  cradle(cx-42, CY, CZ, R); cradle(cx+40, CY, CZ, R);
+}
+
+// ============================================================
+// PIEZA 2 — CODO 90° BRIDADO (radio largo, sube)
+// ============================================================
+function buildCodo(cx) {
+  const bx = cx + 1, byc = CY + 14, RB = 14;
+  flange('x', cx-29, CY, CZ, -1);
+  tube('x', cx-27, bx, CY, CZ, R, steel);
+  for (let x=bx-1; x<=bx+RB+6; x++) for (let y=15; y<=byc+6; y++) for (let z=CZ-6; z<=CZ+6; z++) {
+    let th = Math.atan2(y-byc, x-bx);
+    th = Math.max(-Math.PI/2, Math.min(0, th));
+    const ax = bx + RB*Math.cos(th), ay = byc + RB*Math.sin(th);
+    const dd = Math.hypot(x-ax, y-ay, z-CZ);
+    if (dd < R && dd >= R-1) vox(x, y, z, (y-ay) < -2 ? STEEL_D : STEEL);
+  }
+  tube('y', byc, byc+16, bx+RB, CZ, R, (a,du,dv)=> dv<-2 ? STEEL_D : STEEL);
+  flange('y', byc+16, bx+RB, CZ, 1);
+  cradle(cx-20, CY, CZ, R); cradle(cx-8, CY, CZ, R);
+}
+
+// ============================================================
+// PIEZA 3 — TEE CON DERIVACIÓN BRIDADA (rama hacia arriba)
+// ============================================================
+function buildTee(cx) {
+  flange('x', cx-32, CY, CZ, -1);
+  flange('x', cx+30, CY, CZ, 1);
+  tube('x', cx-30, cx+30, CY, CZ, R, steel);
+  tube('y', CY+3, CY+18, cx, CZ, R, (a,du,dv)=> dv<-2 ? STEEL_D : STEEL);
+  flange('y', CY+18, cx, CZ, 1);
+  cradle(cx-20, CY, CZ, R); cradle(cx+20, CY, CZ, R);
+}
+
+// ============================================================
+// PIEZA 4 — REDUCCIÓN CONCÉNTRICA Ø4" → Ø2½"
+// ============================================================
+function buildReduccion(cx) {
+  flange('x', cx-27, CY, CZ, -1);
+  tube('x', cx-25, cx-13, CY, CZ, R, steel);
+  for (let x=cx-13; x<cx+7; x++) {
+    const t = (x-(cx-13)) / 20;
+    const r = 5 - 2*t;
+    ringUV('x', x, CY, CZ, r, (du,dv)=> du<-1 ? STEEL_D : STEEL);
+  }
+  tube('x', cx+7, cx+19, CY, CZ, 3, steel);
+  flange('x', cx+19, CY, CZ, 1, 6, 4.6, 2.2);
+  cradle(cx-20, CY, CZ, R); cradle(cx+13, CY, CZ, 3);
+}
+
+// ============================================================
+// PIEZA 5 — VÁLVULA DE COMPUERTA (volante rojo, vástago ascendente)
+// ============================================================
+function buildCompuerta(cx) {
+  flange('x', cx-19, CY, CZ, -1);
+  tube('x', cx-17, cx-8, CY, CZ, R, steel);
+  tube('x', cx+8, cx+17, CY, CZ, R, steel);
+  flange('x', cx+17, CY, CZ, 1);
+  // cuerpo esférico azul industrial
+  for (let dx=-8; dx<=8; dx++) for (let dy=-8; dy<=8; dy++) for (let dz=-8; dz<=8; dz++) {
+    const d = Math.hypot(dx, dy, dz);
+    if (d < 8 && d >= 7) vox(cx+dx, CY+dy, CZ+dz, dy<-3 ? VBODY_D : VBODY);
+  }
+  // anillos de cubo (transición a los stubs)
+  for (const hx of [cx-8, cx+7]) for (let dy=-7; dy<=7; dy++) for (let dz=-7; dz<=7; dz++) {
+    const d = Math.hypot(dy, dz);
+    if (d < 7 && d >= 4.5) vox(hx, CY+dy, CZ+dz, VBODY_D);
+  }
+  // bonete + brida del bonete (con barreno para el vástago)
+  tube('y', CY+6, CY+12, cx, CZ, 3.2, ()=>VBODY);
+  for (let s=0; s<2; s++) for (let du=-5; du<=5; du++) for (let dv=-5; dv<=5; dv++) {
+    const d = Math.hypot(du, dv);
+    if (d < 5 && d >= 1.8) vox(cx+du, CY+12+s, CZ+dv, d>=4 ? FLANGE_D : FLANGE);
+  }
+  for (const b of [[3,3],[3,-3],[-3,3],[-3,-3]]) vox(cx+b[0], CY+14, CZ+b[1], NUT);
+  // yugo
+  for (let y=CY+14; y<=CY+21; y++) {
+    for (const dx of [-4,-3,3,4]) for (const dz of [-1,0]) vox(cx+dx, y, CZ+dz, FRAME);
+  }
+  for (let dx=-2; dx<=2; dx++) for (let y=CY+21; y<=CY+23; y++) for (let dz=-1; dz<=1; dz++)
+    vox(cx+dx, y, CZ+dz, FRAME);
+  cradle(cx-13, CY, CZ, R); cradle(cx+13, CY, CZ, R);
+}
+
+// ============================================================
+// PIEZA 6 — VÁLVULA DE MARIPOSA (palanca roja + cuadrante dentado)
+// ============================================================
+function buildMariposa(cx) {
+  flange('x', cx-18, CY, CZ, -1);
+  tube('x', cx-16, cx-5, CY, CZ, R, steel);
+  tube('x', cx+5, cx+16, CY, CZ, R, steel);
+  flange('x', cx+16, CY, CZ, 1);
+  // par de bridas que emparedan la oblea
+  for (const fx of [cx-5, cx+3]) for (let s=0; s<2; s++)
+    for (let du=-8; du<=8; du++) for (let dv=-8; dv<=8; dv++) {
+      const d = Math.hypot(du, dv);
+      if (d < 8 && d >= 3.2) vox(fx+s, CY+du, CZ+dv, d>=7 ? FLANGE_D : FLANGE);
+    }
+  // oblea (cuerpo azul)
+  for (let x=cx-3; x<cx+3; x++) for (let du=-6; du<=6; du++) for (let dv=-6; dv<=6; dv++) {
+    const d = Math.hypot(du, dv);
+    if (d < 5.6 && d >= 3.2) vox(x, CY+du, CZ+dv, du<-2 ? VBODY_D : VBODY);
+  }
+  // espárragos pasantes con tuercas en ambos extremos
+  for (let k=0; k<8; k++) {
+    const ang = k*Math.PI/4 + Math.PI/8;
+    const bu = Math.round(Math.cos(ang)*6.4), bv = Math.round(Math.sin(ang)*6.4);
+    for (let x=cx-7; x<=cx+6; x++) vox(x, CY+bu, CZ+bv, (x===cx-7||x===cx+6) ? NUT : BOLT);
+  }
+  // cuello del vástago
+  for (const ix of [cx-1, cx]) for (let y=CY+5; y<=CY+8; y++) for (const iz of [CZ-1, CZ])
+    vox(ix, y, iz, VBODY);
+  // cuadrante dentado horizontal (hacia el frente)
+  for (let dx=-8; dx<=7; dx++) for (let dz=-2; dz<=7; dz++) {
+    const fx = dx+0.5, fz = dz+0.5;
+    const dd = Math.hypot(fx, fz);
+    if (dd < 7.2 && dd >= 1.6 && fz >= -0.6) {
+      const ai = Math.round(Math.atan2(fz, fx) / (Math.PI/10));
+      if (dd >= 5.8 && ai % 2 === 0) continue;   // muescas
+      vox(cx+dx, CY+9, CZ+dz, FLANGE_D);
+    }
+  }
+  cradle(cx-12, CY, CZ, R); cradle(cx+12, CY, CZ, R);
+}
+
+// ============================================================
+// PIEZA 7 — VÁLVULA CHECK DE COLUMPIO (corte con clapeta visible)
+// ============================================================
+function buildCheck(cx) {
+  flange('x', cx-19, CY, CZ, -1);
+  tube('x', cx-17, cx-12, CY, CZ, R, steel);
+  tube('x', cx+12, cx+17, CY, CZ, R, steel);
+  flange('x', cx+17, CY, CZ, 1);
+  // cuerpo r=6 con ventana de corte frontal-superior
+  tube('x', cx-12, cx+12, CY, CZ, 6, (x,du,dv)=>{
+    if (dv>=2 && du>=-2 && x>=cx-8 && x<=cx+8) return null;    // corte
+    return du<-3 ? VBODY_D : VBODY;
+  });
+  for (const hx of [cx-12, cx+11]) for (let dy=-7; dy<=7; dy++) for (let dz=-7; dz<=7; dz++) {
+    const d = Math.hypot(dy, dz);
+    if (d < 6.5 && d >= 4.5) vox(hx, CY+dy, CZ+dz, VBODY_D);
+  }
+  // asiento
+  for (let du=-4; du<=4; du++) for (let dv=-4; dv<=4; dv++) {
+    const d = Math.hypot(du, dv);
+    if (d < 4 && d >= 2.4) vox(cx-6, CY+du, CZ+dv, DIAL_BK);
+  }
+  // tapa superior atornillada
+  for (let dx=-5; dx<=5; dx++) for (let y=CY+6; y<=CY+8; y++) for (let dz=-3; dz<=3; dz++)
+    vox(cx+dx, y, CZ+dz, VBODY_D);
+  for (const b of [[-4,-2],[-4,2],[4,-2],[4,2]]) vox(cx+b[0], CY+9, CZ+b[1], NUT);
+  cradle(cx-14, CY, CZ, R); cradle(cx+14, CY, CZ, R);
+}
+
+// ============================================================
+// PIEZA 8 — COLADOR TIPO Y (tapa bridada + tapón de drenado)
+// ============================================================
+function buildColador(cx) {
+  const cyc = CY + 4;   // línea de centro elevada (la pierna baja a 45°)
+  flange('x', cx-24, cyc, CZ, -1);
+  flange('x', cx+22, cyc, CZ, 1);
+  tube('x', cx-22, cx+22, cyc, CZ, R, (x,du)=> du<-2 ? GREENC_D : GREENC);
+  tube('x', cx-6, cx+6, cyc, CZ, 6, (x,du)=> du<-2 ? GREENC_D : GREENC);
+  // pierna diagonal 45° con tapa bridada, anillo de pernos y tapón de latón
+  const dirx = Math.SQRT1_2, diry = -Math.SQRT1_2, L = 7;
+  const p0x = cx+1, p0y = cyc-1;
+  for (let x=cx-2; x<=cx+14; x++) for (let y=11; y<=cyc; y++) for (let z=CZ-7; z<=CZ+7; z++) {
+    const vx = x-p0x, vy = y-p0y, vz = z-CZ;
+    const s = vx*dirx + vy*diry;
+    const rx = vx - dirx*s, ry = vy - diry*s;
+    const rad = Math.hypot(rx, ry, vz);
+    let c = null;
+    if (s>=0 && s<L && rad<4 && rad>=3) c = GREENC_D;
+    else if (s>=L && s<L+3 && rad<6) c = rad>=5 ? FLANGE_D : FLANGE;
+    else if (s>=L+3 && s<L+4 && rad<5.4 && rad>=4.2) c = BOLT;
+    else if (s>=L+3 && s<L+5.5 && rad<1.7) c = BRASS;
+    if (c !== null && y >= TOPY+1) vox(x, y, z, c);
+  }
+  cradle(cx-16, cyc, CZ, R); cradle(cx+16, cyc, CZ, R);
+}
+
+// ============================================================
+// PIEZA 9 — JUNTA FLEXIBLE DE NEOPRENO (anillos arrugados + varillas)
+// ============================================================
+function buildJunta(cx) {
+  flange('x', cx-15, CY, CZ, -1);
+  flange('x', cx+13, CY, CZ, 1);
+  for (let x=cx-13; x<cx+13; x++) {
+    const t = (x-(cx-13)) / 26;
+    const r = 5.4 + 1.4*Math.abs(Math.sin(Math.PI*3*t));
+    ringUV('x', x, CY, CZ, r, ()=> r > 6.2 ? RUBBER_H : RUBBER);
+  }
+  // varillas limitadoras con tuercas
+  for (const vz of [CZ-9, CZ+9]) for (let x=cx-16; x<=cx+15; x++)
+    vox(x, CY, vz, (x<=cx-15 || x>=cx+14) ? NUT : BOLT);
+  cradle(cx-10, CY, CZ, 5); cradle(cx+9, CY, CZ, 5);
+}
+
+// ====== CARÁTULAS (manómetro / termómetro) ======
+function dial(cx0, cyc, cz0, rCase, arcFn, needleDeg) {
+  const ri = Math.ceil(rCase);
+  for (let dx=-ri; dx<=ri; dx++) for (let dy=-ri; dy<=ri; dy++) {
+    const d = Math.hypot(dx, dy);
+    if (d < rCase && d >= rCase-1.4) {
+      for (const zz of [cz0-1, cz0, cz0+1]) vox(cx0+dx, cyc+dy, zz, CASE_D);
+    } else if (d < rCase-1.4) {
+      vox(cx0+dx, cyc+dy, cz0-1, BACK_D);
+      const ang = Math.atan2(dy, dx)*180/Math.PI;
+      vox(cx0+dx, cyc+dy, cz0, arcFn(d, ang) || FACE_W);
+    }
+  }
+  const na = needleDeg*Math.PI/180;
+  const nr = Math.round(rCase-3);
+  for (let rr=0; rr<=nr; rr++)
+    vox(cx0+Math.round(Math.cos(na)*rr), cyc+Math.round(Math.sin(na)*rr), cz0+1, DIAL_BK);
+}
+const manoArc = (d, ang)=> (d>=3.4 && d<4.8)
+  ? (ang>=60 ? ARC_G : (ang>=0 ? ARC_Y : (ang>-45 ? ARC_R2 : null))) : null;
+const termArc = (d, ang)=> (d>=2.8 && d<4.0)
+  ? (ang>=90 ? ARC_B : (ang>-45 ? ARC_R2 : null)) : null;
+
+// ============================================================
+// PIEZA 10 — MANÓMETRO EN LÍNEA (carátula de color + llave de aguja)
+// ============================================================
+function buildManometro(cx) {
+  flange('x', cx-20, CY, CZ, -1);
+  flange('x', cx+18, CY, CZ, 1);
+  tube('x', cx-18, cx+18, CY, CZ, R, steel);
+  tube('y', CY+4, CY+8, cx, CZ, 2.2, ()=>STEEL_D);
+  // llave de aguja de latón con perilla roja lateral
+  for (let dx=-1; dx<=1; dx++) for (let y=CY+8; y<=CY+10; y++) for (let dz=-1; dz<=1; dz++)
+    vox(cx+dx, y, CZ+dz, BRASS);
+  vox(cx+2, CY+9, CZ, BRASS);
+  vox(cx+3, CY+9, CZ, RED); vox(cx+3, CY+9, CZ-1, RED); vox(cx+3, CY+9, CZ+1, RED);
+  for (let y=CY+11; y<=CY+14; y++) vox(cx, y, CZ, STEEL_D);
+  dial(cx, CY+21, CZ, 7.5, manoArc, 135);
+  cradle(cx-14, CY, CZ, R); cradle(cx+14, CY, CZ, R);
+}
+
+// ============================================================
+// PIEZA 11 — TERMÓMETRO DE CARÁTULA EN TERMOPOZO
+// ============================================================
+function buildTermometro(cx) {
+  flange('x', cx-20, CY, CZ, -1);
+  flange('x', cx+18, CY, CZ, 1);
+  tube('x', cx-18, cx+18, CY, CZ, R, steel);
+  // termopozo de latón con collarín hexagonal
+  for (let dx=-2; dx<=2; dx++) for (let dz=-2; dz<=2; dz++) {
+    const d = Math.hypot(dx, dz);
+    if (d < 2.3) for (let y=CY+4; y<=CY+7; y++) vox(cx+dx, y, CZ+dz, BRASS);
+    if (d < 2.9) vox(cx+dx, CY+8, CZ+dz, BRASS);
+  }
+  for (let y=CY+9; y<=CY+11; y++) vox(cx, y, CZ, STEEL_D);
+  dial(cx, CY+18, CZ, 6.5, termArc, 110);
+  cradle(cx-14, CY, CZ, R); cradle(cx+14, CY, CZ, R);
+}
+
+// ============================================================
+// PIEZA 12 — SOPORTE TIPO RACK DE TRAPECIO (varillas roscadas + abrazaderas)
+// ============================================================
+function buildSoporte(cx) {
+  // pórtico: dos postes + viga superior
+  for (const pz of [-16, 14]) for (let x=cx-1; x<=cx+1; x++)
+    for (let y=TOPY+1; y<=41; y++) for (let z=pz; z<=pz+2; z++) vox(x, y, z, FRAME);
+  for (let x=cx-2; x<=cx+2; x++) for (let y=42; y<=44; y++) for (let z=-16; z<=16; z++)
+    vox(x, y, z, y===44 ? STEEL_D : FRAME);
+  // varillas roscadas (patrón de cuerda alternado)
+  for (const rz of [-12, 12]) for (let y=17; y<=41; y++) vox(cx, y, rz, y%2 ? NUT : BOLT);
+  // tirante tipo canal con ranuras
+  for (let x=cx-2; x<=cx+2; x++) for (let z=-14; z<=14; z++) {
+    if (!(z%3===0 && x===cx)) vox(x, 18, z, FRAME);
+  }
+  for (const wx of [cx-2, cx+2]) for (let y=19; y<=20; y++) for (let z=-14; z<=14; z++)
+    vox(wx, y, z, FRAME);
+  for (const rz of [-12, 12]) { vox(cx, 16, rz, NUT); }
+  // dos tubos Ø4" sobre el trapecio: agua helada (azul) y condensados (rojo)
+  const runs = [[-6, FLOW_B], [6, FLOW_R]];
+  for (const rn of runs) {
+    const pzc = rn[0], bandC = rn[1];
+    tube('x', cx-13, cx+13, 25, pzc, R, (x,du)=>{
+      const xr = x-(cx-13);
+      if ((xr>=4&&xr<7) || (xr>=19&&xr<22)) return bandC;
+      return du<-2 ? STEEL_D : STEEL;
+    });
+    // abrazadera galvanizada sobre el tirante
+    for (let du=-6; du<=6; du++) for (let dv=-6; dv<=6; dv++) {
+      const d = Math.hypot(du, dv);
+      if (d < 6.2 && d >= 4.8 && du >= -1) vox(cx, 25+du, pzc+dv, NUT);
+    }
+    for (const tz of [pzc-5, pzc+5]) for (let y=21; y<=23; y++) vox(cx, y, tz, NUT);
+  }
+}
+
+// ============================================================
+// PIEZA 13 — TRAMO CON AISLAMIENTO A MEDIO FORRAR (agua helada, banda AZUL)
+// ============================================================
+function buildAislado(cx) {
+  const x0 = cx - 60;
+  // mitad desnuda con banda azul y chevrones de flujo
+  tube('x', x0, x0+61, CY, CZ, R, (x,dy,dz)=>{
+    const xr = x - x0;
+    if ((xr>=10&&xr<13) || (xr>=44&&xr<47)) return FLOW_B;
+    if (dz>=3 && Math.abs(dy)<=3 && xr>=16 && xr<=42) {
+      const u = xr % 14;
+      if (u === 8-Math.abs(dy) || u === 9-Math.abs(dy)) return CHEV;
+    }
+    return dy<-2 ? STEEL_D : STEEL;
+  });
+  // caras de corte del aislamiento (fibra visible)
+  for (const fx of [x0+61, x0+119]) for (let dy=-8; dy<=8; dy++) for (let dz=-8; dz<=8; dz++) {
+    const d = Math.hypot(dy, dz);
+    if (d < 7 && d >= 4) vox(fx, CY+dy, CZ+dz, FIBER);
+  }
+  // chaqueta gris con bandas de cinta plateada
+  tube('x', x0+61, x0+120, CY, CZ, 8, (x,dy,dz)=>{
+    const xr = x - x0;
+    if ((xr>=66&&xr<68)||(xr>=82&&xr<84)||(xr>=98&&xr<100)||(xr>=114&&xr<116)) return TAPE;
+    return dy<-3 ? INSUL_D : INSUL;
+  });
+  cradle(cx-50, CY, CZ, R); cradle(cx-20, CY, CZ, R);
+}
+
+// ============================================================
+// PEDESTALES (mismo diseño que el catálogo de ductería)
+// ============================================================
+function pedestal(cx, slotW) {
+  const L = Math.min(slotW - 34, 84);
+  const x0 = Math.round(cx - L/2), x1 = x0 + L - 1;
+  const zf = 15;
+  // chip de chevrón + guía teal punteada al frente (primero: first-wins)
+  const ch = [[-2,11],[-1,12],[-2,13],[1,11],[2,12],[1,13]];
+  for (const c of ch) vox(cx+c[0], c[1], zf, ACCENT);
+  for (let x=x0+2; x<=x1-2; x++) if (x%4<2 && Math.abs(x-cx)>5) vox(x, 12, zf, ACCENT);
+  // losa superior
+  for (let x=x0; x<=x1; x++) for (let z=-16; z<=15; z++) {
+    vox(x, 13, z, PED_T);
+    if (x===x0 || x===x1 || z===-16 || z===15) { vox(x, 11, z, PED); vox(x, 12, z, PED); }
+  }
+  // columna (perímetro)
+  const c0 = x0+8, c1 = x1-8;
+  for (let y=3; y<=10; y++) {
+    for (let x=c0; x<=c1; x++) { vox(x, y, -10, PED); vox(x, y, 9, PED); }
+    for (let z=-10; z<=9; z++) { vox(c0, y, z, PED); vox(c1, y, z, PED); }
+  }
+  // base tipo marco
+  const b0 = x0-3, b1 = x1+3;
+  for (let x=b0; x<=b1; x++) for (let z=-19; z<=18; z++) {
+    if (x<b0+2 || x>b1-2 || z<-17 || z>16)
+      for (let y=0; y<=2; y++) vox(x, y, z, y===2 ? PED_T : PED);
+  }
+}
+
+// ====== CONSTRUCCIÓN ======
+const BUILDERS = {
+  tramo:buildTramo, codo:buildCodo, tee:buildTee, reduccion:buildReduccion,
+  compuerta:buildCompuerta, mariposa:buildMariposa, check:buildCheck,
+  colador:buildColador, junta:buildJunta, manometro:buildManometro,
+  termometro:buildTermometro, soporte:buildSoporte, aislado:buildAislado
+};
+for (const d of DEFS) { BUILDERS[d.id](d.cx); pedestal(d.cx, d.w); }
+
+// ====== RENDER: InstancedMesh por color ======
+const MATP = {};
+function mp(c, r, m) { MATP[c] = [r, m]; }
+mp(STEEL,0.45,0.7); mp(STEEL_D,0.5,0.7); mp(STEEL_W,0.55,0.6);
+mp(FLANGE,0.5,0.6); mp(FLANGE_D,0.55,0.6);
+mp(BOLT,0.5,0.75); mp(NUT,0.35,0.85);
+mp(VBODY,0.5,0.4); mp(VBODY_D,0.55,0.4);
+mp(GREENC,0.55,0.35); mp(GREENC_D,0.6,0.35);
+mp(RUBBER,0.9,0.05); mp(RUBBER_H,0.85,0.05);
+mp(INSUL,0.92,0.02); mp(INSUL_D,0.92,0.02); mp(TAPE,0.35,0.7); mp(FIBER,0.95,0.0);
+mp(BRASS,0.4,0.85); mp(RED,0.45,0.5);
+mp(FLOW_B,0.5,0.3); mp(FLOW_R,0.5,0.3); mp(CHEV,0.45,0.2);
+mp(FACE_W,0.4,0.0); mp(CASE_D,0.5,0.6); mp(DIAL_BK,0.6,0.2); mp(BACK_D,0.7,0.1);
+mp(ARC_G,0.5,0.0); mp(ARC_Y,0.5,0.0); mp(ARC_R2,0.5,0.0); mp(ARC_B,0.5,0.0);
+mp(FRAME,0.6,0.5); mp(PED,0.78,0.15); mp(PED_T,0.72,0.2); mp(ACCENT,0.4,0.3);
+
+const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+for (const k in voxData) {
+  const color = voxData[k].color, positions = voxData[k].positions;
+  const pr = MATP[color] || [0.6, 0.35];
+  const mat = new THREE.MeshStandardMaterial({ color, roughness:pr[0], metalness:pr[1] });
+  if (color === ACCENT) { mat.emissive = new THREE.Color(0x00d4aa); mat.emissiveIntensity = 0.35; }
+  const mesh = new THREE.InstancedMesh(cubeGeo, mat, positions.length);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  const m = new THREE.Matrix4();
+  positions.forEach((p, i) => {
+    m.setPosition(p[0]+0.5, p[1]+0.5, p[2]+0.5);
+    mesh.setMatrixAt(i, m);
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+  scene.add(mesh);
+}
+
+// ====== PARTES ANIMADAS (Groups separados, fuera del InstancedMesh) ======
+const ANIM_DBG = [];
+function dbg(gx, gy, gz, x, y, z, c) { ANIM_DBG.push([gx+x, gy+y, gz+z, c]); }
+const cGeo = new THREE.BoxGeometry(1, 1, 1);
+const stemMat  = new THREE.MeshStandardMaterial({ color:0xaab4bf, roughness:0.35, metalness:0.85 });
+const redMat   = new THREE.MeshStandardMaterial({ color:0xd42a2a, roughness:0.4,  metalness:0.5 });
+const bronzeMat= new THREE.MeshStandardMaterial({ color:0x8a5a2a, roughness:0.45, metalness:0.75 });
+
+// --- COMPUERTA: volante rojo + vástago ascendente ---
+const gDef = DEFS[4];
+const GATE_Y0 = CY + 9.5;
+const gateRise = new THREE.Group();
+gateRise.position.set(gDef.cx+0.5, GATE_Y0, CZ+0.5);
+for (let y=0; y<=16; y++) {
+  const c = new THREE.Mesh(cGeo, stemMat);
+  c.scale.set(0.9, 1, 0.9); c.position.set(0, y, 0); c.castShadow = true;
+  gateRise.add(c); dbg(gDef.cx+0.5, GATE_Y0, CZ+0.5, 0, y, 0, 0xaab4bf);
+}
+const gateWheel = new THREE.Group();
+gateWheel.position.set(0, 13.5, 0);
+for (let i=0; i<18; i++) {
+  const a = i/18*Math.PI*2;
+  const c = new THREE.Mesh(cGeo, redMat);
+  c.scale.set(1.15, 0.9, 1.15);
+  c.position.set(Math.cos(a)*5.5, 0, Math.sin(a)*5.5);
+  c.rotation.y = -a; c.castShadow = true;
+  gateWheel.add(c); dbg(gDef.cx+0.5, GATE_Y0+13.5, CZ+0.5, Math.cos(a)*5.5, 0, Math.sin(a)*5.5, 0xd42a2a);
+}
+for (let s=0; s<4; s++) {
+  const a = s*Math.PI/2;
+  for (let rr=1.5; rr<=4.5; rr++) {
+    const c = new THREE.Mesh(cGeo, redMat);
+    c.scale.set(0.7, 0.7, 0.7);
+    c.position.set(Math.cos(a)*rr, 0, Math.sin(a)*rr);
+    gateWheel.add(c); dbg(gDef.cx+0.5, GATE_Y0+13.5, CZ+0.5, Math.cos(a)*rr, 0, Math.sin(a)*rr, 0xd42a2a);
+  }
+}
+const gHub = new THREE.Mesh(cGeo, redMat);
+gHub.scale.set(1.7, 1.1, 1.7);
+gateWheel.add(gHub);
+gateRise.add(gateWheel);
+scene.add(gateRise);
+
+// --- MARIPOSA: palanca roja sobre el cuadrante ---
+const bDef = DEFS[5];
+const bflyLever = new THREE.Group();
+bflyLever.position.set(bDef.cx, CY+10.7, CZ);
+const stem2 = new THREE.Mesh(cGeo, stemMat);
+stem2.scale.set(1.3, 2.2, 1.3); stem2.position.set(0, -0.6, 0);
+bflyLever.add(stem2);
+for (let k=1; k<=11; k++) {
+  const c = new THREE.Mesh(cGeo, redMat);
+  const s = k >= 9 ? 1.5 : 1.0;
+  c.scale.set(s, 0.8, 1.05);
+  c.position.set(0, 0.5 + k*0.10, k);
+  c.castShadow = true;
+  bflyLever.add(c); dbg(bDef.cx, CY+10.7, CZ, 0, 0.5+k*0.10, k, 0xd42a2a);
+}
+const latch = new THREE.Mesh(cGeo, stemMat);
+latch.scale.set(0.6, 1.6, 0.6); latch.position.set(0, -0.2, 2.5);
+bflyLever.add(latch);
+scene.add(bflyLever);
+
+// --- CHECK: clapeta de columpio (visible por el corte) ---
+const kDef = DEFS[6];
+const checkFlap = new THREE.Group();
+checkFlap.position.set(kDef.cx-3.5, CY+4.5, CZ+0.5);
+const pin = new THREE.Mesh(cGeo, stemMat);
+pin.scale.set(0.8, 0.8, 5.2);
+checkFlap.add(pin);
+for (let j=1; j<=7; j++) for (let kk=-3; kk<=3; kk++) {
+  if (Math.hypot(j-4, kk) <= 3.6) {
+    const c = new THREE.Mesh(cGeo, bronzeMat);
+    c.position.set(0, -j, kk); c.castShadow = true;
+    checkFlap.add(c); dbg(kDef.cx-3.5, CY+4.5, CZ+0.5, 0, -j, kk, 0x8a5a2a);
+  }
+}
+checkFlap.rotation.z = 0.10;
+scene.add(checkFlap);
+
+// ====== ETIQUETAS FLOTANTES (sprites con CanvasTexture) ======
+const labelSprites = [];
+function makeLabel(text, chip, x, y) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 96;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(6,8,13,0.85)'; g.fillRect(0, 0, 512, 96);
+  g.strokeStyle = 'rgba(0,212,170,0.55)'; g.lineWidth = 4; g.strokeRect(3, 3, 506, 90);
+  g.fillStyle = chip; g.fillRect(20, 34, 26, 26);
+  g.fillStyle = '#eaf2f6'; g.font = '600 30px ui-monospace, Consolas, monospace';
+  g.textBaseline = 'middle';
+  g.fillText(text, 64, 51);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true }));
+  spr.scale.set(32, 6, 1);
+  spr.position.set(x+0.5, y, CZ+0.5);
+  scene.add(spr);
+  labelSprites.push(spr);
+}
+for (const d of DEFS) makeLabel(d.name, d.chip, d.cx, d.ly);
+
+// ====== ESTADÍSTICAS / VALIDACIÓN ======
+let total = 0; const perColor = {};
+for (const k in voxData) { perColor[k] = voxData[k].positions.length; total += voxData[k].positions.length; }
+window.__VOX_STATS = { total, perColor, dupSkipped, cells: cellSet.size };
+window.__VOX_DATA = voxData;
+window.__ANIM_DBG = ANIM_DBG;
+document.getElementById('vcount').textContent = total.toLocaleString('es-MX');
+
+// ====== UI ======
+const state = { valves:false };
+let openT = 0;
+let labelsOn = true;
+const bVal = document.getElementById('bVal');
+const bLab = document.getElementById('bLab');
+const bRot = document.getElementById('bRot');
+bVal.onclick = () => {
+  state.valves = !state.valves;
+  bVal.className = state.valves ? 'on' : 'off';
+  bVal.textContent = state.valves ? 'ABIERTAS' : 'CERRADAS';
+};
+bLab.onclick = () => {
+  labelsOn = !labelsOn;
+  labelSprites.forEach(s => s.visible = labelsOn);
+  bLab.className = labelsOn ? 'on' : 'off';
+  bLab.textContent = labelsOn ? 'ON' : 'OFF';
+};
+bRot.onclick = () => {
+  controls.autoRotate = !controls.autoRotate;
+  bRot.className = controls.autoRotate ? 'on' : 'off';
+  bRot.textContent = controls.autoRotate ? 'ON' : 'OFF';
+};
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ====== ANIMACIÓN ======
+const clock = new THREE.Clock();
+let firstFrame = true;
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const tgt = state.valves ? 1 : 0;
+  openT += (tgt - openT) * Math.min(1, dt*2.4);
+  gateRise.position.y = GATE_Y0 + openT*5;          // vástago ascendente
+  gateWheel.rotation.y = openT * Math.PI * 6;        // volante gira 3 vueltas
+  bflyLever.rotation.y = openT * Math.PI / 2;        // palanca barre 90°
+  checkFlap.rotation.z = 0.10 + openT * 0.95;        // clapeta se columpia
+  controls.update();
+  renderer.render(scene, camera);
+  if (firstFrame) { firstFrame = false; document.getElementById('loader').classList.add('hidden'); }
+}
+animate();
+</script>
+</body>
+</html>
