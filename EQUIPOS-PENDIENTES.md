@@ -15,6 +15,11 @@
 | 2 | Manejadora / AHU | `voxel/ahu-cuarto-maquinas-voxel.html` | 252 draws / 104,918 tris |
 | 3 | Fan Coil de plafón | `voxel/fcu-plafon-voxel.html` | 779 draws / 339,640 tris |
 | 4 | Chiller enfriado por agua | `voxel/chiller-tornillo-agua-voxel-v1.html` | 86 draws / 174,642 tris |
+| 6 | Intercambiador de placas | `voxel/intercambiador-placas-voxel-v1.html` | 112 draws / 674,457 tris |
+| 8 | Extractor de azotea (hongo) | `voxel/extractor-hongo-voxel-v1.html` | 253 draws / 648,540 tris |
+| 9 | Kit ductos/difusores | `voxel/ducteria-catalogo-voxel-v1.html` | 55 draws / 1,262,043 tris |
+| 10 | Tanque expansión / buffer | `voxel/tanques-expansion-buffer-voxel-v1.html` | 53 draws / 236,339 tris |
+| 11 | Filtro de arena + bomba alberca | `voxel/filtrado-alberca-voxel-v1.html` | 107 draws / 413,292 tris |
 
 **📦 Ya existen en `voxel/` (era claude.ai — NO recrear; se auditan y rescatan al integrar):**
 
@@ -25,9 +30,7 @@
 - Minisplit / split / Liebert → `voxel/minisplit-voxel-v2 (4).html`, `split-system-voxel.html`, `liebert-split-voxel*.html`
 - Extractor de cocina → `voxel/extractor-cocina-voxel (2).html` · Generador → `voxel/generador-electrico-voxel (1).html`
 
-**❌ Faltan por crear (prompts abajo):** 5 caldera+ACS · 6 intercambiador de placas (lo pide el
-cuarto de máquinas de alberca del hotel) · 7 tablero VFDs · 8 extractor hongo · 9 kit ductos ·
-10 tanque expansión · **11 filtro de arena + bomba de alberca (lo pide el hotel — NUEVO)**.
+**❌ Faltan por crear (prompts abajo):** 5 caldera+ACS · 7 tablero VFDs. (Todo lo demás entregado.)
 
 ## REGLAS DE CASA — pegar al FINAL de cada prompt
 
@@ -149,7 +152,7 @@ Panel CONTROL DE EQUIPO: QUEMADOR ON-OFF (resplandor naranja animado en la miril
 sutil de chimenea con sprites), BOMBA RECIRC ON-OFF, AUTO-ROTATE.
 ```
 
-- [ ] **6. Intercambiador de placas** → `voxel/intercambiador-placas-voxel.html`
+- [x] **6. Intercambiador de placas** → entregado: `voxel/intercambiador-placas-voxel-v1.html`
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un
@@ -181,7 +184,7 @@ Panel CONTROL DE EQUIPO: VFD-1/2/3 ON-OFF (cambia LEDs y lámparas piloto), FALL
 (parpadeo rojo en un VFD), AUTO-ROTATE.
 ```
 
-- [ ] **8. Extractor de azotea (hongo)** → `voxel/extractor-azotea-voxel.html`
+- [x] **8. Extractor de azotea (hongo)** → entregado: `voxel/extractor-hongo-voxel-v1.html`
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un EXTRACTOR
@@ -197,7 +200,7 @@ Panel CONTROL DE EQUIPO: EXTRACTOR ON-OFF (giro con inercia + partículas de air
 AUTO-ROTATE.
 ```
 
-- [ ] **11. Filtro de arena + bomba de alberca** → `voxel/filtro-arena-alberca-voxel.html`
+- [x] **11. Filtro de arena + bomba de alberca** → entregado: `voxel/filtrado-alberca-voxel-v1.html`
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: el EQUIPO DE
@@ -219,7 +222,7 @@ sentido de las partículas de flujo), AUTO-ROTATE.
 
 ## 🟢 PRIORIDAD BAJA (kit de acabados)
 
-- [ ] **9. Kit ductos/difusores** → `voxel/kit-ductos-voxel.html`
+- [x] **9. Kit ductos/difusores** → entregado: `voxel/ducteria-catalogo-voxel-v1.html`
 
 ```
 Crea una ESCENA-CATÁLOGO de VOXEL ART 3D en un solo archivo HTML standalone: piezas modulares
@@ -236,7 +239,7 @@ Panel CONTROL DE EQUIPO: COMPUERTA ABRIR-CERRAR (rota la hoja), ETIQUETAS ON-OFF
 flotante sobre cada pieza), AUTO-ROTATE.
 ```
 
-- [ ] **10. Tanque de expansión / buffer** → `voxel/tanque-expansion-voxel.html`
+- [x] **10. Tanque de expansión / buffer** → entregado: `voxel/tanques-expansion-buffer-voxel-v1.html`
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un TANQUE DE
