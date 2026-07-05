@@ -95,6 +95,15 @@ near-verbatim in `voxel/liebert-split-voxel.html:86-96`, `voxel/cooling-tower-vo
 | Depth cue | none | `THREE.Fog` scaled per scene: 22-40 units small tank (`carcamo-agua-3d (1).html:272`) vs 420-1100 large plan (`cuarto-frio-plano-realistic (6).html:85`) |
 | Textures | flat vertex-less colors | procedural `CanvasTexture` only (fins, nameplates — `chiller-aircooled-realistic (7).html:150-174`); no image loading |
 
+> **CORRECTED (§14, 2026-07-04, post-run-6)**: this table's "Environment: light rig only" row for
+> the VOXEL family is **REFUTED** — a driver-verified grep shows **21/21 voxel files SET
+> `scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture`** (e.g.
+> `voxel/trane-rtu-voxel__6_ (3).html:77`, `voxel/liebert-split-voxel.html:78`). The original
+> bootstrap sweep mis-reported it. BOTH families use the same IBL; they differ in geometry/
+> materials/fog/textures, not environment. Downstream echoes corrected: [Block 3] §3.1,
+> [Block 4] §4.4, [Block 12] §12.2, WORKFLOW.md, HANDBOOK.md. Surfaced by the datacenter
+> rebuild agent (commit bc9e2d8) — next-iteration audit catching a day-one error.
+
 Absent in BOTH families `[CERT]` (zero grep hits across all 23 files): custom shaders
 (`ShaderMaterial`/`RawShaderMaterial`), post-processing (`EffectComposer`/bloom passes),
 `OrthographicCamera` (app code), `CSS2DRenderer`, image textures, geometry merging

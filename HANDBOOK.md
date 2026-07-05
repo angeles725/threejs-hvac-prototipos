@@ -68,7 +68,7 @@ granularidad [Block 12 §12.2].
   (`setMatrixAt` + `instanceMatrix.needsUpdate = true`) [Block 2 §2.3].
 - Partes animadas (fan, damper) **fuera** del InstancedMesh, como `Group`s independientes
   [Block 2 §2.3].
-- `MeshStandardMaterial` de color plano — sin texturas, sin environment map.
+- `MeshStandardMaterial` de color plano — sin texturas, (ambas pasadas comparten el IBL de RoomEnvironment — corregido 2026-07-04).
 - Cámara `PerspectiveCamera`, FOV ~40° (fake isométrico — nunca `OrthographicCamera`)
   [Block 7 §7.1].
 

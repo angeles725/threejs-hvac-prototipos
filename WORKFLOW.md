@@ -19,7 +19,7 @@ Goal: silhouette, proportions, color blocking, and part decomposition — at one
 
 - One shared `BoxGeometry(1,1,1)` + one `InstancedMesh` per color group (`setMatrixAt` +
   `instanceMatrix.needsUpdate`). Animated parts live OUTSIDE the InstancedMesh as `Group`s.
-- Flat-color `MeshStandardMaterial`, no textures, no environment map.
+- Flat-color `MeshStandardMaterial`, no textures. (Both passes share the RoomEnvironment IBL — corrected 2026-07-04, B1 §1.4.)
 - Camera: `PerspectiveCamera` FOV ~40° (fake isometric — deliberately not OrthographicCamera).
 
 ### Pass 2 — Realistic (build-out)

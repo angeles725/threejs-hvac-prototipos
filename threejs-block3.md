@@ -32,8 +32,7 @@ per-fragment-shaded cost. Two scalar dials:
 | `envMap` / `envMapIntensity` | environment reflections; "for best results, an environment map should always be specified when using this material" |
 
 That last sentence is load-bearing for the corpus: the realistic family satisfies it via
-`scene.environment` IBL ([Block 1] §1.4), while the voxel family runs MeshStandardMaterial with
-**no environment at all** — lights only ([Block 1] §1.4). The voxel look is therefore driven
+`scene.environment` IBL ([Block 1] §1.4), while the voxel family ~~runs with no environment~~ — **CORRECTED §14 2026-07-04: voxel files DO set scene.environment (21/21, see [Block 1] §1.4 correction)**; the doc guidance is satisfied corpus-wide. The voxel look is therefore driven
 purely by the 3-light rig; adding an environment is the single documented "best results" knob the
 voxel stage leaves unused `[INFER]` (direct application of the doc guidance to the corpus split).
 

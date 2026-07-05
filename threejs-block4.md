@@ -55,8 +55,7 @@ Verified rig, near-verbatim across ≥3 voxel files and present in realistic fil
 | Teal rim | `DirectionalLight(0x00d4aa, 0.2)` | `voxel/trane-rtu-voxel__6_ (3).html:95` |
 | LED/glow accents | `PointLight(color, 1.0, distance 12-18)` — no explicit `decay` | `voxel/liebert-split-voxel.html:402`, `trane-rtu-realistic-v10.html:811` |
 
-The two families differ ONLY in what sits on top of the rig: voxel = rig alone; realistic = rig +
-`scene.environment` IBL (§4.1) + fog ([Block 1] §1.4) `[CERT]`. This makes the rig the house
+~~The two families differ in environment~~ **CORRECTED §14 2026-07-04**: BOTH families run rig + `scene.environment` IBL (21/21 voxel files verified — [Block 1] §1.4 correction); the realistic family's remaining differentiator on this axis is fog + material sophistication, not IBL. This makes the rig the house
 "key light + colored fill/rim" signature, and the environment the realistic stage's differentiator.
 
 ## 4.3 — The physically-correct lighting era `[CERT-web]`

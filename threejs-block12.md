@@ -32,7 +32,7 @@ dates + statement).
 |---|---|---|
 | Geometry | ONE shared `BoxGeometry(1,1,1)`; one `InstancedMesh` per color group, `setMatrixAt` fill, `needsUpdate` honored | [Block 2] §2.3 |
 | Animation | moving parts kept OUT of the InstancedMesh as `Group`s ("PARTES ANIMADAS...") | [Block 2] §2.3 |
-| Materials | `MeshStandardMaterial` flat colors — no maps, no environment | [Block 3] §3.1, [Block 1] §1.4 |
+| Materials | `MeshStandardMaterial` flat colors — no maps (~~no environment~~ **§14 corrected: voxel DOES use RoomEnvironment IBL — [Block 1] §1.4 correction**) | [Block 3] §3.1, [Block 1] §1.4 |
 | Light | the house 3-light rig (sun 1.5 + blue fill `0x88aaff` + teal rim `0x00d4aa` + ambient ~0.25) | [Block 4] §4.2 |
 | Camera | `PerspectiveCamera` FOV ≈40° — fake isometric, never true ortho | [Block 7] §7.1 |
 
