@@ -5,6 +5,30 @@
 > especificación dimensional. Soltar cada HTML en `voxel/` con el nombre indicado; Claude Code
 > lo baselinea, audita e integra. Marcar `[x]` al entregar.
 
+## ESTADO DEL INVENTARIO — 2026-07-05
+
+**✅ Entregados e integrados en el hotel (v4, commit 215d9e5):**
+
+| # | Equipo | Archivo entregado | Baseline standalone |
+|---|--------|-------------------|---------------------|
+| 1 | Bomba centrífuga | `voxel/bomba-centrifuga-voxel.html` | 183 draws / 320,591 tris |
+| 2 | Manejadora / AHU | `voxel/ahu-cuarto-maquinas-voxel.html` | 252 draws / 104,918 tris |
+| 3 | Fan Coil de plafón | `voxel/fcu-plafon-voxel.html` | 779 draws / 339,640 tris |
+| 4 | Chiller enfriado por agua | `voxel/chiller-tornillo-agua-voxel-v1.html` | 86 draws / 174,642 tris |
+
+**📦 Ya existen en `voxel/` (era claude.ai — NO recrear; se auditan y rescatan al integrar):**
+
+- Torre de enfriamiento → `voxel/cooling-tower-voxel (1).html` (pendiente de trasplante al hotel, v5)
+- Caja VAV → `voxel/vav-box-voxel.html` + variantes `(2)`/`(7)` (pendiente de trasplante al hotel, v5)
+- Chiller enfriado por aire → `voxel/chiller-aircooled-voxel (7).html` / `chiller-enfriado-aire-voxel (7).html`
+- RTU paquete → `voxel/trane-rtu-voxel__6_ (3).html` · Tracer/tablero → `voxel/tracer-package-voxel (3).html`
+- Minisplit / split / Liebert → `voxel/minisplit-voxel-v2 (4).html`, `split-system-voxel.html`, `liebert-split-voxel*.html`
+- Extractor de cocina → `voxel/extractor-cocina-voxel (2).html` · Generador → `voxel/generador-electrico-voxel (1).html`
+
+**❌ Faltan por crear (prompts abajo):** 5 caldera+ACS · 6 intercambiador de placas (lo pide el
+cuarto de máquinas de alberca del hotel) · 7 tablero VFDs · 8 extractor hongo · 9 kit ductos ·
+10 tanque expansión · **11 filtro de arena + bomba de alberca (lo pide el hotel — NUEVO)**.
+
 ## REGLAS DE CASA — pegar al FINAL de cada prompt
 
 ```
@@ -26,7 +50,7 @@ toggles indicados, fondo oscuro #06080d, fuente monoespaciada.
 
 ## 🔴 PRIORIDAD ALTA (los pide el hotel)
 
-- [ ] **1. Bomba centrífuga** → `voxel/bomba-centrifuga-voxel.html`
+- [x] **1. Bomba centrífuga** → entregado: `voxel/bomba-centrifuga-voxel.html`
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: una BOMBA
@@ -45,7 +69,7 @@ Panel CONTROL DE EQUIPO: BOMBA ON-OFF (acelera/detiene el acoplamiento con inerc
 VIBRACIÓN ON-OFF (jitter sutil del conjunto motor-bomba), AUTO-ROTATE.
 ```
 
-- [ ] **2. Manejadora / AHU** → `voxel/manejadora-ahu-voxel.html`
+- [x] **2. Manejadora / AHU** → entregado: `voxel/ahu-cuarto-maquinas-voxel.html`
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: una MANEJADORA
@@ -66,7 +90,7 @@ Panel CONTROL DE EQUIPO: VENTILADOR ON-OFF, COMPUERTAS ABRIR-CERRAR, CORTE ON-OF
 oculta los paneles frontales para ver el interior), AUTO-ROTATE.
 ```
 
-- [ ] **3. Fan Coil (FCU) de plafón** → `voxel/fancoil-voxel.html`
+- [x] **3. Fan Coil (FCU) de plafón** → entregado: `voxel/fcu-plafon-voxel.html`
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un FAN COIL
@@ -84,7 +108,7 @@ Panel CONTROL DE EQUIPO: VENTILADOR 3 VELOCIDADES (OFF-LO-HI, cambia velocidad d
 CORTE ON-OFF, AUTO-ROTATE.
 ```
 
-- [ ] **4. Chiller enfriado por agua** → `voxel/chiller-agua-voxel.html`
+- [x] **4. Chiller enfriado por agua** → entregado: `voxel/chiller-tornillo-agua-voxel-v1.html`
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un CHILLER
@@ -171,6 +195,26 @@ Colores: campana aluminio, curb gris oscuro, rodete azul.
 Leyenda: Aire de extracción.
 Panel CONTROL DE EQUIPO: EXTRACTOR ON-OFF (giro con inercia + partículas de aire saliendo),
 AUTO-ROTATE.
+```
+
+- [ ] **11. Filtro de arena + bomba de alberca** → `voxel/filtro-arena-alberca-voxel.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: el EQUIPO DE
+FILTRADO DE ALBERCA de un cuarto de máquinas de hotel — FILTRO DE ARENA + BOMBA DE ALBERCA
+con trampa de pelos — con alta densidad de micro-voxeles.
+Partes obligatorias: tanque de filtro de arena vertical (casquetes voxelizados, boca de
+inspección superior con abrazadera, mirilla lateral); válvula multipuerto de 6 posiciones
+encima o al lado con palanca; manómetros de entrada/salida (carátulas de color); bomba de
+alberca con trampa de pelos de tapa transparente (canastilla visible) y motor con aletas
+(el impulsor/acoplamiento GIRA — animado); tubería PVC con válvulas de bola de palanca roja;
+tramo de retorno y tramo de succión con bridas; base/patín con anclas.
+Dimensión real: filtro ~1.2 m diámetro × 1.5 m alto; bomba ~0.8 m largo; conjunto ~2.5 m.
+Colores: tanque azul o arena (elige uno y sé consistente), multipuerto negra con palanca
+amarilla, PVC blanco/gris claro, trampa transparente, motor gris oscuro.
+Leyenda: Succión (de alberca) / Retorno (a alberca) / Retrolavado (a drenaje).
+Panel CONTROL DE EQUIPO: BOMBA ON-OFF (giro con inercia), RETROLAVADO ON-OFF (invierte el
+sentido de las partículas de flujo), AUTO-ROTATE.
 ```
 
 ## 🟢 PRIORIDAD BAJA (kit de acabados)
