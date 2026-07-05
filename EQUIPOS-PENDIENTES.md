@@ -30,7 +30,9 @@
 - Minisplit / split / Liebert → `voxel/minisplit-voxel-v2 (4).html`, `split-system-voxel.html`, `liebert-split-voxel*.html`
 - Extractor de cocina → `voxel/extractor-cocina-voxel (2).html` · Generador → `voxel/generador-electrico-voxel (1).html`
 
-**❌ Faltan por crear (prompts abajo):** 5 caldera+ACS · 7 tablero VFDs. (Todo lo demás entregado.)
+**❌ Faltan por crear (prompts abajo):** 5 caldera+ACS · 7 tablero VFDs · **12 kit tubería
+hidráulica (NUEVO — spec para el kit realistic de red; opcional pero sube la fidelidad)**.
+(Todo lo demás entregado.)
 
 ## REGLAS DE CASA — pegar al FINAL de cada prompt
 
@@ -253,6 +255,31 @@ Dimensión real: expansión ~0.6 m diámetro × 1.5 m alto; buffer ~1.2 m diáme
 Colores: expansión rojo industrial, buffer azul con aislamiento gris.
 Leyenda: Agua helada / Aire precarga.
 Panel CONTROL DE EQUIPO: NIVEL/PRECARGA (sube-baja la banda de membrana), AUTO-ROTATE.
+```
+
+- [ ] **12. Kit tubería hidráulica** → `voxel/kit-tuberia-voxel.html`
+
+```
+Crea una ESCENA-CATÁLOGO de VOXEL ART 3D en un solo archivo HTML standalone: piezas modulares
+de TUBERÍA HIDRÁULICA HVAC (lado de agua) exhibidas en fila sobre pedestales, alta densidad de
+micro-voxeles. Es el gemelo hidráulico del catálogo de ductería.
+Piezas: tramo recto bridado con pernos visibles en ambos extremos; codo 90° bridado; tee con
+derivación bridada; reducción concéntrica; válvula de COMPUERTA con volante rojo y vástago
+ascendente; válvula de MARIPOSA con palanca y cuadrante; válvula CHECK de columpio (corte que
+muestra la clapeta); colador tipo Y con tapa bridada y tapón de drenado; junta flexible de
+neopreno con bridas (anillos arrugados); manómetro en línea con carátula de color y llave de
+aguja; termómetro de carátula en termopozo; soporte tipo rack de trapecio con varillas roscadas
+y abrazaderas; tramo con AISLAMIENTO a medio forrar (mitad forrado con chaqueta gris y cinta,
+mitad tubo desnudo — para mostrar ambos).
+Escala real: tubería Ø4" (~0.10 m) como diámetro base; tramos de ~1.2 m; válvulas ~0.35 m.
+Colores: acero al carbón gris azulado, bridas gris medio con pernos oscuros y tuercas claras,
+volantes/palancas ROJOS, cuerpo de válvulas azul industrial, colador verde oscuro, junta negra,
+aislamiento gris claro con cinta plateada, bandas de flujo AZUL (agua helada) en un tramo y
+ROJA (condensados) en otro.
+Leyenda: Agua helada / Agua condensados / Sentido de flujo.
+Panel CONTROL DE EQUIPO: VÁLVULAS ABRIR-CERRAR (rota volante de compuerta + palanca de
+mariposa + clapeta del check), ETIQUETAS ON-OFF (nombre flotante sobre cada pieza),
+AUTO-ROTATE.
 ```
 
 ---
