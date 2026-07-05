@@ -128,6 +128,32 @@ Por cada equipo, el kit completo [Block 38 §38.6]:
 
 ## 3. Las normas
 
+### 3.0 Escala y dimensiones (norma de mundo)
+
+**1 unidad de mundo = 1 metro.** Todo diseño declara su relación voxel:metro en un comentario
+al inicio (`// SCALE: 1 voxel = 0.5 m`). Los equipos NUNCA se dibujan más grandes que la
+arquitectura que los contiene — si un equipo necesita destacarse, se usa cámara/preset o
+resaltado (outline/hotspot), no tamaño falso.
+
+Dimensiones de referencia (aproximadas, para sanity-check):
+
+| Elemento | Dimensión real |
+|---|---|
+| Piso de edificio | ~3 m de altura |
+| Persona (referencia) | 1.8 m |
+| RTU / Manejadora (AHU) | 2.5-4 m largo × ~2 m alto |
+| Chiller enfriado por aire | 3-5 m largo × ~2 m alto |
+| Torre de enfriamiento | 4-6 m alto |
+| Bomba centrífuga | 1-1.5 m |
+| Caja VAV | 0.6-1 m (¡pequeña! mostrar en cortes, no sobredimensionar) |
+| Minisplit (evaporadora) | ~0.9 m |
+| Alberca hotelera | 15-25 m largo |
+| Palmera | 6-10 m |
+
+Regla de verificación: en el screenshot del gate, pregunta "¿una persona de 1.8 m se vería
+correcta parada junto a cada elemento?" Si un equipo compite en tamaño con un edificio, el
+diseño NO pasa el gate.
+
 ### 3.1 — Paleta PBR corregida (por familia de superficie)
 
 Regla de oro, respaldada por Filament y por la especificación glTF 2.0: **el metalness casi
