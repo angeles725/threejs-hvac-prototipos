@@ -111,13 +111,20 @@ direction at `sun.position × 4` (magnitude ~307 < far) so it never clips. `[CER
 
 Driven as a build loop, each iteration syntax-checked + committed + rebuilt to `publish/` (obfuscated):
 
-- **It.1 (this block, G42)**: relief + biomes + animated sea + sky. **DONE.**
-- **It.2 (G43)**: vegetation (instanced bushes + beach grass tufts + more palms), paths/boardwalk,
-  beach & pool furniture (loungers, umbrellas, palapas, jacuzzi) — merged + instanced.
-- **It.3 (G45)**: per-floor average temperature — simulated per-floor °C, HUD panel + floating
-  labels + optional floor-band color coding (NEW capability, neither scene had it).
-- **It.4 (G44)**: voxel-parity interactions — zone isolation (AISLAR), sprite scene labels, per-unit
-  detail panel, flow particles along the CHW/condenser pipes; pipe/duct connection audit vs voxel.
+- **It.1 (G42)**: relief + biomes + animated sea + sky. **DONE + DEPLOYED** (commit 365a43e).
+- **It.2 (G43)**: vegetation (14 palms + 36 bushes + 40 dune-grass tufts), boardwalk + garden path,
+  beach furniture (10 lounger+umbrella clusters + 3 palapas) — all instanced/merged, +12 draws.
+  **DONE + DEPLOYED.**
+- **It.3 (G45)**: per-floor average temperature — simulated per-floor °C (setpoint + height gradient
+  + 1 Hz live oscillation), #temps HUD panel + 8 floating color-coded sprite labels, +8 draws.
+  NEW capability (neither voxel nor realistic had it). **DONE + DEPLOYED.**
+- **It.4 (G44)**: voxel-parity interactions — scene wayfinding labels (MAR CARIBE/PLAYA/MALECON/CASA
+  DE MAQUINAS/HOTEL, +5 draws) **DONE + DEPLOYED**; pipe/duct correctness audit vs voxel + any fixes
+  and flow cues **in progress**.
+
+**Deploy cadence**: each iteration is `node build-publish.mjs` (obfuscated) → `wrangler pages deploy
+publish --project-name=hotel-energia --branch=main`. Production live at hotel-energia.pages.dev /
+hotel.angeles-group.org. No git remote on this repo → commits are local only.
 
 Loop exit criterion (client lens): the realistic scene reads unmistakably as a beachfront resort
 (relief + coast + vegetation + life), carries every functional affordance the voxel scene had, and
