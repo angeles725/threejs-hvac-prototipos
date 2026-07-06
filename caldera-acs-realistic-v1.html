@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CALDERA PIROTUBULAR + TANQUE ACS · Caldera 2.5×1.5 m · Tanque Ø1×2 m · Realistic</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter:blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; color:#cfe0da; }
+  #legend i { width:12px; height:10px; display:inline-block; border-radius:2px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter:blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:64px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+</style>
+<script>
+// Inyeccion dinamica de importmap: String.fromCharCode(64) evita el mangling de '@' (package@version) por Cloudflare.
+(function(){
+  var AT = String.fromCharCode(64);
+  var tag = document.createElement('script');
+  tag.type = 'importmap';
+  tag.textContent = JSON.stringify({ imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }});
+  document.head.appendChild(tag);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>CALDERA PIROTUBULAR + TANQUE ACS</b><br>
+  <span>Caldera 2.5×1.5 m · Tanque Ø1×2 m · Realistic PBR · 1 unidad = 1 m</span>
+</div>
+<div id="legend">
+  <div><i style="background:#d8a828"></i> Gas</div>
+  <div><i style="background:#c0472a"></i> Agua caliente</div>
+  <div><i style="background:#cf7a3a"></i> Recirculación</div>
+  <div><i style="background:#9aa0a8"></i> Gases de combustión</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>QUEMADOR</label><button id="bQ" class="off">OFF</button></div>
+  <div class="row"><label>BOMBA RECIRC</label><button id="bP" class="off">OFF</button></div>
+  <div class="row"><label>CORTE (tubos)</label><button id="bCorte" class="on">ON</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 unidad = 1 m. Spec dimensional/composicion: voxel/caldera-acs-voxel.html (1 voxel = 0.05 m).
+// CALDERA pirotubular horizontal (eje X): shell Ø1.30 x 2.10 m + cabezales abombados -> ~2.5 m largo,
+//   eje a y=0.80 (top ~1.45, con silletas ~1.5 m alto). Azul pintado, tapa frontal NEGRA abisagrada con
+//   mirilla (glow ambar con el quemador). Quemador frontal + tren de gas amarillo. Chimenea vertical trasera.
+//   Panel de control con display. CUT-AWAY (CORTE): oculta la media-carcasa frontal (+Z) para revelar el
+//   HAZ DE TUBOS DE HUMO + el hogar/camara de combustion (default corte=on -> tubos visibles).
+// TANQUE ACS vertical Ø1.0 x ~2.0 m: cuerpo + cupulas + camisa de aislamiento con bandas naranjas,
+//   termometro, conexiones bridadas, patas. BOMBA de recirculacion pequena (acople gira). Tuberia de agua
+//   caliente NARANJA (correcto: esta caliente) con valvula + check, tuberia de recirculacion.
+// FLUJO/HUMO: pluma translucida sobre la chimenea con scroll de CanvasTexture (offset.y) + opacidad; glow de
+//   mirilla/hogar por emissiveIntensity; acople por rotacion. Todo el loop solo muta transform/emissive/offset.
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 8, 40);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.05, 200);
+camera.position.set(3.1, 1.95, 3.5);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;          // sombras horneadas: un solo horneado tras construir
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.5;
+controls.minDistance = 1.4;
+controls.maxDistance = 20;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(0.0, 0.95, 0.55);
+// Ground clamp (regla de la casa): ni el target ni la camara bajan del piso
+controls.addEventListener('change', () => {
+  if (controls.target.y < 0) controls.target.y = 0;
+  if (camera.position.y < 0.2) camera.position.y = 0.2;
+});
+
+// ====== RIG DE LUCES ======
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4.2, 6.2, 3.0);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -3.4; sun.shadow.camera.right = 3.4;
+sun.shadow.camera.top = 3.8; sun.shadow.camera.bottom = -0.6;
+sun.shadow.camera.near = 1.5; sun.shadow.camera.far = 20;
+sun.shadow.bias = -0.0004;
+sun.target.position.set(0, 0.8, 0.5);
+scene.add(sun); scene.add(sun.target);
+
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-3.6, 3.0, -2.6);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rim.position.set(-1.8, 1.8, 3.8);
+scene.add(rim);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+// ====== PISO ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(80, 80),
+  new THREE.MeshStandardMaterial({ color:0x0a0d12, roughness:0.95, metalness:0 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(40, 80, 0x123f35, 0x0c1d1a);
+grid.position.y = 0.002;
+grid.material.transparent = true;
+grid.material.opacity = 0.35;
+scene.add(grid);
+
+// ====== TEXTURAS PROCEDURALES (CanvasTexture) ======
+// Mapas de COLOR: SRGBColorSpace · mapas de datos (roughness/alpha): lineales
+function canvasTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+function dataTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 4;
+  return t;
+}
+
+// Variacion sutil de rugosidad para la pintura (mapa lineal). roughnessMap MULTIPLICA el escalar:
+// escalar 1.0 * mapa (~0.55 medio) deja el producto en la banda de pintura percibida (0.5-0.6).
+const paintRoughTex = dataTex(256, 256, (g) => {
+  g.fillStyle = '#8c8c8c'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2600; i++){
+    const v = 120 + Math.floor(Math.random() * 60);
+    g.fillStyle = `rgba(${v},${v},${v},0.16)`;
+    g.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 3, 1 + Math.random() * 3);
+  }
+});
+paintRoughTex.wrapS = paintRoughTex.wrapT = THREE.RepeatWrapping;
+paintRoughTex.repeat.set(3, 2);
+
+// Moteado de concreto para la losa (mapa de color)
+const concreteTex = canvasTex(256, 256, (g) => {
+  g.fillStyle = '#9c978b'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 1600; i++){
+    g.fillStyle = Math.random() < 0.55 ? 'rgba(135,130,111,0.35)' : 'rgba(178,173,158,0.28)';
+    g.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 3, 1 + Math.random() * 3);
+  }
+  g.strokeStyle = 'rgba(95,91,82,0.5)'; g.lineWidth = 1;
+  for (let i = 0; i < 6; i++){
+    g.beginPath();
+    let x = Math.random() * 256, y = Math.random() * 256;
+    g.moveTo(x, y);
+    for (let s = 0; s < 5; s++){ x += (Math.random() - 0.5) * 44; y += (Math.random() - 0.5) * 44; g.lineTo(x, y); }
+    g.stroke();
+  }
+});
+concreteTex.wrapS = concreteTex.wrapT = THREE.RepeatWrapping;
+concreteTex.repeat.set(3, 3);
+
+// Placa de datos generica
+function nameplateTex(title, sub, rows){
+  return canvasTex(512, 256, (g, w, h) => {
+    const grad = g.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#d8dade'); grad.addColorStop(0.5, '#b8bcc2'); grad.addColorStop(1, '#c8ccd2');
+    g.fillStyle = grad; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#3a3f46'; g.lineWidth = 6; g.strokeRect(10, 10, w - 20, h - 20);
+    g.fillStyle = '#22262c';
+    g.font = 'bold 30px monospace'; g.textAlign = 'center';
+    g.fillText(title, w/2, 54);
+    g.font = '20px monospace';
+    g.fillText(sub, w/2, 86);
+    g.font = '19px monospace'; g.textAlign = 'left';
+    rows.forEach((r, i) => g.fillText(r, 40, 128 + i * 30));
+    for (const [bx, by] of [[26, 26], [w-26, 26], [26, h-26], [w-26, h-26]]){
+      g.beginPath(); g.arc(bx, by, 7, 0, Math.PI*2); g.fillStyle = '#787c82'; g.fill();
+    }
+  });
+}
+const plateBoilerTex = nameplateTex('CALDERA PIROTUBULAR', 'TUBOS DE HUMO · GAS', [
+  'MODELO      PT-350-3P', 'POTENCIA    350 kW · 10 bar', 'SERV.       VAPOR/AGUA 90 C']);
+const plateTankTex = nameplateTex('TANQUE ACS', 'ACUMULACIÓN · AGUA CALIENTE', [
+  'MODELO      ACS-500-V', 'VOLUMEN     500 L · 8 bar', 'SERV.       ACS 60 C']);
+
+// Caratula de gauge (fondo segun servicio, escala 270°, aguja horneada)
+function gaugeTex(bg, unit, label, frac){
+  return canvasTex(256, 256, (g, w, h) => {
+    const cx = w/2, cy = h/2;
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#22262c'; g.lineWidth = 8;
+    g.beginPath(); g.arc(cx, cy, 118, 0, Math.PI*2); g.stroke();
+    const a0 = Math.PI * 0.75, sweep = Math.PI * 1.5;
+    for (let i = 0; i <= 30; i++){
+      const a = a0 + sweep * i / 30, major = i % 5 === 0;
+      const r1 = 108, r0 = major ? 90 : 99;
+      g.strokeStyle = '#22262c'; g.lineWidth = major ? 5 : 2;
+      g.beginPath();
+      g.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+      g.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      g.stroke();
+      if (major){
+        g.fillStyle = '#22262c'; g.font = 'bold 20px monospace'; g.textAlign = 'center';
+        g.fillText(String(i / 5 * 2), cx + Math.cos(a) * 70, cy + Math.sin(a) * 70 + 7);
+      }
+    }
+    g.fillStyle = '#22262c'; g.font = 'bold 17px monospace'; g.textAlign = 'center';
+    g.fillText(unit, cx, cy + 46);
+    g.font = '13px monospace';
+    g.fillText(label, cx, cy + 66);
+    const na = a0 + sweep * frac;
+    g.strokeStyle = '#d0242e'; g.lineWidth = 6; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(cx - Math.cos(na) * 18, cy - Math.sin(na) * 18);
+    g.lineTo(cx + Math.cos(na) * 92, cy + Math.sin(na) * 92); g.stroke();
+    g.fillStyle = '#22262c';
+    g.beginPath(); g.arc(cx, cy, 12, 0, Math.PI*2); g.fill();
+    g.fillStyle = '#d0242e';
+    g.beginPath(); g.arc(cx, cy, 6, 0, Math.PI*2); g.fill();
+  });
+}
+const faceThermoACS = gaugeTex('#f6ddce', 'C',   'ACS 60', 0.62);   // termometro ACS (caliente)
+const faceManoBoiler = gaugeTex('#e7edf3', 'bar', 'CALDERA', 0.42);  // manometro de la caldera
+
+// Display del panel de control (verde tipo LCD)
+const displayTex = canvasTex(256, 128, (g, w, h) => {
+  g.fillStyle = '#04120e'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#0b3a2c'; g.lineWidth = 3; g.strokeRect(6, 6, w-12, h-12);
+  g.fillStyle = '#00e59a'; g.font = 'bold 34px monospace'; g.textAlign = 'left';
+  g.fillText('88.6 C', 20, 52);
+  g.font = '18px monospace';
+  g.fillText('P 8.2 bar', 20, 88);
+  g.fillStyle = '#7a8a98'; g.font = '13px monospace';
+  g.fillText('QUEMADOR . BOMBA . ACS', 20, 112);
+});
+
+// ====== PALETA PBR (metalness 0 = pintado · metalness 1 = metal desnudo) ======
+// Leccion documentada (torre/bomba/tanques): gris medio + metalness 1 lee NEGRO en este entorno.
+// Caldera azul, tapa negra, aislamiento del tanque, bandas -> metalness 0 con roughnessMap.
+// Metal desnudo (tubos de humo, quemador, valvulas de gas, bridas, chimenea, flecha) -> metalness 1.
+// Identificacion: GAS = amarillo; AGUA CALIENTE = naranja/rojo; gases de combustion = gris.
+const M = {
+  SHELL:   new THREE.MeshStandardMaterial({ color:0x24507c, roughness:1.0, metalness:0, roughnessMap:paintRoughTex, side:THREE.DoubleSide }),
+  SHELL_D: new THREE.MeshStandardMaterial({ color:0x18365a, roughness:0.6, metalness:0 }),
+  FRONT:   new THREE.MeshStandardMaterial({ color:0x16161b, roughness:0.55, metalness:0.1 }),   // tapa frontal negra
+  FURN:    new THREE.MeshStandardMaterial({ color:0x6a6f78, roughness:0.5, metalness:0.7, side:THREE.DoubleSide }), // hogar
+  TUBE:    new THREE.MeshStandardMaterial({ color:0x828892, roughness:0.42, metalness:1 }),      // tubos de humo
+  STEEL:   new THREE.MeshStandardMaterial({ color:0x9aa0a8, roughness:0.34, metalness:1 }),      // bridas / metal desnudo
+  STEEL_D: new THREE.MeshStandardMaterial({ color:0x5c626b, roughness:0.5, metalness:0.55 }),    // cuerpos de valvula
+  CHIM:    new THREE.MeshStandardMaterial({ color:0x6c6c74, roughness:0.5, metalness:1 }),        // chimenea acero desnudo
+  GAS:     new THREE.MeshStandardMaterial({ color:0xd8a828, roughness:0.5, metalness:0 }),        // tren de gas amarillo
+  HOT:     new THREE.MeshStandardMaterial({ color:0xc0472a, roughness:0.5, metalness:0 }),        // agua caliente naranja/rojo
+  REC:     new THREE.MeshStandardMaterial({ color:0xcf7a3a, roughness:0.5, metalness:0 }),        // recirculacion
+  INSUL:   new THREE.MeshStandardMaterial({ color:0xd6d0c2, roughness:1.0, metalness:0, roughnessMap:paintRoughTex }), // aislamiento tanque
+  BAND:    new THREE.MeshStandardMaterial({ color:0xd96a26, roughness:0.5, metalness:0 }),        // bandas naranjas
+  JBAND:   new THREE.MeshStandardMaterial({ color:0xb9c0c8, roughness:0.32, metalness:1 }),       // fleje inox
+  BRASS:   new THREE.MeshStandardMaterial({ color:0xb87333, roughness:0.35, metalness:1 }),
+  RED:     new THREE.MeshStandardMaterial({ color:0xc22a34, roughness:0.5, metalness:0.2 }),      // volantes
+  FRAME:   new THREE.MeshStandardMaterial({ color:0x3a3a3e, roughness:0.6, metalness:0.3 }),      // silletas / patas
+  CONCRETE:new THREE.MeshStandardMaterial({ color:0xffffff, map:concreteTex, roughness:0.92, metalness:0 }),
+  DARK:    new THREE.MeshStandardMaterial({ color:0x24242a, roughness:0.7, metalness:0 }),
+  BOLT:    new THREE.MeshStandardMaterial({ color:0x22242a, roughness:0.4, metalness:1 }),
+  GLASS:   new THREE.MeshPhysicalMaterial({ color:0xeef4ff, roughness:0.06, metalness:0,
+             transmission:0.92, thickness:0.01, ior:1.45 })
+};
+// Mirilla (vidrio de la tapa): glow ambar con el quemador (emissive mutado)
+const sightMat = new THREE.MeshPhysicalMaterial({ color:0x1a0d08, emissive:0xff8a30, emissiveIntensity:0,
+  roughness:0.28, metalness:0.1, transmission:0.35, thickness:0.02, ior:1.45 });
+// Camara de combustion (revelada en CORTE): glow ambar con el quemador
+const chamberMat = new THREE.MeshStandardMaterial({ color:0x2a1206, emissive:0xff5a1e, emissiveIntensity:0,
+  roughness:0.7, metalness:0, side:THREE.DoubleSide });
+// Display + LEDs (emissive)
+const displayMat = new THREE.MeshStandardMaterial({ map:displayTex, emissiveMap:displayTex,
+  emissive:0xffffff, emissiveIntensity:0.7, roughness:0.4, metalness:0 });
+const ledQMat = new THREE.MeshStandardMaterial({ color:0xff2233, emissive:0xff2233, emissiveIntensity:1.2, roughness:0.3, metalness:0.2 });
+const ledPMat = new THREE.MeshStandardMaterial({ color:0xff2233, emissive:0xff2233, emissiveIntensity:1.2, roughness:0.3, metalness:0.2 });
+// Humo de chimenea (gases de combustion) — translucido, scroll + opacidad
+const smokeTex = canvasTex(64, 128, (g, w, h) => {
+  g.clearRect(0, 0, w, h);
+  for (let i = 0; i < 24; i++){
+    const cx = Math.random() * w, cy = Math.random() * h, r = 6 + Math.random() * 14;
+    const grad = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grad.addColorStop(0, 'rgba(170,176,184,0.5)');
+    grad.addColorStop(1, 'rgba(154,160,168,0)');
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+  }
+});
+smokeTex.wrapS = smokeTex.wrapT = THREE.RepeatWrapping;
+smokeTex.repeat.set(2, 1);
+const smokeMat = new THREE.MeshBasicMaterial({ color:0x9aa0a8, map:smokeTex, transparent:true,
+  opacity:0.0, depthWrite:false, side:THREE.DoubleSide });
+
+// ====== HELPERS DE GEOMETRIA PARAMETRICA ======
+const staticG = new THREE.Group();       // todo lo estatico (sombras horneadas)
+scene.add(staticG);
+const cutGroup = new THREE.Group();       // media-carcasa frontal (+Z) removible de la caldera (toggle CORTE)
+staticG.add(cutGroup);
+
+function mesh(geo, mat, x = 0, y = 0, z = 0, parent = staticG){
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+function box(w, h, d, mat, x, y, z, parent = staticG){
+  return mesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent);
+}
+function cylX(r, len, mat, x, y, z, seg = 20, parent = staticG){
+  const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+  m.rotation.z = Math.PI / 2;
+  return m;
+}
+function cylY(r, len, mat, x, y, z, seg = 20, parent = staticG){
+  return mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+}
+function cylZ(r, len, mat, x, y, z, seg = 20, parent = staticG){
+  const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+  m.rotation.x = Math.PI / 2;
+  return m;
+}
+// Cupula semi-elipsoidal (cabezal torisferico simplificado) via lathe: ecuador (R,0) -> polo (0,h)
+function domeGeo(R, h, segRad = 32, segArc = 12){
+  const pts = [];
+  for (let i = 0; i <= segArc; i++){
+    const a = i / segArc * Math.PI / 2;
+    pts.push(new THREE.Vector2(Math.cos(a) * R, Math.sin(a) * h));
+  }
+  return new THREE.LatheGeometry(pts, segRad);
+}
+// Tuberia con codos suavizados
+function makePipe(points, r, mat, bend = 0.06, parent = staticG, seg = 12){
+  const path = new THREE.CurvePath();
+  const P = points.map(p => new THREE.Vector3(...p));
+  let prev = P[0];
+  for (let i = 1; i < P.length - 1; i++){
+    const a = P[i], b = P[i+1];
+    const dIn = a.clone().sub(prev).normalize();
+    const dOut = b.clone().sub(a).normalize();
+    const tIn = a.clone().sub(dIn.clone().multiplyScalar(bend));
+    const tOut = a.clone().add(dOut.clone().multiplyScalar(bend));
+    path.add(new THREE.LineCurve3(prev, tIn));
+    path.add(new THREE.QuadraticBezierCurve3(tIn, a, tOut));
+    prev = tOut;
+  }
+  path.add(new THREE.LineCurve3(prev, P[P.length - 1]));
+  const len = path.getLength();
+  const g = new THREE.TubeGeometry(path, Math.max(16, Math.round(len * 28)), r, seg);
+  return mesh(g, mat, 0, 0, 0, parent);
+}
+
+// Pernos / instancias globales (una sola draw call)
+const boltMatrices = [];
+const _bm = new THREE.Matrix4(), _bs = new THREE.Vector3(1,1,1), _q0 = new THREE.Quaternion();
+const AXQ = {
+  x: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI/2)),
+  y: new THREE.Quaternion(),
+  z: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2, 0, 0))
+};
+function boltRing(cx, cy, cz, axis, radius, n){
+  for (let i = 0; i < n; i++){
+    const a = i / n * Math.PI * 2 + Math.PI / n;
+    const u = Math.cos(a) * radius, v = Math.sin(a) * radius;
+    let px = cx, py = cy, pz = cz;
+    if (axis === 'x'){ py += u; pz += v; }
+    else if (axis === 'y'){ px += u; pz += v; }
+    else { px += u; py += v; }
+    _bm.compose(new THREE.Vector3(px, py, pz), AXQ[axis], _bs);
+    boltMatrices.push(_bm.clone());
+  }
+}
+function makeIM(geo, mat, mats, parent = staticG, cast = true){
+  const im = new THREE.InstancedMesh(geo, mat, mats.length);
+  mats.forEach((m, i) => im.setMatrixAt(i, m));
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = cast; im.receiveShadow = true;
+  parent.add(im);
+  return im;
+}
+function tMat(x, y, z, q = _q0, s = _bs){
+  return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q, s);
+}
+// Brida a ras + anillo de esparragos (leccion: brida flush, nunca air gap)
+function flangeX(R, thick, x, y, z, nBolts, boltR, boltSide = 1, parent = staticG){
+  cylX(R, thick, M.STEEL, x, y, z, 24, parent);
+  if (nBolts) boltRing(x + boltSide * (thick/2 + 0.006), y, z, 'x', boltR, nBolts);
+}
+function flangeY(R, thick, x, y, z, nBolts, boltR, boltSide = 1, parent = staticG){
+  cylY(R, thick, M.STEEL, x, y, z, 24, parent);
+  if (nBolts) boltRing(x, y + boltSide * (thick/2 + 0.006), z, 'y', boltR, nBolts);
+}
+// Gauge (dial en canvas) mirando a +Z: stub laton + biselado + caratula + lente
+function gaugeZ(x, y, z, faceTex, parent = staticG){
+  cylZ(0.012, 0.05, M.BRASS, x, y, z - 0.03, 12, parent);
+  cylZ(0.058, 0.035, M.DARK, x, y, z, 22, parent);
+  mesh(new THREE.TorusGeometry(0.052, 0.007, 8, 26), M.BRASS, x, y, z + 0.02, parent);
+  const face = mesh(new THREE.CircleGeometry(0.049, 26),
+    new THREE.MeshStandardMaterial({ map:faceTex, emissiveMap:faceTex, emissive:0xffffff,
+      emissiveIntensity:0.2, roughness:0.35, metalness:0 }), x, y, z + 0.021, parent);
+  face.castShadow = false;
+  const lens = cylZ(0.05, 0.006, M.GLASS, x, y, z + 0.024, 24, parent);
+  lens.castShadow = false;
+}
+
+// ==================================================================
+// COTAS (metros)
+// ==================================================================
+// --- CALDERA (eje X, centrada en x=0) ---
+const BR = 0.65;                  // radio del shell (Ø1.30)
+const BAY = 0.80;                 // eje de la caldera (y)
+const B_HALF = 1.05;              // medio-largo del cuerpo cilindrico (cuerpo 2.10)
+const B_DH = 0.20;                // altura del cabezal -> vasija -1.25 .. 1.25 (~2.5 m)
+const FURN_R = 0.20;              // radio del hogar
+const FURN_DY = -0.25;            // hogar por debajo del eje
+const FURN_Y = BAY + FURN_DY;     // ~0.55
+
+// --- TANQUE ACS (vertical) ---
+const TX = -0.35, TZ = 1.70;      // eje del tanque
+const TR = 0.50;                  // radio de vasija (Ø1.0)
+const TRJ = 0.515;                // radio exterior de la camisa
+const T_B0 = 0.30, T_B1 = 1.82;   // cuerpo cilindrico
+const T_DH = 0.18;                // cupula -> vasija 0.12 .. 2.00 (~1.9 m)
+
+// ==================================================================
+// LOSA / HOUSEKEEPING PAD
+// ==================================================================
+mesh(new THREE.BoxGeometry(3.4, 0.09, 2.9), M.CONCRETE, -0.05, 0.045, 0.7);
+
+// ==================================================================
+// CALDERA PIROTUBULAR
+// ==================================================================
+// --- silletas (soportes) + placas ---
+for (const sx of [-0.62, 0.62]){
+  box(0.5, 0.02, 0.9, M.DARK, sx, 0.10, 0);                     // placa base
+  box(0.14, 0.30, 0.8, M.FRAME, sx, 0.25, 0);                   // alma central
+  // banda-silla que abraza el shell por debajo
+  const cradle = mesh(new THREE.CylinderGeometry(BR + 0.02, BR + 0.02, 0.16, 28, 1, true, -Math.PI/2 - 0.62, 1.24),
+    M.FRAME, sx, BAY, 0);
+  cradle.rotation.z = Math.PI / 2;
+  cradle.material.side = THREE.DoubleSide;
+}
+
+// --- cuerpo: media-carcasa trasera (-Z, fija) + frontal (+Z, removible, CORTE) ---
+// theta 0 = +Z (local). Frontal (+Z): thetaStart=-PI/2 span PI. Trasera (-Z): thetaStart=+PI/2 span PI.
+// rotation.z = PI/2 acuesta el cilindro sobre el eje X (el plano theta local se conserva en +Z mundial).
+{
+  const backHalf = mesh(new THREE.CylinderGeometry(BR, BR, 2*B_HALF, 40, 1, true, Math.PI/2, Math.PI), M.SHELL, 0, BAY, 0);
+  backHalf.rotation.z = Math.PI / 2;
+  const frontHalf = mesh(new THREE.CylinderGeometry(BR, BR, 2*B_HALF, 40, 1, true, -Math.PI/2, Math.PI), M.SHELL, 0, BAY, 0, cutGroup);
+  frontHalf.rotation.z = Math.PI / 2;
+  // aros de soldadura del cuerpo (torus finos)
+  for (const wx of [-0.6, 0.0, 0.6]){
+    const w = mesh(new THREE.TorusGeometry(BR + 0.004, 0.01, 8, 40), M.SHELL_D, wx, BAY, 0);
+    w.rotation.y = Math.PI / 2;
+  }
+}
+
+// --- cabezal trasero abombado (azul) + espejo trasero ---
+{
+  const dRear = mesh(domeGeo(BR, B_DH), M.SHELL, B_HALF, BAY, 0);
+  dRear.rotation.z = -Math.PI / 2;                              // polo hacia +X
+  cylX(BR - 0.03, 0.03, M.DARK, B_HALF - 0.01, BAY, 0, 40);    // espejo trasero (tube sheet)
+}
+
+// --- HOGAR (tubo de fuego central) + camara de combustion (glow) ---
+cylX(FURN_R, 2.3, M.FURN, 0, FURN_Y, 0, 24);
+{
+  const chamber = cylX(FURN_R - 0.03, 2.0, chamberMat, -0.05, FURN_Y, 0, 20);
+  chamber.castShadow = false;
+}
+
+// --- HAZ DE TUBOS DE HUMO (instanciados) — revelados en CORTE ---
+{
+  const tubeMats = [];
+  for (let dy = -0.42; dy <= 0.42; dy += 0.135)
+    for (let dz = -0.44; dz <= 0.44; dz += 0.135){
+      if (dy*dy + dz*dz > 0.50*0.50) continue;                 // dentro del shell (deja 0.15 al muro)
+      const fdy = dy - FURN_DY;                                 // relativo al hogar
+      if (fdy*fdy + dz*dz < 0.30*0.30) continue;               // fuera del hogar
+      tubeMats.push(tMat(0, BAY + dy, dz, AXQ.x));
+    }
+  const tubeGeo = new THREE.CylinderGeometry(0.028, 0.028, 2.3, 10);
+  makeIM(tubeGeo, M.TUBE, tubeMats, staticG, false);
+}
+
+// --- TAPA FRONTAL NEGRA ABISAGRADA (-X) + espejo frontal ---
+{
+  cylX(BR - 0.03, 0.03, M.DARK, -B_HALF + 0.01, BAY, 0, 40);   // espejo frontal (tube sheet)
+  const door = mesh(domeGeo(BR - 0.02, 0.16), M.FRONT, -B_HALF - 0.02, BAY, 0);
+  door.rotation.z = Math.PI / 2;                               // polo hacia -X
+  // aro de la brida de la tapa + esparragos
+  const ring = mesh(new THREE.TorusGeometry(BR - 0.02, 0.03, 10, 40), M.FRONT, -B_HALF - 0.01, BAY, 0);
+  ring.rotation.y = Math.PI / 2;
+  boltRing(-B_HALF - 0.01, BAY, 0, 'x', BR - 0.05, 16);
+  // bisagras (lado +Z)
+  for (const hy of [BAY - 0.34, BAY + 0.30]){
+    box(0.14, 0.06, 0.08, M.STEEL, -B_HALF - 0.06, hy, BR - 0.08);
+    cylX(0.02, 0.16, M.STEEL, -B_HALF - 0.10, hy, BR - 0.08, 8);
+  }
+  // grapas de cierre (lado -Z)
+  for (const cy of [BAY - 0.30, BAY, BAY + 0.30])
+    box(0.05, 0.10, 0.05, M.STEEL, -B_HALF - 0.10, cy, -(BR - 0.06));
+  // MIRILLA (glow ambar con el quemador): anillo + vidrio
+  cylX(0.075, 0.04, M.STEEL, -B_HALF - 0.18, BAY + 0.24, 0.16, 16);
+  const sight = cylX(0.055, 0.05, sightMat, -B_HALF - 0.185, BAY + 0.24, 0.16, 16);
+  sight.castShadow = false;
+}
+
+// ==================================================================
+// QUEMADOR FRONTAL + TREN DE GAS (amarillo)
+// ==================================================================
+{
+  const BX0 = -B_HALF - 0.02;                                  // cara de la tapa
+  // placa de montaje del quemador sobre el eje del hogar
+  cylX(0.30, 0.03, M.STEEL_D, BX0 - 0.02, FURN_Y, 0, 28);
+  boltRing(BX0 - 0.03, FURN_Y, 0, 'x', 0.24, 8);
+  // cuerpo cilindrico del quemador + nariz conica
+  cylX(0.17, 0.34, M.STEEL_D, BX0 - 0.21, FURN_Y, 0, 28);
+  mesh(new THREE.CylinderGeometry(0.10, 0.17, 0.16, 24), M.STEEL, BX0 - 0.06, FURN_Y, 0).rotation.z = Math.PI/2;
+  // caja del soplador (blower) arriba + anillo de toma de aire
+  box(0.24, 0.26, 0.30, M.STEEL_D, BX0 - 0.30, FURN_Y + 0.22, 0);
+  mesh(new THREE.TorusGeometry(0.13, 0.03, 12, 26), M.STEEL, BX0 - 0.30, FURN_Y + 0.22, 0.16);
+  cylZ(0.11, 0.06, M.DARK, BX0 - 0.30, FURN_Y + 0.22, 0.17, 20);
+  // caja de conexiones del quemador
+  box(0.12, 0.14, 0.10, M.DARK, BX0 - 0.34, FURN_Y - 0.10, 0.14);
+
+  // --- TREN DE GAS (amarillo): riser + regulador + valvula manual + doble solenoide ---
+  const gx = BX0 - 0.44, gz = -0.30;
+  makePipe([[gx, 0.14, gz - 0.30], [gx, 0.14, gz], [gx, FURN_Y + 0.02, gz], [gx, FURN_Y + 0.02, -0.05]],
+    0.028, M.GAS, 0.06);
+  makePipe([[gx, FURN_Y + 0.02, -0.05], [BX0 - 0.30, FURN_Y + 0.05, 0]], 0.024, M.GAS, 0.04);
+  // valvula manual de gas (llave) con volante rojo
+  cylZ(0.05, 0.08, M.STEEL_D, gx, 0.30, gz, 16);
+  cylY(0.014, 0.10, M.STEEL, gx, 0.38, gz, 8);
+  const gwheel = mesh(new THREE.TorusGeometry(0.05, 0.009, 8, 20), M.RED, gx, 0.44, gz);
+  gwheel.rotation.x = Math.PI / 2;
+  // regulador de presion (cuerpo + campana + venteo laton)
+  box(0.13, 0.14, 0.13, M.STEEL_D, gx, 0.14, gz - 0.16);
+  cylY(0.075, 0.05, M.STEEL_D, gx, 0.22, gz - 0.16, 20);
+  cylY(0.012, 0.04, M.BRASS, gx, 0.26, gz - 0.16, 8);
+  // doble valvula solenoide (dos cuerpos con bobina amarilla)
+  for (const sy of [FURN_Y - 0.18, FURN_Y - 0.02]){
+    box(0.10, 0.10, 0.12, M.STEEL_D, gx, sy, gz + 0.08);
+    box(0.07, 0.07, 0.05, M.GAS, gx, sy + 0.075, gz + 0.08);
+  }
+  // soportes del tren a la losa
+  box(0.04, 0.14, 0.04, M.FRAME, gx, 0.07, gz - 0.30);
+}
+
+// ==================================================================
+// CHIMENEA / FLUE (trasera, vertical) + CAJA DE HUMOS + SOMBRERETE
+// ==================================================================
+const CHX = B_HALF + 0.22, CHZ = 0.0, CH_TOP = 3.15;
+{
+  // caja de humos trasera (rectangular) con puerta de registro
+  box(0.34, 0.9, 0.9, M.STEEL_D, B_HALF + 0.16, BAY, 0);
+  box(0.02, 0.34, 0.34, M.DARK, B_HALF + 0.335, BAY - 0.05, 0);   // puerta de registro
+  cylX(0.02, 0.06, M.STEEL, B_HALF + 0.36, BAY - 0.05, 0.10, 8);  // manija
+  // collar de la chimenea + fuste vertical
+  cylY(0.20, 0.05, M.STEEL_D, CHX, BAY + 0.48, CHZ, 24);
+  cylY(0.16, CH_TOP - (BAY + 0.5), M.CHIM, CHX, (BAY + 0.5 + CH_TOP) / 2, CHZ, 24);
+  // aros de refuerzo del fuste (instanciados)
+  const hoopMats = [];
+  const hoopGeo = new THREE.TorusGeometry(0.165, 0.012, 8, 26);
+  hoopGeo.rotateX(Math.PI / 2);
+  for (let hy = BAY + 0.75; hy < CH_TOP; hy += 0.45) hoopMats.push(tMat(CHX, hy, CHZ));
+  makeIM(hoopGeo, M.CHIM, hoopMats);
+  // sombrerete (rain cap): disco + cono sobre 3 postes
+  const capMats = [];
+  for (let i = 0; i < 3; i++){
+    const a = i / 3 * Math.PI * 2;
+    capMats.push(tMat(CHX + Math.cos(a) * 0.15, CH_TOP + 0.10, CHZ + Math.sin(a) * 0.15));
+  }
+  makeIM(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 6), M.CHIM, capMats);
+  mesh(new THREE.ConeGeometry(0.26, 0.14, 24), M.STEEL, CHX, CH_TOP + 0.25, CHZ);
+  cylY(0.26, 0.015, M.STEEL, CHX, CH_TOP + 0.18, CHZ, 24);
+}
+// PLUMA DE HUMO (gases de combustion) — translucida, animada por scroll/opacidad
+const smokePlume = mesh(new THREE.CylinderGeometry(0.14, 0.30, 0.9, 24, 1, true), smokeMat, CHX, CH_TOP + 0.75, CHZ);
+smokePlume.castShadow = false; smokePlume.receiveShadow = false;
+smokePlume.renderOrder = 2;
+smokePlume.visible = false;
+
+// ==================================================================
+// VALVULA DE SEGURIDAD + MANOMETRO (lomo de la caldera)
+// ==================================================================
+{
+  // montados en la mitad -Z (retenida en CORTE) para no flotar cuando se oculta el frente
+  cylY(0.045, 0.14, M.BRASS, -0.15, BR + BAY - 0.02, -0.10, 14);  // cuerpo
+  cylY(0.03, 0.06, M.BRASS, -0.15, BR + BAY + 0.09, -0.10, 12);   // venteo
+  box(0.12, 0.03, 0.03, M.STEEL, -0.05, BR + BAY + 0.02, -0.10);  // palanca
+  // manometro de la caldera (pedestal en la mitad -Z, dial hacia +Z / camara)
+  cylY(0.02, 0.12, M.STEEL, 0.30, BR + BAY + 0.05, -0.10, 10);
+  gaugeZ(0.30, BR + BAY + 0.14, -0.04, faceManoBoiler);
+  // placa de datos de la caldera (cara +Z del shell)
+  const np = mesh(new THREE.PlaneGeometry(0.34, 0.17),
+    new THREE.MeshStandardMaterial({ map:plateBoilerTex, roughness:0.4, metalness:0 }),
+    0.35, BAY + 0.30, BR - 0.02, cutGroup);
+  np.rotation.x = -0.35;
+  np.castShadow = false;
+}
+
+// ==================================================================
+// PANEL DE CONTROL (gabinete de piso, lado frontal)
+// ==================================================================
+{
+  const PX = -1.05, PZ = 0.95;
+  box(0.30, 1.05, 0.42, M.FRAME, PX, 0.55, PZ);                   // gabinete
+  box(0.015, 0.9, 0.36, M.DARK, PX + 0.15, 0.6, PZ);             // puerta (cara +X)
+  // display verde
+  const disp = mesh(new THREE.PlaneGeometry(0.22, 0.12), displayMat, PX + 0.158, 0.82, PZ);
+  disp.rotation.y = Math.PI / 2; disp.castShadow = false;
+  // LEDs de estado (QUEMADOR / BOMBA)
+  const lq = cylX(0.014, 0.014, ledQMat, PX + 0.158, 0.66, PZ - 0.08, 12);
+  const lp = cylX(0.014, 0.014, ledPMat, PX + 0.158, 0.66, PZ + 0.02, 12);
+  lq.castShadow = lp.castShadow = false;
+  // patas del gabinete
+  for (const oz of [-0.15, 0.15]) box(0.04, 0.06, 0.04, M.DARK, PX, 0.03, PZ + oz);
+}
+
+// ==================================================================
+// TANQUE ACS (vertical, aislado con bandas)
+// ==================================================================
+{
+  // --- 3 patas + placas base ---
+  const legMats = [], plateMats = [];
+  for (let i = 0; i < 3; i++){
+    const a = i / 3 * Math.PI * 2 + Math.PI / 2;
+    const lx = TX + Math.cos(a) * 0.40, lz = TZ + Math.sin(a) * 0.40;
+    legMats.push(tMat(lx, 0.16, lz));
+    plateMats.push(tMat(lx, 0.012, lz));
+    for (const [ox, oz] of [[-0.04,-0.04],[0.04,-0.04],[-0.04,0.04],[0.04,0.04]])
+      boltRing(lx + ox, 0.024, lz + oz, 'y', 0.0001, 1);
+  }
+  makeIM(new THREE.BoxGeometry(0.05, 0.32, 0.05), M.FRAME, legMats);
+  makeIM(new THREE.BoxGeometry(0.13, 0.02, 0.13), M.STEEL_D, plateMats);
+
+  // --- cupulas (naranja de identificacion? no: cuerpo azul-gris; aqui la vasija va oculta por camisa) ---
+  const dTop = mesh(domeGeo(TR, T_DH), M.INSUL, TX, T_B1, TZ);
+  const dBot = mesh(domeGeo(TR, T_DH), M.INSUL, TX, T_B0, TZ);
+  dBot.rotation.x = Math.PI;
+
+  // --- camisa de aislamiento (cuerpo) ---
+  cylY(TR, (T_B1 - T_B0), M.INSUL, TX, (T_B0 + T_B1) / 2, TZ, 36);
+  // faldon inferior oscuro
+  cylY(TR + 0.005, 0.08, M.DARK, TX, T_B0 + 0.04, TZ, 36);
+
+  // --- bandas naranjas de identificacion (instanciadas) ---
+  const bandMats = [];
+  const bandGeo = new THREE.CylinderGeometry(TR + 0.008, TR + 0.008, 0.10, 36);
+  for (const by of [0.75, 1.40]) bandMats.push(tMat(TX, by, TZ));
+  makeIM(bandGeo, M.BAND, bandMats, staticG, false);
+  // flejes inox de la camisa (instanciados)
+  const jbandMats = [];
+  const jbandGeo = new THREE.TorusGeometry(TR + 0.006, 0.01, 8, 40);
+  jbandGeo.rotateX(Math.PI / 2);
+  for (const by of [0.55, 1.05, 1.60]) jbandMats.push(tMat(TX, by, TZ));
+  makeIM(jbandGeo, M.JBAND, jbandMats);
+
+  // --- valvula T&P en el domo ---
+  cylY(0.03, 0.10, M.BRASS, TX, T_B1 + T_DH + 0.04, TZ, 12);
+  cylX(0.02, 0.10, M.BRASS, TX + 0.08, T_B1 + T_DH + 0.06, TZ, 8);
+
+  // --- termometro (dial, mira a +Z) + termopozo ---
+  gaugeZ(TX, 1.15, TZ + TR + 0.02, faceThermoACS);
+  cylZ(0.014, 0.10, M.STEEL, TX, 1.15, TZ + TR - 0.05, 8);
+
+  // --- conexiones bridadas: entrada ACS (arriba) + salida recirc (abajo), lado -X ---
+  for (const [py, side] of [[1.55, -1], [0.55, -1]]){
+    const rootX = TX + side * (TR - 0.01);
+    cylX(0.04, 0.16, M.HOT, rootX + side * 0.08, py, TZ, 16);
+    flangeX(0.07, 0.02, rootX + side * 0.17, py, TZ, 6, 0.055, side);
+  }
+
+  // --- placa de datos (cara +Z) ---
+  const np = mesh(new THREE.PlaneGeometry(0.28, 0.14),
+    new THREE.MeshStandardMaterial({ map:plateTankTex, roughness:0.4, metalness:0 }),
+    TX + 0.18, 1.02, TZ + TR + 0.008);
+  np.castShadow = false;
+}
+
+// ==================================================================
+// BOMBA DE RECIRCULACION (pequena, entre caldera y tanque) — el acople GIRA
+// ==================================================================
+const PUMP = { x: -0.35, z: 1.02 };
+let couplingG;
+{
+  const px = PUMP.x, pz = PUMP.z, cy = 0.28;                    // eje de flecha (Z)
+  // base + pedestal
+  box(0.42, 0.10, 0.52, M.DARK, px, 0.08, pz);
+  box(0.20, 0.12, 0.22, M.FRAME, px, 0.19, pz - 0.02);
+  // voluta (cuerpo en espiral simplificado: cilindro + lengua) con eje Z hacia el tanque
+  cylZ(0.14, 0.11, M.STEEL_D, px, cy, pz + 0.20, 24);
+  cylZ(0.10, 0.05, M.STEEL_D, px, cy, pz + 0.28, 20);          // boca de succion (+Z, hacia el tanque)
+  // cuello de descarga vertical + brida
+  mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.16, 20), M.STEEL_D, px, cy + 0.17, pz + 0.20);
+  flangeY(0.09, 0.02, px, cy + 0.26, pz + 0.20, 6, 0.07, 1);
+  // motor (eje Z, hacia -Z) + aletas + campana
+  cylZ(0.11, 0.30, M.FRAME, px, cy, pz - 0.14, 28);
+  const finMats = [];
+  const finGeo = new THREE.TorusGeometry(0.115, 0.006, 6, 24);
+  finGeo.rotateX(Math.PI / 2);
+  for (let i = 0; i < 6; i++) finMats.push(tMat(px, cy, pz - 0.04 - i * 0.038));
+  makeIM(finGeo, M.FRAME, finMats, staticG, false);
+  cylZ(0.09, 0.03, M.DARK, px, cy, pz - 0.30, 24);             // campana trasera
+  box(0.10, 0.08, 0.12, M.DARK, px, cy + 0.11, pz - 0.10);     // caja de conexiones
+  // flecha (metal desnudo)
+  cylZ(0.02, 0.12, M.STEEL, px, cy, pz + 0.03, 12);
+
+  // --- ACOPLE (gira; chaveta para que el giro SE LEA) ---
+  couplingG = new THREE.Group();
+  couplingG.position.set(px, cy, pz + 0.06);
+  const hubGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.04, 18);
+  const coupMat = new THREE.MeshStandardMaterial({ color:0xff2233, emissive:0xff2233,
+    emissiveIntensity:0.4, roughness:0.35, metalness:0.4 });
+  couplingG.userData.mat = coupMat;
+  for (const hz of [-0.03, 0.03]){
+    const hub = new THREE.Mesh(hubGeo, M.STEEL);
+    hub.rotation.x = Math.PI / 2; hub.position.z = hz;
+    couplingG.add(hub);
+  }
+  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.05, 18), coupMat);
+  sleeve.rotation.x = Math.PI / 2;
+  couplingG.add(sleeve);
+  const key = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.09, 0.06), M.DARK);
+  key.position.y = 0.035;
+  couplingG.add(key);
+  couplingG.traverse(o => { o.castShadow = false; });
+  scene.add(couplingG);
+}
+
+// ==================================================================
+// TUBERIA AGUA CALIENTE (naranja) — caldera -> tanque (con valvula + check + bridas)
+// ==================================================================
+{
+  const rx = 0.30;                                             // salida del lomo trasero de la caldera
+  makePipe([
+    [rx, BR + BAY - 0.05, 0.10], [rx, 1.55, 0.10],
+    [rx, 1.55, 1.0], [TX + 0.30, 1.55, 1.55], [TX + (TR + 0.17), 1.55, TZ]
+  ], 0.045, M.HOT, 0.10);
+  // valvula de compuerta (cuerpo + volante rojo) en el riser
+  cylY(0.075, 0.12, M.STEEL_D, rx, 1.15, 0.10, 20);
+  cylY(0.016, 0.10, M.STEEL, rx, 1.24, 0.10, 8);
+  const w1 = mesh(new THREE.TorusGeometry(0.065, 0.011, 8, 24), M.RED, rx, 1.30, 0.10);
+  w1.rotation.x = Math.PI / 2;
+  // valvula check (swing) en el tramo horizontal
+  cylZ(0.07, 0.12, M.STEEL_D, rx, 1.55, 0.5, 20);
+  cylY(0.03, 0.06, M.BRASS, rx, 1.61, 0.5, 12);
+  // soporte del tramo aereo
+  box(0.05, 1.5, 0.05, M.FRAME, rx, 0.75, 0.10);
+}
+
+// ==================================================================
+// TUBERIA RECIRCULACION (naranja claro) — tanque -> bomba -> caldera
+// ==================================================================
+{
+  // succion: fondo del tanque (salida baja -X) -> boca de succion de la bomba (+Z)
+  makePipe([
+    [TX - (TR + 0.10), 0.55, TZ], [TX - (TR + 0.10), 0.32, TZ],
+    [PUMP.x, 0.28, TZ - 0.10], [PUMP.x, 0.28, PUMP.z + 0.34]
+  ], 0.035, M.REC, 0.08);
+  // descarga: cuello de la bomba -> cuerpo de la caldera (lado -X bajo)
+  makePipe([
+    [PUMP.x, 0.55, PUMP.z + 0.20], [PUMP.x, 0.65, PUMP.z],
+    [PUMP.x, 0.65, 0.28], [-0.55, 0.62, 0.20]
+  ], 0.032, M.REC, 0.08);
+  // valvula de aislamiento en la succion
+  cylZ(0.055, 0.09, M.STEEL_D, PUMP.x, 0.28, PUMP.z + 0.34, 18);
+}
+
+// ==================================================================
+// INSTANCIADO GLOBAL (esparragos de bridas + anclas) — 1 draw call
+// ==================================================================
+makeIM(new THREE.CylinderGeometry(0.008, 0.008, 0.02, 6), M.BOLT, boltMatrices, staticG, false);
+
+// ====== FIRELIGHT (glow del hogar, sin sombra) ======
+const firelight = new THREE.PointLight(0xff7a2a, 0, 4.0);
+firelight.position.set(-0.6, FURN_Y, 0);
+firelight.castShadow = false;
+scene.add(firelight);
+
+// ====== ESTADO / CONTROL DE EQUIPO ======
+const COLOR_ON = 0x00ff66, COLOR_OFF = 0xff2233;
+const state = { q:false, p:false, corte:true, rot:true };
+let qLevel = 0, pLevel = 0;                                    // 0..1 con inercia asimetrica
+
+function setLed(mat, on){
+  mat.color.setHex(on ? COLOR_ON : COLOR_OFF);
+  mat.emissive.setHex(on ? COLOR_ON : COLOR_OFF);
+  mat.emissiveIntensity = on ? 1.7 : 1.2;
+}
+function applyState(){
+  // Solo cambia emisivos / visibilidad / objetivos: NO se rehornean sombras aqui
+  setLed(ledQMat, state.q);
+  setLed(ledPMat, state.p);
+  const cm = couplingG.userData.mat;
+  cm.color.setHex(state.p ? COLOR_ON : COLOR_OFF);
+  cm.emissive.setHex(state.p ? COLOR_ON : COLOR_OFF);
+  cm.emissiveIntensity = state.p ? 0.65 : 0.4;
+  cutGroup.visible = !state.corte;                            // CORTE on = cutaway (media-carcasa frontal oculta)
+}
+
+// ====== UI ======
+function bind(id, key){
+  const btn = document.getElementById(id);
+  btn.addEventListener('click', () => {
+    state[key] = !state[key];
+    btn.className = state[key] ? 'on' : 'off';
+    btn.textContent = state[key] ? 'ON' : 'OFF';
+    applyState();
+  });
+}
+bind('bQ', 'q');
+bind('bP', 'p');
+const bCorte = document.getElementById('bCorte');
+bCorte.addEventListener('click', () => {
+  state.corte = !state.corte;
+  bCorte.className = state.corte ? 'on' : 'off';
+  bCorte.textContent = state.corte ? 'ON' : 'OFF';
+  applyState();
+});
+const bRot = document.getElementById('bRot');
+bRot.addEventListener('click', () => {
+  state.rot = !state.rot;
+  bRot.className = state.rot ? 'on' : 'off';
+  bRot.textContent = state.rot ? 'ON' : 'OFF';
+});
+
+applyState();
+renderer.shadowMap.needsUpdate = true;          // horneado unico tras construir la escena
+
+// ====== LOOP DE ANIMACION ======
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  // inercia asimetrica (arranque rapido, apagado con coast-down)
+  const tq = state.q ? 1 : 0, kq = state.q ? 2.0 : 1.2;
+  qLevel += (tq - qLevel) * Math.min(1, dt * kq);
+  if (Math.abs(qLevel - tq) < 0.0015) qLevel = tq;
+  const tp = state.p ? 1 : 0, kp = state.p ? 1.6 : 0.5;
+  pLevel += (tp - pLevel) * Math.min(1, dt * kp);
+  if (Math.abs(pLevel - tp) < 0.0015) pLevel = tp;
+
+  // BOMBA RECIRC: el acople gira (solo rotacion)
+  couplingG.rotation.z += dt * pLevel * 13;
+
+  // QUEMADOR: glow de mirilla / camara + firelight (solo emissive / intensity)
+  const flick = 0.85 + Math.sin(t * 17) * 0.25 + Math.sin(t * 29) * 0.12;
+  sightMat.emissiveIntensity = qLevel * 1.4 * flick;
+  chamberMat.emissiveIntensity = qLevel * 1.1 * flick;
+  firelight.intensity = qLevel * 2.2 * (0.9 + Math.sin(t * 19) * 0.25);
+
+  // HUMO de chimenea: scroll + opacidad (allocation-free)
+  if (qLevel > 0.03){
+    smokePlume.visible = true;
+    smokeTex.offset.y -= dt * (0.25 + 0.45 * qLevel);
+    smokeMat.opacity = 0.32 * qLevel * (0.7 + 0.3 * Math.sin(t * 3.0));
+  } else {
+    smokePlume.visible = false;
+  }
+
+  controls.autoRotate = state.rot;
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
