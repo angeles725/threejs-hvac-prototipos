@@ -294,20 +294,33 @@ AUTO-ROTATE.
 
 - [ ] **13. Edificio torre hotel (VAV)** → `voxel/hotel-torre-voxel.html`
   > Corrección cliente (2026-07-05): el sistema del hotel es **VAV** (aire central por ductos),
-  > NO minisplit. Sin condensadoras exteriores, fachadas limpias, sin letrero. Prompt reescrito abajo.
+  > NO minisplit. Sin condensadoras exteriores, fachadas limpias, sin letrero.
+  > Rev-2 (feedback Cristian): la 1ª generación VAV leía como **apartamentos/condominio** (balcones
+  > privados profundos + base débil). Prompt reforzado con señales de HOTEL: porte-cochère, podio de
+  > doble altura, balcones someros tipo Juliet, amenidad en azotea. Prompt completo abajo.
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: la TORRE DE UN
 HOTEL DE PLAYA de 8 pisos + planta baja, con arquitectura CREÍBLE de hotel real, alta densidad
 de micro-voxeles. Este edificio reemplazará la torre esquemática de una escena mayor — la
 FACHADA SUR es la cara protagonista (da a la alberca y al mar).
+CRÍTICO — DEBE LEERSE COMO HOTEL, NO como edificio de apartamentos/condominio. Señales de hotel
+OBLIGATORIAS: (1) PORTE-COCHÈRE — marquesina grande volada sobre un acceso de autos con drop-off;
+(2) PODIO de doble altura en la base, visualmente DISTINTO de la torre de cuartos, con lobby
+acristalado y recepción visible; (3) balcones de cuarto SOMEROS y UNIFORMES (tipo Juliet, poco
+voladizo), NUNCA terrazas privadas profundas (eso lee como condominio); (4) amenidad en azotea.
+Sin letrero de texto.
 Partes obligatorias:
-— PLANTA BAJA: lobby de doble altura con marquesina de acceso, ventanal corrido, recepción
-sugerida al interior, arcada/columnas, jardineras.
-— PISOS TIPO (8): ~11 módulos de cuarto por piso en fachada sur (módulo ~4 m); CADA cuarto con
-balcón (losa volada), barandal de cristal con pasamanos de aluminio y puerta corrediza de vidrio
-de 2 hojas. TODAS las fachadas van LIMPIAS (sin equipos colgados, sin condensadoras) — el
-sistema es de AIRE CENTRAL VAV, toda la máquina va adentro o en azotea.
+— PODIO / PLANTA BAJA (base de HOTEL, distinta de la torre): LOBBY de DOBLE ALTURA con ventanal
+corrido de piso a techo y recepción + estar de lobby visibles al interior; un PORTE-COCHÈRE
+prominente — marquesina volada (losa + columnas) cubriendo un ACCESO DE AUTOS con drop-off (poné
+un auto y palmeras alineando la llegada); acento de madera en la cenefa; jardineras. La base debe
+leerse PÚBLICA (hotel), no como estacionamiento residencial.
+— PISOS TIPO (8): ~11 módulos de cuarto por piso en fachada sur (módulo ~4 m), IDÉNTICOS y
+repetidos (ritmo cerrado y uniforme = hotel). Balcón SOMERO y UNIFORME por cuarto (tipo Juliet:
+losa de poco voladizo ~0.4 m + barandal de cristal casi al ras), NO una terraza privada profunda.
+Puerta corrediza de vidrio de 2 hojas. TODAS las fachadas van LIMPIAS (sin equipos colgados, sin
+condensadoras) — el sistema es de AIRE CENTRAL VAV, toda la máquina va adentro o en azotea.
 — CLIMA CENTRAL VAV (aire por ductos, NO minisplit): una UTA/manejadora en azotea trata el aire
 y lo inyecta a un DUCTO TRONCAL VERTICAL que baja por el núcleo; en cada piso salen RAMALES por
 el plafón del pasillo hacia cada cuarto. En cada cuarto: una CAJA VAV (caja rectangular metálica
@@ -321,9 +334,11 @@ de cuartos como volúmenes sugeridos.
 ducto troncal vertical del VAV) en el extremo norte, visible en corte, subiendo hasta la azotea.
 — FACHADAS ESTE/OESTE/NORTE: ventanería menor, escalera de emergencia exterior en la norte. La
 fachada norte va LIMPIA (ya no lleva racks de condensadoras).
-— AZOTEA: pretil perimetral, cuarto de máquinas de elevadores, la SALIDA del ducto troncal
-(penetración capada donde conecta la UTA), y zona plana ~10×8 m de bases libres para equipos
-(la UTA/manejadora y un extractor se colocan después).
+— AZOTEA: pretil perimetral; una AMENIDAD de azotea que grite "hotel de playa" — solárium con
+camastros + una pérgola/bar (opcional pequeña alberca/jacuzzi), separada del área técnica; el
+cuarto de máquinas de elevadores; la SALIDA del ducto troncal (penetración capada donde conecta la
+UTA); y zona plana ~10×8 m de bases libres para equipos (la UTA/manejadora y un extractor se
+colocan después).
 Dimensión real: ~44 m largo (sur) × 18 m fondo × 30 m alto (PB 4 m + 8 pisos de 3 m + pretil).
 // SCALE: 1 voxel = 0.25 m.
 Colores: cuerpo blanco arena con losas de balcón en blanco puro, barandales de cristal
