@@ -43,7 +43,7 @@
      El panel de VISTAS (#views) permanece visible. El click limpio ya NO abre el
      dashboard (eso lo hace un boton del contenedor padre): ahora hace zoom-in al
      equipo clickeado via raycast (ver modulo). -->
-<style>.clean #info,.clean #legend,.clean #ctl,.clean #hud,.clean #ctl2,.clean #temps{display:none!important}.clean #views{top:48px!important}</style>
+<style>.clean #info,.clean #legend,.clean #ctl,.clean #hud,.clean #ctl2,.clean #temps,.clean #roomPanel{display:none!important}.clean #views{top:48px!important}</style>
 <script>
 if(new URLSearchParams(location.search).has('clean')){
   document.documentElement.classList.add('clean');
@@ -83,6 +83,89 @@ if(new URLSearchParams(location.search).has('clean')){
   <div class="row"><label>EDIF LOD</label><b id="lodN">–</b></div>
 </div>
 <div id="ctl2" style="position:fixed;left:12px;bottom:34px;font:11px monospace;color:#8fb;opacity:.7">L: forzar LOD edificio (auto / HI / LO)</div>
+
+<!-- ============ PANEL CUARTO (click-to-select) — mantenimiento PREDICTIVO ============
+     Se muestra al seleccionar un cuarto por raycast. Mismo lenguaje visual que el HUD:
+     vidrio oscuro, borde #00d4aa44, mono, backdrop-blur. Colores de estado:
+     teal #00d4aa (normal) · ambar #ffb84d (advertencia) · rojo #ff4d6d (alarma). -->
+<style>
+  #roomPanel{ position:fixed; top:14px; left:50%; transform:translateX(-50%);
+    width:322px; max-width:calc(100vw - 28px); z-index:30; display:none;
+    background:rgba(6,8,13,0.9); border:1px solid #00d4aa44; border-radius:10px;
+    font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#cfe0da;
+    backdrop-filter:blur(8px); box-shadow:0 8px 30px rgba(0,0,0,.5); overflow:hidden; }
+  #roomPanel.show{ display:block; }
+  #roomPanel .rp-head{ position:relative; padding:13px 16px 11px; border-bottom:1px solid #00d4aa22; }
+  #roomPanel .rp-id{ color:#fff; font-size:16px; letter-spacing:.1em; font-weight:600; }
+  #roomPanel .rp-zone{ color:#7a8a98; font-size:10px; letter-spacing:.08em; margin-top:3px; }
+  #roomPanel .rp-close{ position:absolute; top:10px; right:12px; width:24px; height:24px;
+    border:1px solid #00d4aa33; background:transparent; color:#7a8a98; cursor:pointer;
+    border-radius:5px; font-size:15px; line-height:1; }
+  #roomPanel .rp-close:hover{ color:#fff; border-color:#00d4aa88; }
+  #roomPanel .rp-pill{ display:flex; align-items:center; gap:8px; margin:11px 16px;
+    padding:7px 11px; border-radius:6px; font-size:11px; letter-spacing:.12em;
+    background:#00d4aa1a; border:1px solid #00d4aa55; color:#00d4aa; }
+  #roomPanel .rp-pill .dot{ width:9px; height:9px; border-radius:50%; background:currentColor;
+    box-shadow:0 0 0 0 currentColor; animation:rpPulse 1.8s infinite; }
+  #roomPanel.warning .rp-pill{ background:#ffb84d1a; border-color:#ffb84d55; color:#ffb84d; }
+  #roomPanel.alarm   .rp-pill{ background:#ff4d6d1f; border-color:#ff4d6d66; color:#ff4d6d; }
+  @keyframes rpPulse{ 0%{box-shadow:0 0 0 0 currentColor} 70%{box-shadow:0 0 0 7px transparent} 100%{box-shadow:0 0 0 0 transparent} }
+  #roomPanel .rp-temp{ margin:0 16px 12px; padding:12px 14px; border-radius:8px;
+    background:#0d141c; border:1px solid #00d4aa22; display:flex; justify-content:space-between; align-items:flex-end; }
+  #roomPanel .rp-lbl{ color:#7a8a98; font-size:9px; letter-spacing:.14em; margin-bottom:5px; }
+  #roomPanel .rp-temp .big{ font-size:34px; font-weight:600; color:#00d4aa; font-variant-numeric:tabular-nums; line-height:1; }
+  #roomPanel.warning .rp-temp .big{ color:#ffb84d; }
+  #roomPanel.alarm   .rp-temp .big{ color:#ff4d6d; }
+  #roomPanel .rp-temp .sp{ font-size:20px; color:#9fb0aa; font-variant-numeric:tabular-nums; line-height:1; }
+  #roomPanel .u{ font-size:12px; color:#7a8a98; letter-spacing:0; }
+  #roomPanel .rp-grid{ display:flex; gap:10px; margin:0 16px 12px; }
+  #roomPanel .rp-cell{ flex:1; padding:9px 11px; border-radius:8px; background:#0d141c; border:1px solid #00d4aa22; }
+  #roomPanel .rp-cell .val{ font-size:19px; color:#e6efe9; font-variant-numeric:tabular-nums; margin-top:4px; }
+  #roomPanel .rp-bar{ height:5px; margin-top:7px; border-radius:3px; background:#1b2530; overflow:hidden; }
+  #roomPanel .rp-bar i{ display:block; height:100%; background:#00d4aa; border-radius:3px; }
+  #roomPanel .rp-pred{ margin:0 16px 15px; padding:11px 13px; border-radius:8px;
+    background:#0d141c; border:1px solid #00d4aa22; }
+  #roomPanel .rp-pred .ttl{ color:#00d4aa; font-size:9px; letter-spacing:.16em; margin-bottom:7px; display:flex; justify-content:space-between; }
+  #roomPanel .rp-pred .diag{ color:#cfe0da; font-size:11px; line-height:1.5; }
+  #roomPanel .rp-pred .meta{ display:flex; justify-content:space-between; margin-top:9px;
+    padding-top:8px; border-top:1px solid #00d4aa1a; font-size:10px; color:#7a8a98; }
+  #roomPanel .rp-pred .meta b{ color:#9fb0aa; font-variant-numeric:tabular-nums; }
+</style>
+<div id="roomPanel">
+  <div class="rp-head">
+    <div class="rp-id" id="rp-id">CUARTO —</div>
+    <div class="rp-zone" id="rp-zone">—</div>
+    <button class="rp-close" id="rp-close" title="Cerrar">×</button>
+  </div>
+  <div class="rp-pill"><span class="dot"></span><span id="rp-state">NORMAL</span></div>
+  <div class="rp-temp">
+    <div>
+      <div class="rp-lbl">TEMPERATURA</div>
+      <div class="big" id="rp-temp">—<span class="u"> °C</span></div>
+    </div>
+    <div style="text-align:right">
+      <div class="rp-lbl">SETPOINT</div>
+      <div class="sp" id="rp-sp">—<span class="u"> °C</span></div>
+    </div>
+  </div>
+  <div class="rp-grid">
+    <div class="rp-cell">
+      <div class="rp-lbl">HUMEDAD</div>
+      <div class="val" id="rp-hum">—<span class="u"> %</span></div>
+      <div class="rp-bar"><i id="rp-hum-bar" style="width:0%"></i></div>
+    </div>
+    <div class="rp-cell">
+      <div class="rp-lbl">AMPERAJE FCU</div>
+      <div class="val" id="rp-amp">—<span class="u"> A</span></div>
+      <div class="rp-bar"><i id="rp-amp-bar" style="width:0%"></i></div>
+    </div>
+  </div>
+  <div class="rp-pred">
+    <div class="ttl"><span>DIAGNÓSTICO PREDICTIVO</span><span id="rp-trend">—</span></div>
+    <div class="diag" id="rp-diag">—</div>
+    <div class="meta"><span>VIDA ÚTIL FILTRO: <b id="rp-filter">—%</b></span><span>MANTENIMIENTO <b>PREDICTIVO</b></span></div>
+  </div>
+</div>
 
 <!-- Panel VISTAS (blueprint). Visible SIEMPRE, tambien en modo clean. -->
 <style>
@@ -1210,6 +1293,10 @@ renderer.domElement.addEventListener('pointerup', e => {
   const moved = Math.hypot(e.clientX-_dx, e.clientY-_dy) >= 5;
   const wasDown = _down; _down = false;
   if (!wasDown || moved) return;                   // fue un drag: no hacer zoom
+  // PRIORIDAD: un click limpio sobre un cuarto lo selecciona (panel + outline) y
+  // NO dispara el zoom. Si no toca cuarto pero hay uno abierto, lo cierra.
+  // window.__roomClick lo define el bloque CLICK-TO-SELECT al final del modulo.
+  if (window.__roomClick && window.__roomClick(e)) return;
   ndc.x =  (e.clientX / window.innerWidth)  * 2 - 1;
   ndc.y = -(e.clientY / window.innerHeight) * 2 + 1;
   ray.setFromCamera(ndc, camera);
@@ -6658,6 +6745,206 @@ function buildEdificio(detail = 'hi'){
   }
 
   return root;
+}
+
+// ==================================================================
+// ============  CLICK-TO-SELECT DE CUARTOS (aditivo)  ==============
+// Hitboxes invisibles alineados con los 88 cuartos instanciados de la
+// torre + outline por estado + panel flotante de mantenimiento
+// PREDICTIVO (temperatura / humedad / amperaje + diagnostico).
+//
+// ALINEACION: se recomputan las MISMAS constantes que buildEdificio
+// (PODIUM_H=4, FLOOR_H=3, NF=8, HZ=9 -> SOUTH_Z=-9, MODX cada 4 m).
+// El cuarto ocupa, en coords locales del edificio, un box de 4x3x7 m
+// centrado en (mx, fy+1.5, SOUTH_Z+3.5). El edificio esta en (55,0,3)
+// rotado 180 (rotation.y=PI), asi que local (lx,ly,lz) -> world
+// (55-lx, ly, 3-lz). Como la rotacion es de 180 el box sigue alineado
+// a los ejes, solo se recentra. Resultado: los hitboxes/outline caen
+// EXACTAMENTE sobre los cuartos renderizados.
+// ==================================================================
+{
+  const _PODIUM_H = 4, _FLOOR_H = 3, _NF = 8, _HZ = 9;
+  const _SOUTH_Z = -_HZ;                                  // fachada al mar (local)
+  const _MODX = []; for (let i = 0; i < 11; i++) _MODX.push(-20 + i * 4);   // 11 modulos / piso
+  const _FLOORY = []; for (let f = 0; f < _NF; f++) _FLOORY.push(_PODIUM_H + f * _FLOOR_H);
+
+  // Box del cuarto en local (con leve inset para que cuartos vecinos no se toquen).
+  const _RW = 3.7, _RH = 2.82, _RD = 6.5;                 // ancho, alto, fondo (m)
+  const _RLZ = _SOUTH_Z + 3.5;                            // centro-z local del cuarto
+
+  const STATE_COLOR = { normal: 0x00d4aa, warning: 0xffb84d, alarm: 0xff4d6d };
+  const STATE_TXT   = { normal: 'NORMAL · OPERATIVO', warning: 'ADVERTENCIA', alarm: 'ALARMA ACTIVA' };
+
+  // Hash determinista [0,1) por (piso, cuarto, sal) -> datos reproducibles (no Math.random).
+  function _rhash(f, j, salt){
+    let h = (f * 131 + j * 17 + salt * 2654435761 + 7) >>> 0;
+    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d); h ^= h >>> 12;
+    h = Math.imul(h ^ (h >>> 7),  0x297a2d39); h ^= h >>> 15;
+    return (h >>> 0) / 4294967296;
+  }
+
+  const roomData = {};        // id -> modelo simulado
+  const roomHitboxes = [];    // meshes raycastables (invisibles)
+  // Material invisible pero raycastable: no escribe color ni profundidad -> ~0 costo
+  // de fragmentos. Aun asi cada hitbox es 1 draw call: 88 en total (peor caso, con
+  // frustumCulled=true por defecto se descartan los fuera de cuadro). Cobertura
+  // total: cada cuarto visible es seleccionable. Alternativa "modesta" seria limitar
+  // a un subconjunto de bahias por piso.
+  const HITMAT = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+
+  for (let f = 0; f < _NF; f++){
+    for (let j = 0; j < _MODX.length; j++){
+      const id = 'P' + (f + 1) + '-' + (j + 1);
+      // --- posicion world (misma transformada que el edificio) ---
+      const lx = _MODX[j], ly = _FLOORY[f] + 1.5, lz = _RLZ;
+      const wx = 55 - lx, wy = ly, wz = 3 - lz;
+
+      // --- modelo de datos simulado (predictivo) ---
+      const floorGrad = f * 0.16;                          // pisos altos algo mas calidos
+      const sev = _rhash(f, j, 9);
+      const hA = _rhash(f, j, 1), hH = _rhash(f, j, 3), hK = _rhash(f, j, 5);
+      const setpoint = 22.0;
+      let state, temp, amp, filterLifePct, trend, hum;
+      if (sev > 0.93){                                     // ~7% alarma
+        state = 'alarm';
+        temp = 25.6 + hA * 1.1 + floorGrad * 0.3;
+        amp  = 10.6 + hA * 1.3;
+        filterLifePct = 40 + hK * 9;
+        trend = 'rising';
+        hum   = 50 + hH * 8;
+      } else if (sev > 0.78){                              // ~15% advertencia
+        state = 'warning';
+        temp = 24.2 + hA * 0.9;
+        amp  = 9.0 + hA * 1.4;
+        filterLifePct = 46 + hK * 14;
+        trend = hA > 0.5 ? 'rising' : 'stable';
+        hum   = 47 + hH * 9;
+      } else {                                             // normal
+        state = 'normal';
+        temp = 21.9 + hA * 1.4 + floorGrad * 0.2;
+        amp  = 4.5 + hA * 3.4;
+        filterLifePct = 60 + hK * 34;
+        trend = 'stable';
+        hum   = 45 + hH * 10;
+      }
+
+      const zone = f <= 2 ? 'PISO BAJO · Habitación Estándar'
+                 : f <= 5 ? 'PISO MEDIO · Habitación Superior'
+                 : 'PISO ALTO · Suite Premium';
+
+      // Diagnostico en clave PREDICTIVA (predictivo antes que correctivo).
+      let diagnosis;
+      if (state === 'alarm'){
+        const rise = (1.4 + hA * 1.2).toFixed(1);
+        diagnosis = 'Tendencia al alza +' + rise + '°C/24h — programar mantenimiento PREDICTIVO antes que correctivo.';
+      } else if (state === 'warning'){
+        if (filterLifePct < 55)      diagnosis = 'Filtro al ' + Math.round(filterLifePct) + '% de vida útil — reemplazo preventivo recomendado.';
+        else if (amp > 9.8)          diagnosis = 'Amperaje FCU elevado (' + amp.toFixed(1) + ' A) — inspeccionar rodamiento del ventilador.';
+        else                         diagnosis = 'Temperatura +' + (temp - setpoint).toFixed(1) + '°C sobre setpoint — verificar caudal de agua helada.';
+      } else {
+        diagnosis = 'Operación nominal — amperaje FCU y filtro dentro de rango.';
+      }
+
+      roomData[id] = { id, floor: f + 1, room: j + 1, zone, state, temp, setpoint,
+        hum, amp, filterLifePct, trend, diagnosis, wx, wy, wz };
+
+      // --- hitbox invisible raycastable ---
+      const hb = new THREE.Mesh(new THREE.BoxGeometry(_RW, _RH, _RD), HITMAT);
+      hb.position.set(wx, wy, wz);
+      hb.castShadow = false; hb.receiveShadow = false;
+      hb.userData = { roomId: id };
+      roomHitboxes.push(hb);
+      scene.add(hb);
+    }
+  }
+
+  // ---------- seleccion + visuales ----------
+  const _rray = new THREE.Raycaster();
+  const _rndc = new THREE.Vector2();
+  let roomSelected = null;
+  let roomOutline = null;
+  const panel = document.getElementById('roomPanel');
+
+  function _disposeRoomOutline(){
+    if (!roomOutline) return;
+    scene.remove(roomOutline);
+    if (roomOutline.geometry) roomOutline.geometry.dispose();
+    if (roomOutline.material) roomOutline.material.dispose();
+    roomOutline = null;
+  }
+
+  function selectRoom(id){
+    const d = roomData[id]; if (!d) return;
+    roomSelected = id;
+    // outline por estado (teal/ambar/rojo), sobre-dibujado (depthTest:false).
+    _disposeRoomOutline();
+    const eg = new THREE.EdgesGeometry(new THREE.BoxGeometry(_RW, _RH, _RD));
+    roomOutline = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({
+      color: STATE_COLOR[d.state], transparent: true, opacity: 0.95, depthTest: false
+    }));
+    roomOutline.position.set(d.wx, d.wy, d.wz);
+    roomOutline.renderOrder = 999;
+    scene.add(roomOutline);
+    _paintPanel(d, 0);
+    panel.classList.add('show');
+  }
+
+  function deselectRoom(){
+    roomSelected = null;
+    _disposeRoomOutline();
+    panel.classList.remove('show');
+  }
+
+  const $r = (i) => document.getElementById(i);
+  function _paintPanel(d, phase){
+    // pequena variacion viva (~1 Hz) sobre los valores base — no altera el estado.
+    const jT = Math.sin(phase * 0.9 + d.floor) * 0.08;
+    const jH = Math.sin(phase * 0.7 + d.room) * 0.6;
+    const jA = Math.sin(phase * 1.1 + d.floor * 2) * 0.06;
+    const temp = d.temp + jT, hum = d.hum + jH, amp = d.amp + jA;
+
+    panel.className = d.state + ' show';
+    $r('rp-id').textContent   = 'CUARTO P' + d.floor + '-' + d.room;
+    $r('rp-zone').textContent = d.zone;
+    $r('rp-state').textContent = STATE_TXT[d.state];
+    $r('rp-temp').innerHTML = temp.toFixed(1) + '<span class="u"> °C</span>';
+    $r('rp-sp').innerHTML   = d.setpoint.toFixed(1) + '<span class="u"> °C</span>';
+    $r('rp-hum').innerHTML  = Math.round(hum) + '<span class="u"> %</span>';
+    $r('rp-hum-bar').style.width = Math.max(0, Math.min(100, hum)) + '%';
+    $r('rp-amp').innerHTML  = amp.toFixed(1) + '<span class="u"> A</span>';
+    $r('rp-amp-bar').style.width = Math.max(0, Math.min(100, amp / 12 * 100)) + '%';
+    const barColor = STATE_COLOR[d.state].toString(16).padStart(6, '0');
+    $r('rp-hum-bar').style.background = '#' + barColor;
+    $r('rp-amp-bar').style.background = '#' + barColor;
+    $r('rp-trend').textContent = d.trend === 'rising' ? '▲ AL ALZA' : '● ESTABLE';
+    $r('rp-diag').textContent = d.diagnosis;
+    $r('rp-filter').textContent = Math.round(d.filterLifePct) + '%';
+  }
+
+  // Intento de seleccion por click; expuesto al handler de zoom para dar PRIORIDAD.
+  // Devuelve true si consumio el click (selecciono un cuarto o cerro el panel).
+  window.__roomClick = function(e){
+    _rndc.x =  (e.clientX / window.innerWidth)  * 2 - 1;
+    _rndc.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    _rray.setFromCamera(_rndc, camera);
+    const hits = _rray.intersectObjects(roomHitboxes, false);
+    if (hits.length){
+      selectRoom(hits[0].object.userData.roomId);
+      return true;                                   // consumido: NO hacer zoom
+    }
+    if (roomSelected){ deselectRoom(); return true; } // click en vacio con panel abierto -> cerrar
+    return false;                                     // dejar pasar al zoom
+  };
+
+  document.getElementById('rp-close').addEventListener('click', deselectRoom);
+
+  // Refresco ~1 Hz del cuarto seleccionado (barato, sin trabajo por-frame).
+  let _rphase = 0;
+  setInterval(() => {
+    if (!roomSelected) return;
+    _rphase += 1;
+    const d = roomData[roomSelected]; if (d) _paintPanel(d, _rphase);
+  }, 1000);
 }
 
 </script>
