@@ -771,6 +771,11 @@ function assemble(unitRoot, places, label, sysKey){
 // ==================================================================
 const EQUIP_LODS = [];
 const EQUIP_LOD_DIST = 60;                           // m: umbral near->far del cluster (calibrado)
+// MARCAS PERSISTENTES (FIX 2): outlines siempre visibles (sin seleccion) para
+// unidades en warning/alarm. Se pueblan en el bloque de seleccion (carga sincrona,
+// antes del 1er frame); el loop de animacion lee persistAlarmMarks para el pulso.
+const persistMarks = [];        // todas las marcas persistentes (cuartos + equipo)
+const persistAlarmMarks = [];   // subconjunto en alarma -> pulso en el loop
 function assembleLOD(buildFn, places, label, sysKey, center){
   const rHi = assemble(buildFn('hi'), places, label + ' HI');
   const rLo = assemble(buildFn('lo'), places, label + ' LO');
@@ -779,7 +784,8 @@ function assembleLOD(buildFn, places, label, sysKey, center){
   rHi.ims.forEach(m => { m.visible = !far; });
   rLo.ims.forEach(m => { m.visible = far; });
   EQUIP_LODS.push({ imHi: rHi.ims, imLo: rLo.ims, center: c, sysKey, on: true });
-  return { draws: rHi.draws, transp: rHi.transp, tris: rHi.tris };   // reporta el nivel HI (near)
+  // imHi expuesto para capturar el envelope LOCAL real del equipo (nivel HI). Ver EQUIP_ENV.
+  return { draws: rHi.draws, transp: rHi.transp, tris: rHi.tris, imHi: rHi.ims };   // reporta el nivel HI (near)
 }
 
 // ==================================================================
@@ -830,6 +836,41 @@ const rFl   = assemble(buildFiltrado(),  FILT_PLACE_W,  'FILTRADO ALBERCA x1');
 const rEx   = assemble(buildExtractor(), EXT_PLACE_W,   'EXTRACTOR AZOTEA x1');
 const rAhu  = assemble(buildAHU(),       AHU_PLACE_W,   'UMA-1 x1');
 const rPool = assemble(buildAHU(),       POOL_PLACE_W,  'CALENTADOR ALBERCA x1');
+
+// ==================================================================
+// ENVELOPE REAL POR TIPO (FIX 1): union de los boundingBox LOCAL de los
+// InstancedMesh de cada equipo (espacio de la unidad, pre-instancia). Corrige el
+// tamaño/origen aproximados de _EQ_DEFS. El centro real del cuerpo en world =
+// placement + rotY(center, ry). Para clusters con LOD se usa el nivel HI (imHi).
+// ==================================================================
+const EQUIP_ENV = {};
+function equipEnvCapture(type, ims){
+  if (!ims || !ims.length) return;
+  const box = new THREE.Box3();
+  let has = false;
+  for (const im of ims){
+    const g = im && im.geometry;
+    if (!g) continue;
+    if (!g.boundingBox) g.computeBoundingBox();
+    if (!g.boundingBox) continue;
+    box.union(g.boundingBox);
+    has = true;
+  }
+  if (!has) return;
+  const size = new THREE.Vector3(), center = new THREE.Vector3();
+  box.getSize(size); box.getCenter(center);
+  EQUIP_ENV[type] = { size, center };
+}
+equipEnvCapture('chiller',  rC.imHi);   // cluster LOD -> nivel HI
+equipEnvCapture('pump',     rP.imHi);   // cluster LOD -> nivel HI
+equipEnvCapture('tower',    rT.ims);
+equipEnvCapture('boiler',   rCal.ims);
+equipEnvCapture('tanks',    rTk.ims);
+equipEnvCapture('hx',       rHx.ims);
+equipEnvCapture('filter',   rFl.ims);
+equipEnvCapture('exhaust',  rEx.ims);
+equipEnvCapture('ahu',      rAhu.ims);
+equipEnvCapture('poolheat', rPool.ims);
 
 // ==================================================================
 // FASE 3 — EDIFICIO TORRE HOTEL (realistic PBR, instanciado internamente)
@@ -1358,6 +1399,12 @@ function animate(){
     const showHi = e.on && !far, showLo = e.on && far;
     for (let k = 0; k < e.imHi.length; k++) e.imHi[k].visible = showHi;
     for (let k = 0; k < e.imLo.length; k++) e.imLo[k].visible = showLo;
+  }
+  // Pulso de marcas persistentes en ALARMA (FIX 2): modula opacidad con seno
+  // (barato, guardado por longitud). Las de advertencia quedan fijas.
+  if (persistAlarmMarks.length){
+    const _pulse = 0.55 + 0.35 * (0.5 + 0.5 * Math.sin(now * 0.006));   // ~[0.55, 0.90]
+    for (let i = 0; i < persistAlarmMarks.length; i++) persistAlarmMarks[i].material.opacity = _pulse;
   }
   renderer.render(scene, camera);                 // aqui el renderer corre edLOD.update(camera)
   drawN.textContent = renderer.info.render.calls;
@@ -7049,6 +7096,16 @@ function buildEdificio(detail = 'hi'){
   const equipHitboxes = [];   // meshes raycastables invisibles (18)
   const _EQ_HITMAT = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
 
+  // Placement crudo por tag para recentrar el outline con el envelope real (FIX 1).
+  // wx/wz de cada def YA coinciden con placement.x/z; solo difieren la Y base del
+  // placement y la rotacion ry. Default: y=0, ry=0. Rooftop (ext/uma) y=28.5; uma y
+  // calentador van rotados 180 (ry=PI).
+  const equipPlaceMeta = {
+    'EX-1':  { y: 28.5, ry: 0 },
+    'UMA-1': { y: 28.5, ry: Math.PI },
+    'CA-1':  { y: 0,    ry: Math.PI },
+  };
+
   _EQ_DEFS.forEach((u, idx) => {
     const cfg = _EQ_TYPE[u.type];
     const state = u.state;
@@ -7063,6 +7120,23 @@ function buildEdificio(detail = 'hi'){
     const rulVal = state === 'alarm'   ? '< ' + Math.round(3 + h * 4) + ' d'
                  : state === 'warning' ? Math.round(18 + h * 22) + ' d'
                  :                        Math.round(120 + h * 200) + ' d';
+    // --- envelope corregido por tipo (FIX 1): tamaño real del cuerpo + centro real ---
+    // Fallback a los valores aprox del def si no hubo captura de envelope.
+    let bsx = u.sx, bsy = u.sy, bsz = u.sz;   // tamaño (m)
+    let bcx = u.wx, bcy = u.wy, bcz = u.wz;   // centro world del cuerpo
+    const env = EQUIP_ENV[u.type];
+    if (env){
+      const meta = equipPlaceMeta[u.tag] || { y: 0, ry: 0 };
+      const ry = meta.ry || 0, cs = Math.cos(ry), sn = Math.sin(ry);
+      const c = env.center;
+      // rotY(center, ry): x' = x·cos + z·sin ; z' = -x·sin + z·cos (ry=PI niega x,z).
+      const rx = c.x * cs + c.z * sn;
+      const rz = -c.x * sn + c.z * cs;
+      bsx = env.size.x; bsy = env.size.y; bsz = env.size.z;
+      bcx = u.wx + rx;          // wx == placement.x
+      bcy = meta.y + c.y;       // y base del placement + centro local
+      bcz = u.wz + rz;          // wz == placement.z
+    }
     equipData[u.tag] = {
       id: u.tag, kind: 'equip', type: u.type, label: u.label, zone: u.zone, state,
       temp, tempLbl: cfg.tempLbl, tempU: cfg.tempU,
@@ -7072,20 +7146,61 @@ function buildEdificio(detail = 'hi'){
       trend: state === 'normal' ? 'stable' : 'rising',
       diagnosis: _equipDiag(u.type, state),
       rulLbl: cfg.rulLbl, rulVal,
-      wx: u.wx, wy: u.wy, wz: u.wz, sx: u.sx, sy: u.sy, sz: u.sz,
+      wx: bcx, wy: bcy, wz: bcz, sx: bsx, sy: bsy, sz: bsz,
     };
     // Hitbox GENEROSO (desacoplado del outline, que va ajustado): margen amplio y
-    // minimo cubico para que el equipo sea facil de clickear aunque el cuerpo sea
-    // mas ancho que su envolvente nominal o el eje X/Z difiera del convenio.
-    const _hbx = Math.max(u.sx, u.sz) + 1.6, _hby = Math.max(u.sy + 1.0, 3.0);
+    // minimo cubico para que el equipo sea facil de clickear. Recentrado en el
+    // centro real del cuerpo (bcx/bcy/bcz) para que el click aterrice en el equipo.
+    const _hbx = Math.max(bsx, bsz) + 1.6, _hby = Math.max(bsy + 1.0, 3.0);
     const hb = new THREE.Mesh(new THREE.BoxGeometry(_hbx, _hby, _hbx), _EQ_HITMAT);
-    hb.position.set(u.wx, u.wy, u.wz);
+    hb.position.set(bcx, bcy, bcz);
     hb.castShadow = false; hb.receiveShadow = false;
     hb.frustumCulled = true;
     hb.userData = { equipId: u.tag };
     equipHitboxes.push(hb);
     scene.add(hb);
   });
+
+  // ================================================================
+  // MARCAS PERSISTENTES (FIX 2): resalta SIEMPRE (sin seleccion) toda unidad en
+  // warning/alarm para que los problemas destaquen. Un LineSegments por unidad;
+  // renderOrder 997 (bajo el outline de seleccion=999, que dibuja encima). Las
+  // alarmas pulsan en el loop; las advertencias quedan fijas. NO interfieren con
+  // la seleccion ni se remueven al deseleccionar.
+  // ================================================================
+  function _persistMark(sx, sy, sz, cx, cy, cz, state){
+    const eg = new THREE.EdgesGeometry(new THREE.BoxGeometry(sx, sy, sz));
+    const mat = new THREE.LineBasicMaterial({
+      color: STATE_COLOR[state], transparent: true,
+      opacity: state === 'alarm' ? 0.85 : 0.6, depthTest: false
+    });
+    const ls = new THREE.LineSegments(eg, mat);
+    ls.position.set(cx, cy, cz);
+    ls.renderOrder = 997;
+    scene.add(ls);
+    persistMarks.push(ls);
+    if (state === 'alarm') persistAlarmMarks.push(ls);
+  }
+  let _persistRooms = 0, _persistEquip = 0;
+  // Cuartos: caja _RW x _RH x _RD en el centro del cuarto.
+  for (const id in roomData){
+    const d = roomData[id];
+    if (d.state === 'warning' || d.state === 'alarm'){
+      _persistMark(_RW, _RH, _RD, d.wx, d.wy, d.wz, d.state);
+      _persistRooms++;
+    }
+  }
+  // Equipo: envelope corregido (FIX 1) en el centro real del cuerpo.
+  for (const id in equipData){
+    const d = equipData[id];
+    if (d.state === 'warning' || d.state === 'alarm'){
+      _persistMark(d.sx, d.sy, d.sz, d.wx, d.wy, d.wz, d.state);
+      _persistEquip++;
+    }
+  }
+  // Conteo esperado: ~6 equipos (4 warn: CH-2/CP-2/TE-1/FL-1 + 2 alarm: CH-4/BP-1)
+  // + cuartos warning/alarm (~20% de 88). Una sola LineSegments por unidad.
+  console.log('[persist marks] rooms=' + _persistRooms + ' equip=' + _persistEquip + ' total=' + persistMarks.length);
 
   function selectEquip(id){
     const d = equipData[id]; if (!d) return;
