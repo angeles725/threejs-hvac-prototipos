@@ -17,6 +17,12 @@
   #hud .ph { color:#fff; font-size:10px; letter-spacing:0.15em; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #00d4aa33; }
   #hud .row { display:flex; justify-content:space-between; gap:22px; margin:4px 0; color:#7a8a98; }
   #hud b { color:#00ff9c; font-size:15px; }
+  #temps { position:fixed; top:270px; right:14px; background:rgba(6,8,13,0.82); border:1px solid #00d4aa44; padding:9px 12px; font-size:11px; letter-spacing:0.05em; backdrop-filter:blur(6px); z-index:19; }
+  #temps .ph { color:#fff; font-size:10px; letter-spacing:0.14em; margin-bottom:7px; padding-bottom:5px; border-bottom:1px solid #00d4aa33; }
+  #temps .trow { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #temps .trow i { width:11px; height:9px; border-radius:2px; display:inline-block; background:#2f7fd6; }
+  #temps .trow label { color:#7a8a98; width:26px; }
+  #temps .trow b { color:#cfe0da; font-variant-numeric:tabular-nums; }
 </style>
 <script>
 // Inyeccion dinamica de importmap: String.fromCharCode(64) evita el mangling de '@' (package@version) por Cloudflare.
@@ -37,7 +43,7 @@
      El panel de VISTAS (#views) permanece visible. El click limpio ya NO abre el
      dashboard (eso lo hace un boton del contenedor padre): ahora hace zoom-in al
      equipo clickeado via raycast (ver modulo). -->
-<style>.clean #info,.clean #legend,.clean #ctl,.clean #hud,.clean #ctl2{display:none!important}.clean #views{top:48px!important}</style>
+<style>.clean #info,.clean #legend,.clean #ctl,.clean #hud,.clean #ctl2,.clean #temps{display:none!important}.clean #views{top:48px!important}</style>
 <script>
 if(new URLSearchParams(location.search).has('clean')){
   document.documentElement.classList.add('clean');
@@ -61,6 +67,10 @@ if(new URLSearchParams(location.search).has('clean')){
   <div style="margin-top:5px;padding-top:5px;border-top:1px solid #00d4aa22"><i style="background:#e6ddca"></i> Edificio torre hotel (1)</div>
 </div>
 <div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="temps">
+  <div class="ph">TEMP · PISO (°C)</div>
+  <div id="tempList"></div>
+</div>
 <div id="hud">
   <div class="ph">renderer.info (live)</div>
   <div class="row"><label>DRAW CALLS</label><b id="drawN">–</b></div>
@@ -688,6 +698,70 @@ edLOD.position.set(55, 0, 3);
 scene.add(edLOD);
 SYS.edificio.push(edLOD);                        // ref para el toggle EDIFICIO
 
+// ==================================================================
+// TEMPERATURA PROMEDIO POR PISO (It.3) — simulacion + lectura por piso.
+// Setpoint ~22.5C + gradiente por altura (carga solar / efecto stack) + una
+// oscilacion lenta por piso para lectura "viva". Se muestra en (a) panel HUD
+// #temps y (b) 8 etiquetas flotantes (sprites) sobre la esquina mar/este de la
+// torre (edificio en (55,0,3): borde este x~77, fachada al mar z~12). 1 Hz.
+// ==================================================================
+const FLOORS_N = 8;
+const FLOOR_BASE_Y = 5.5;                        // centro del piso 1 = PODIUM_H(4) + FLOOR_H/2(1.5)
+const FLOOR_DY = 3;                              // FLOOR_H
+const floorTemps = new Float32Array(FLOORS_N);
+const _tCold = new THREE.Color(0x2f7fd6), _tCool = new THREE.Color(0x36c46a),
+      _tWarm = new THREE.Color(0xf2c14e), _tHot = new THREE.Color(0xe0533a);
+const _tCol = new THREE.Color();
+function tempColor(t){                            // 20 azul -> 23 verde -> 25 ambar -> 27 rojo
+  if (t <= 20) return _tCol.copy(_tCold);
+  if (t <= 23) return _tCol.copy(_tCold).lerp(_tCool, (t-20)/3);
+  if (t <= 25) return _tCol.copy(_tCool).lerp(_tWarm, (t-23)/2);
+  return _tCol.copy(_tWarm).lerp(_tHot, Math.min(1, (t-25)/2));
+}
+function _roundRect(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
+// Etiquetas 3D: un sprite por piso.
+const floorSprites = [];
+for (let i = 0; i < FLOORS_N; i++){
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, depthTest:true, depthWrite:false, transparent:true }));
+  spr.scale.set(6.4, 1.6, 1);
+  spr.position.set(79, FLOOR_BASE_Y + FLOOR_DY*i, 10);
+  scene.add(spr);
+  floorSprites.push({ spr, cv, tex });
+}
+// Filas del panel HUD (P8 arriba .. P1 abajo).
+const tempRows = [];
+{
+  const host = document.getElementById('tempList');
+  for (let i = FLOORS_N-1; i >= 0; i--){
+    const row = document.createElement('div'); row.className = 'trow';
+    row.innerHTML = '<i></i><label>P'+(i+1)+'</label><b>–</b>';
+    host.appendChild(row);
+    tempRows[i] = { chip: row.querySelector('i'), val: row.querySelector('b') };
+  }
+}
+let _tempLast = -1e9;
+function updateFloorTemps(now){
+  if (now - _tempLast < 1000) return;            // refresco 1 Hz (barato)
+  _tempLast = now; const s = now * 0.001;
+  for (let i = 0; i < FLOORS_N; i++){
+    const t = 22.5 + i*0.35 + Math.sin(s*0.5 + i*0.9)*0.6;   // gradiente + vida
+    floorTemps[i] = t;
+    const hex = '#' + tempColor(t).getHexString();
+    if (tempRows[i]){ tempRows[i].chip.style.background = hex; tempRows[i].val.textContent = t.toFixed(1) + '°'; }
+    const fs = floorSprites[i], cx = fs.cv.getContext('2d');
+    cx.clearRect(0,0,256,64);
+    cx.fillStyle = 'rgba(8,12,18,0.72)'; cx.strokeStyle = hex; cx.lineWidth = 4;
+    _roundRect(cx, 3, 3, 250, 58, 10); cx.fill(); cx.stroke();
+    cx.textBaseline = 'middle';
+    cx.fillStyle = '#eaf2f0'; cx.font = 'bold 26px monospace'; cx.fillText('P'+(i+1), 18, 34);
+    cx.fillStyle = hex;       cx.font = 'bold 30px monospace'; cx.fillText(t.toFixed(1)+'°C', 96, 34);
+    fs.tex.needsUpdate = true;
+  }
+}
+updateFloorTemps(performance.now());             // primer render inmediato
+
 // DEMO: forzar nivel con la tecla L (auto -> HI -> LO) para capturar el antes/despues
 // sin alejar la camara. En 'auto' manda la distancia; forzado desactiva autoUpdate.
 let edLodMode = 'auto';                          // 'auto' | 'hi' | 'lo'
@@ -978,6 +1052,7 @@ function animate(){
   _lastT = now;
   controls.update();
   seaUniforms.uTime.value = now * 0.0011;          // olas del mar (GPU)
+  updateFloorTemps(now);                           // temperatura por piso (1 Hz)
   if (ANIM_ON){
     for (let i = 0; i < spinners.fans.length; i++)  spinners.fans[i].rotation.y  += 0.16;
     for (let i = 0; i < spinners.pumps.length; i++) spinners.pumps[i].rotation.x += 0.34;
