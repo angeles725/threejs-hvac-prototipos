@@ -311,6 +311,203 @@ const _sunCan=document.createElement('canvas'); _sunCan.width=_sunCan.height=128
 const sunSpr=new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(_sunCan), fog:false, depthWrite:false, transparent:true }));
 sunSpr.scale.set(64,64,1); sunSpr.position.copy(sun.position).multiplyScalar(4); scene.add(sunSpr);
 
+// ====== ENTORNO VIVO (It.2): vegetacion + caminos + mobiliario ======
+// Props de ambientacion 100% OPTIMIZADOS: se construye UNA unidad por familia,
+// se fusiona por material (BufferGeometryUtils.mergeGeometries) y se reparte con
+// THREE.InstancedMesh. Cada prop se apoya en el terreno via terrainH(x,z) para
+// que nada flote. Total ~12 draw calls. Bloque aislado en su propio scope {} para
+// no colisionar con globales existentes (scene/terrainH/BufferGeometryUtils solo lectura).
+{
+  const _mergeG = (geos) => BufferGeometryUtils.mergeGeometries(geos.filter(Boolean), false);
+  const _YAXIS = new THREE.Vector3(0, 1, 0);
+
+  // RNG deterministico (dispersion reproducible entre cargas; no depende de Math.random).
+  let _seed = 20240706;
+  const _rnd = () => { _seed = (_seed * 1103515245 + 12345) & 0x7fffffff; return _seed / 0x7fffffff; };
+
+  // Coloca la instancia i apoyada en el terreno (base de la geometria horneada en y=0).
+  const _fm = new THREE.Matrix4(), _fq = new THREE.Quaternion(), _fp = new THREE.Vector3(), _fs = new THREE.Vector3();
+  const _setInst = (im, i, x, z, ry, s) => {
+    _fp.set(x, terrainH(x, z), z);
+    _fq.setFromAxisAngle(_YAXIS, ry || 0);
+    _fs.setScalar(s == null ? 1 : s);
+    _fm.compose(_fp, _fq, _fs);
+    im.setMatrixAt(i, _fm);
+  };
+
+  // --- Materiales locales (prefijos _veg / _furn) ---
+  const _vegTrunkMat  = new THREE.MeshStandardMaterial({ color: 0x8a6a43, roughness: 0.92, metalness: 0 });
+  const _vegFrondMat  = new THREE.MeshStandardMaterial({ color: 0x3f7d3a, roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
+  const _vegBushMat   = new THREE.MeshStandardMaterial({ color: 0x4c7a3c, roughness: 0.9,  metalness: 0 });
+  const _vegGrassMat  = new THREE.MeshStandardMaterial({ color: 0x8fae55, roughness: 0.9,  metalness: 0, side: THREE.DoubleSide });
+  const _furnWoodMatA = new THREE.MeshStandardMaterial({ color: 0xb08a52, roughness: 0.82, metalness: 0 });
+  const _furnWoodMatB = new THREE.MeshStandardMaterial({ color: 0x9c7642, roughness: 0.82, metalness: 0 });
+  const _furnConcMat  = new THREE.MeshStandardMaterial({ color: 0xcfc8b8, roughness: 0.96, metalness: 0 });
+  const _furnCushMat  = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.7,  metalness: 0 });
+  const _furnPoleMat  = new THREE.MeshStandardMaterial({ color: 0x555a5e, roughness: 0.6,  metalness: 0.3 });
+  const _furnCanopyMat= new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8,  metalness: 0 }); // instanceColor lo tinta
+  const _furnThatchMat= new THREE.MeshStandardMaterial({ color: 0xcaa46a, roughness: 0.95, metalness: 0 });
+
+  // ============================================================
+  // 1) PALMERAS (14) — tronco inclinado (marron) + copa de 6 hojas (verde).
+  //    2 InstancedMesh (1 por material), variacion de rotacion.y por indice.
+  // ============================================================
+  const PALM_H = 5.2, PALM_LEAN = 0.13;
+  const _trunkGeo = new THREE.CylinderGeometry(0.16, 0.30, PALM_H, 8, 3);
+  _trunkGeo.translate(0, PALM_H / 2, 0);      // base en y=0
+  _trunkGeo.rotateZ(PALM_LEAN);               // inclinacion
+  const _crownTop = new THREE.Vector3(0, PALM_H, 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), PALM_LEAN);
+  const _frondGeos = [];
+  const FROND_N = 6;
+  for (let k = 0; k < FROND_N; k++) {
+    const ay = (k / FROND_N) * Math.PI * 2;
+    const pitch = -0.55 - 0.14 * (k % 2);     // caida de la hoja
+    const f = new THREE.BoxGeometry(0.20, 0.07, 2.7);
+    f.translate(0, 0, 1.35);                  // un extremo en el origen (union con la copa)
+    f.rotateX(pitch);
+    f.rotateY(ay);
+    f.translate(_crownTop.x, _crownTop.y, _crownTop.z);
+    _frondGeos.push(f);
+  }
+  const _frondGeo = _mergeG(_frondGeos);
+  const PALM_POS = [
+    [-8, 5], [-14, 20], [-20, -5], [2, 45], [-4, 30], [-18, 42],
+    [70, 10], [80, -2], [90, 25], [68, 40], [100, 15], [76, 50],
+    [30, 44], [48, 42]
+  ];
+  const palmTrunkIM = new THREE.InstancedMesh(_trunkGeo, _vegTrunkMat, PALM_POS.length);
+  const palmFrondIM = new THREE.InstancedMesh(_frondGeo, _vegFrondMat, PALM_POS.length);
+  PALM_POS.forEach(([x, z], i) => {
+    const ry = i * 0.9;                        // variacion por indice (deterministica)
+    _setInst(palmTrunkIM, i, x, z, ry, 0.9 + 0.06 * (i % 3));
+    _setInst(palmFrondIM, i, x, z, ry, 0.9 + 0.06 * (i % 3));
+  });
+  palmTrunkIM.instanceMatrix.needsUpdate = true; palmFrondIM.instanceMatrix.needsUpdate = true;
+  palmTrunkIM.castShadow = true;  palmTrunkIM.receiveShadow = true;  palmTrunkIM.frustumCulled = false;
+  palmFrondIM.castShadow = true;  palmFrondIM.receiveShadow = false; palmFrondIM.frustumCulled = false;
+  scene.add(palmTrunkIM, palmFrondIM);
+
+  // ============================================================
+  // 2) ARBUSTOS (36) — icosaedro achatado, disperso en jardin (fuera del patio).
+  // ============================================================
+  const _bushGeo = new THREE.IcosahedronGeometry(1.0, 0);
+  _bushGeo.scale(1, 0.62, 1);
+  _bushGeo.translate(0, 0.62, 0);             // base en y=0
+  const BUSH_N = 36;
+  const BUSH_ZONES = [
+    { x0: -28, x1: 2,  z0: -28, z1: 58 },     // jardin izquierdo
+    { x0: 66,  x1: 108, z0: -28, z1: 58 },    // jardin derecho
+    { x0: 8,   x1: 60, z0: -30, z1: -14 }     // detras del hotel (z<<-6, fuera del patio)
+  ];
+  const bushIM = new THREE.InstancedMesh(_bushGeo, _vegBushMat, BUSH_N);
+  for (let i = 0; i < BUSH_N; i++) {
+    const zn = BUSH_ZONES[i % 3];
+    const x = zn.x0 + _rnd() * (zn.x1 - zn.x0);
+    const z = zn.z0 + _rnd() * (zn.z1 - zn.z0);
+    _setInst(bushIM, i, x, z, _rnd() * Math.PI * 2, 0.7 + _rnd() * 0.7);
+  }
+  bushIM.instanceMatrix.needsUpdate = true;
+  bushIM.castShadow = true; bushIM.receiveShadow = true; bushIM.frustumCulled = false;
+  scene.add(bushIM);
+
+  // ============================================================
+  // 3) PASTO DE PLAYA (40 matas) — conos finos en la duna z in [40,48]. castShadow=false.
+  // ============================================================
+  const _grassGeo = new THREE.ConeGeometry(0.10, 0.8, 4);
+  _grassGeo.translate(0, 0.4, 0);
+  const GRASS_N = 40;
+  const grassIM = new THREE.InstancedMesh(_grassGeo, _vegGrassMat, GRASS_N);
+  for (let i = 0; i < GRASS_N; i++) {
+    const x = 10 + _rnd() * 100;
+    const z = 40 + _rnd() * 8;
+    _setInst(grassIM, i, x, z, _rnd() * Math.PI * 2, 0.6 + _rnd() * 0.9);
+  }
+  grassIM.instanceMatrix.needsUpdate = true;
+  grassIM.castShadow = false; grassIM.receiveShadow = false; grassIM.frustumCulled = false;
+  scene.add(grassIM);
+
+  // ============================================================
+  // 4) MALECON (boardwalk) + camino de jardin — geometrias fusionadas (meshes estaticos).
+  //    Boardwalk: tablones alternos de tono, sobre x=55 de z=34 a z=49, ~4 m de ancho.
+  // ============================================================
+  const BW_X = 55, BW_HALF = 2.0;
+  const bwA = [], bwB = [];
+  let _bwi = 0;
+  for (let z = 34; z <= 49.001; z += 0.5) {
+    const g = new THREE.BoxGeometry(BW_HALF * 2, 0.08, 0.42);
+    g.translate(BW_X, terrainH(BW_X, z) + 0.10, z);      // apenas por encima del terreno
+    (_bwi % 2 ? bwB : bwA).push(g); _bwi++;
+  }
+  const boardwalkA = new THREE.Mesh(_mergeG(bwA), _furnWoodMatA);
+  const boardwalkB = new THREE.Mesh(_mergeG(bwB), _furnWoodMatB);
+  boardwalkA.castShadow = false; boardwalkA.receiveShadow = true;
+  boardwalkB.castShadow = false; boardwalkB.receiveShadow = true;
+  scene.add(boardwalkA, boardwalkB);
+
+  // Camino de jardin (concreto claro) en la periferia derecha, x=66 (fuera del patio).
+  const pathGeos = [];
+  for (let z = 2; z <= 40.001; z += 3.2) {
+    const g = new THREE.BoxGeometry(2.0, 0.06, 3.3);
+    g.translate(66, terrainH(66, z) + 0.06, z);
+    pathGeos.push(g);
+  }
+  const gardenPath = new THREE.Mesh(_mergeG(pathGeos), _furnConcMat);
+  gardenPath.castShadow = false; gardenPath.receiveShadow = true;
+  scene.add(gardenPath);
+
+  // ============================================================
+  // 5) MOBILIARIO DE PLAYA — camastro (cojin+respaldo blanco) + sombrilla (poste+dosel).
+  //    3 InstancedMesh (blanco / poste / dosel). El dosel alterna color por instanceColor.
+  // ============================================================
+  const _cush = new THREE.BoxGeometry(0.72, 0.12, 1.9); _cush.translate(0, 0.34, 0);
+  const _back = new THREE.BoxGeometry(0.72, 0.09, 0.75); _back.rotateX(-0.9); _back.translate(0, 0.55, -0.82);
+  const _furnWhiteGeo = _mergeG([_cush, _back]);
+  const _poleGeo = new THREE.CylinderGeometry(0.04, 0.05, 2.7, 6); _poleGeo.translate(1.0, 1.35, 0);
+  const _canopyGeo = new THREE.ConeGeometry(1.15, 0.55, 8); _canopyGeo.translate(1.0, 2.75, 0);
+  const FURN_POS = [
+    [16, 41], [24, 44], [34, 40], [42, 45], [50, 41],
+    [62, 44], [70, 40], [80, 45], [92, 41], [100, 44]
+  ];
+  const furnWhiteIM  = new THREE.InstancedMesh(_furnWhiteGeo, _furnCushMat,  FURN_POS.length);
+  const furnPoleIM   = new THREE.InstancedMesh(_poleGeo,      _furnPoleMat,  FURN_POS.length);
+  const furnCanopyIM = new THREE.InstancedMesh(_canopyGeo,    _furnCanopyMat, FURN_POS.length);
+  const _canColA = new THREE.Color(0xcc4433), _canColB = new THREE.Color(0xffffff);
+  FURN_POS.forEach(([x, z], i) => {
+    const ry = i * 1.1;
+    _setInst(furnWhiteIM,  i, x, z, ry);
+    _setInst(furnPoleIM,   i, x, z, ry);
+    _setInst(furnCanopyIM, i, x, z, ry);
+    furnCanopyIM.setColorAt(i, i % 2 ? _canColB : _canColA);   // alterna rojo/blanco por indice
+  });
+  furnWhiteIM.instanceMatrix.needsUpdate = true;
+  furnPoleIM.instanceMatrix.needsUpdate = true;
+  furnCanopyIM.instanceMatrix.needsUpdate = true;
+  if (furnCanopyIM.instanceColor) furnCanopyIM.instanceColor.needsUpdate = true;
+  furnWhiteIM.castShadow = true;  furnWhiteIM.receiveShadow = true;  furnWhiteIM.frustumCulled = false;
+  furnPoleIM.castShadow = false;  furnPoleIM.receiveShadow = false;  furnPoleIM.frustumCulled = false;
+  furnCanopyIM.castShadow = true; furnCanopyIM.receiveShadow = false; furnCanopyIM.frustumCulled = false;
+  scene.add(furnWhiteIM, furnPoleIM, furnCanopyIM);
+
+  // Palapas (3) — poste de madera + techo de palma (thatch). 2 InstancedMesh.
+  const _ppoleGeo = new THREE.CylinderGeometry(0.12, 0.14, 3.0, 7); _ppoleGeo.translate(0, 1.5, 0);
+  const _thatchGeo = new THREE.ConeGeometry(1.9, 1.3, 9); _thatchGeo.translate(0, 3.65, 0);
+  const PALAPA_POS = [[22, 47], [58, 47], [88, 46]];
+  const palapaPoleIM   = new THREE.InstancedMesh(_ppoleGeo,  _furnWoodMatB, PALAPA_POS.length);
+  const palapaThatchIM = new THREE.InstancedMesh(_thatchGeo, _furnThatchMat, PALAPA_POS.length);
+  PALAPA_POS.forEach(([x, z], i) => {
+    const ry = i * 0.7;
+    _setInst(palapaPoleIM,   i, x, z, ry);
+    _setInst(palapaThatchIM, i, x, z, ry);
+  });
+  palapaPoleIM.instanceMatrix.needsUpdate = true; palapaThatchIM.instanceMatrix.needsUpdate = true;
+  palapaPoleIM.castShadow = false;   palapaPoleIM.receiveShadow = false;   palapaPoleIM.frustumCulled = false;
+  palapaThatchIM.castShadow = true;  palapaThatchIM.receiveShadow = false; palapaThatchIM.frustumCulled = false;
+  scene.add(palapaPoleIM, palapaThatchIM);
+
+  console.log('[ENTORNO VIVO] palmeras=14 arbustos=36 pasto=40 mobiliario=10 palapas=3 · draws=12');
+}
+// ====== /ENTORNO VIVO ======
+
 // ==================================================================
 // AGGRESSIVE LOCAL-SPACE MERGE (verbatim del harness assembly-poc)
 // Colapsa un equipo a ~1 mesh por material. Expande cada copia de los
