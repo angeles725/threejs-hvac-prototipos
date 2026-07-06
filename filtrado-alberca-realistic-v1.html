@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FILTRADO DE ALBERCA · Filtro Ø1.2×1.5 m + Bomba · Realistic</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter:blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; color:#cfe0da; }
+  #legend i { width:12px; height:10px; display:inline-block; border-radius:2px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter:blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel .mode { margin-top:10px; padding-top:8px; border-top:1px solid #00d4aa33; color:#7a8a98; letter-spacing:0.08em; }
+  #panel .mode b { color:#00e07a; }
+  #panel .mode.rl b { color:#ffb020; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:64px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+</style>
+<script>
+// Inyeccion dinamica de importmap: String.fromCharCode(64) evita el mangling de '@' (package@version) por Cloudflare.
+(function(){
+  var AT = String.fromCharCode(64);
+  var tag = document.createElement('script');
+  tag.type = 'importmap';
+  tag.textContent = JSON.stringify({ imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }});
+  document.head.appendChild(tag);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>FILTRADO DE ALBERCA</b><br>
+  <span>Filtro Ø1.2×1.5 m + Bomba · Realistic PBR · 1 unidad = 1 m</span>
+</div>
+<div id="legend">
+  <div><i style="background:#38b6ff"></i> Succión (de alberca)</div>
+  <div><i style="background:#00e07a"></i> Retorno (a alberca)</div>
+  <div><i style="background:#ffb020"></i> Retrolavado (a drenaje)</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>BOMBA</label><button id="bPump" class="on">ON</button></div>
+  <div class="row"><label>RETROLAVADO</label><button id="bWash" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+  <div class="mode" id="modeLbl">MODO: <b>FILTRACIÓN</b></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 unidad = 1 m. Spec dimensional: voxel/filtrado-alberca-voxel-v1.html (1 voxel = 0.05 m).
+// FILTRO de arena vertical Ø1.2 x ~1.5 m (cuerpo cilindrico + cabezales abombados, azul) con valvula
+//   multipuerto de 6 posiciones (cuerpo negro, selector AMARILLO), mirilla, manometro y placa de datos.
+// BOMBA de alberca (centrifuga) ~0.8 m: voluta espiral + trampa de pelos con TAPA TRANSPARENTE (canasta
+//   visible), motor aletado gris y acoplamiento/ventilador que GIRAN con inercia asimetrica.
+// TUBERIA PVC blanca: succion (azul) · retorno (verde) · retrolavado a drenaje (ambar), con valvulas de bola.
+// FLUJO: textura de flechas chevron que hace scroll por .offset.y (sin allocations). RETROLAVADO invierte
+//   la direccion en el lazo filtro<->valvula y re-enruta el flujo visible del retorno al drenaje.
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 6, 26);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.05, 120);
+camera.position.set(2.7, 1.75, 2.9);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;          // sombras horneadas: un solo horneado tras construir
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.55;
+controls.minDistance = 1.0;
+controls.maxDistance = 13;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(0.05, 0.75, 0.0);
+// Ground clamp (regla de la casa): ni el target ni la camara bajan del piso
+controls.addEventListener('change', () => {
+  if (controls.target.y < 0) controls.target.y = 0;
+  if (camera.position.y < 0.2) camera.position.y = 0.2;
+});
+
+// ====== RIG DE LUCES ======
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.4, 5.2, 2.4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -2.6; sun.shadow.camera.right = 2.6;
+sun.shadow.camera.top = 2.8; sun.shadow.camera.bottom = -0.4;
+sun.shadow.camera.near = 1.5; sun.shadow.camera.far = 14;
+sun.shadow.bias = -0.0004;
+sun.target.position.set(0, 0.8, 0);
+scene.add(sun); scene.add(sun.target);
+
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-3.2, 2.6, -2.2);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rim.position.set(-1.6, 1.6, 3.4);
+scene.add(rim);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+// ====== PISO ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  new THREE.MeshStandardMaterial({ color:0x0a0d12, roughness:0.95, metalness:0 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(30, 60, 0x123f35, 0x0c1d1a);
+grid.position.y = 0.002;
+grid.material.transparent = true;
+grid.material.opacity = 0.35;
+scene.add(grid);
+
+// ====== TEXTURAS PROCEDURALES (CanvasTexture) ======
+// Mapas de COLOR: SRGBColorSpace · mapas de datos (roughness/alpha): lineales
+function canvasTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+function dataTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 4;
+  return t;
+}
+
+// Variacion sutil de rugosidad para pintura (mapa lineal). roughnessMap MULTIPLICA el escalar:
+// escalar 1.0 * mapa (~0.55 medio) deja el producto en la banda de pintura percibida.
+const paintRoughTex = dataTex(256, 256, (g) => {
+  g.fillStyle = '#8c8c8c'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2600; i++){
+    const v = 120 + Math.floor(Math.random() * 60);
+    g.fillStyle = `rgba(${v},${v},${v},0.16)`;
+    g.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 3, 1 + Math.random() * 3);
+  }
+});
+paintRoughTex.wrapS = paintRoughTex.wrapT = THREE.RepeatWrapping;
+paintRoughTex.repeat.set(2, 3);
+
+// Textura de FLUJO: flechas chevron a lo largo del eje del tubo (V del cilindro/tubo). base = color del
+// circuito, flechas mas claras. Se anima por .offset.y (scroll, sin allocations, sin needsUpdate).
+function flowTex(base, arrow){
+  const t = canvasTex(64, 128, (g, w, h) => {
+    g.fillStyle = base; g.fillRect(0, 0, w, h);
+    g.strokeStyle = arrow; g.lineWidth = 11; g.lineCap = 'round'; g.lineJoin = 'round';
+    for (let cy = 24; cy < h + 20; cy += 44){
+      g.beginPath();
+      g.moveTo(12, cy + 20); g.lineTo(w / 2, cy); g.lineTo(w - 12, cy + 20);
+      g.stroke();
+    }
+  });
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+// Perforacion de la canasta (alphaMap: blanco = plastico, negro = hueco)
+const basketTex = dataTex(128, 128, (g, w, h) => {
+  g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#000';
+  for (let y = 8; y < h; y += 14)
+    for (let x = 8; x < w; x += 14){
+      g.beginPath(); g.arc(x + (y % 28 ? 7 : 0), y, 4, 0, Math.PI*2); g.fill();
+    }
+});
+basketTex.wrapS = basketTex.wrapT = THREE.RepeatWrapping;
+basketTex.repeat.set(6, 3);
+
+// Placa de datos generica
+function nameplateTex(title, sub, rows){
+  return canvasTex(512, 256, (g, w, h) => {
+    const grad = g.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#d8dade'); grad.addColorStop(0.5, '#b8bcc2'); grad.addColorStop(1, '#c8ccd2');
+    g.fillStyle = grad; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#3a3f46'; g.lineWidth = 6; g.strokeRect(10, 10, w - 20, h - 20);
+    g.fillStyle = '#22262c';
+    g.font = 'bold 30px monospace'; g.textAlign = 'center';
+    g.fillText(title, w/2, 54);
+    g.font = '20px monospace';
+    g.fillText(sub, w/2, 86);
+    g.font = '19px monospace'; g.textAlign = 'left';
+    rows.forEach((r, i) => g.fillText(r, 40, 128 + i * 30));
+    for (const [bx, by] of [[26, 26], [w-26, 26], [26, h-26], [w-26, h-26]]){
+      g.beginPath(); g.arc(bx, by, 7, 0, Math.PI*2); g.fillStyle = '#787c82'; g.fill();
+    }
+  });
+}
+const plateFilterTex = nameplateTex('FILTRO DE ARENA', 'ALBERCA · LECHO DE SILICE', [
+  'MODELO      SF-120-T', 'AREA        0.66 m² · Ø1.2 m', 'MAX         3.5 bar · 50 C']);
+
+// Caratula de manometro (fondo segun servicio, escala 270°, aguja horneada)
+function gaugeTex(bg, unit, label, frac){
+  return canvasTex(256, 256, (g, w, h) => {
+    const cx = w/2, cy = h/2;
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#22262c'; g.lineWidth = 8;
+    g.beginPath(); g.arc(cx, cy, 118, 0, Math.PI*2); g.stroke();
+    const a0 = Math.PI * 0.75, sweep = Math.PI * 1.5;
+    for (let i = 0; i <= 30; i++){
+      const a = a0 + sweep * i / 30, major = i % 5 === 0;
+      const r1 = 108, r0 = major ? 90 : 99;
+      g.strokeStyle = '#22262c'; g.lineWidth = major ? 5 : 2;
+      g.beginPath();
+      g.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+      g.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      g.stroke();
+      if (major){
+        g.fillStyle = '#22262c'; g.font = 'bold 20px monospace'; g.textAlign = 'center';
+        g.fillText(String(i / 5), cx + Math.cos(a) * 70, cy + Math.sin(a) * 70 + 7);
+      }
+    }
+    // banda verde de operacion normal
+    g.strokeStyle = 'rgba(45,170,90,0.85)'; g.lineWidth = 9;
+    g.beginPath(); g.arc(cx, cy, 104, a0 + sweep*0.18, a0 + sweep*0.42); g.stroke();
+    g.fillStyle = '#22262c'; g.font = 'bold 17px monospace'; g.textAlign = 'center';
+    g.fillText(unit, cx, cy + 46);
+    g.font = '13px monospace';
+    g.fillText(label, cx, cy + 66);
+    const na = a0 + sweep * frac;
+    g.strokeStyle = '#d0242e'; g.lineWidth = 6; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(cx - Math.cos(na) * 18, cy - Math.sin(na) * 18);
+    g.lineTo(cx + Math.cos(na) * 92, cy + Math.sin(na) * 92); g.stroke();
+    g.fillStyle = '#22262c';
+    g.beginPath(); g.arc(cx, cy, 12, 0, Math.PI*2); g.fill();
+    g.fillStyle = '#d0242e';
+    g.beginPath(); g.arc(cx, cy, 6, 0, Math.PI*2); g.fill();
+  });
+}
+const faceFilter = gaugeTex('#e7edf3', 'bar', 'FILTRO', 0.30);
+const faceSuction = gaugeTex('#dcecff', 'bar', 'SUCCIÓN', 0.16);
+
+// Caratula del selector multipuerto (6 posiciones, indice rojo arriba en FILTRACIÓN)
+const valveDialTex = canvasTex(256, 256, (g, w, h) => {
+  const cx = w/2, cy = h/2;
+  g.fillStyle = '#17191e'; g.fillRect(0, 0, w, h);
+  g.beginPath(); g.arc(cx, cy, 122, 0, Math.PI*2); g.fillStyle = '#1e2127'; g.fill();
+  g.strokeStyle = '#3a3f46'; g.lineWidth = 4; g.beginPath(); g.arc(cx, cy, 118, 0, Math.PI*2); g.stroke();
+  const labels = ['FILTER', 'BACKWASH', 'RINSE', 'WASTE', 'RECIRC', 'CLOSED'];
+  for (let i = 0; i < 6; i++){
+    const a = -Math.PI/2 + i / 6 * Math.PI * 2;
+    const lx = cx + Math.cos(a) * 84, ly = cy + Math.sin(a) * 84;
+    g.fillStyle = i === 0 ? '#d0242e' : '#f2c230';
+    g.beginPath(); g.arc(cx + Math.cos(a) * 104, cy + Math.sin(a) * 104, i === 0 ? 9 : 6, 0, Math.PI*2); g.fill();
+    g.save();
+    g.translate(lx, ly); g.rotate(a + Math.PI/2);
+    g.fillStyle = '#cfd6dd'; g.font = 'bold 15px monospace'; g.textAlign = 'center';
+    g.fillText(labels[i], 0, 0);
+    g.restore();
+  }
+  g.fillStyle = '#0f1115'; g.beginPath(); g.arc(cx, cy, 30, 0, Math.PI*2); g.fill();
+});
+
+// ====== PALETA PBR (metalness 0 = pintado/plastico · metalness 1 = metal desnudo) ======
+// Leccion documentada: gris medio + metalness 1 lee NEGRO en este entorno. Tanque pintado (azul),
+// PVC blanco, valvula/plastico negro y motor gris -> metalness 0. Metal desnudo (abrazadera, bridas,
+// pernos, laton, vastagos, flecha, acoplamiento) -> metalness 1. Agua de alberca: identificacion AZUL.
+const M = {
+  TANK:    new THREE.MeshStandardMaterial({ color:0x1f66b0, roughness:1.0, metalness:0, roughnessMap:paintRoughTex }),
+  TANK_D:  new THREE.MeshStandardMaterial({ color:0x164e88, roughness:0.6, metalness:0 }),
+  BASE_DK: new THREE.MeshStandardMaterial({ color:0x23262e, roughness:0.82, metalness:0 }),   // base moldeada / faldon
+  BLACK:   new THREE.MeshStandardMaterial({ color:0x16181d, roughness:0.5,  metalness:0 }),   // cuerpo valvula multipuerto (ABS)
+  YELLOW:  new THREE.MeshStandardMaterial({ color:0xf2c230, roughness:0.45, metalness:0 }),   // selector
+  PVC:     new THREE.MeshStandardMaterial({ color:0xe6e9ec, roughness:0.4,  metalness:0 }),   // tuberia PVC blanca
+  PVC_D:   new THREE.MeshStandardMaterial({ color:0xc2c8ce, roughness:0.42, metalness:0 }),   // uniones / fittings
+  MOTOR:   new THREE.MeshStandardMaterial({ color:0x3a3a40, roughness:0.55, metalness:0 }),
+  MOTOR_D: new THREE.MeshStandardMaterial({ color:0x2c2c32, roughness:0.6,  metalness:0 }),
+  FIN:     new THREE.MeshStandardMaterial({ color:0x4a4a52, roughness:0.55, metalness:0 }),
+  STEEL:   new THREE.MeshStandardMaterial({ color:0x9aa0a8, roughness:0.34, metalness:1 }),   // abrazadera / bridas / metal desnudo
+  STEEL_D: new THREE.MeshStandardMaterial({ color:0x5c626b, roughness:0.5,  metalness:0.4 }), // cuerpos de valvula (fundicion pintada)
+  VOLUTE:  new THREE.MeshStandardMaterial({ color:0x2b2f36, roughness:0.55, metalness:0.2 }),  // caracol de la bomba (fundicion)
+  BOLT:    new THREE.MeshStandardMaterial({ color:0x22242a, roughness:0.4,  metalness:1 }),
+  NUT:     new THREE.MeshStandardMaterial({ color:0xb7b7bc, roughness:0.35, metalness:1 }),
+  BRASS:   new THREE.MeshStandardMaterial({ color:0xb87333, roughness:0.35, metalness:1 }),
+  SHAFT:   new THREE.MeshStandardMaterial({ color:0x9aa0a8, roughness:0.28, metalness:1 }),
+  RED:     new THREE.MeshStandardMaterial({ color:0xc22a34, roughness:0.5,  metalness:0 }),   // palancas de bola
+  DARK:    new THREE.MeshStandardMaterial({ color:0x24242a, roughness:0.7,  metalness:0 }),
+  FRAME:   new THREE.MeshStandardMaterial({ color:0x3a3a3e, roughness:0.6,  metalness:0 }),
+  GRATE:   new THREE.MeshStandardMaterial({ color:0x2a2e36, roughness:0.7,  metalness:0.2 }),
+  GLASS:   new THREE.MeshPhysicalMaterial({ color:0xeef4ff, roughness:0.05, metalness:0,
+             transmission:0.94, thickness:0.01, ior:1.45 }),
+  BASKET:  new THREE.MeshStandardMaterial({ color:0xdfe6ea, roughness:0.5, metalness:0,
+             alphaMap:basketTex, alphaTest:0.5, side:THREE.DoubleSide })
+};
+// Acoplamiento (gira; el color marca el estado ON/OFF)
+const coupMat = new THREE.MeshStandardMaterial({ color:0xff2233, emissive:0xff2233,
+  emissiveIntensity:0.4, roughness:0.35, metalness:0.2 });
+// LED de estado de la bomba
+const ledMat = new THREE.MeshStandardMaterial({ color:0xff2233, emissive:0xff2233,
+  emissiveIntensity:1.2, roughness:0.3, metalness:0 });
+// LED de modo en la valvula multipuerto
+const modeLedMat = new THREE.MeshStandardMaterial({ color:0x00e07a, emissive:0x00e07a,
+  emissiveIntensity:0.9, roughness:0.3, metalness:0 });
+
+// ====== HELPERS DE GEOMETRIA PARAMETRICA ======
+const staticG = new THREE.Group();       // todo lo estatico (sombras horneadas)
+scene.add(staticG);
+
+function mesh(geo, mat, x = 0, y = 0, z = 0, parent = staticG){
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+function box(w, h, d, mat, x, y, z, parent = staticG){
+  return mesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent);
+}
+function cylX(r, len, mat, x, y, z, seg = 20, parent = staticG){
+  const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+  m.rotation.z = Math.PI / 2;
+  return m;
+}
+function cylY(r, len, mat, x, y, z, seg = 20, parent = staticG){
+  return mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+}
+function cylZ(r, len, mat, x, y, z, seg = 20, parent = staticG){
+  const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+  m.rotation.x = Math.PI / 2;
+  return m;
+}
+// Cabezal torisferico simplificado via lathe: ecuador (R,0) -> polo (0,h)
+function domeGeo(R, h, segRad = 36, segArc = 12){
+  const pts = [];
+  for (let i = 0; i <= segArc; i++){
+    const a = i / segArc * Math.PI / 2;
+    pts.push(new THREE.Vector2(Math.cos(a) * R, Math.sin(a) * h));
+  }
+  return new THREE.LatheGeometry(pts, segRad);
+}
+// Tuberia con codos suavizados. Devuelve el mesh; usada tambien por los tubos de FLUJO.
+function makePipe(points, r, mat, bend = 0.05, parent = staticG, seg = 12){
+  const path = new THREE.CurvePath();
+  const P = points.map(p => new THREE.Vector3(...p));
+  let prev = P[0];
+  for (let i = 1; i < P.length - 1; i++){
+    const a = P[i], b = P[i+1];
+    const dIn = a.clone().sub(prev).normalize();
+    const dOut = b.clone().sub(a).normalize();
+    const tIn = a.clone().sub(dIn.clone().multiplyScalar(bend));
+    const tOut = a.clone().add(dOut.clone().multiplyScalar(bend));
+    path.add(new THREE.LineCurve3(prev, tIn));
+    path.add(new THREE.QuadraticBezierCurve3(tIn, a, tOut));
+    prev = tOut;
+  }
+  path.add(new THREE.LineCurve3(prev, P[P.length - 1]));
+  const len = path.getLength();
+  const g = new THREE.TubeGeometry(path, Math.max(14, Math.round(len * 22)), r, seg);
+  const m = mesh(g, mat, 0, 0, 0, parent);
+  m.userData.len = len;
+  return m;
+}
+
+// Pernos instanciados globales (una sola draw call)
+const boltMatrices = [];
+const _bm = new THREE.Matrix4(), _bs = new THREE.Vector3(1,1,1);
+const AXQ = {
+  x: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI/2)),
+  y: new THREE.Quaternion(),
+  z: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2, 0, 0))
+};
+function boltRing(cx, cy, cz, axis, radius, n){
+  for (let i = 0; i < n; i++){
+    const a = i / n * Math.PI * 2 + Math.PI / n;
+    const u = Math.cos(a) * radius, v = Math.sin(a) * radius;
+    let px = cx, py = cy, pz = cz;
+    if (axis === 'x'){ py += u; pz += v; }
+    else if (axis === 'y'){ px += u; pz += v; }
+    else { px += u; py += v; }
+    _bm.compose(new THREE.Vector3(px, py, pz), AXQ[axis], _bs);
+    boltMatrices.push(_bm.clone());
+  }
+}
+// Brida flush + anillo de esparragos (leccion: brida flush o enterrada, nunca air gap)
+function flangeX(R, thick, x, y, z, nBolts, boltR, boltSide = 1){
+  cylX(R, thick, M.STEEL, x, y, z, 24);
+  if (nBolts) boltRing(x + boltSide * (thick/2 + 0.006), y, z, 'x', boltR, nBolts);
+}
+function flangeY(R, thick, x, y, z, nBolts, boltR, boltSide = 1){
+  cylY(R, thick, M.STEEL, x, y, z, 24);
+  if (nBolts) boltRing(x, y + boltSide * (thick/2 + 0.006), z, 'y', boltR, nBolts);
+}
+function flangeZ(R, thick, x, y, z, nBolts, boltR, boltSide = 1){
+  cylZ(R, thick, M.STEEL, x, y, z, 24);
+  if (nBolts) boltRing(x, y, z + boltSide * (thick/2 + 0.006), 'z', boltR, nBolts);
+}
+function makeIM(geo, mat, mats, parent = staticG, cast = true){
+  const im = new THREE.InstancedMesh(geo, mat, mats.length);
+  mats.forEach((m, i) => im.setMatrixAt(i, m));
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = cast; im.receiveShadow = true;
+  parent.add(im);
+  return im;
+}
+const _q0 = new THREE.Quaternion();
+function tMat(x, y, z, q = _q0, s = _bs){
+  return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q, s);
+}
+// Manometro (dial canvas) mirando a +Z: stub laton + bisel + caratula + lente
+function gaugeZ(x, y, z, faceTex, parent = staticG){
+  cylZ(0.012, 0.05, M.BRASS, x, y, z - 0.03, 12, parent);
+  cylZ(0.055, 0.032, M.DARK, x, y, z, 22, parent);
+  mesh(new THREE.TorusGeometry(0.05, 0.007, 8, 26), M.BRASS, x, y, z + 0.018, parent);
+  const face = mesh(new THREE.CircleGeometry(0.047, 26),
+    new THREE.MeshStandardMaterial({ map:faceTex, emissiveMap:faceTex, emissive:0xffffff,
+      emissiveIntensity:0.2, roughness:0.35, metalness:0 }), x, y, z + 0.019, parent);
+  face.castShadow = false;
+  const lens = cylZ(0.048, 0.006, M.GLASS, x, y, z + 0.022, 24, parent);
+  lens.castShadow = false;
+}
+
+// ====== FLUJO: tubos con textura de flechas (scroll allocation-free) ======
+const flows = [];   // { tex, mat, baseDir, reversible, mode }
+function flowPipe(points, r, base, arrow, emis, mode, baseDir, reversible){
+  const tex = flowTex(base, arrow);
+  const mat = new THREE.MeshStandardMaterial({ map:tex, emissive:new THREE.Color(emis),
+    emissiveMap:tex, emissiveIntensity:0.0, roughness:0.4, metalness:0 });
+  const m = makePipe(points, r, mat, 0.05, staticG, 14);
+  m.castShadow = false;                                     // parte animada (offset de textura)
+  tex.repeat.set(1, Math.max(2, Math.round(m.userData.len * 7)));
+  flows.push({ tex, mat, baseDir, reversible, mode });
+  return m;
+}
+
+// ==================================================================
+// COTAS (metros). Ejes: filtro TX, valvula MX, bomba PX.
+// ==================================================================
+const TX = -0.55;                    // eje del filtro de arena
+const MX = 0.40;                     // eje de la valvula multipuerto
+const PX = 0.98, PCY = 0.40;         // eje de la bomba (linea de flecha) y su altura
+
+// ==================================================================
+// 1) FILTRO DE ARENA  (vertical, Ø1.2 x ~1.5 m, azul)
+// ==================================================================
+const TR = 0.60;                     // radio del cuerpo (Ø1.2)
+const T_B0 = 0.55, T_B1 = 1.15;      // cuerpo cilindrico (alto 0.60)
+const T_DTOP = 0.30, T_DBOT = 0.20;  // alturas de cabezal
+{
+  // --- base moldeada oscura (pedestal troncoconico) + faldon ---
+  mesh(new THREE.CylinderGeometry(0.42, 0.52, 0.34, 36), M.BASE_DK, TX, 0.17, 0);
+  mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.05, 36), M.BASE_DK, TX, 0.02, 0);   // pie de la base
+  // --- cabezal inferior (nested en la base) + cuerpo + cabezal superior ---
+  const dBot = mesh(domeGeo(TR, T_DBOT), M.TANK, TX, T_B0, 0);
+  dBot.rotation.x = Math.PI;
+  cylY(TR, (T_B1 - T_B0), M.TANK, TX, (T_B0 + T_B1) / 2, 0, 44);
+  mesh(domeGeo(TR, T_DTOP), M.TANK, TX, T_B1, 0);
+  // soldaduras ecuatoriales
+  mesh(new THREE.TorusGeometry(TR + 0.004, 0.008, 8, 44), M.TANK_D, TX, T_B0, 0).rotation.x = Math.PI/2;
+  mesh(new THREE.TorusGeometry(TR + 0.004, 0.008, 8, 44), M.TANK_D, TX, T_B1, 0).rotation.x = Math.PI/2;
+  // banda de refuerzo media
+  const midBand = cylY(TR + 0.006, 0.05, M.TANK_D, TX, (T_B0 + T_B1) / 2, 0, 44);
+  midBand.castShadow = false;
+
+  // --- boca de inspeccion + ABRAZADERA de banda + tapa + perilla (apice superior) ---
+  const apex = T_B1 + T_DTOP;                                  // ~1.45
+  cylY(0.16, 0.06, M.STEEL_D, TX, apex + 0.02, 0, 28);         // collar de la boca
+  cylY(0.175, 0.045, M.STEEL, TX, apex + 0.06, 0, 32);   // anillo abrazadera (metal desnudo)
+  // orejeta + perno tensor de la abrazadera (frente +Z)
+  box(0.05, 0.07, 0.03, M.STEEL, TX, apex + 0.06, 0.178);
+  cylY(0.009, 0.09, M.BOLT, TX + 0.03, apex + 0.06, 0.185, 8);
+  cylY(0.16, 0.04, M.STEEL_D, TX, apex + 0.1, 0, 28);          // tapa
+  cylY(0.03, 0.06, M.STEEL, TX, apex + 0.15, 0, 12);           // vastago de la perilla
+  mesh(new THREE.TorusGeometry(0.05, 0.014, 10, 24), M.STEEL, TX, apex + 0.185, 0).rotation.x = Math.PI/2; // perilla en T
+
+  // --- mirilla (sight glass) frontal (+Z) ---
+  cylZ(0.06, 0.03, M.BASE_DK, TX, 0.82, TR - 0.01, 20);        // marco oscuro
+  mesh(new THREE.TorusGeometry(0.052, 0.01, 8, 24), M.STEEL, TX, 0.82, TR + 0.012).rotation.x = Math.PI/2;
+  const sight = cylZ(0.045, 0.02, M.GLASS, TX, 0.82, TR + 0.012, 24);
+  sight.castShadow = false;
+
+  // --- placa de datos (frente, +Z) ---
+  const np = mesh(new THREE.PlaneGeometry(0.22, 0.11),
+    new THREE.MeshStandardMaterial({ map:plateFilterTex, roughness:0.4, metalness:0 }),
+    TX, 1.02, TR + 0.008);
+  np.castShadow = false;
+
+  // --- bulkheads bridados: superior (+X, retorno del lazo) e inferior (+X, underdrain) ---
+  cylX(0.05, 0.08, M.PVC, TX + TR + 0.02, 0.90, 0, 16);        // stub superior
+  flangeX(0.08, 0.02, TX + TR + 0.065, 0.90, 0, 6, 0.06, 1);
+  cylX(0.05, 0.08, M.PVC, TX + TR - 0.06, 0.36, 0, 16);        // stub inferior (underdrain)
+  flangeX(0.08, 0.02, TX + TR - 0.015, 0.36, 0, 6, 0.06, 1);
+
+  // --- 3 placas de ancla de la base (instanciadas) ---
+  const anchMats = [];
+  for (let i = 0; i < 3; i++){
+    const a = i / 3 * Math.PI * 2 + Math.PI / 2;
+    anchMats.push(tMat(TX + Math.cos(a) * 0.5, 0.012, Math.sin(a) * 0.5));
+    boltRing(TX + Math.cos(a) * 0.5, 0.03, Math.sin(a) * 0.5, 'y', 0.0001, 1);
+  }
+  makeIM(new THREE.BoxGeometry(0.1, 0.02, 0.1), M.STEEL_D, anchMats);
+}
+
+// ==================================================================
+// 2) VALVULA MULTIPUERTO 6 POSICIONES (cuerpo negro, selector amarillo)
+// ==================================================================
+const V_B0 = 0.55, V_B1 = 1.00;      // tambor
+let selectorG, modeLED;
+{
+  // --- columna de soporte al piso ---
+  cylY(0.05, V_B0, M.STEEL_D, MX, V_B0/2, 0, 16);
+  box(0.16, 0.02, 0.16, M.STEEL_D, MX, 0.012, 0);
+  boltRing(MX - 0.05, 0.03, -0.05, 'y', 0.0001, 1);
+  boltRing(MX + 0.05, 0.03, 0.05, 'y', 0.0001, 1);
+  // --- tambor negro (ABS) + anillo de tornillos + tapa ---
+  cylY(0.14, (V_B1 - V_B0), M.BLACK, MX, (V_B0 + V_B1)/2, 0, 28);
+  const capRing = cylY(0.145, 0.035, M.STEEL_D, MX, V_B1 - 0.02, 0, 28);   // anillo de la tapa
+  capRing.castShadow = false;
+  boltRing(MX, V_B1 - 0.002, 0, 'y', 0.125, 8);
+  cylY(0.135, 0.02, M.BLACK, MX, V_B1 + 0.008, 0, 28);        // tapa
+  // caratula (6 posiciones) mirando +Y
+  const dial = mesh(new THREE.CircleGeometry(0.13, 32),
+    new THREE.MeshStandardMaterial({ map:valveDialTex, roughness:0.5, metalness:0 }),
+    MX, V_B1 + 0.019, 0);
+  dial.rotation.x = -Math.PI/2;
+  dial.castShadow = false;
+  // LED de modo (en la tapa, frente)
+  modeLED = cylY(0.012, 0.014, modeLedMat, MX, V_B1 + 0.02, 0.09, 12);
+  modeLED.castShadow = false;
+
+  // --- 3 puertos laterales con union PVC ---
+  // PUMP (+X, del descargue de la bomba)
+  cylX(0.045, 0.09, M.BLACK, MX + 0.17, 0.75, 0, 16);
+  cylX(0.055, 0.03, M.PVC_D, MX + 0.2, 0.75, 0, 16);
+  // RETURN (+Z, a la alberca)
+  cylZ(0.045, 0.09, M.BLACK, MX, 0.85, 0.17, 16);
+  cylZ(0.055, 0.03, M.PVC_D, MX, 0.85, 0.2, 16);
+  // WASTE (-Z, a drenaje)
+  cylZ(0.045, 0.09, M.BLACK, MX, 0.68, -0.17, 16);
+  cylZ(0.055, 0.03, M.PVC_D, MX, 0.68, -0.2, 16);
+
+  // --- selector (empuja-gira) que apunta a la posicion; gira a BACKWASH en retrolavado ---
+  selectorG = new THREE.Group();
+  selectorG.position.set(MX, V_B1 + 0.03, 0);
+  scene.add(selectorG);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.04, 0.05, 20), M.BLACK);
+  selectorG.add(hub);
+  const spring = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.11, 12), M.STEEL);
+  spring.position.y = 0.08; selectorG.add(spring);
+  // brazo indicador amarillo hacia la posicion (+Z local = FILTER)
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.028, 0.15), M.YELLOW);
+  arm.position.set(0, 0.14, 0.06); selectorG.add(arm);
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.12, 14), M.YELLOW);
+  grip.rotation.x = Math.PI/2; grip.position.set(0, 0.14, 0.135); selectorG.add(grip);
+  selectorG.traverse(o => { o.castShadow = false; });
+}
+
+// ==================================================================
+// 3) BOMBA DE ALBERCA (centrifuga: voluta + trampa de pelos + motor)
+//    Eje de la flecha a lo largo de Z. Motor (-Z) · voluta (z~0) · trampa (+Z).
+// ==================================================================
+let couplingG, fanG, statusLED;
+{
+  // ---- base / patin de la bomba + patas ----
+  box(0.7, 0.05, 0.42, M.FRAME, PX, 0.025, -0.1);
+  for (const [fx, fz] of [[PX-0.28,-0.26],[PX+0.28,-0.26],[PX-0.28,0.05],[PX+0.28,0.05]]){
+    box(0.05, 0.05, 0.05, M.MOTOR_D, fx, 0.06, fz);
+    boltRing(fx, 0.055, fz, 'y', 0.0001, 1);
+  }
+
+  // ---- VOLUTA ESPIRAL (extruida en Z, descarga +Y) ----
+  {
+    const shape = new THREE.Shape();
+    const N = 90;
+    for (let i = 0; i <= N; i++){
+      const a = i / N * Math.PI * 2;
+      const r = 0.088 + 0.05 * (a / (Math.PI * 2));
+      const sx = Math.cos(a) * r, sy = Math.sin(a) * r;
+      if (i === 0) shape.moveTo(sx, sy); else shape.lineTo(sx, sy);
+    }
+    shape.closePath();
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.12, bevelEnabled: true,
+      bevelThickness: 0.012, bevelSize: 0.01, bevelSegments: 2 });
+    geo.translate(0, 0, -0.06);
+    mesh(geo, M.VOLUTE, PX, PCY, -0.02);
+  }
+  // tapa de succion trasera (-Z, hacia el motor) con circulo de pernos del ojo
+  cylZ(0.11, 0.028, M.STEEL_D, PX, PCY, -0.1, 28);
+  boltRing(PX, PCY, -0.116, 'z', 0.09, 8);
+  cylZ(0.055, 0.03, M.STEEL_D, PX, PCY, -0.12, 20);            // boss del prensaestopas
+  // cuello de descarga vertical + brida
+  mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.14, 20), M.STEEL_D, PX, 0.55, -0.02);
+  flangeY(0.075, 0.02, PX, 0.63, -0.02, 6, 0.058, 1);
+  // tapon de drenaje (laton) al pie de la voluta
+  cylY(0.01, 0.03, M.BRASS, PX - 0.07, 0.24, -0.02, 8);
+
+  // ---- TRAMPA DE PELOS (strainer pot, vertical, +Z) con TAPA TRANSPARENTE + canasta ----
+  const HZ = 0.2;                                             // centro de la trampa en z
+  cylZ(0.075, 0.13, M.STEEL_D, PX, PCY, 0.06, 20);            // garganta que une voluta<->trampa
+  cylY(0.115, 0.36, M.STEEL_D, PX, 0.34, HZ, 24);            // pared del pote
+  mesh(new THREE.CylinderGeometry(0.115, 0.09, 0.06, 24), M.STEEL_D, PX, 0.15, HZ);  // fondo conico
+  const potRing = cylY(0.125, 0.03, M.STEEL, PX, 0.52, HZ, 24);   // anillo de cierre (metal desnudo)
+  potRing.castShadow = false;
+  // canasta perforada (visible por la tapa)
+  const basket = cylY(0.092, 0.3, M.BASKET, PX, 0.35, HZ, 20);
+  basket.castShadow = false;
+  mesh(new THREE.CircleGeometry(0.092, 20), M.BASKET, PX, 0.205, HZ).rotation.x = -Math.PI/2;  // fondo canasta
+  // TAPA TRANSPARENTE (domo) + perilla
+  const lid = mesh(new THREE.SphereGeometry(0.108, 24, 12, 0, Math.PI*2, 0, Math.PI/2), M.GLASS, PX, 0.53, HZ);
+  lid.castShadow = false;
+  mesh(new THREE.TorusGeometry(0.108, 0.012, 8, 24), M.STEEL, PX, 0.53, HZ).rotation.x = Math.PI/2;
+  cylY(0.03, 0.05, M.YELLOW, PX, 0.62, HZ, 16);              // perilla de la tapa
+
+  // ---- MOTOR ELECTRICO ALETADO (-Z) ----
+  cylZ(0.085, 0.28, M.MOTOR, PX, PCY, -0.42, 28);            // cuerpo
+  {
+    const finGeo = new THREE.TorusGeometry(0.09, 0.006, 6, 32);   // aletas (anillos torus en XY = eje Z)
+    const finIM = new THREE.InstancedMesh(finGeo, M.FIN, 9);
+    for (let i = 0; i < 9; i++){
+      _bm.compose(new THREE.Vector3(PX, PCY, -0.30 - i * 0.03), _q0, _bs);
+      finIM.setMatrixAt(i, _bm);
+    }
+    finIM.castShadow = false; finIM.receiveShadow = true;
+    staticG.add(finIM);
+  }
+  cylZ(0.088, 0.03, M.MOTOR_D, PX, PCY, -0.27, 28);          // campana delantera (sella hacia la voluta)
+  cylZ(0.04, 0.06, M.MOTOR_D, PX, PCY, -0.235, 16);          // boss del balero delantero
+  cylZ(0.092, 0.05, M.MOTOR_D, PX, PCY, -0.57, 28);          // campana trasera
+  cylZ(0.095, 0.016, M.MOTOR_D, PX, PCY, -0.6, 28);          // aro del cowl
+  // rejilla del cowl (disco oscuro) + ventilador que gira detras
+  const grille = mesh(new THREE.CircleGeometry(0.09, 28), M.DARK, PX, PCY, -0.606);
+  grille.rotation.x = Math.PI;                               // mira a -Z
+  grille.castShadow = false;
+  fanG = new THREE.Group();
+  fanG.position.set(PX, PCY, -0.57);
+  scene.add(fanG);
+  {
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.03, 14), M.MOTOR_D);
+    hub.rotation.x = Math.PI/2; fanG.add(hub);
+    const bladeGeo = new THREE.BoxGeometry(0.05, 0.012, 0.01);
+    const bladeIM = new THREE.InstancedMesh(bladeGeo, M.MOTOR_D, 6);
+    for (let i = 0; i < 6; i++){
+      const a = i / 6 * Math.PI * 2;
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, a));
+      _bm.compose(new THREE.Vector3(Math.cos(a) * 0.05, Math.sin(a) * 0.05, 0), q, _bs);
+      bladeIM.setMatrixAt(i, _bm);
+    }
+    fanG.add(bladeIM);
+    fanG.traverse(o => { o.castShadow = false; });
+  }
+  // ---- flecha + ACOPLAMIENTO/slinger que gira (entre campana delantera y voluta) ----
+  cylZ(0.02, 0.14, M.SHAFT, PX, PCY, -0.18, 12);             // flecha desnuda visible
+  couplingG = new THREE.Group();
+  couplingG.position.set(PX, PCY, -0.19);
+  scene.add(couplingG);
+  {
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 20), coupMat);
+    disc.rotation.x = Math.PI/2; couplingG.add(disc);
+    // asimetria para que el giro SE LEA: chaveta oscura + 3 pernos en la cara
+    const key = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.09, 0.032), M.DARK);
+    couplingG.add(key);
+    const boltGeo = new THREE.CylinderGeometry(0.006, 0.006, 0.034, 8);
+    for (let i = 0; i < 3; i++){
+      const a = i / 3 * Math.PI * 2;
+      const b = new THREE.Mesh(boltGeo, M.NUT);
+      b.rotation.x = Math.PI/2;
+      b.position.set(Math.cos(a) * 0.03, Math.sin(a) * 0.03, 0);
+      couplingG.add(b);
+    }
+    couplingG.traverse(o => { o.castShadow = false; });
+  }
+  // ---- caja de conexiones + conduit + LED de estado (arriba del motor) ----
+  box(0.12, 0.09, 0.14, M.MOTOR_D, PX, 0.56, -0.44);
+  box(0.128, 0.02, 0.148, M.DARK, PX, 0.61, -0.44);
+  makePipe([[PX + 0.05, 0.1, -0.44], [PX + 0.05, 0.52, -0.44]], 0.012, M.DARK, 0.04);
+  statusLED = cylZ(0.012, 0.012, ledMat, PX, 0.56, -0.37, 12);
+  statusLED.castShadow = false;
+  const ledLight = new THREE.PointLight(0xff2233, 0.2, 0.35);
+  ledLight.position.set(PX, 0.6, -0.28);
+  scene.add(ledLight);
+  couplingG.userData.ledLight = ledLight;
+}
+
+// ==================================================================
+// 4) VALVULAS DE BOLA (helper) + TUBERIA DE FLUJO
+// ==================================================================
+function ballValve(x, y, z, axis, len = 0.14){
+  // cuerpo (fundicion pintada) + 2 uniones PVC + palanca ROJA
+  if (axis === 'z'){
+    cylZ(0.048, len, M.STEEL_D, x, y, z, 18);
+    cylZ(0.056, 0.028, M.PVC_D, x, y, z - len/2 + 0.02, 18);
+    cylZ(0.056, 0.028, M.PVC_D, x, y, z + len/2 - 0.02, 18);
+    box(0.02, 0.02, 0.11, M.RED, x, y + 0.075, z); box(0.05, 0.03, 0.03, M.RED, x, y + 0.12, z);
+    cylY(0.012, 0.06, M.STEEL, x, y + 0.05, z, 10);
+  } else {
+    cylX(0.048, len, M.STEEL_D, x, y, z, 18);
+    cylX(0.056, 0.028, M.PVC_D, x - len/2 + 0.02, y, z, 18);
+    cylX(0.056, 0.028, M.PVC_D, x + len/2 - 0.02, y, z, 18);
+    box(0.11, 0.02, 0.02, M.RED, x, y + 0.075, z); box(0.03, 0.03, 0.05, M.RED, x, y + 0.12, z);
+    cylY(0.012, 0.06, M.STEEL, x, y + 0.05, z, 10);
+  }
+}
+
+// Puntos de conexion (metros)
+const R_PVC = 0.032;
+// -- lazo filtro <-> valvula (REVERSIBLE en retrolavado) --
+// superior: valvula (+X port) ... en realidad el lazo conecta la valvula a los bulkheads del filtro.
+// TANK_TOP: valve upper region <-> tank top-side bulkhead (+X del filtro, y0.90)
+flowPipe([[MX - 0.05, 0.90, 0], [TX + TR + 0.09, 0.90, 0]],
+  R_PVC, '#173f6e', '#5fa8ff', 0x2f7fff, 'run', 1, true);
+// TANK_BOT: valve lower <-> tank underdrain (+X del filtro, y0.36) — riser en L
+flowPipe([[MX - 0.05, 0.62, 0], [MX - 0.12, 0.62, 0], [MX - 0.12, 0.36, 0], [TX + TR + 0.02, 0.36, 0]],
+  R_PVC, '#173f6e', '#5fa8ff', 0x2f7fff, 'run', -1, true);
+
+// -- succion (AZUL): alberca -> trampa de pelos (+Z), con valvula de bola --
+flowPipe([[PX, 0.34, 0.7], [PX, 0.34, 0.28]],
+  R_PVC, '#173f6e', '#5fa8ff', 0x2f7fff, 'run', 1, false);
+cylZ(0.05, 0.06, M.PVC, PX, 0.34, 0.31, 16);                // union a la trampa
+ballValve(PX, 0.34, 0.55, 'z');
+flangeZ(0.075, 0.02, PX, 0.34, 0.7, 6, 0.058, 1);          // brida a la red (de alberca)
+
+// -- descarga bomba -> valvula PUMP port (AZUL) --
+flowPipe([[PX, 0.55, -0.02], [PX, 0.84, -0.02], [PX, 0.84, 0], [MX + 0.22, 0.84, 0], [MX + 0.22, 0.75, 0]],
+  R_PVC, '#173f6e', '#5fa8ff', 0x2f7fff, 'run', 1, false);
+
+// -- retorno (VERDE): valvula RETURN port (+Z) -> alberca, con bola + manometro --
+flowPipe([[MX, 0.85, 0.2], [MX, 0.85, 0.72]],
+  R_PVC, '#0f5a34', '#3fe08a', 0x1fd06e, 'filter', 1, false);
+ballValve(MX, 0.85, 0.5, 'z');
+cylZ(0.05, 0.04, M.PVC_D, MX, 0.85, 0.72, 16);
+gaugeZ(MX + 0.11, 0.85, 0.32, faceFilter);                 // manometro de filtro (lado retorno)
+cylX(0.012, 0.11, M.BRASS, MX + 0.055, 0.85, 0.32, 10);    // stub del manometro
+
+// -- retrolavado (AMBAR): valvula WASTE port (-Z) -> drenaje (baja al piso) --
+flowPipe([[MX, 0.68, -0.2], [MX, 0.68, -0.55], [MX, 0.14, -0.55]],
+  R_PVC, '#6e4a12', '#ffc24d', 0xffb020, 'wash', 1, false);
+// rejilla de drenaje en el piso
+box(0.24, 0.02, 0.2, M.GRATE, MX, 0.02, -0.62);
+{
+  const barMats = [];
+  for (let i = 0; i < 5; i++) barMats.push(tMat(MX - 0.09 + i * 0.045, 0.035, -0.62));
+  makeIM(new THREE.BoxGeometry(0.02, 0.015, 0.18), M.STEEL_D, barMats, staticG, false);
+}
+
+// manometro de succion (en el pote de la trampa, frente +Z) — presion baja
+gaugeZ(PX - 0.11, 0.46, 0.335, faceSuction);               // cara +Z del pote (z = 0.2 + 0.115 + 0.02)
+
+// soportes de tuberia a piso
+box(0.05, 0.62, 0.05, M.FRAME, MX, 0.31, 0.72);            // soporte del retorno
+box(0.05, 0.34, 0.05, M.FRAME, PX, 0.17, 0.7);            // soporte de la succion
+
+// ==================================================================
+// INSTANCIADO GLOBAL (esparragos de bridas + anclas) — 1 draw call
+// ==================================================================
+makeIM(new THREE.CylinderGeometry(0.008, 0.008, 0.02, 6), M.BOLT, boltMatrices, staticG, false);
+
+// ====== ESTADO / CONTROL DE EQUIPO ======
+const state = { pump:true, wash:false, rot:true };
+let rpm = 0;                                    // 0..1 con inercia asimetrica
+let simT = 0;
+const WASH_ANGLE = -Math.PI * 2 / 6;            // una posicion (FILTER -> BACKWASH) sobre la caratula
+let leverT = 0;                                 // 0 filtracion, 1 retrolavado (eased)
+
+const bPump = document.getElementById('bPump');
+const bWash = document.getElementById('bWash');
+const bRot  = document.getElementById('bRot');
+const modeLbl = document.getElementById('modeLbl');
+function setBtn(b, on){ b.className = on ? 'on' : 'off'; b.textContent = on ? 'ON' : 'OFF'; }
+
+function applyState(){
+  // Solo cambian emisivos / objetivo de giro / direccion de scroll: NO se rehornean sombras aqui
+  const on = state.pump;
+  coupMat.color.setHex(on ? 0x00ff66 : 0xff2233);
+  coupMat.emissive.setHex(on ? 0x00ff66 : 0xff2233);
+  coupMat.emissiveIntensity = on ? 0.6 : 0.4;
+  ledMat.color.setHex(on ? 0x00ff66 : 0xff2233);
+  ledMat.emissive.setHex(on ? 0x00ff66 : 0xff2233);
+  ledMat.emissiveIntensity = on ? 1.7 : 1.2;
+  const ll = couplingG.userData.ledLight;
+  ll.color.setHex(on ? 0x00ff66 : 0xff2233); ll.intensity = on ? 0.28 : 0.18;
+  const mg = state.wash ? 0xffb020 : 0x00e07a;
+  modeLedMat.color.setHex(mg); modeLedMat.emissive.setHex(mg);
+  modeLbl.innerHTML = 'MODO: <b>' + (state.wash ? 'RETROLAVADO' : 'FILTRACIÓN') + '</b>';
+  modeLbl.className = 'mode' + (state.wash ? ' rl' : '');
+  controls.autoRotate = state.rot;
+}
+bPump.addEventListener('click', () => { state.pump = !state.pump; setBtn(bPump, state.pump); applyState(); });
+bWash.addEventListener('click', () => { state.wash = !state.wash; setBtn(bWash, state.wash); applyState(); });
+bRot.addEventListener('click',  () => { state.rot  = !state.rot;  setBtn(bRot,  state.rot);  applyState(); });
+
+applyState();
+renderer.shadowMap.needsUpdate = true;          // horneado unico tras construir la escena
+
+// ====== LOOP DE ANIMACION ======
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  simT += dt;
+
+  // inercia asimetrica de la bomba (arranque rapido, paro con coast-down lento)
+  const target = state.pump ? 1 : 0;
+  const k = state.pump ? 1.5 : 0.5;
+  rpm += (target - rpm) * Math.min(1, dt * k);
+  if (Math.abs(rpm - target) < 0.0015) rpm = target;
+
+  const spin = rpm * 17;
+  couplingG.rotation.z -= dt * spin;
+  fanG.rotation.z += dt * spin * 1.1;            // asimetria de sentido para que ambos giros se lean
+
+  // selector: easing hacia BACKWASH en retrolavado (solo transform)
+  const lt = state.wash ? 1 : 0;
+  leverT += (lt - leverT) * Math.min(1, dt * 3.5);
+  selectorG.rotation.y = leverT * WASH_ANGLE;
+
+  // FLUJO: scroll allocation-free (solo muta offset y emissiveIntensity)
+  const running = rpm > 0.15;
+  const pulse = 0.32 + 0.16 * Math.sin(simT * 3.0);
+  for (const f of flows){
+    let on = running;
+    if (f.mode === 'filter') on = running && !state.wash;
+    else if (f.mode === 'wash') on = running && state.wash;
+    if (on){
+      const d = f.baseDir * (f.reversible && state.wash ? -1 : 1);
+      f.tex.offset.y += d * dt * (0.15 + 0.45 * rpm);
+      f.mat.emissiveIntensity = pulse;
+    } else {
+      f.mat.emissiveIntensity = 0.0;
+    }
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
