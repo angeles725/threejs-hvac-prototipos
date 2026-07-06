@@ -158,7 +158,7 @@ This index guides through the **40 blocks** of this research. Each block is an i
 - [ ] G41 — Equipment LOD (dual hi/lo InstancedMesh for chillers/pumps) → **requires-execution (§19)**, not read-only
 - [x] G42 — Voxel→realistic parity map + living environment It.1 (relief, animated sea, biomes, sky) → [Block 41] (run 8, build-phase §19)
 - [x] G43 — Living environment It.2 (vegetation, paths/boardwalk, beach & pool furniture) → [Block 41 §41.6] (run 8, +12 draws, deployed)
-- [~] G44 — Voxel-parity interactions It.4 (scene labels DONE; pipe/duct audit + flow/isolation in progress) → [Block 41 §41.6] (run 8, in-loop)
+- [x] G44 — Voxel-parity It.4 (scene labels + pipe connectivity fixes [CHW riser to roof AHU, pool loop, condenser 2-pipe] + rooftop AHU->shaft duct) → [Block 41 §41.6] (run 8, deployed). DEFERRED (optional next batch): zone isolation (AISLAR), per-unit detail panel (needs hitboxes on merged geo), pipe flow particles (voxel had them stripped — realistic already at parity).
 - [x] G45 — Per-floor average temperature It.3 (simulated °C, HUD panel + 8 floating color-coded labels, 1 Hz) → [Block 41 §41.6] (run 8, +8 draws, deployed)
 
 ## Non-investigable gaps (without lab / hardware / NDA)
