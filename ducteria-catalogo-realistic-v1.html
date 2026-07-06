@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CATALOGO DUCTERIA HVAC · 8 piezas · Realistic PBR · 1 unidad = 1 m</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter:blur(6px); }
+  #ctl b { color:#00d4aa; }
+  #ctl #stats { color:#4a5a68; }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); }
+  #legend .lh { color:#fff; letter-spacing:0.15em; margin-bottom:6px; font-size:10px; }
+  #legend div.fl { display:flex; align-items:center; gap:8px; margin:3px 0; color:#cfe0da; }
+  #legend i { width:12px; height:10px; display:inline-block; border-radius:2px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter:blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; gap:12px; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:78px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+</style>
+<script>
+// Inyeccion dinamica de importmap: String.fromCharCode(64) evita el mangling de '@' (package@version) por Cloudflare.
+(function(){
+  var AT = String.fromCharCode(64);
+  var tag = document.createElement('script');
+  tag.type = 'importmap';
+  tag.textContent = JSON.stringify({ imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }});
+  document.head.appendChild(tag);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>CATALOGO DUCTERIA HVAC · 8 piezas</b><br>
+  <span>Kit de ducteria modular · Realistic PBR · 1 unidad = 1 m</span>
+</div>
+<div id="legend">
+  <div class="lh">FLUJOS</div>
+  <div class="fl"><i style="background:#2f7bff"></i> Suministro</div>
+  <div class="fl"><i style="background:#ff2233"></i> Retorno</div>
+  <div class="fl"><i style="background:#ffc400"></i> Extraccion</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan<br><span id="stats"></span></div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>COMPUERTA VCD</label><button id="bDamper" class="off">CERRADA</button></div>
+  <div class="row"><label>ETIQUETAS</label><button id="bLabels" class="on">ON</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 unidad = 1 m. Spec dimensional/composicion: voxel/ducteria-catalogo-voxel-v1.html (1 voxel = 0.025 m).
+// SHOWCASE de 8 piezas modulares de ducteria en fila, cada una centrada sobre su PEDESTAL, leidas de frente.
+// Seccion de ducto de referencia 0.50 (Z) x 0.30 (Y) m; tramos ~1.2 m; difusor/rejilla retorno ~0.60 m.
+// Lamina GALVANIZADA = metal desnudo (metalness ~0.95, roughness ~0.40) con TONO CLARO + roughnessMap de
+//   spangle/costuras para que no lea negra en el entorno oscuro. Aislamiento gris = metalness 0. Difusores/
+//   rejillas blancas y manijas rojas = pintadas metalness 0. Pedestales oscuros pintados.
+// Todo repetido esta INSTANCIADO (alabes, anillos flex, conos de difusor, barras de rejilla, plisados de
+//   filtro, herrajes, pedestales). Etiquetas por pieza via CanvasTexture (Sprite).
+// ANIMACION: la HOJA de la compuerta VCD (+ su manija roja externa) interpola su rotacion entre cerrada y
+//   abierta en COMPUERTA; ETIQUETAS solo togglea la visibilidad de los sprites. applyState() nunca reconstruye
+//   geometria ni re-hornea sombras; horneado unico tras construir; partes animadas castShadow=false.
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 16, 58);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.05, 300);
+camera.position.set(5.5, 5.0, 13.5);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;          // sombras horneadas: un solo horneado tras construir
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.45;
+controls.minDistance = 3.0;
+controls.maxDistance = 46;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(0, 0.55, 0);
+// Ground clamp (regla de la casa): ni el target ni la camara bajan del piso
+controls.addEventListener('change', () => {
+  if (controls.target.y < 0) controls.target.y = 0;
+  if (camera.position.y < 0.25) camera.position.y = 0.25;
+});
+
+// ====== RIG DE LUCES ======
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(8.0, 12.0, 8.0);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -9.0; sun.shadow.camera.right = 9.0;
+sun.shadow.camera.top = 6.0; sun.shadow.camera.bottom = -1.5;
+sun.shadow.camera.near = 2.0; sun.shadow.camera.far = 42;
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.02;
+sun.target.position.set(0, 0.4, 0);
+scene.add(sun); scene.add(sun.target);
+
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-7.0, 4.5, -4.0);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rim.position.set(0, 3.0, 8.0);
+scene.add(rim);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+// ====== PISO ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(160, 80),
+  new THREE.MeshStandardMaterial({ color:0x0a0d12, roughness:0.95, metalness:0 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(80, 80, 0x123f35, 0x0c1d1a);
+grid.position.y = 0.002;
+grid.material.transparent = true;
+grid.material.opacity = 0.32;
+scene.add(grid);
+
+// ====== TEXTURAS PROCEDURALES (CanvasTexture) ======
+function canvasTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+function dataTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 4;
+  return t;
+}
+
+// roughnessMap de spangle galvanizado (mapa lineal): cristales facetados + costuras longitudinales.
+// El escalar de roughness MULTIPLICA este mapa; base gris medio deja el metal en la banda 0.35-0.5.
+const galvRough = dataTex(256, 256, (g) => {
+  g.fillStyle = '#9a9a9a'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 170; i++){
+    const x = Math.random()*256, y = Math.random()*256, r = 5 + Math.random()*22;
+    const v = 105 + Math.floor(Math.random()*80);
+    g.strokeStyle = `rgba(${v},${v},${v},0.45)`; g.lineWidth = 1;
+    g.beginPath();
+    for (let k = 0; k < 5; k++){ const a = Math.random()*6.283; g.moveTo(x, y); g.lineTo(x + Math.cos(a)*r, y + Math.sin(a)*r); }
+    g.stroke();
+  }
+  g.strokeStyle = 'rgba(70,70,70,0.6)'; g.lineWidth = 2;
+  for (let x = 32; x < 256; x += 64){ g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 256); g.stroke(); }
+});
+galvRough.wrapS = galvRough.wrapT = THREE.RepeatWrapping;
+galvRough.repeat.set(3, 1);
+
+// roughnessMap del aislamiento (superficie mate fibrosa)
+const insRough = dataTex(256, 256, (g) => {
+  g.fillStyle = '#dcdcdc'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 3000; i++){
+    const v = 200 + Math.floor(Math.random()*55);
+    g.fillStyle = `rgba(${v},${v},${v},0.25)`;
+    g.fillRect(Math.random()*256, Math.random()*256, 1 + Math.random()*2, 1 + Math.random()*2);
+  }
+});
+insRough.wrapS = insRough.wrapT = THREE.RepeatWrapping;
+insRough.repeat.set(2, 2);
+
+// Media plisada de filtro (crema fibrosa)
+const filterTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#e8e0c6'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 3000; i++){
+    g.fillStyle = Math.random() < 0.5 ? 'rgba(206,198,172,0.25)' : 'rgba(240,234,214,0.2)';
+    g.fillRect(Math.random()*w, Math.random()*h, 1 + Math.random()*2, 1 + Math.random()*2);
+  }
+});
+filterTex.wrapS = filterTex.wrapT = THREE.RepeatWrapping;
+
+// ====== PALETA PBR (metalness ~1 = metal desnudo · metalness 0 = pintado) ======
+const M = {
+  GALV:    new THREE.MeshStandardMaterial({ color:0xbcc7d0, roughness:0.40, metalness:0.95, roughnessMap:galvRough }),
+  GALV_SS: new THREE.MeshStandardMaterial({ color:0xbcc7d0, roughness:0.42, metalness:0.95, roughnessMap:galvRough, side:THREE.DoubleSide }),
+  GALV_D:  new THREE.MeshStandardMaterial({ color:0x8f9daa, roughness:0.46, metalness:0.90 }),
+  GALV_T:  new THREE.MeshStandardMaterial({ color:0xc2ccd4, roughness:0.35, metalness:0.85, transparent:true, opacity:0.26, depthWrite:false, side:THREE.DoubleSide }),
+  EDGE:    new THREE.MeshStandardMaterial({ color:0x59636e, roughness:0.50, metalness:0.60 }),
+  INSUL:   new THREE.MeshStandardMaterial({ color:0x9aa0a8, roughness:1.0,  metalness:0, roughnessMap:insRough }),
+  INSUL_D: new THREE.MeshStandardMaterial({ color:0x7c828a, roughness:1.0,  metalness:0 }),
+  WHITE:   new THREE.MeshStandardMaterial({ color:0xf2f4f6, roughness:0.55, metalness:0 }),
+  WHITE_D: new THREE.MeshStandardMaterial({ color:0xd2d8de, roughness:0.60, metalness:0 }),
+  GRIL_BG: new THREE.MeshStandardMaterial({ color:0x11161d, roughness:0.90, metalness:0.10 }),
+  RED:     new THREE.MeshStandardMaterial({ color:0xd93636, roughness:0.45, metalness:0.20, emissive:0xd93636, emissiveIntensity:0.12 }),
+  FLEX:    new THREE.MeshStandardMaterial({ color:0xcfd6dc, roughness:0.50, metalness:0.55 }),
+  FLEX_D:  new THREE.MeshStandardMaterial({ color:0x8b959f, roughness:0.60, metalness:0.40 }),
+  CREAM:   new THREE.MeshStandardMaterial({ map:filterTex, roughness:0.90, metalness:0 }),
+  FILTER_F:new THREE.MeshStandardMaterial({ color:0xb08d57, roughness:0.85, metalness:0 }),
+  VANE:    new THREE.MeshStandardMaterial({ color:0xa7b6c0, roughness:0.40, metalness:0.70, side:THREE.DoubleSide }),
+  PED:     new THREE.MeshStandardMaterial({ color:0x18202e, roughness:0.70, metalness:0.15 }),
+  PED_T:   new THREE.MeshStandardMaterial({ color:0x25344a, roughness:0.60, metalness:0.20 }),
+  TRIM:    new THREE.MeshStandardMaterial({ color:0x00d4aa, roughness:0.40, metalness:0.20, emissive:0x00d4aa, emissiveIntensity:0.7 }),
+  FLOW_S:  new THREE.MeshStandardMaterial({ color:0x2f7bff, roughness:0.50, metalness:0.20, emissive:0x2f7bff, emissiveIntensity:0.6 }),
+  FLOW_R:  new THREE.MeshStandardMaterial({ color:0xff2233, roughness:0.50, metalness:0.20, emissive:0xff2233, emissiveIntensity:0.6 }),
+  FLOW_E:  new THREE.MeshStandardMaterial({ color:0xffc400, roughness:0.50, metalness:0.20, emissive:0xffc400, emissiveIntensity:0.6 })
+};
+
+// ====== HELPERS DE GEOMETRIA ======
+const staticG = new THREE.Group();     // todo lo estatico (sombras horneadas)
+scene.add(staticG);
+
+function mesh(geo, mat, x = 0, y = 0, z = 0, parent = staticG){
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+function box(w, h, d, mat, x, y, z, parent = staticG){
+  return mesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent);
+}
+function cylX(r, len, mat, x, y, z, seg = 16, parent = staticG){
+  const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+  m.rotation.z = Math.PI / 2;
+  return m;
+}
+function cylY(r, len, mat, x, y, z, seg = 16, parent = staticG){
+  return mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+}
+
+// Tubo rectangular (pared de ducto) — perfil rect exterior menos hueco interior, extruido a lo largo de X.
+// Convencion: widthZ a lo largo de Z, heightY a lo largo de Y, len a lo largo de X.
+function rectTube(widthZ, heightY, len, t){
+  const hw = widthZ/2, hh = heightY/2, iw = hw - t, ih = hh - t;
+  const s = new THREE.Shape();
+  s.moveTo(-hw, -hh); s.lineTo(hw, -hh); s.lineTo(hw, hh); s.lineTo(-hw, hh); s.closePath();
+  const hole = new THREE.Path();
+  hole.moveTo(-iw, -ih); hole.lineTo(-iw, ih); hole.lineTo(iw, ih); hole.lineTo(iw, -ih); hole.closePath();
+  s.holes.push(hole);
+  const g = new THREE.ExtrudeGeometry(s, { depth:len, bevelEnabled:false });
+  g.translate(0, 0, -len/2);
+  g.rotateY(Math.PI/2);      // extrusion local Z -> X
+  return g;
+}
+// Brida/marco plano normal X (plano Z-Y). outerW/heightY exteriores, holeW/holeH abertura.
+function plateX(outerW, outerH, holeW, holeH, t){
+  const a = outerW/2, b = outerH/2, c = holeW/2, d = holeH/2;
+  const s = new THREE.Shape();
+  s.moveTo(-a, -b); s.lineTo(a, -b); s.lineTo(a, b); s.lineTo(-a, b); s.closePath();
+  const h = new THREE.Path();
+  h.moveTo(-c, -d); h.lineTo(-c, d); h.lineTo(c, d); h.lineTo(c, -d); h.closePath();
+  s.holes.push(h);
+  const g = new THREE.ExtrudeGeometry(s, { depth:t, bevelEnabled:false });
+  g.translate(0, 0, -t/2);
+  g.rotateY(Math.PI/2);
+  return g;
+}
+// Brida/marco plano normal Z (plano X-Y).
+function plateZ(outerW, outerH, holeW, holeH, t){
+  const a = outerW/2, b = outerH/2, c = holeW/2, d = holeH/2;
+  const s = new THREE.Shape();
+  s.moveTo(-a, -b); s.lineTo(a, -b); s.lineTo(a, b); s.lineTo(-a, b); s.closePath();
+  const h = new THREE.Path();
+  h.moveTo(-c, -d); h.lineTo(-c, d); h.lineTo(c, d); h.lineTo(c, -d); h.closePath();
+  s.holes.push(h);
+  const g = new THREE.ExtrudeGeometry(s, { depth:t, bevelEnabled:false });
+  g.translate(0, 0, -t/2);
+  return g;
+}
+// Transicion cuadrado->redondo: loft de un anillo rectangular (x=-len/2) a uno circular (x=+len/2).
+function squareToRound(len, hw, hh, r, segX, N){
+  const pos = [], idx = [];
+  const cornerR = Math.hypot(hw, hh);
+  for (let ix = 0; ix <= segX; ix++){
+    const f = ix / segX, x = -len/2 + len * f;
+    for (let i = 0; i < N; i++){
+      const a = i / N * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+      let Rr = Math.min(hw / Math.max(Math.abs(ca), 1e-4), hh / Math.max(Math.abs(sa), 1e-4));
+      Rr = Math.min(Rr, cornerR);
+      const R = Rr + (r - Rr) * f;
+      pos.push(x, R * sa, R * ca);
+    }
+  }
+  for (let ix = 0; ix < segX; ix++)
+    for (let i = 0; i < N; i++){
+      const a = ix*N + i, b = ix*N + (i+1)%N, c = (ix+1)*N + i, d = (ix+1)*N + (i+1)%N;
+      idx.push(a, c, b, b, c, d);
+    }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+// ====== INSTANCIADO ======
+const Q0 = new THREE.Quaternion();
+const S1 = new THREE.Vector3(1, 1, 1);
+function tMat(x, y, z, q, s){
+  return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q || Q0, s || S1);
+}
+function makeIM(geo, mat, mats, cast = true, parent = staticG){
+  const im = new THREE.InstancedMesh(geo, mat, mats.length);
+  mats.forEach((m, i) => im.setMatrixAt(i, m));
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = cast; im.receiveShadow = true;
+  parent.add(im);
+  return im;
+}
+const QY90 = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI/2, 0));
+
+// ====== COTAS GLOBALES (metros) ======
+const PED_TOP = 0.30;                 // cara superior del pedestal (12 vox)
+const DW = 0.50, DH = 0.30;           // seccion de ducto de referencia (Z x Y)
+const PITCH = 1.8;                    // separacion de piezas en X
+
+// ==================================================================
+// PIEZA 1 · TRAMO RECTO RECTANGULAR CON BRIDA TDC (1.2 m) — mitad aislada
+// ==================================================================
+function tramoRecto(px){
+  const len = 1.2, t = 0.012, yc = PED_TOP + 0.03 + DH/2;
+  const x0 = px - len/2, x1 = px + len/2;
+  // cuerpo del ducto (galvanizado, tubo cerrado)
+  mesh(rectTube(DW, DH, len, t), M.GALV, px, yc, 0);
+  // costura intermedia
+  mesh(plateX(DW + 0.008, DH + 0.008, DW - 0.02, DH - 0.02, 0.01), M.GALV_D, px - 0.02, yc, 0);
+  // bridas TDC en ambos extremos
+  mesh(plateX(DW + 0.06, DH + 0.06, DW - 0.02, DH - 0.02, 0.022), M.GALV_D, x0 - 0.011, yc, 0);
+  mesh(plateX(DW + 0.06, DH + 0.06, DW - 0.02, DH - 0.02, 0.022), M.GALV_D, x1 + 0.011, yc, 0);
+  // placas de esquina TDC (8) instanciadas
+  const cleatMats = [], cw = DW/2 + 0.02, ch = DH/2 + 0.02;
+  for (const cx of [x0 - 0.02, x1 + 0.02])
+    for (const sz of [-1, 1]) for (const sy of [-1, 1])
+      cleatMats.push(tMat(cx, yc + sy*ch, sz*cw, QY90, new THREE.Vector3(0.055, 0.055, 0.012)));
+  makeIM(new THREE.BoxGeometry(1, 1, 1), M.EDGE, cleatMats, true);
+  // forro de aislamiento gris (mitad derecha)
+  const insLen = len/2 - 0.03;
+  mesh(rectTube(DW + 0.09, DH + 0.09, insLen, 0.045), M.INSUL, px + len/4 + 0.005, yc, 0);
+  // cara de corte del aislamiento (a la vista, plano medio)
+  mesh(plateX(DW + 0.09, DH + 0.09, DW, DH, 0.014), M.INSUL_D, px + 0.02, yc, 0);
+  // silletas de apoyo bajo la mitad descubierta (instanciadas)
+  const sadMats = [];
+  for (const sx of [x0 + 0.16, x0 + 0.42])
+    sadMats.push(tMat(sx, PED_TOP + 0.015, 0, Q0, new THREE.Vector3(0.05, 0.03, DW + 0.04)));
+  makeIM(new THREE.BoxGeometry(1, 1, 1), M.EDGE, sadMats, true);
+}
+
+// ==================================================================
+// PIEZA 2 · CODO 90° CON ALABES GUIA (corte, 0.6 m)
+// ==================================================================
+function codo90(px){
+  const S = 0.6, H = 0.30, t = 0.012;
+  const yb = PED_TOP + 0.02, yc = yb + H/2, yt = yb + H;
+  // piso
+  box(S, t, S, M.GALV_D, px, yb, 0);
+  // paredes exteriores (entrada -X, salida +Z): pared +X y pared -Z
+  box(t, H, S, M.GALV, px + S/2, yc, 0);
+  box(S, H, t, M.GALV, px, yc, -S/2);
+  // techo: solo franjas junto a las paredes exteriores (CORTE) con labio
+  box(S, t, 0.14, M.GALV, px, yt, -S/2 + 0.07);
+  box(0.14, t, S, M.GALV, px + S/2 - 0.07, yt, 0);
+  box(S, 0.012, 0.012, M.EDGE, px, yt, -S/2 + 0.14);
+  box(0.012, 0.012, S, M.EDGE, px + S/2 - 0.14, yt, 0);
+  // alabes guia: 4 cuartos de cilindro concentricos al codo interior (px-S/2, +S/2)
+  const cxv = px - S/2, czv = S/2;
+  for (const r of [0.15, 0.275, 0.40, 0.525]){
+    const g = new THREE.CylinderGeometry(r, r, H - 0.03, 20, 1, true, Math.PI/2, Math.PI/2);
+    mesh(g, M.VANE, cxv, yc, czv);
+  }
+  // pestanas en las bocas (entrada -X normal X · salida +Z normal Z)
+  mesh(plateX(S, H, S - 0.06, H - 0.05, 0.02), M.GALV_D, px - S/2 - 0.01, yc, 0);
+  mesh(plateZ(S, H, S - 0.06, H - 0.05, 0.02), M.GALV_D, px, yc, S/2 + 0.01);
+}
+
+// ==================================================================
+// PIEZA 3 · TRANSICION RECTANGULAR -> CIRCULAR (0.6 m)
+// ==================================================================
+function transicion(px){
+  const len = 0.6, r = 0.19, yc = PED_TOP + 0.03 + DH/2;
+  mesh(squareToRound(len, DW/2, DH/2, r, 6, 48), M.GALV_SS, px, yc, 0);
+  // brida TDC en boca rectangular (-X)
+  mesh(plateX(DW + 0.06, DH + 0.06, DW - 0.02, DH - 0.02, 0.02), M.GALV_D, px - len/2 - 0.01, yc, 0);
+  // collar en boca circular (+X)
+  const col = cylX(r + 0.022, 0.03, M.GALV_D, px + len/2 + 0.012, yc, 0, 28);
+  col.receiveShadow = true;
+  // silleta de apoyo bajo el extremo rectangular
+  box(0.05, 0.03, DW + 0.04, M.EDGE, px - len/2 + 0.08, PED_TOP + 0.015, 0);
+}
+
+// ==================================================================
+// PIEZA 4 · DUCTO FLEXIBLE (anillos corrugados, ligera flecha, 1.2 m)
+// ==================================================================
+function flexible(px){
+  const len = 1.2, x0 = px - len/2, baseY = PED_TOP + 0.20, sag = 0.09;
+  const cyAt = x => baseY - sag * Math.sin(Math.PI * (x - x0) / len);
+  // nucleo interior (tubo oscuro) para ocluir el fondo
+  const pts = [];
+  for (let i = 0; i <= 10; i++){ const x = x0 + len * i/10; pts.push(new THREE.Vector3(x, cyAt(x), 0)); }
+  const curve = new THREE.CatmullRomCurve3(pts);
+  mesh(new THREE.TubeGeometry(curve, 44, 0.112, 12), M.FLEX_D, 0, 0, 0);
+  // anillos corrugados instanciados (toro con normal a lo largo de X)
+  const ringMats = [], NR = 26;
+  for (let i = 0; i < NR; i++){
+    const x = x0 + 0.06 + (len - 0.12) * i/(NR - 1);
+    ringMats.push(tMat(x, cyAt(x), 0, QY90));
+  }
+  makeIM(new THREE.TorusGeometry(0.132, 0.021, 8, 20), M.FLEX, ringMats);
+  // collares galvanizados en los extremos
+  cylX(0.145, 0.09, M.GALV, x0 + 0.035, cyAt(x0 + 0.035), 0, 20);
+  cylX(0.145, 0.09, M.GALV, x0 + len - 0.035, cyAt(x0 + len - 0.035), 0, 20);
+  // cinchos (abrazaderas) + soportes de exhibicion instanciados
+  const clampMats = [];
+  for (const cx of [x0 + 0.07, x0 + len - 0.07]) clampMats.push(tMat(cx, cyAt(cx), 0, QY90));
+  makeIM(new THREE.TorusGeometry(0.152, 0.012, 6, 20), M.EDGE, clampMats);
+  const legMats = [];
+  for (const lx of [x0 + 0.04, x0 + len - 0.04]){
+    const topY = cyAt(lx) - 0.14;
+    legMats.push(tMat(lx, (PED_TOP + topY)/2, 0, Q0, new THREE.Vector3(0.035, topY - PED_TOP, 0.05)));
+  }
+  makeIM(new THREE.BoxGeometry(1, 1, 1), M.EDGE, legMats, true);
+}
+
+// ==================================================================
+// PIEZA 5 · DIFUSOR DE PLAFON 4 VIAS (conos cuadrados concentricos, 0.6 m)
+// ==================================================================
+function difusor(px){
+  const face = 0.6;
+  // cuello circular (sirve de soporte)
+  cylY(0.14, 0.1, M.GALV, px, PED_TOP + 0.05, 0, 24);
+  // placa base blanca
+  box(face, 0.014, face, M.WHITE, px, PED_TOP + 0.10, 0);
+  // conos concentricos: 5 anillos cuadrados escalonados hacia arriba (4 barras c/u, instanciados)
+  const rings = [[0.2625, 0.135], [0.2125, 0.16], [0.1625, 0.185], [0.1125, 0.21], [0.0625, 0.235]];
+  const louMats = [], bt = 0.014;
+  for (const [s, hy] of rings){
+    const y = PED_TOP + hy, l = 2*s + bt;
+    louMats.push(tMat(px, y, +s, Q0, new THREE.Vector3(l, bt, bt)));
+    louMats.push(tMat(px, y, -s, Q0, new THREE.Vector3(l, bt, bt)));
+    louMats.push(tMat(px + s, y, 0, Q0, new THREE.Vector3(bt, bt, l)));
+    louMats.push(tMat(px - s, y, 0, Q0, new THREE.Vector3(bt, bt, l)));
+  }
+  makeIM(new THREE.BoxGeometry(1, 1, 1), M.WHITE_D, louMats, true);
+  // tapa central
+  box(0.06, 0.014, 0.06, M.WHITE, px, PED_TOP + 0.25, 0);
+}
+
+// ==================================================================
+// PIEZA 6 · REJILLA LINEAL DE SUMINISTRO (1.2 m x 0.2 m)
+// ==================================================================
+function rejillaLineal(px){
+  const W = 1.2, Hf = 0.2, cy = PED_TOP + 0.03 + 0.18;
+  // plenum trasero
+  box(W - 0.06, Hf, 0.12, M.GALV, px, cy, -0.09);
+  // fondo oscuro tras las ranuras
+  box(W - 0.1, Hf - 0.05, 0.01, M.GRIL_BG, px, cy, -0.005);
+  // marco frontal blanco
+  mesh(plateZ(W, Hf, W - 0.08, Hf - 0.06, 0.022), M.WHITE, px, cy, 0.02);
+  // aletas lineales horizontales instanciadas
+  const barMats = [], nb = 6;
+  for (let i = 0; i < nb; i++){
+    const yy = cy - Hf/2 + 0.045 + i * (Hf - 0.09)/(nb - 1);
+    barMats.push(tMat(px, yy, 0.018, Q0, new THREE.Vector3(W - 0.1, 0.012, 0.02)));
+  }
+  makeIM(new THREE.BoxGeometry(1, 1, 1), M.WHITE_D, barMats, true);
+  // patas
+  const legMats = [];
+  for (const lx of [px - W/2 + 0.12, px, px + W/2 - 0.12])
+    legMats.push(tMat(lx, PED_TOP + 0.09, 0, Q0, new THREE.Vector3(0.03, 0.18, 0.03)));
+  makeIM(new THREE.BoxGeometry(1, 1, 1), M.EDGE, legMats, true);
+}
+
+// ==================================================================
+// PIEZA 7 · REJILLA DE RETORNO CON FILTRO (eggcrate + filtro plisado, 0.6 m)
+// ==================================================================
+function rejillaRetorno(px){
+  const F = 0.6, cy = PED_TOP + 0.06 + F/2;
+  // patas
+  const legMats = [];
+  for (const lx of [px - F/2 + 0.08, px + F/2 - 0.08])
+    legMats.push(tMat(lx, PED_TOP + 0.18, 0.02, Q0, new THREE.Vector3(0.03, 0.36, 0.03)));
+  makeIM(new THREE.BoxGeometry(1, 1, 1), M.EDGE, legMats, true);
+  // fondo oscuro (se ve el filtro detras)
+  box(F - 0.08, F - 0.08, 0.008, M.GRIL_BG, px, cy, -0.02);
+  // marco frontal blanco
+  mesh(plateZ(F, F, F - 0.08, F - 0.08, 0.022), M.WHITE, px, cy, 0.02);
+  // retícula eggcrate (barras verticales + horizontales instanciadas)
+  const vMats = [], hMats = [], n = 7;
+  for (let i = 0; i < n; i++){
+    const o = -F/2 + 0.06 + i * (F - 0.12)/(n - 1);
+    vMats.push(tMat(px + o, cy, 0.012, Q0, new THREE.Vector3(0.008, F - 0.1, 0.014)));
+    hMats.push(tMat(px, cy + o, 0.012, Q0, new THREE.Vector3(F - 0.1, 0.008, 0.014)));
+  }
+  makeIM(new THREE.BoxGeometry(1, 1, 1), M.WHITE_D, vMats, true);
+  makeIM(new THREE.BoxGeometry(1, 1, 1), M.WHITE_D, hMats, true);
+  // filtro plisado detras, deslizado +X para mostrarse fuera del marco
+  const pleatMats = [], nP = 12, px0 = px - 0.08, pStep = 0.44/(nP - 1);
+  const qA = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0.5, 0));
+  const qB = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -0.5, 0));
+  for (let i = 0; i < nP; i++)
+    pleatMats.push(tMat(px0 + i * pStep, cy, -0.08, i % 2 ? qA : qB));
+  makeIM(new THREE.BoxGeometry(0.02, F - 0.12, 0.09), M.CREAM, pleatMats, true);
+  // marco de carton del filtro + riel portafiltro
+  mesh(plateZ(0.52, F - 0.04, 0.46, F - 0.11, 0.02), M.FILTER_F, px + 0.14, cy, -0.09);
+  box(0.02, F, 0.11, M.GALV_D, px - F/2 + 0.01, cy, -0.08);
+}
+
+// ==================================================================
+// PIEZA 8 · COMPUERTA DE VOLUMEN MANUAL (VCD, 0.4 m) — hoja + manija animadas
+// ==================================================================
+const VCD = { px: 0, yc: 0, W: 0.4, H: 0.4, len: 0.4 };
+let bladeGroup;
+function compuerta(px){
+  const len = VCD.len, W = VCD.W, H = VCD.H, t = 0.012;
+  const yc = PED_TOP + 0.03 + H/2;
+  VCD.px = px; VCD.yc = yc;
+  const x0 = px - len/2, x1 = px + len/2;
+  // paredes: piso y lado +Z opacos; techo y lado -Z (frente) transparentes para ver la hoja
+  box(len, t, W, M.GALV, px, yc - H/2, 0);           // piso
+  box(len, t, W, M.GALV_T, px, yc + H/2, 0).castShadow = false;   // techo (transparente)
+  box(len, H, t, M.GALV, px, yc, W/2);               // lado +Z (con cuadrante)
+  box(len, H, t, M.GALV_T, px, yc, -W/2).castShadow = false;      // lado -Z frente (transparente)
+  // bridas en las bocas ±X
+  mesh(plateX(W + 0.06, H + 0.06, W - 0.02, H - 0.02, 0.02), M.GALV_D, x0 - 0.011, yc, 0);
+  mesh(plateX(W + 0.06, H + 0.06, W - 0.02, H - 0.02, 0.02), M.GALV_D, x1 + 0.011, yc, 0);
+  // patas
+  const legMats = [];
+  for (const lx of [x0 + 0.05, x1 - 0.05]) for (const lz of [-W/2 + 0.05, W/2 - 0.05])
+    legMats.push(tMat(lx, PED_TOP + 0.015, lz, Q0, new THREE.Vector3(0.035, 0.03, 0.035)));
+  makeIM(new THREE.BoxGeometry(1, 1, 1), M.EDGE, legMats, true);
+  // cuadrante externo (placa de cuarto de circulo, cara +Z) — FIJO
+  const quad = mesh(new THREE.CircleGeometry(0.185, 24, 0, Math.PI/2), M.GALV_D, px, yc, W/2 + 0.02);
+  quad.castShadow = false;
+  // muescas de posicion sobre el cuadrante (instanciadas, teal)
+  const notchMats = [];
+  for (let k = 0; k <= 4; k++){
+    const a = k/4 * Math.PI/2, rr = 0.16;
+    notchMats.push(tMat(px + Math.cos(a)*rr, yc + Math.sin(a)*rr, W/2 + 0.03, Q0, new THREE.Vector3(0.02, 0.02, 0.012)));
+  }
+  makeIM(new THREE.BoxGeometry(1, 1, 1), M.TRIM, notchMats, false);
+
+  // ---- PARTE ANIMADA: hoja + eje + manija roja (grupo que pivota sobre el eje Z) ----
+  bladeGroup = new THREE.Group();
+  bladeGroup.position.set(px, yc, 0);
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.012, H - 0.06, W - 0.06), M.GALV_D);
+  blade.castShadow = false; blade.receiveShadow = true;
+  bladeGroup.add(blade);
+  const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, W + 0.14, 12), M.EDGE);
+  axle.rotation.x = Math.PI/2; axle.castShadow = false;
+  bladeGroup.add(axle);
+  const hShaft = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.17, 0.025), M.RED);
+  hShaft.position.set(0, 0.09, W/2 + 0.06); hShaft.castShadow = false;
+  bladeGroup.add(hShaft);
+  const hGrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.07), M.RED);
+  hGrip.position.set(0, 0.17, W/2 + 0.06); hGrip.castShadow = false;
+  bladeGroup.add(hGrip);
+  scene.add(bladeGroup);
+}
+
+// ==================================================================
+// PEDESTALES (instanciados: zocalo, columna, tapa, trim, chevron de flujo)
+// ==================================================================
+function buildPedestals(pieces){
+  const baseMats = [], colMats = [], capMats = [], trimMats = [];
+  const chev = { FLOW_S: [], FLOW_R: [], FLOW_E: [] };
+  for (const p of pieces){
+    const w = p.pw, d = 0.72;
+    baseMats.push(tMat(p.x, 0.03, 0, Q0, new THREE.Vector3(w, 0.06, d)));
+    colMats.push(tMat(p.x, 0.16, 0, Q0, new THREE.Vector3(w - 0.12, 0.20, d - 0.12)));
+    capMats.push(tMat(p.x, 0.28, 0, Q0, new THREE.Vector3(w, 0.04, d)));
+    trimMats.push(tMat(p.x, 0.29, d/2, Q0, new THREE.Vector3(w - 0.14, 0.012, 0.012)));
+    chev[p.flow].push(tMat(p.x, 0.16, d/2 + 0.005, Q0, new THREE.Vector3(0.09, 0.09, 0.02)));
+  }
+  const unit = new THREE.BoxGeometry(1, 1, 1);
+  makeIM(unit, M.PED_T, baseMats, true);
+  makeIM(unit, M.PED, colMats, true);
+  makeIM(unit, M.PED_T, capMats, true);
+  makeIM(unit, M.TRIM, trimMats, false);
+  if (chev.FLOW_S.length) makeIM(unit, M.FLOW_S, chev.FLOW_S, false);
+  if (chev.FLOW_R.length) makeIM(unit, M.FLOW_R, chev.FLOW_R, false);
+  if (chev.FLOW_E.length) makeIM(unit, M.FLOW_E, chev.FLOW_E, false);
+}
+
+// ==================================================================
+// ETIQUETAS (Sprites con CanvasTexture)
+// ==================================================================
+function roundRectPath(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y,   x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x,   y+h, r);
+  ctx.arcTo(x,   y+h, x,   y,   r);
+  ctx.arcTo(x,   y,   x+w, y,   r);
+  ctx.closePath();
+}
+const FLOW_CSS = { FLOW_S:'#2f7bff', FLOW_R:'#ff2233', FLOW_E:'#ffc400' };
+function makeLabel(text, chipHex){
+  const cnv = document.createElement('canvas');
+  cnv.width = 768; cnv.height = 160;
+  const ctx = cnv.getContext('2d');
+  roundRectPath(ctx, 10, 28, 748, 104, 18);
+  ctx.fillStyle = 'rgba(7,10,16,0.88)'; ctx.fill();
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,212,170,0.55)'; ctx.stroke();
+  ctx.fillStyle = chipHex; ctx.fillRect(34, 65, 30, 30);
+  ctx.fillStyle = '#e8eef2'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  let fs = 44;
+  ctx.font = `600 ${fs}px "JetBrains Mono", ui-monospace, monospace`;
+  while (ctx.measureText(text).width > 650 && fs > 24){
+    fs -= 2; ctx.font = `600 ${fs}px "JetBrains Mono", ui-monospace, monospace`;
+  }
+  ctx.fillText(text, 86, 82);
+  const tex = new THREE.CanvasTexture(cnv);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true, depthTest:false }));
+  spr.scale.set(0.95, 0.198, 1);
+  spr.renderOrder = 10;
+  return spr;
+}
+const labelSprites = [];
+function buildLabels(pieces){
+  for (const p of pieces){
+    const spr = makeLabel(p.name, FLOW_CSS[p.flow]);
+    spr.position.set(p.x, 1.28, 0);
+    scene.add(spr);
+    labelSprites.push(spr);
+  }
+}
+
+// ==================================================================
+// CATALOGO — 8 piezas en fila
+// ==================================================================
+const PIECES = [
+  { name:'TRAMO RECTO · BRIDA TDC',     flow:'FLOW_S', pw:1.35, build:tramoRecto },
+  { name:'CODO 90° · ALABES GUIA',      flow:'FLOW_S', pw:0.72, build:codo90 },
+  { name:'TRANSICION RECT->CIRCULAR',   flow:'FLOW_S', pw:0.72, build:transicion },
+  { name:'DUCTO FLEXIBLE',              flow:'FLOW_S', pw:1.35, build:flexible },
+  { name:'DIFUSOR PLAFON 4 VIAS',       flow:'FLOW_S', pw:0.72, build:difusor },
+  { name:'REJILLA LINEAL · SUMINISTRO', flow:'FLOW_S', pw:1.35, build:rejillaLineal },
+  { name:'REJILLA RETORNO + FILTRO',    flow:'FLOW_R', pw:0.72, build:rejillaRetorno },
+  { name:'COMPUERTA DE VOLUMEN (VCD)',  flow:'FLOW_E', pw:0.60, build:compuerta }
+];
+PIECES.forEach((p, i) => { p.x = (i - 3.5) * PITCH; });
+buildPedestals(PIECES);
+for (const p of PIECES) p.build(p.x);
+buildLabels(PIECES);
+
+// ====== ESTADO / CONTROL DE EQUIPO ======
+const DAMPER_OPEN = -1.335;            // ~-76.5°: hoja horizontal = ABIERTA; 0 = CERRADA
+const state = { damper:false, labels:true, rotate:true };
+
+const bDamper = document.getElementById('bDamper');
+bDamper.addEventListener('click', () => {
+  state.damper = !state.damper;
+  bDamper.className = state.damper ? 'on' : 'off';
+  bDamper.textContent = state.damper ? 'ABIERTA' : 'CERRADA';
+});
+const bLabels = document.getElementById('bLabels');
+bLabels.addEventListener('click', () => {
+  state.labels = !state.labels;
+  bLabels.className = state.labels ? 'on' : 'off';
+  bLabels.textContent = state.labels ? 'ON' : 'OFF';
+  applyState();
+});
+const bRot = document.getElementById('bRot');
+bRot.addEventListener('click', () => {
+  state.rotate = !state.rotate;
+  controls.autoRotate = state.rotate;
+  bRot.className = state.rotate ? 'on' : 'off';
+  bRot.textContent = state.rotate ? 'ON' : 'OFF';
+});
+
+function applyState(){
+  // Solo togglea visibilidad de etiquetas (la compuerta interpola en el loop). No re-hornea sombras.
+  for (const s of labelSprites) s.visible = state.labels;
+}
+applyState();
+renderer.shadowMap.needsUpdate = true;          // horneado unico tras construir la escena
+
+// ====== LOOP DE ANIMACION ======
+const clock = new THREE.Clock();
+let dAng = 0, statsDone = false;
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const target = state.damper ? DAMPER_OPEN : 0;
+  dAng += (target - dAng) * Math.min(1, dt * 3.5);
+  bladeGroup.rotation.z = dAng;
+  controls.update();
+  renderer.render(scene, camera);
+  if (!statsDone){
+    statsDone = true;
+    const r = renderer.info.render;
+    document.getElementById('stats').textContent = r.calls + ' draws · ' + r.triangles.toLocaleString('en-US') + ' tris';
+  }
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
