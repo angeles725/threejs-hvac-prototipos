@@ -187,7 +187,9 @@ mkdirSync(OUTDIR, { recursive: true });
 // 3) Cloudflare cache headers: index always fresh, the rest cached long.
 writeFileSync(join(OUTDIR, '_headers'), [
   '/index.html', '  Cache-Control: no-cache',
-  '/hotel-realista-ensamblado.html', '  Cache-Control: public, max-age=31536000, immutable',
+  // El 3D se redespliega en cada iteracion y el cliente debe ver los cambios sin
+  // hard-refresh -> no-cache (antes: immutable 1 año, que ocultaba las actualizaciones).
+  '/hotel-realista-ensamblado.html', '  Cache-Control: no-cache',
   '/*', '  X-Content-Type-Options: nosniff',
   '',
 ].join('\n'));
