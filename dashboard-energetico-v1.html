@@ -227,6 +227,44 @@ svg,img{max-width:100%}
   .chart .fig{font-size:10px;padding:6px 9px}
   .kpi .val{font-size:30px}
 }
+
+/* ============ REPORTE · toolbar + impresión ============ */
+.report-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.rbtn{font-family:var(--cond);font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:12px;
+  background:var(--bg);color:var(--ink);border:1px solid var(--ink);padding:8px 14px;cursor:pointer;border-radius:0}
+.rbtn:hover{background:var(--ink);color:var(--bg)}
+.rbtn.accent{border-color:var(--accent);color:var(--accent)}
+.rbtn.accent:hover{background:var(--accent);color:var(--bg)}
+@media(max-width:900px){.rbtn{min-height:44px;display:inline-flex;align-items:center}}
+
+/* toast (fallback PDF / avisos) */
+#rtoast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:30;display:none;
+  background:var(--ink);color:var(--bg);font-family:var(--mono);font-size:12px;line-height:1.4;
+  padding:10px 16px;border:1px solid var(--ink);max-width:90vw;text-align:center}
+
+/* contenedor del reporte: oculto en pantalla, visible sólo al imprimir */
+#reporte{display:none;color:#000;background:#fff;font-family:var(--sans)}
+#reporte h1{font-family:var(--cond);font-weight:700;text-transform:uppercase;letter-spacing:.02em;font-size:26px;margin:0 0 2px}
+#reporte .rsub{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:16px}
+#reporte h2{font-family:var(--cond);font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:15px;
+  margin:20px 0 8px;border-bottom:1px solid #000;padding-bottom:3px}
+#reporte .rsum{border:1px solid #000;padding:10px 12px;font-family:var(--mono);font-size:12px;line-height:1.75}
+#reporte .rsum b{font-weight:700}
+#reporte table{width:100%;border-collapse:collapse;margin-top:2px}
+#reporte th,#reporte td{border:1px solid #000;padding:5px 8px;font-family:var(--mono);font-size:11px;text-align:right;vertical-align:top}
+#reporte th{text-transform:uppercase;letter-spacing:.03em;background:#eaeaea}
+#reporte th:first-child,#reporte td:first-child{text-align:left}
+#reporte tfoot td{font-weight:700;border-top:2px solid #000;background:#eaeaea}
+#reporte tr{page-break-inside:avoid}
+#reporte .rfoot{font-family:var(--serif);font-style:italic;font-size:11px;margin-top:18px;line-height:1.5}
+
+@media print{
+  @page{margin:16mm}
+  html,body{overflow:visible;background:#fff;color:#000}
+  body > *{display:none !important}
+  body > #reporte{display:block !important}
+  #rtoast{display:none !important}
+}
 </style>
 </head>
 <body>
@@ -262,6 +300,10 @@ svg,img{max-width:100%}
     <div class="hero">
       <h1>Consumo Energético</h1>
       <div class="sub">Electricidad · Agua · Gas L.P. — Costeo, insights y recomendaciones</div>
+      <div class="report-toolbar">
+        <button class="rbtn" id="btnPrint" type="button">🖨️ Imprimir reporte</button>
+        <button class="rbtn accent" id="btnPdf" type="button">⬇️ Descargar PDF</button>
+      </div>
     </div>
 
     <section>
@@ -311,6 +353,13 @@ svg,img{max-width:100%}
   </div>
 </div>
 
+<!-- ============ REPORTE (oculto en pantalla · visible al imprimir) ============ -->
+<div id="reporte"></div>
+<!-- aviso/toast (fallback PDF offline) -->
+<div id="rtoast" role="status" aria-live="polite"></div>
+
+<!-- jsPDF (script plano, NO importmap; URL sin '@' para no chocar con Cloudflare). Expone window.jspdf.jsPDF -->
+<script src="https://unpkg.com/jspdf/dist/jspdf.umd.min.js"></script>
 <script type="module">
 // El gemelo 3D vive en el iframe (hotel-realista-ensamblado.html?clean=1); aquí no se importa three.
 
@@ -518,6 +567,110 @@ function spark(data,color){
     </div>`;
   }).join('');
 }
+
+// ==================== REPORTE (imprimir / PDF) ====================
+// Presenta los MISMOS datos ya mostrados en el tablero (KPIs + mantenimiento predictivo).
+// Demo: los valores son simulados (deterministas) del gemelo digital; al conectar telemetría
+// real el mismo reporte tomará los valores medidos.
+const PDF_TREND={up:'al alza',flat:'estable',down:'a la baja'};
+function reportSummary(){
+  const ok=SUBSYSTEMS.filter(s=>s.state==='ok').length;
+  const warn=SUBSYSTEMS.filter(s=>s.state==='warn').length;
+  const alarm=SUBSYSTEMS.filter(s=>s.state==='alarm').length;
+  const avg=Math.round(SUBSYSTEMS.reduce((a,s)=>a+s.salud,0)/SUBSYSTEMS.length);
+  return {ok,warn,alarm,avg,total:SUBSYSTEMS.length};
+}
+function kpiRows(){
+  return SVC.map(s=>{const d=DATA[s.k],cur=d.serie[5],delta=pct(cur,d.prev),cost=cur*d.tarifa;
+    return {name:s.name,cons:NUM(cur)+' '+d.u,tar:'$'+d.tarifa.toFixed(2)+'/'+d.u,
+      costNum:cost,cost:MXN(cost),delta:(delta>=0?'+':'')+delta.toFixed(1)+'%'};});
+}
+function fmtStamp(d){
+  return d.toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})+' · '+
+    d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+}
+function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function toast(msg){
+  const t=document.getElementById('rtoast');
+  t.textContent=msg;t.style.display='block';
+  clearTimeout(t._h);t._h=setTimeout(()=>{t.style.display='none';},4400);
+}
+// A) Construye el reporte imprimible desde los mismos arrays del tablero.
+function buildReporte(){
+  const now=new Date(),sm=reportSummary(),kp=kpiRows();
+  const total=kp.reduce((a,r)=>a+r.costNum,0);
+  const kpiTable=`<table><thead><tr><th>Servicio</th><th>Consumo Jul</th><th>Tarifa</th><th>Costo MXN</th><th>Δ vs jun</th></tr></thead>
+    <tbody>${kp.map(r=>`<tr><td>${r.name}</td><td>${r.cons}</td><td>${r.tar}</td><td>${r.cost}</td><td>${r.delta}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>TOTAL</td><td></td><td></td><td>${MXN(total)}</td><td></td></tr></tfoot></table>`;
+  const predTable=`<table><thead><tr><th>Subsistema</th><th>Estado</th><th>Salud</th><th>Tendencia</th><th>Vida útil · próx. servicio</th><th>Recomendación</th></tr></thead>
+    <tbody>${SUBSYSTEMS.map(s=>`<tr><td>${s.name}</td><td>${STATE_LABEL[s.state]}</td><td>${s.salud}%</td><td>${TREND_LABEL[s.trend]}</td>
+      <td>${s.vida[0]}: ${s.vida[1]} · ${s.prox[0]}: ${s.prox[1]}</td><td style="text-align:left">${s.rec}</td></tr>`).join('')}</tbody></table>`;
+  document.getElementById('reporte').innerHTML=`
+    <h1>Reporte de operación — Hotel · Gemelo digital</h1>
+    <div class="rsub">Hotel frente al mar · Cancún · Plano DE-2026-07 — Generado ${fmtStamp(now)} · DEMO (datos simulados del gemelo digital)</div>
+    <h2>Resumen</h2>
+    <div class="rsum">Salud global: <b>${sm.avg}%</b><br>
+      Subsistemas: <b>${sm.ok}</b> óptimo · <b>${sm.warn}</b> a vigilar · <b>${sm.alarm}</b> requiere intervención<br>
+      PREDICTIVO ANTES QUE CORRECTIVO · <b>0</b> correctivos</div>
+    <h2>KPIs energéticos — Julio 2026</h2>
+    ${kpiTable}
+    <h2>Mantenimiento predictivo</h2>
+    ${predTable}
+    <div class="rfoot">Reporte generado por el gemelo digital del hotel — datos simulados con fines de demostración. Al conectar telemetría real, el mismo reporte tomará los valores medidos.</div>`;
+}
+function printReporte(){ buildReporte(); window.print(); }
+// B) PDF directo vía jsPDF (script plano). Fallback si el CDN está bloqueado/offline.
+function downloadPDF(){
+  if(!window.jspdf||!window.jspdf.jsPDF){
+    toast('PDF directo no disponible sin conexión — usa Imprimir reporte');
+    return;
+  }
+  try{
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({unit:'pt',format:'a4'});
+    const now=new Date(),sm=reportSummary(),kp=kpiRows();
+    const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight(),M=40;
+    let y=54;
+    const line=(dy=13)=>{y+=dy; if(y>H-48){doc.addPage();y=54;}};
+    doc.setFont('helvetica','bold');doc.setFontSize(16);doc.setTextColor(0);
+    doc.text('Reporte de operación - Hotel · Gemelo digital',M,y);line(16);
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(90);
+    doc.text('Hotel frente al mar · Cancún · Plano DE-2026-07',M,y);line(12);
+    doc.text('Generado '+fmtStamp(now)+' · DEMO (datos simulados del gemelo digital)',M,y);line(24);
+    // Resumen
+    doc.setTextColor(0);doc.setFont('helvetica','bold');doc.setFontSize(12);
+    doc.text('Resumen',M,y);line(16);
+    doc.setFont('helvetica','normal');doc.setFontSize(10);
+    doc.text('Salud global: '+sm.avg+'%',M,y);line(14);
+    doc.text('Subsistemas: '+sm.ok+' optimo · '+sm.warn+' a vigilar · '+sm.alarm+' requiere intervencion',M,y);line(14);
+    doc.text('PREDICTIVO ANTES QUE CORRECTIVO · 0 correctivos',M,y);line(24);
+    // KPIs
+    doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text('KPIs energeticos - Julio 2026',M,y);line(16);
+    doc.setFont('helvetica','normal');doc.setFontSize(9);
+    kp.forEach(r=>{doc.text(r.name+'  -  '+r.cons+'  ·  '+r.tar+'  ·  '+r.cost+'  ('+r.delta+' vs jun)',M,y);line(13);});
+    const total=kp.reduce((a,r)=>a+r.costNum,0);
+    doc.setFont('helvetica','bold');doc.text('TOTAL: '+MXN(total),M,y);line(24);
+    // Mantenimiento predictivo
+    doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text('Mantenimiento predictivo',M,y);line(16);
+    doc.setFontSize(9);
+    const DOT={ok:[25,150,90],warn:[210,150,30],alarm:[200,50,70]};
+    SUBSYSTEMS.forEach(s=>{
+      if(y>H-72){doc.addPage();y=54;}
+      const c=DOT[s.state];doc.setFillColor(c[0],c[1],c[2]);doc.circle(M+3,y-3,3,'F');
+      doc.setFont('helvetica','bold');doc.setTextColor(0);
+      doc.text(s.name+'  ['+STATE_LABEL[s.state]+']  salud '+s.salud+'%  tendencia '+PDF_TREND[s.trend],M+12,y);line(12);
+      doc.setFont('helvetica','normal');doc.setTextColor(70);
+      const rec=doc.splitTextToSize(s.rec,W-2*M-12);
+      doc.text(rec,M+12,y);y+=rec.length*11+8; if(y>H-48){doc.addPage();y=54;}
+      doc.setTextColor(0);
+    });
+    doc.save('reporte-hotel-'+ymd(now)+'.pdf');
+  }catch(err){
+    toast('No se pudo generar el PDF — usa Imprimir reporte');
+  }
+}
+document.getElementById('btnPrint').addEventListener('click',printReporte);
+document.getElementById('btnPdf').addEventListener('click',downloadPDF);
 
 // ==================== OPEN / CLOSE DASHBOARD ====================
 const dash=document.getElementById('dash');
