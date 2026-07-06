@@ -225,27 +225,49 @@ function _vnoise(x,z){
   return a*(1-u)*(1-v)+b*u*(1-v)+c*(1-u)*v+d*u*v;
 }
 function _fbm(x,z){ let s=0,a=0.5,f=1; for(let i=0;i<4;i++){ s+=a*_vnoise(x*f,z*f); f*=2; a*=0.5; } return s; }
-// Zona construida (world m) donde el relieve se anula para que ningun equipo flote.
-const BUILT = { x0:2, x1:84, z0:-10, z1:40 };
+// Zonas construidas (world m) donde el relieve se anula para que ningun equipo flote.
+// Dos rectangulos: (1) yard + hotel + alberca principal; (2) cuarto de maquinas de
+// alberca (filtrado/HX/calentador ~x106-110) — antes quedaba fuera y el relieve lo levantaba.
+const BUILT = [
+  { x0:2,   x1:84,  z0:-10, z1:40 },
+  { x0:100, x1:116, z0:26,  z1:46 },
+];
+function _rectDist(x,z,r){ const dx=Math.max(r.x0-x, 0, x-r.x1), dz=Math.max(r.z0-z, 0, z-r.z1); return Math.hypot(dx,dz); }
 function _builtMask(x,z){
-  const dx=Math.max(BUILT.x0-x, 0, x-BUILT.x1), dz=Math.max(BUILT.z0-z, 0, z-BUILT.z1);
-  return Math.min(1, Math.hypot(dx,dz)/10);      // 0 dentro, sube a 1 a >=10 m del borde
+  let d=1e9; for (const r of BUILT) d=Math.min(d, _rectDist(x,z,r));
+  return Math.min(1, d/10);                       // 0 dentro de una zona, sube a 1 a >=10 m del borde
 }
+const _smooth=(a,b,t)=>{ t=Math.max(0,Math.min(1,(t-a)/(b-a))); return t*t*(3-2*t); };
 function terrainH(x,z){
-  let h = _fbm(x*0.045, z*0.045) * 1.7 * _builtMask(x,z);    // dunas rodantes de jardin
-  if (z>38 && z<SHORE_Z){                                     // duna de playa: se aplana en la orilla
-    const t=(z-38)/(SHORE_Z-38);
-    h += Math.max(0, 0.35 + _fbm(x*0.18, z*0.18)) * (1-t) * 0.85;
+  const m = _builtMask(x,z);
+  // relieve de jardin: colinas suaves de baja frecuencia, amplitud moderada, solo periferia
+  let h = (_fbm(x*0.035, z*0.035) - 0.5) * 2.4 * m;
+  // duna de playa: cresta suave (sin() se aplana en el cesped z=37 y en la orilla z=SHORE_Z)
+  if (z>37 && z<SHORE_Z){
+    const crest = Math.sin(((z-37)/(SHORE_Z-37)) * Math.PI);   // 0 en extremos, 1 al centro
+    h += (0.5 + _fbm(x*0.14, z*0.14)) * crest * 0.7;
   }
   return h;
 }
-const _GRASS=new THREE.Color(0x5f8f46), _GRASS2=new THREE.Color(0x77a755),
-      _YARD=new THREE.Color(0xbdb6a4), _SAND=new THREE.Color(0xd8caa4), _WET=new THREE.Color(0xad9a78);
+// Paleta PROBADA del voxel (hotel-playa) + variantes para mezcla suave (sin bandas duras).
+const _GRASS=new THREE.Color(0x66a851), _GRASS_D=new THREE.Color(0x4f8a3e), _GRASS_L=new THREE.Color(0x83b962),
+      _YARD=new THREE.Color(0xc3bda8),  _YARD_D=new THREE.Color(0xafa792),
+      _SAND=new THREE.Color(0xd4c49a),  _SAND_D=new THREE.Color(0xc4b285), _WET=new THREE.Color(0xb0997a);
+const _ta=new THREE.Color(), _tb=new THREE.Color();
 function terrainColor(x,z){
-  if (z>=46) return _WET;                                     // arena humeda junto al agua
-  if (z>=37) return _SAND;                                    // playa
-  if (x>=4 && x<=64 && z>=-8 && z<=34) return _YARD;          // explanada de planta/hotel
-  return _tc.copy(_GRASS).lerp(_GRASS2, _vnoise(x*0.3, z*0.3)); // cesped con variacion
+  // 1) cesped base con variacion en dos escalas (parches claros/oscuros)
+  _tc.copy(_GRASS).lerp(_GRASS_D, _vnoise(x*0.16,z*0.16)*0.7).lerp(_GRASS_L, _vnoise(x*0.5,z*0.5)*0.32);
+  // 2) explanada de planta/hotel: mezcla SUAVE (no rectangulo duro)
+  const yard = _smooth(0,6,x+2) * _smooth(0,6,66-x) * _smooth(0,6,z+10) * _smooth(0,6,34-z);
+  if (yard>0){ _ta.copy(_YARD).lerp(_YARD_D, _vnoise(x*0.3,z*0.3)); _tc.lerp(_ta, yard*0.92); }
+  // 3) playa: arena veteada (SAND/SAND_D) desde z~34, humeda junto al agua — transiciones suaves
+  const beach = _smooth(34,40,z);
+  if (beach>0){
+    _ta.copy(_SAND).lerp(_SAND_D, _vnoise(x*0.35,z*0.35)*0.85);
+    _ta.lerp(_WET, _smooth(44,49,z));
+    _tc.lerp(_ta, beach);
+  }
+  return _tc;
 }
 const groundGeo = new THREE.PlaneGeometry(320, 320, 200, 200);
 {
@@ -325,6 +347,27 @@ const _sunCan=document.createElement('canvas'); _sunCan.width=_sunCan.height=128
 }
 const sunSpr=new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(_sunCan), fog:false, depthWrite:false, transparent:true }));
 sunSpr.scale.set(64,64,1); sunSpr.position.copy(sun.position).multiplyScalar(4); scene.add(sunSpr);
+
+// ====== CASETA / CUARTO DE MAQUINAS DE ALBERCA (paridad voxel: pool hut) ======
+// Cobertizo abierto que cobija filtrado + intercambiador + calentador de alberca
+// (~x106-110, z31-42). El pad ya esta aplanado (BUILT rect 2). Merged -> 2 draws.
+{
+  const cx0=103.5, cx1=113, cz0=28.5, cz1=45.5, postH=4.4;
+  const cxC=(cx0+cx1)/2, czC=(cz0+cz1)/2, cw=cx1-cx0, cd=cz1-cz0;
+  const _cb=[]; const CB=(w,h,d,x,y,z)=>_cb.push(new THREE.BoxGeometry(w,h,d).translate(x,y,z));
+  CB(cw+0.6, 0.2, cd+0.6, cxC, 0.1, czC);          // losa de piso
+  CB(0.28, postH, 0.28, cx0, postH/2, cz0);        // 4 postes de esquina
+  CB(0.28, postH, 0.28, cx0, postH/2, cz1);
+  CB(0.28, postH, 0.28, cx1, postH/2, cz0);
+  CB(0.28, postH, 0.28, cx1, postH/2, cz1);
+  CB(0.2,  postH, cd,   cx1, postH/2, czC);         // muro trasero (este), frente abierto a la alberca
+  const _casGeo = BufferGeometryUtils.mergeGeometries(_cb, false);
+  const caseta = new THREE.Mesh(_casGeo, new THREE.MeshStandardMaterial({ color:0xb9b3a4, roughness:0.92, metalness:0 }));
+  caseta.castShadow = true; caseta.receiveShadow = true; scene.add(caseta);
+  const casRoof = new THREE.Mesh(new THREE.BoxGeometry(cw+1.0, 0.3, cd+1.0),
+    new THREE.MeshStandardMaterial({ color:0x8f9aa0, roughness:0.85, metalness:0.1 }));
+  casRoof.position.set(cxC, postH+0.15, czC); casRoof.castShadow = true; scene.add(casRoof);
+}
 
 // ====== ENTORNO VIVO (It.2): vegetacion + caminos + mobiliario ======
 // Props de ambientacion 100% OPTIMIZADOS: se construye UNA unidad por familia,
