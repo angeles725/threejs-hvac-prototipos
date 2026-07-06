@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Hotel Frente al Mar · Torre 8 Pisos + PB · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:240px; font-size:11px; backdrop-filter: blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:54px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>HOTEL FRENTE AL MAR · TORRE</b><br>
+  <span>PB + 8 pisos · 44 × 18 × 30 m · Voxel Art (1 vox = 0.25 m)</span>
+</div>
+<div id="legend">
+  <div><i style="background:#e6dfd0"></i> Fachada</div>
+  <div><i style="background:#6fd0c4"></i> Balcones</div>
+  <div><i style="background:#3a3a3e"></i> Núcleo</div>
+  <div><i style="background:#f4f2ec"></i> Azotea</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>CORTE FACHADA</label><button id="bCorte" class="off">OFF</button></div>
+  <div class="row"><label>LUCES NOCHE</label><button id="bNoche" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 voxel = 0.25 m
+// Torre: 176 x 72 x ~122 voxeles = 44 m (sur) x 18 m (fondo) x ~30 m (PB 4 m + 8 pisos de 3 m + pretil)
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 600, 1900);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 2600);
+camera.position.set(265, 135, 330);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(88, 52, 36);
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.35;
+
+// ====== LIGHTS ======
+const amb = new THREE.AmbientLight(0xffffff, 0.25);
+scene.add(amb);
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(330, 420, 380);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+const sc = sun.shadow.camera;
+sc.left=-250; sc.right=250; sc.top=250; sc.bottom=-250; sc.near=1; sc.far=1200;
+sun.shadow.bias = -0.0004;
+sun.target.position.set(88, 40, 36);
+scene.add(sun); scene.add(sun.target);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-160, 140, -120);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rim.position.set(88, 60, -240);
+scene.add(rim);
+
+// ====== GROUND ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(2200,2200),
+  new THREE.MeshStandardMaterial({ color:0x0a0e16, roughness:0.92, metalness:0.05 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.position.set(88, -0.02, 36);
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(2200, 340, 0x00d4aa, 0x142028);
+grid.material.opacity = 0.1;
+grid.material.transparent = true;
+grid.position.set(88, 0.01, 36);
+scene.add(grid);
+
+// ====== PALETA ======
+const COL = {
+  BODY:   0xe6dfd0,  // blanco arena
+  BODY_D: 0xcfc6b2,
+  SLAB:   0xf4f2ec,  // blanco puro (losas de balcon / azotea)
+  FLOOR:  0xd8d2c2,  // losas interiores
+  GLASS:  0x5aa8d8,  // vidrio (ventanas encendibles de noche)
+  GLASS2: 0x467fa8,  // vidrio (ventanas apagadas)
+  RAILG:  0x6fd0c4,  // barandal de cristal azul-verde
+  ALUM:   0xb9bec6,  // aluminio
+  WOOD:   0xc79a5f,  // madera clara (marquesina, cenefa)
+  FRAME:  0x3a3a3e,  // nucleo / estructura
+  GRILLE: 0x1a1a1e,
+  DARK:   0x2a2a2e,
+  SKID:   0xa8a8ac,
+  PANEL:  0xb0aa92,
+  LINEN:  0xeeeae0,
+  LAMP:   0xffd890,
+  CORR:   0xffe9bf,  // luz de pasillo
+  SIGN:   0xfff1d6,  // letrero emisivo
+  LEAF:   0x2f8a3e,
+  TILE:   0x9fd4d8,
+  PAVE:   0x565b62,
+  COND:   0xdcdcda,  // condensadoras minisplit
+  COPPER: 0xb87333,
+  TV:     0x101014,
+  RUG:    0x6f9fb8,
+};
+
+// ====== DIMENSIONES ======
+const LX = 176, DZ = 72;       // 44 m x 18 m
+const PB = 16, FH = 12, NF = 8; // PB 4 m, pisos tipo 3 m
+const MOD = 16;                 // modulo de cuarto 4 m
+const ROOFY = PB + NF*FH;       // losa de azotea (y=112)
+const SLAB = n => PB + n*FH;    // losa del piso n (n=0 -> piso 1)
+const FURN = [1, 4, 7, 9];      // modulos con cuarto amueblado
+
+// ====== VOXEL BUILDER (dos stores: estatico y fachada ocultable) ======
+const voxS = {}, voxF = {};
+function addVox(store, x, y, z, color) {
+  const k = color.toString();
+  if (!store[k]) store[k] = { color, positions: [] };
+  store[k].positions.push([x,y,z]);
+}
+const vS = (x,y,z,c) => addVox(voxS,x,y,z,c);
+const vF = (x,y,z,c) => addVox(voxF,x,y,z,c);
+function fillS(x0,x1,y0,y1,z0,z1,c){ for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++)for(let z=z0;z<=z1;z++) vS(x,y,z,c); }
+function fillF(x0,x1,y0,y1,z0,z1,c){ for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++)for(let z=z0;z<=z1;z++) vF(x,y,z,c); }
+const litRoom = (m,n) => ((m*7 + n*13) % 10) < 7;   // ventanas encendidas de noche (patron estable)
+
+// ====== BASE / PLINTO + PISO DE LOBBY ======
+for (let x=0; x<=LX-1; x++)
+  for (let z=0; z<=DZ-1; z++) {
+    if (x===0 || x===LX-1 || z===0 || z===DZ-1) vS(x, 0, z, COL.BODY_D);
+    const lobbyTile = (x>=56 && x<=120 && z>=28 && z<=68);
+    vS(x, 1, z, lobbyTile ? COL.TILE : COL.BODY_D);
+  }
+
+// ====== PLAZA DE ACCESO (sur) ======
+for (let x=-8; x<=183; x++)
+  for (let z=72; z<=98; z++) {
+    const walk = (x>=76 && x<=100);
+    vS(x, 0, z, walk ? COL.TILE : COL.PAVE);
+  }
+
+// ====== LOSAS INTERIORES + AZOTEA ======
+for (let n=0; n<NF; n++) {
+  const s = SLAB(n);
+  for (let x=1; x<=174; x++)
+    for (let z=1; z<=70; z++) {
+      const visible = (z>=29) || (z>=14 && x>=80 && x<=126);   // pasillo + cuartos + lobby de elevadores
+      if (visible) vS(x, s, z, COL.FLOOR);
+    }
+}
+for (let x=0; x<=175; x++)
+  for (let z=0; z<=71; z++)
+    vS(x, ROOFY, z, COL.SLAB);
+
+// ====== FACHADA NORTE (z=0): ventaneria menor + puertas ======
+for (let x=0; x<=175; x++)
+  for (let y=2; y<=111; y++) {
+    // puerta de servicio PB
+    if (y<=9 && x>=130 && x<=135) { vS(x,y,0, (x===130||x===135||y===9) ? COL.ALUM : COL.DARK); continue; }
+    // louver de servicio PB
+    if (y>=6 && y<=11 && x>=20 && x<=44) { vS(x,y,0, ((x+y)%2===0) ? COL.GRILLE : COL.BODY); continue; }
+    if (y>=PB) {
+      const n = Math.floor((y-PB)/FH), s = SLAB(n), ry = y-s;
+      // puertas a escalera de emergencia exterior
+      if (x>=152 && x<=155 && ry>=1 && ry<=8) { vS(x,y,0,COL.DARK); continue; }
+      // ventanas menores por modulo
+      const m = Math.floor(x/MOD);
+      if (x<146 && ry>=5 && ry<=8 && x>=m*MOD+6 && x<=m*MOD+9) { vS(x,y,0,COL.GLASS2); continue; }
+    }
+    vS(x, y, 0, COL.BODY);
+  }
+
+// ====== FACHADAS ESTE (x=0) / OESTE (x=175): ventaneria menor ======
+for (const wx of [0, 175])
+  for (let z=1; z<=70; z++)
+    for (let y=2; y<=111; y++) {
+      if (y>=PB) {
+        const ry = (y-PB) % FH;
+        const winZ = (z>=10&&z<=12) || (z>=33&&z<=35) || (z>=55&&z<=57);
+        if (winZ && ry>=5 && ry<=8) { vS(wx,y,z,COL.GLASS2); continue; }
+      }
+      vS(wx, y, z, COL.BODY);
+    }
+
+// ====== PB SUR: VENTANAL CORRIDO + ACCESO ======
+for (let x=2; x<=173; x++)
+  for (let y=2; y<=13; y++) {
+    if (x>=80 && x<=95) { // puerta principal (2 pares)
+      vS(x, y, 71, (x===80||x===87||x===88||x===95) ? COL.ALUM : COL.GLASS);
+    } else {
+      vS(x, y, 71, (x%8===0) ? COL.ALUM : COL.GLASS);
+    }
+  }
+for (let x=0; x<=175; x++) { vS(x,14,71,COL.WOOD); vS(x,15,71,COL.WOOD); } // cenefa de madera PB
+fillS(0,1, 2,13, 71,71, COL.BODY);       // esquinas PB
+fillS(174,175, 2,13, 71,71, COL.BODY);
+
+// ====== ARCADA / COLUMNAS PB (fuera de la zona de marquesina) ======
+for (const m of [0,1,2,3,7,8,9,10]) {
+  const cx = m*MOD + 8;
+  fillS(cx, cx+1, 1, 13, 74, 75, COL.BODY);
+}
+for (const [bx0,bx1] of [[2,64],[112,173]]) {
+  for (let x=bx0; x<=bx1; x++) { vS(x,14,74,COL.SLAB); vS(x,15,74,COL.SLAB); vS(x,14,75,COL.WOOD); vS(x,15,75,COL.WOOD); }
+}
+
+// ====== MARQUESINA DE ACCESO ======
+for (let x=68; x<=107; x++)
+  for (let z=72; z<=87; z++)
+    for (let y=13; y<=14; y++) {
+      const fascia = (x===68 || x===107 || z===87);
+      vS(x, y, z, fascia ? COL.WOOD : COL.SLAB);
+    }
+fillS(72,73, 1,12, 84,85, COL.BODY);     // columnas de marquesina
+fillS(102,103, 1,12, 84,85, COL.BODY);
+
+// ====== JARDINERAS ======
+for (const [j0,j1] of [[10,20],[44,54],[122,132],[156,166]]) {
+  fillS(j0, j1, 1, 2, 73, 76, COL.BODY_D);
+  fillS(j0+1, j1-1, 3, 3, 74, 75, COL.LEAF);
+  fillS(j0+3, j1-3, 4, 4, 74, 75, COL.LEAF);
+}
+
+// ====== LOBBY: RECEPCION SUGERIDA ======
+fillS(78,98, 2,4, 30,33, COL.WOOD);                   // mostrador
+fillS(77,99, 5,5, 29,34, COL.LINEN);                  // cubierta
+for (let x=74; x<=102; x++)                            // muro de fondo con duelas
+  for (let y=2; y<=13; y++)
+    vS(x, y, 24, (x%2===0) ? COL.WOOD : COL.DARK);
+for (const px of [82, 88, 94]) {                       // lamparas colgantes
+  fillS(px,px, 13,15, 31,31, COL.FRAME);
+  vS(px, 12, 31, COL.LAMP);
+}
+fillS(50,58, 2,3, 50,52, COL.PANEL); fillS(50,58, 4,4, 52,52, COL.PANEL);   // sofas
+fillS(118,126, 2,3, 50,52, COL.PANEL); fillS(118,126, 4,4, 52,52, COL.PANEL);
+// muro PB entre lobby y zona de servicio norte
+for (let x=4; x<=170; x++) {
+  if (x>=81 && x<=123) continue;                       // vano hacia nucleo
+  for (let y=2; y<=15; y++) {
+    const door = (x>=40&&x<=43) || (x>=140&&x<=143);
+    vS(x, y, 15, (door && y<=9) ? COL.DARK : COL.BODY);
+  }
+}
+
+// ====== NUCLEO: 2 ELEVADORES + ESCALERA (extremo norte) ======
+function coreCol(x, z, c) {
+  for (let y=2; y<=111; y++) {
+    if (y>=PB && (y-PB)%FH===0) continue;              // no duplicar losas
+    vS(x, y, z, c);
+  }
+}
+for (let z=1; z<=12; z++) { coreCol(84,z,COL.FRAME); coreCol(93,z,COL.FRAME); coreCol(102,z,COL.FRAME); }
+for (let x=85; x<=101; x++)                            // frente de elevadores con puertas
+  for (let y=2; y<=111; y++) {
+    if (y>=PB && (y-PB)%FH===0) continue;
+    let door;
+    if (y<PB) door = (y>=3 && y<=10);
+    else { const ry = (y-PB)%FH; door = (ry>=1 && ry<=8); }
+    const dx = (x>=86&&x<=89) || (x>=96&&x<=99);
+    vS(x, y, 13, (door && dx) ? COL.ALUM : COL.FRAME);
+  }
+for (const sx of [106, 122]) for (let z=1; z<=12; z++) coreCol(sx, z, COL.FRAME);
+for (let x=107; x<=121; x++)                           // frente de escalera con puerta
+  for (let y=2; y<=111; y++) {
+    if (y>=PB && (y-PB)%FH===0) continue;
+    let door;
+    if (y<PB) door = (y>=3 && y<=10);
+    else { const ry = (y-PB)%FH; door = (ry>=1 && ry<=8); }
+    vS(x, y, 13, (door && x>=112 && x<=115) ? COL.DARK : COL.FRAME);
+  }
+
+// ====== PISOS TIPO: PASILLO + MUROS + CUARTOS ======
+for (let n=0; n<NF; n++) {
+  const s = SLAB(n), b = s+1;
+
+  // muro pasillo-cuartos (z=38) con puertas de madera
+  for (let x=1; x<=174; x++) {
+    const m = Math.floor(x/MOD);
+    const inDoor = (x>=m*MOD+8 && x<=m*MOD+10);
+    for (let y=s+1; y<=s+11; y++)
+      vS(x, y, 38, (inDoor && y<=s+8) ? COL.WOOD : COL.BODY_D);
+  }
+  // muro norte del pasillo (z=29) con vano al lobby de elevadores
+  for (let x=1; x<=174; x++) {
+    if (x>=82 && x<=124) continue;
+    for (let y=s+1; y<=s+11; y++) vS(x, y, 29, COL.BODY_D);
+  }
+  // luces del pasillo
+  for (let x=8; x<=168; x+=12)
+    fillS(x, x+2, s+11, s+11, 33, 34, COL.CORR);
+
+  // muros divisorios entre cuartos
+  for (let m=1; m<=10; m++)
+    fillS(m*MOD, m*MOD, s+1, s+11, 39, 70, COL.PANEL);
+
+  // cuartos
+  for (let m=0; m<=10; m++) {
+    const x0 = m*MOD;
+    // minisplit de pared (todos los cuartos, alto sobre la cabecera)
+    for (let z=52; z<=58; z++) {
+      vS(x0+1, b+9, z, COL.COND);
+      vS(x0+1, b+8, z, (z%2===0) ? COL.GRILLE : COL.COND);
+    }
+    if (FURN.includes(m)) {
+      // --- cuarto amueblado ---
+      // bano (muros + puerta entreabierta)
+      for (let x=x0+1; x<=x0+6; x++) {
+        if (x===x0+3 || x===x0+4) continue;            // vano de puerta
+        fillS(x, x, b, b+9, 45, 45, COL.PANEL);
+      }
+      fillS(x0+6, x0+6, b, b+9, 39, 44, COL.PANEL);
+      fillS(x0+3, x0+3, b, b+7, 46, 47, COL.WOOD);     // hoja de puerta abierta
+      // closet con puertas de madera
+      for (let x=x0+11; x<=x0+14; x++)
+        for (let y=b; y<=b+9; y++)
+          for (let z=39; z<=42; z++)
+            vS(x, y, z, (z===42 && x%2===0) ? COL.WOOD : COL.PANEL);
+      // cama king con cabecera
+      fillS(x0+1, x0+1, b+1, b+4, 51, 60, COL.WOOD);   // cabecera
+      fillS(x0+1, x0+9, b, b, 52, 59, COL.DARK);       // base
+      fillS(x0+2, x0+9, b+1, b+1, 52, 59, COL.LINEN);  // colchon
+      fillS(x0+2, x0+3, b+2, b+2, 53, 58, COL.PANEL);  // almohadas
+      // buros con lampara
+      fillS(x0+1, x0+2, b, b+1, 48, 49, COL.WOOD); vS(x0+1, b+2, 48, COL.LAMP);
+      fillS(x0+1, x0+2, b, b+1, 61, 62, COL.WOOD); vS(x0+1, b+2, 62, COL.LAMP);
+      // consola + TV en muro
+      fillS(x0+14, x0+15, b, b+1, 52, 59, COL.WOOD);
+      fillS(x0+15, x0+15, b+4, b+7, 52, 59, COL.TV);
+      // tapete + sillon
+      fillS(x0+4, x0+10, b, b, 60, 66, COL.RUG);
+      fillS(x0+11, x0+13, b, b+1, 65, 67, COL.PANEL);
+      fillS(x0+13, x0+13, b+2, b+2, 65, 67, COL.PANEL);
+    } else {
+      // --- volumen sugerido ---
+      fillS(x0+1, x0+9, b, b, 52, 59, COL.DARK);
+      fillS(x0+2, x0+9, b+1, b+1, 52, 59, COL.PANEL);
+      fillS(x0+1, x0+1, b+1, b+3, 52, 59, COL.PANEL);
+      fillS(x0+11, x0+14, b, b+8, 39, 42, COL.PANEL);
+    }
+  }
+}
+
+// ====== FACHADA SUR (grupo ocultable): MURO + PUERTAS CORREDIZAS ======
+for (let n=0; n<NF; n++) {
+  const s = SLAB(n);
+  for (let m=0; m<=10; m++) {
+    const x0 = m*MOD;
+    const lit = litRoom(m, n);
+    for (let x=x0; x<x0+MOD; x++) {
+      vF(x, s, 71, COL.SLAB);                          // canto de losa
+      for (let y=s+1; y<=s+11; y++) {
+        const inDoor = (x>=x0+4 && x<=x0+12 && y<=s+9);
+        if (inDoor) {
+          if (x===x0+4 || x===x0+12 || x===x0+8 || y===s+9) vF(x,y,71,COL.ALUM);  // marcos + riel central (2 hojas)
+          else vF(x, y, 71, lit ? COL.GLASS : COL.GLASS2);
+        } else {
+          const cenefa = (n===NF-1 && y>=s+10);        // remate de madera bajo pretil
+          vF(x, y, 71, cenefa ? COL.WOOD : COL.BODY);
+        }
+      }
+    }
+  }
+}
+
+// ====== BALCONES (grupo ocultable): losa volada + barandal de cristal ======
+for (let n=0; n<NF; n++) {
+  const s = SLAB(n);
+  for (let m=0; m<=10; m++) {
+    const x0 = m*MOD;
+    fillF(x0+1, x0+14, s, s, 72, 78, COL.SLAB);        // losa volada
+    for (let x=x0+1; x<=x0+14; x++) {                  // barandal frontal
+      const post = ((x-x0-1)%6===0) || x===x0+14;
+      for (let y=s+1; y<=s+3; y++) vF(x, y, 78, post ? COL.ALUM : COL.RAILG);
+      vF(x, s+4, 78, COL.ALUM);                        // pasamanos
+    }
+    for (const xs of [x0+1, x0+14])                    // retornos laterales
+      for (let z=73; z<=77; z++) {
+        for (let y=s+1; y<=s+3; y++) vF(xs, y, z, (z===75) ? COL.ALUM : COL.RAILG);
+        vF(xs, s+4, z, COL.ALUM);
+      }
+    if (m>0) fillF(x0, x0, s+1, s+7, 72, 77, COL.BODY_D);  // panel divisor de privacidad
+  }
+}
+
+// ====== RACKS DE CONDENSADORAS (fachada norte, por piso) ======
+for (let n=0; n<NF; n++) {
+  const s = SLAB(n), sy = s+1;
+  for (let k=0; k<10; k++) {
+    const ux = 6 + k*15;
+    fillS(ux-1, ux+4, sy, sy, -3, -1, COL.SKID);       // repisa metalica
+    vS(ux, s, -1, COL.FRAME); vS(ux+3, s, -1, COL.FRAME);  // mensulas
+    for (let x=ux; x<=ux+3; x++)
+      for (let y=sy+1; y<=sy+3; y++)
+        for (let z=-3; z<=-2; z++) {
+          if (z===-3) vS(x, y, z, (y===sy+3) ? COL.COND : (((x+y)%2===0) ? COL.GRILLE : COL.COND));
+          else vS(x, y, z, COL.COND);
+        }
+    vS(ux+4, sy+1, -1, COL.COPPER);                    // linea refrigerante al muro
+  }
+}
+
+// ====== ESCALERA DE EMERGENCIA EXTERIOR (norte) ======
+const SCOLS = new Set(['151,-6','156,-2','164,-6','169,-2']);
+function plat(x0, x1, y, z0, z1, c) {                  // plataforma que respeta columnas
+  for (let x=x0; x<=x1; x++)
+    for (let z=z0; z<=z1; z++)
+      if (!SCOLS.has(x+','+z)) vS(x, y, z, c);
+}
+for (const [cx,cz] of [[151,-6],[156,-2],[164,-6],[169,-2]])
+  fillS(cx, cx, 1, 112, cz, cz, COL.FRAME);
+for (let k=0; k<=13; k++)                              // tramo a nivel de calle
+  plat(157+k, 157+k, 15-k, -3, -1, COL.SKID);
+for (let n=0; n<NF; n++) {
+  const s = SLAB(n);
+  plat(150, 156, s, -7, -1, COL.SKID);                 // descanso en piso
+  fillS(150, 156, s+3, s+3, -7, -7, COL.FRAME);        // barandal descanso
+  if (n < NF-1) {
+    plat(164, 170, s+6, -7, -1, COL.SKID);             // descanso intermedio
+    fillS(164, 170, s+9, s+9, -7, -7, COL.FRAME);
+    for (let k=0; k<=5; k++) {                         // tramo de subida
+      fillS(157+k, 157+k, s+1+k, s+1+k, -3, -1, COL.SKID);
+      vS(157+k, s+4+k, -3, COL.FRAME);
+    }
+    vS(163, s+6, -2, COL.SKID);
+    for (let k=0; k<=5; k++) {                         // tramo de regreso
+      fillS(163-k, 163-k, s+7+k, s+7+k, -7, -5, COL.SKID);
+      vS(163-k, s+10+k, -7, COL.FRAME);
+    }
+    vS(157, s+12, -6, COL.SKID);
+  }
+}
+
+// ====== AZOTEA: PRETIL + CUARTO DE MAQUINAS + ZONA DE EQUIPOS ======
+for (let x=0; x<=175; x++)
+  for (const z of [0, 71]) {
+    for (let y=113; y<=116; y++) vS(x, y, z, COL.BODY);
+    vS(x, 117, z, COL.SLAB);
+  }
+for (let z=1; z<=70; z++)
+  for (const wx of [0, 175]) {
+    for (let y=113; y<=116; y++) vS(wx, y, z, COL.BODY);
+    vS(wx, 117, z, COL.SLAB);
+  }
+// cuarto de maquinas de elevadores
+for (let x=82; x<=106; x++)
+  for (let z=1; z<=17; z++) {
+    vS(x, 124, z, COL.SLAB);
+    const per = (x===82 || x===106 || z===1 || z===17);
+    if (!per) continue;
+    for (let y=113; y<=123; y++) {
+      if (z===17 && x>=92 && x<=95 && y<=120) { vS(x,y,z,COL.DARK); continue; }
+      if (x===106 && z>=5 && z<=12 && y>=116 && y<=120) { vS(x,y,z, ((z+y)%2===0)?COL.GRILLE:COL.BODY); continue; }
+      vS(x, y, z, COL.BODY);
+    }
+  }
+// zona plana libre ~10x8 m para UMA + extractor (marcada) con bases
+for (let x=16; x<=56; x++) { vS(x,113,30,COL.DARK); vS(x,113,62,COL.DARK); }
+for (let z=31; z<=61; z++) { vS(16,113,z,COL.DARK); vS(56,113,z,COL.DARK); }
+fillS(20, 41, 113, 114, 34, 43, COL.SKID);             // base para UMA
+fillS(20, 33, 113, 114, 50, 57, COL.SKID);             // base para extractor
+// ventilas menores + antena
+fillS(140,145, 113,115, 10,14, COL.SKID);
+fillS(150,154, 113,114, 40,44, COL.SKID);
+fillS(168,168, 113,124, 60,60, COL.FRAME);
+vS(168, 125, 60, COL.LAMP);
+
+// ====== LETRERO "HOTEL FRENTE AL MAR" (pretil sur, voxeles emisivos) ======
+const FONT = {
+  H:['10001','10001','11111','10001','10001'],
+  O:['01110','10001','10001','10001','01110'],
+  T:['11111','00100','00100','00100','00100'],
+  E:['11111','10000','11110','10000','11111'],
+  L:['10000','10000','10000','10000','11111'],
+  F:['11111','10000','11110','10000','10000'],
+  R:['11110','10001','11110','10010','10001'],
+  N:['10001','11001','10101','10011','10001'],
+  A:['01110','10001','11111','10001','10001'],
+  M:['10001','11011','10101','10001','10001'],
+};
+let scx = 27;
+for (const ch of 'HOTEL FRENTE AL MAR') {
+  if (ch === ' ') { scx += 4; continue; }
+  const rows = FONT[ch];
+  rows.forEach((row, r) => {
+    for (let c=0; c<5; c++)
+      if (row[c] === '1') vS(scx+c, 122-r, 71, COL.SIGN);
+  });
+  scx += 7;
+}
+
+// ====== INSTANCED MESHES ======
+const cubeGeo = new THREE.BoxGeometry(1,1,1);
+const TRANSP = { [COL.GLASS]:0.45, [COL.GLASS2]:0.4, [COL.RAILG]:0.35 };
+const EMIS = {
+  [COL.LAMP]: [0xffb860, 0.55],
+  [COL.CORR]: [0xffe8b0, 0.6],
+  [COL.SIGN]: [0xfff1d6, 0.12],
+};
+const METAL = new Set([COL.ALUM, COL.SKID, COL.FRAME, COL.GRILLE, COL.COND, COL.COPPER]);
+const mats = {};
+function buildStore(store, parent) {
+  for (const k in store) {
+    const { color, positions } = store[k];
+    const gl = TRANSP[color];
+    const em = EMIS[color];
+    const mat = new THREE.MeshStandardMaterial({
+      color,
+      roughness: gl !== undefined ? 0.15 : (METAL.has(color) ? 0.35 : 0.6),
+      metalness: gl !== undefined ? 0.1  : (METAL.has(color) ? 0.65 : 0.12),
+      transparent: gl !== undefined,
+      opacity: gl !== undefined ? gl : 1.0,
+      depthWrite: gl === undefined,
+      side: gl !== undefined ? THREE.DoubleSide : THREE.FrontSide,
+      emissive: em ? em[0] : 0x000000,
+      emissiveIntensity: em ? em[1] : 0,
+    });
+    (mats[color] ||= []).push(mat);
+    const mesh = new THREE.InstancedMesh(cubeGeo, mat, positions.length);
+    mesh.castShadow = (gl === undefined) && color !== COL.FLOOR;
+    mesh.receiveShadow = true;
+    const mtx = new THREE.Matrix4();
+    positions.forEach((p, i) => {
+      mtx.setPosition(p[0]+0.5, p[1]+0.5, p[2]+0.5);
+      mesh.setMatrixAt(i, mtx);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    parent.add(mesh);
+  }
+}
+buildStore(voxS, scene);
+const facadeGroup = new THREE.Group();
+scene.add(facadeGroup);
+buildStore(voxF, facadeGroup);
+
+// ====== LUCES PUNTUALES (letrero + lobby, activas de noche) ======
+const signL1 = new THREE.PointLight(0xfff1d6, 0, 60); signL1.position.set(58, 121, 80);  scene.add(signL1);
+const signL2 = new THREE.PointLight(0xfff1d6, 0, 60); signL2.position.set(118, 121, 80); scene.add(signL2);
+const lobbyL = new THREE.PointLight(0xffd890, 0, 70); lobbyL.position.set(88, 11, 42);   scene.add(lobbyL);
+
+// ====== MAQUINA DE ESTADOS ======
+const state = { corte:false, noche:false };
+function setEm(color, hex, intensity, opacity) {
+  (mats[color] || []).forEach(m => {
+    m.emissive.setHex(hex);
+    m.emissiveIntensity = intensity;
+    if (opacity !== undefined) m.opacity = opacity;
+  });
+}
+function applyState() {
+  facadeGroup.visible = !state.corte;
+  const n = state.noche;
+  sun.intensity  = n ? 0.12 : 1.5;
+  amb.intensity  = n ? 0.10 : 0.25;
+  fill.intensity = n ? 0.12 : 0.4;
+  rim.intensity  = n ? 0.10 : 0.2;
+  setEm(COL.GLASS, n ? 0xffd890 : 0x000000, n ? 0.9 : 0, n ? 0.75 : 0.45);
+  setEm(COL.SIGN, 0xfff1d6, n ? 1.6 : 0.12);
+  setEm(COL.LAMP, 0xffb860, n ? 1.3 : 0.55);
+  setEm(COL.CORR, 0xffe8b0, n ? 1.4 : 0.6);
+  signL1.intensity = n ? 2.4 : 0;
+  signL2.intensity = n ? 2.4 : 0;
+  lobbyL.intensity = n ? 1.8 : 0;
+}
+applyState();
+
+// ====== UI ======
+function bind(id, key) {
+  const btn = document.getElementById(id);
+  const paint = () => {
+    btn.className = state[key] ? 'on' : 'off';
+    btn.textContent = state[key] ? 'ON' : 'OFF';
+  };
+  paint();
+  btn.onclick = () => { state[key] = !state[key]; paint(); applyState(); };
+}
+bind('bCorte', 'corte');
+bind('bNoche', 'noche');
+const bRot = document.getElementById('bRot');
+bRot.onclick = () => {
+  controls.autoRotate = !controls.autoRotate;
+  bRot.className = controls.autoRotate ? 'on' : 'off';
+  bRot.textContent = controls.autoRotate ? 'ON' : 'OFF';
+};
+
+// ====== RESIZE ======
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ====== ANIMATE ======
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+  if (state.noche)                                      // pulso sutil del letrero
+    (mats[COL.SIGN] || []).forEach(m => { m.emissiveIntensity = 1.6 + Math.sin(t*2)*0.15; });
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

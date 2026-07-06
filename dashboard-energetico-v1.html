@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hotel HVAC · Consumo Energético · Industrial Blueprint</title>
+<!-- Landing = 3D HVAC scene (full screen). Click the plant / button -> energy dashboard overlay.
+     Design language: "Industrial Blueprint" (pruebas-dashboards B11) + 3D HVAC digital-twin (B29/B30).
+     Aged paper + navy ink + rust accent · IBM Plex Condensed ALL-CAPS · no cards · title-block ·
+     hairline grid · charts with FIG/SCALE/SOURCE/AS-OF. Data is FIXED (client demo). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Serif:ital@1&display=swap" rel="stylesheet">
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<style>
+:root{
+  --bg:#ECE3CF; --ink:#1F3A5F; --rule:#BFB49A; --accent:#C2410C;
+  --d1:#1F3A5F; --d2:#A8431C; --d3:#7A8450; --d4:#C28E1E; --d5:#3A3F47;
+  --paper2:#E5DDC3;
+  --cond:"IBM Plex Sans Condensed",system-ui,sans-serif;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+  --serif:"IBM Plex Serif",Georgia,serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow:hidden}
+
+/* ============ LANDING · 3D STAGE ============ */
+#stage{position:fixed;inset:0;background:#E5DDC3;overflow:hidden}
+#scene3d{width:100%;height:100%;display:block;border:0}
+.readings{position:absolute;top:50px;right:26px;border:1px solid var(--ink);background:rgba(236,227,207,.92);min-width:230px;z-index:4}
+.readings .rh{font-family:var(--cond);font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:12px;padding:7px 12px;border-bottom:1px solid var(--ink);background:var(--paper2)}
+.readings .r{display:flex;justify-content:space-between;align-items:baseline;padding:8px 12px;border-bottom:1px solid var(--rule);font-family:var(--mono)}
+.readings .r:last-child{border-bottom:0}
+.readings .r .n{font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.readings .r .v{font-size:16px;font-weight:500;font-variant-numeric:tabular-nums}
+.readings .r .v small{font-size:10px;opacity:.7}
+.stage-meta{position:absolute;top:0;left:0;right:0;border-bottom:2px solid var(--ink);
+  font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-transform:uppercase;
+  display:flex;flex-wrap:wrap;background:rgba(236,227,207,.86);backdrop-filter:none}
+.stage-meta span{padding:7px 14px;border-right:1px solid var(--rule);white-space:nowrap}
+.stage-meta b{color:var(--accent);font-weight:500}
+.stage-title{position:absolute;left:26px;bottom:96px;max-width:60%}
+.stage-title h1{font-family:var(--cond);font-weight:700;text-transform:uppercase;letter-spacing:.02em;
+  font-size:52px;line-height:.98;margin:0}
+.stage-title .sub{font-family:var(--mono);font-size:12px;letter-spacing:.06em;margin-top:8px;text-transform:uppercase}
+.scalebar{position:absolute;right:26px;bottom:34px;font-family:var(--mono);font-size:9px;letter-spacing:.05em;
+  text-align:right;color:var(--ink);opacity:.85}
+.scalebar .bar{display:inline-block;width:80px;height:6px;border:1px solid var(--ink);
+  background:linear-gradient(90deg,var(--ink) 0 50%,transparent 50%);margin-left:8px;vertical-align:middle}
+.hint{position:absolute;left:50%;transform:translateX(-50%);bottom:16px;font-family:var(--mono);font-size:11px;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--ink);display:flex;align-items:center;gap:10px;background:rgba(236,227,207,.72);padding:4px 12px;border:1px solid var(--rule)}
+.hint .dot{width:7px;height:7px;background:var(--accent);border-radius:50%;animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.open-btn{position:absolute;right:26px;bottom:70px;font-family:var(--cond);font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;font-size:15px;background:var(--accent);color:var(--bg);border:1px solid var(--accent);
+  padding:11px 20px;cursor:pointer;border-radius:0}
+.open-btn:hover{background:var(--ink);border-color:var(--ink)}
+#hotlabel{position:absolute;pointer-events:none;font-family:var(--mono);font-size:11px;letter-spacing:.05em;
+  text-transform:uppercase;background:var(--ink);color:var(--bg);padding:3px 8px;border:1px solid var(--ink);
+  transform:translate(-50%,-140%);white-space:nowrap;display:none;z-index:5}
+
+/* ============ DASHBOARD OVERLAY ============ */
+#dash{position:fixed;inset:0;overflow-y:auto;background:var(--bg);
+  background-image:linear-gradient(var(--rule) .6px,transparent .6px),linear-gradient(90deg,var(--rule) .6px,transparent .6px);
+  background-size:28px 28px;
+  opacity:0;visibility:hidden;transform:translateY(14px);transition:opacity .28s ease,transform .28s ease,visibility .28s;z-index:10}
+#dash.show{opacity:1;visibility:visible;transform:none}
+.back-btn{position:fixed;top:12px;right:20px;z-index:12;font-family:var(--cond);font-weight:600;text-transform:uppercase;
+  letter-spacing:.05em;font-size:13px;background:var(--bg);color:var(--ink);border:1px solid var(--ink);padding:7px 14px;cursor:pointer;border-radius:0}
+.back-btn:hover{background:var(--ink);color:var(--bg)}
+.wrap{max-width:1280px;margin:0 auto;padding:0 24px 80px;background:var(--bg);border-left:1px solid var(--ink);border-right:1px solid var(--ink);background-clip:padding-box}
+
+/* meta strip / hero */
+.meta{border-bottom:2px solid var(--ink);font-family:var(--mono);font-size:11px;letter-spacing:.04em;display:flex;flex-wrap:wrap;text-transform:uppercase}
+.meta b{font-weight:500;color:var(--accent)}
+.meta span{padding:7px 14px;border-right:1px solid var(--rule);white-space:nowrap}
+.meta span:last-child{border-right:0;margin-left:auto}
+.hero{padding:22px 0 10px;border-bottom:1px solid var(--ink)}
+.hero h1{font-family:var(--cond);font-weight:700;text-transform:uppercase;letter-spacing:.02em;font-size:44px;line-height:1;margin:0}
+.hero .sub{font-family:var(--mono);font-size:12px;letter-spacing:.06em;margin-top:8px;text-transform:uppercase}
+/* section */
+section{border-top:1px solid var(--ink);padding:22px 0}
+.slabel{font-family:var(--cond);font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:15px;margin:0 0 16px;display:flex;align-items:baseline;gap:12px}
+.slabel .no{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.08em}
+.slabel .hr{flex:1;border-bottom:1px solid var(--rule);transform:translateY(-4px)}
+/* kpi */
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--ink)}
+.kpi{padding:16px 18px;border-right:1px solid var(--ink)}
+.kpi:last-child{border-right:0}
+.kpi .svc{font-family:var(--cond);font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-size:13px}
+.kpi .val{font-family:var(--mono);font-size:34px;font-weight:500;line-height:1.05;margin-top:6px;font-variant-numeric:tabular-nums}
+.kpi .u{font-size:14px;opacity:.7}
+.kpi .row2{display:flex;justify-content:space-between;align-items:baseline;margin-top:10px;font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
+.up{color:var(--accent);font-weight:500}.dn{color:var(--d3);font-weight:500}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.cols.wide{grid-template-columns:1.1fr 1fr}
+@media(max-width:900px){.cols,.cols.wide{grid-template-columns:1fr}.kpis{grid-template-columns:1fr}.kpi{border-right:0;border-bottom:1px solid var(--ink)}}
+/* chart */
+.chart{border:1px solid var(--ink);background:var(--bg)}
+.chart .fig{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--rule);font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.chart .fig .scale{opacity:.7;text-transform:none;letter-spacing:.02em}
+.chart svg{display:block;width:100%;height:auto}
+.chart .foot{padding:6px 12px;border-top:1px solid var(--rule);font-family:var(--mono);font-size:9px;display:flex;justify-content:space-between;opacity:.85}
+.chart .foot .src{font-family:var(--serif);font-style:italic;font-size:10px}
+/* table */
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{border:1px solid var(--ink);padding:7px 10px;text-align:right;font-family:var(--mono);font-size:12px}
+th{font-family:var(--cond);font-weight:600;text-transform:uppercase;letter-spacing:.04em;background:var(--paper2)}
+th:first-child,td:first-child{text-align:left}
+tbody tr:nth-child(even){background:rgba(31,58,95,.045)}
+tfoot td{font-weight:500;border-top:2px solid var(--ink);background:var(--paper2)}
+.tag{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.05em;border:1px solid var(--ink);padding:1px 6px}
+.tag.pdf{color:var(--accent);border-color:var(--accent)}
+a.dl{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent)}
+a.dl:hover{background:var(--accent);color:var(--bg)}
+/* method */
+.method{border:1px solid var(--ink);padding:14px 16px;font-family:var(--mono);font-size:12.5px;line-height:1.7}
+.method .step{display:grid;grid-template-columns:22px 1fr;gap:8px;padding:3px 0}
+.method .step b{color:var(--accent)}
+.method .eq{background:var(--paper2);border:1px solid var(--rule);padding:8px 10px;margin:8px 0;font-size:13px}
+.method .res{border-top:2px solid var(--ink);margin-top:10px;padding-top:8px;font-size:15px}
+.note{font-family:var(--serif);font-style:italic;font-size:12px;opacity:.8;margin-top:8px}
+/* insights */
+.ins{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--ink)}
+@media(max-width:900px){.ins{grid-template-columns:1fr}}
+.ins .col{padding:14px 16px}
+.ins .col:first-child{border-right:1px solid var(--ink)}
+.ins h4{font-family:var(--cond);font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:13px;margin:0 0 10px}
+.item{border-top:1px solid var(--rule);padding:9px 0;display:grid;grid-template-columns:auto 1fr;gap:10px}
+.item:first-of-type{border-top:0}
+.item .mk{font-family:var(--mono);font-size:11px;font-weight:500;padding-top:2px}
+.item .why{font-family:var(--serif);font-style:italic;font-size:13.5px;line-height:1.5}
+.item .rec{font-size:13.5px}
+.item .save{font-family:var(--mono);font-size:11px;color:var(--d3);margin-top:3px}
+.upload{border:1px dashed var(--ink);padding:12px 14px;margin-top:14px;font-family:var(--mono);font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--paper2)}
+.btn{font-family:var(--cond);font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:12px;background:transparent;color:var(--ink);border:1px solid var(--ink);padding:6px 14px;cursor:pointer;border-radius:0}
+
+/* ============ RESPONSIVE ============ */
+/* Global no-horizontal-scroll + fluid media guards (desktop untouched) */
+html,body{overflow-x:hidden}
+#dash{overflow-x:hidden}
+svg,img{max-width:100%}
+/* wide tables scroll inside their own box, never the body */
+.tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+.tscroll table{min-width:440px}
+
+/* --- Tablet (<=900px) --- */
+@media(max-width:900px){
+  .wrap{padding:0 16px 64px}
+  .hero h1{font-size:36px}
+  /* touch targets */
+  .open-btn,.back-btn,.btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+  /* keep readings on the right but a touch smaller so it clears the meta strip */
+  .readings{top:56px;right:12px;min-width:200px}
+}
+
+/* --- Mobile (<=640px) --- */
+@media(max-width:640px){
+  body{font-size:14px}
+  /* (a) meta strips: single-row internal horizontal scroll — never overflow the body */
+  .stage-meta{flex-wrap:nowrap;overflow-x:auto;font-size:9px;-webkit-overflow-scrolling:touch}
+  .stage-meta span{padding:5px 9px}
+  .meta{font-size:9px}
+  .meta span{padding:5px 9px}
+  .meta span:last-child{margin-left:0}
+  /* (d) readings: full width under the meta strip, compact, does not cover the 3D */
+  .readings{top:30px;left:8px;right:8px;min-width:0;width:auto}
+  .readings .rh{padding:5px 10px;font-size:11px}
+  .readings .r{padding:5px 10px}
+  .readings .r .v{font-size:14px}
+  /* hero */
+  .hero h1{font-size:28px}
+  .hero .sub{font-size:11px}
+  .wrap{padding:0 12px 56px}
+  /* (e) touch targets: full-width bottom button + larger back button */
+  .open-btn{left:8px;right:8px;bottom:10px;text-align:center;justify-content:center;font-size:14px;padding:13px 18px}
+  .back-btn{top:8px;right:10px;padding:11px 15px}
+  .hint{left:8px;right:8px;bottom:66px;font-size:10px;line-height:1.35}
+  .scalebar{display:none}
+  /* charts stay fluid via viewBox; tighten chrome text */
+  .chart .fig{font-size:10px;padding:6px 9px}
+  .kpi .val{font-size:30px}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ LANDING · 3D ============ -->
+<div id="stage">
+  <iframe id="scene3d" src="hotel-realista-ensamblado.html?clean=1" title="Gemelo 3D del hotel"></iframe>
+  <div class="readings" id="readings"></div>
+  <div class="stage-meta">
+    <span>PROYECTO: <b>HOTEL FRENTE AL MAR · CANCÚN</b></span>
+    <span>PLANO: DE-2026-07</span>
+    <span>SISTEMA: HVAC — AGUA HELADA (CHW) + VAV</span>
+    <span>ESTADO: <b>DEMO v0.2</b></span>
+  </div>
+  <div class="hint"><span class="dot"></span> Click en un equipo para acercar · botón para abrir el tablero</div>
+  <button class="open-btn" id="openDash">Tablero energético ▸</button>
+  <div class="scalebar">ESCALA APROX. 0 ─── 20 m <span class="bar"></span></div>
+  <div id="hotlabel"></div>
+</div>
+
+<!-- ============ DASHBOARD OVERLAY ============ -->
+<div id="dash">
+  <button class="back-btn" id="closeDash">◀ Vista 3D</button>
+  <div class="wrap">
+    <div class="meta">
+      <span>PROYECTO: <b>HOTEL FRENTE AL MAR · CANCÚN</b></span>
+      <span>PLANO: DE-2026-07</span>
+      <span>ESCALA: 1:1</span>
+      <span>FECHA: 2026-07-06</span>
+      <span>FUENTE: CFE / AGUAKAN / GAS L.P.</span>
+      <span>ESTADO: <b>DEMO v0.2</b></span>
+    </div>
+    <div class="hero">
+      <h1>Consumo Energético</h1>
+      <div class="sub">Electricidad · Agua · Gas L.P. — Costeo, insights y recomendaciones</div>
+    </div>
+
+    <section>
+      <p class="slabel"><span class="no">FIG.01</span> Resumen del periodo — Julio 2026 <span class="hr"></span></p>
+      <div class="kpis" id="kpis"></div>
+    </section>
+
+    <section>
+      <p class="slabel"><span class="no">FIG.02</span> Tendencias de consumo — 6 meses <span class="hr"></span></p>
+      <div class="cols"><div class="chart" id="chart-luz"></div><div class="chart" id="chart-agua"></div></div>
+      <div class="cols" style="margin-top:24px"><div class="chart" id="chart-gas"></div><div class="chart" id="chart-costo"></div></div>
+    </section>
+
+    <section>
+      <p class="slabel"><span class="no">FIG.03</span> Perfil de carga y participación en el costo <span class="hr"></span></p>
+      <div class="cols wide"><div class="chart" id="chart-perfil"></div><div class="chart" id="chart-break"></div></div>
+    </section>
+
+    <section>
+      <p class="slabel"><span class="no">FIG.04</span> Costeo mensual y método del gas <span class="hr"></span></p>
+      <div class="cols"><table id="costeo"></table>
+        <div><div class="method" id="gascalc"></div>
+        <p class="note">Metodología manual del gas L.P. — cómo se convierte el consumo físico a costo monetario.</p></div></div>
+    </section>
+
+    <section>
+      <p class="slabel"><span class="no">FIG.05</span> Facturas — PDFs de consumo <span class="hr"></span></p>
+      <div class="tscroll"><table id="facturas"></table></div>
+      <div class="upload"><span>INGESTA DE PDF — lectura automática del consumo/costo (fase 2: pdf.js + base local).</span>
+        <span><button class="btn" disabled>Subir PDF (pendiente)</button></span></div>
+    </section>
+
+    <section>
+      <p class="slabel"><span class="no">FIG.06</span> Insights y recomendaciones <span class="hr"></span></p>
+      <div class="ins">
+        <div class="col"><h4>¿Por qué se consumió más? (registro)</h4><div id="insights"></div></div>
+        <div class="col"><h4>Recomendaciones de ahorro</h4><div id="recs"></div></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script type="module">
+// El gemelo 3D vive en el iframe (hotel-realista-ensamblado.html?clean=1); aquí no se importa three.
+
+// ==================== DATA (fija — demo) ====================
+const MESES=['FEB','MAR','ABR','MAY','JUN','JUL'];
+const DATA={
+  luz:{serie:[81200,83400,86900,90100,88300,97200],u:'kWh',tarifa:2.86,prev:88300},
+  agua:{serie:[3180,3260,3410,3720,3650,4090],u:'m³',tarifa:25.4,prev:3650},
+  gas:{serie:[3020,2980,3110,3260,3240,3580],u:'L',tarifa:14.20,prev:3240},
+};
+// perfil de carga eléctrica típico HVAC (24 h, kW promedio)
+const PERFIL=[62,58,55,53,52,54,60,72,88,104,118,128,134,138,140,136,128,120,112,104,96,86,74,66];
+const MXN=n=>'$'+Math.round(n).toLocaleString('es-MX');
+const NUM=n=>Math.round(n).toLocaleString('es-MX');
+const pct=(a,b)=>((a-b)/b*100);
+const costMes=i=>DATA.luz.serie[i]*DATA.luz.tarifa+DATA.agua.serie[i]*DATA.agua.tarifa+DATA.gas.serie[i]*DATA.gas.tarifa;
+
+// ==================== KPIs ====================
+const SVC=[{k:'luz',name:'Electricidad',color:'var(--d1)'},{k:'agua',name:'Agua',color:'var(--d3)'},{k:'gas',name:'Gas L.P.',color:'var(--d2)'}];
+document.getElementById('kpis').innerHTML=SVC.map(s=>{
+  const d=DATA[s.k],cur=d.serie[5],delta=pct(cur,d.prev),cost=cur*d.tarifa,cls=delta>=0?'up':'dn',sg=delta>=0?'▲ +':'▼ ';
+  return `<div class="kpi"><div class="svc" style="color:${s.color}">${s.name}</div>
+    <div class="val">${NUM(cur)} <span class="u">${d.u}</span></div>
+    <div class="row2"><span>${MXN(cost)}</span><span class="${cls}">${sg}${Math.abs(delta).toFixed(1)}% vs jun</span></div></div>`;
+}).join('');
+
+// ==================== CHART HELPERS (SVG blueprint) ====================
+function frame(el,fig,scaleTxt,inner,source,extra){
+  el.innerHTML=`<div class="fig"><span>${fig}</span><span class="scale">${scaleTxt}</span></div>
+    <svg viewBox="0 0 560 230" preserveAspectRatio="xMidYMid meet">${inner}</svg>
+    <div class="foot"><span class="src">SOURCE: ${source}</span><span>AS OF: 2026-07-06 · ${extra||'ESCALA LINEAL'}</span></div>`;
+}
+const PAD={l:52,r:16,t:14,b:30}, IW=560-PAD.l-PAD.r, IH=230-PAD.t-PAD.b;
+function axes(labels,max,min,{yfmt=NUM}={}){
+  let s='';for(let g=0;g<=4;g++){const gy=PAD.t+IH*g/4,val=max-(max-min)*g/4;
+    s+=`<line x1="${PAD.l}" y1="${gy}" x2="${560-PAD.r}" y2="${gy}" stroke="var(--rule)" stroke-width=".6"/>`;
+    s+=`<text x="${PAD.l-6}" y="${gy+3}" text-anchor="end" font-family="var(--mono)" font-size="9" fill="var(--ink)">${yfmt(val)}</text>`;}
+  labels.forEach((L,i)=>{const x=PAD.l+IW*i/(labels.length-1);
+    s+=`<text x="${x}" y="${PAD.t+IH+18}" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--ink)">${L}</text>`;});
+  s+=`<line x1="${PAD.l}" y1="${PAD.t}" x2="${PAD.l}" y2="${PAD.t+IH}" stroke="var(--ink)" stroke-width="1"/>`;
+  s+=`<line x1="${PAD.l}" y1="${PAD.t+IH}" x2="${560-PAD.r}" y2="${PAD.t+IH}" stroke="var(--ink)" stroke-width="1"/>`;
+  return s;
+}
+function lineChart(el,{fig,serie,u,scaleTxt,color,source,labels=MESES}){
+  const max=Math.max(...serie)*1.08,min=Math.min(...serie)*0.9;
+  const x=i=>PAD.l+IW*i/(serie.length-1),y=v=>PAD.t+IH*(1-(v-min)/(max-min));
+  const pts=serie.map((v,i)=>[x(i),y(v)]);
+  const path=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const area=path+` L ${x(serie.length-1)} ${PAD.t+IH} L ${PAD.l} ${PAD.t+IH} Z`;
+  const li=serie.indexOf(Math.max(...serie));
+  const ann=`<circle cx="${x(li)}" cy="${y(serie[li])}" r="3" fill="none" stroke="var(--accent)" stroke-width="1.2"/>
+    <line x1="${x(li)}" y1="${y(serie[li])}" x2="${x(li)-40}" y2="${y(serie[li])-16}" stroke="var(--accent)" stroke-width=".8"/>
+    <text x="${x(li)-42}" y="${y(serie[li])-19}" text-anchor="end" font-family="var(--mono)" font-size="9" fill="var(--accent)">PICO ${NUM(serie[li])}</text>`;
+  const inner=axes(labels,max,min)
+    +`<path d="${area}" fill="${color}" opacity=".08"/><path d="${path}" fill="none" stroke="${color}" stroke-width="1.6"/>`
+    +pts.map(p=>`<rect x="${p[0]-2}" y="${p[1]-2}" width="4" height="4" fill="var(--bg)" stroke="${color}" stroke-width="1"/>`).join('')
+    +ann+`<text x="12" y="${PAD.t+IH/2}" transform="rotate(-90 12 ${PAD.t+IH/2})" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--ink)">${u}</text>`;
+  frame(el,fig,scaleTxt,inner,source);
+}
+function barChart(el,{fig,serie,u,scaleTxt,color,source,labels=MESES}){
+  const max=Math.max(...serie)*1.1,min=0,n=serie.length,bw=IW/n*0.6;
+  const x=i=>PAD.l+IW*(i+0.5)/n,y=v=>PAD.t+IH*(1-(v-min)/(max-min));
+  let bars='';serie.forEach((v,i)=>{const h=PAD.t+IH-y(v);
+    bars+=`<rect x="${x(i)-bw/2}" y="${y(v)}" width="${bw}" height="${h}" fill="${color}" opacity=".82" stroke="var(--ink)" stroke-width=".6"/>`;
+    bars+=`<text x="${x(i)}" y="${y(v)-4}" text-anchor="middle" font-family="var(--mono)" font-size="8" fill="var(--ink)">${NUM(v/1000)}k</text>`;});
+  frame(el,fig,scaleTxt,axes(labels,max,min,{yfmt:v=>NUM(v/1000)+'k'})+bars
+    +`<text x="12" y="${PAD.t+IH/2}" transform="rotate(-90 12 ${PAD.t+IH/2})" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--ink)">${u}</text>`,source);
+}
+function areaProfile(el,{fig,serie,u,scaleTxt,color,source}){
+  const labels=serie.map((_,i)=>i%3===0?i+'h':'');
+  const max=Math.max(...serie)*1.1,min=0;
+  const x=i=>PAD.l+IW*i/(serie.length-1),y=v=>PAD.t+IH*(1-(v-min)/(max-min));
+  const path=serie.map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)).join(' ');
+  const area=path+` L ${x(serie.length-1)} ${PAD.t+IH} L ${PAD.l} ${PAD.t+IH} Z`;
+  const pi=serie.indexOf(Math.max(...serie));
+  const ann=`<line x1="${x(pi)}" y1="${y(serie[pi])}" x2="${x(pi)}" y2="${PAD.t}" stroke="var(--accent)" stroke-width=".7" stroke-dasharray="3 2"/>
+    <text x="${x(pi)+4}" y="${PAD.t+10}" font-family="var(--mono)" font-size="9" fill="var(--accent)">PICO ${serie[pi]} kW · 14–15h</text>`;
+  let ticks='';for(let i=0;i<serie.length;i+=3){ticks+=`<text x="${x(i)}" y="${PAD.t+IH+18}" text-anchor="middle" font-family="var(--mono)" font-size="8" fill="var(--ink)">${i}h</text>`;}
+  frame(el,fig,scaleTxt,axes(labels.map(_=>''),max,min)+`<path d="${area}" fill="${color}" opacity=".12"/><path d="${path}" fill="none" stroke="${color}" stroke-width="1.6"/>`+ticks+ann
+    +`<text x="12" y="${PAD.t+IH/2}" transform="rotate(-90 12 ${PAD.t+IH/2})" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--ink)">${u}</text>`,source,'PERFIL 24 H');
+}
+function hbars(el,{fig,rows,scaleTxt,source}){
+  const total=rows.reduce((a,r)=>a+r.v,0),max=Math.max(...rows.map(r=>r.v));
+  const L=140,IWb=560-L-90;let y=30,s='';
+  rows.forEach(r=>{const w=IWb*r.v/max,p=(r.v/total*100).toFixed(1);
+    s+=`<text x="${L-8}" y="${y+13}" text-anchor="end" font-family="var(--mono)" font-size="11" fill="var(--ink)">${r.name}</text>`;
+    s+=`<rect x="${L}" y="${y}" width="${w}" height="18" fill="${r.color}" opacity=".85" stroke="var(--ink)" stroke-width=".6"/>`;
+    s+=`<text x="${L+w+6}" y="${y+13}" font-family="var(--mono)" font-size="11" fill="var(--ink)">${MXN(r.v)} · ${p}%</text>`;
+    y+=34;});
+  el.innerHTML=`<div class="fig"><span>${fig}</span><span class="scale">${scaleTxt}</span></div>
+    <svg viewBox="0 0 560 ${y+10}" preserveAspectRatio="xMidYMid meet">${s}</svg>
+    <div class="foot"><span class="src">SOURCE: ${source}</span><span>AS OF: 2026-07-06 · TOTAL ${MXN(total)}</span></div>`;
+}
+
+// build charts
+lineChart(document.getElementById('chart-luz'),{fig:'FIG. 02A — ELECTRICIDAD',serie:DATA.luz.serie,u:'kWh',scaleTxt:'lineal · feb–jul',color:'var(--d1)',source:'Factura CFE GDMTH'});
+lineChart(document.getElementById('chart-agua'),{fig:'FIG. 02B — AGUA',serie:DATA.agua.serie,u:'m³',scaleTxt:'lineal · feb–jul',color:'var(--d3)',source:'Factura Aguakan'});
+lineChart(document.getElementById('chart-gas'),{fig:'FIG. 02C — GAS L.P.',serie:DATA.gas.serie,u:'L',scaleTxt:'lineal · feb–jul',color:'var(--d2)',source:'Recibo Gas L.P.'});
+barChart(document.getElementById('chart-costo'),{fig:'FIG. 02D — COSTO TOTAL',serie:MESES.map((_,i)=>costMes(i)),u:'MXN',scaleTxt:'barras · feb–jul',color:'var(--d5)',source:'Costeo interno'});
+areaProfile(document.getElementById('chart-perfil'),{fig:'FIG. 03A — PERFIL DE CARGA ELÉCTRICA',serie:PERFIL,u:'kW',scaleTxt:'promedio horario · día típico',color:'var(--d1)',source:'Medidor CFE / SCADA'});
+hbars(document.getElementById('chart-break'),{fig:'FIG. 03B — PARTICIPACIÓN EN EL COSTO (JUL)',scaleTxt:'% del total',source:'Costeo interno',
+  rows:[{name:'ELECTRICIDAD',v:DATA.luz.serie[5]*DATA.luz.tarifa,color:'var(--d1)'},{name:'AGUA',v:DATA.agua.serie[5]*DATA.agua.tarifa,color:'var(--d3)'},{name:'GAS L.P.',v:DATA.gas.serie[5]*DATA.gas.tarifa,color:'var(--d2)'}]});
+
+// ==================== TABLES / METHOD / INSIGHTS ====================
+{
+  const rows=SVC.map(s=>{const d=DATA[s.k],cur=d.serie[5];return{name:s.name,cons:`${NUM(cur)} ${d.u}`,tar:`$${d.tarifa.toFixed(2)}/${d.u}`,cost:cur*d.tarifa};});
+  const total=rows.reduce((a,r)=>a+r.cost,0);
+  document.getElementById('costeo').innerHTML=`<thead><tr><th>Servicio</th><th>Consumo Jul</th><th>Tarifa</th><th>Costo MXN</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.cons}</td><td>${r.tar}</td><td>${MXN(r.cost)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>TOTAL</td><td></td><td></td><td>${MXN(total)}</td></tr></tfoot>`;
+}
+{
+  const L=DATA.gas.serie[5],price=DATA.gas.tarifa,kg=L*0.54,cost=L*price;
+  document.getElementById('gascalc').innerHTML=`
+    <div class="step"><b>1</b><span>Lectura de tanque/medidor L.P. — inicio vs fin de mes → <b>volumen (L)</b>.</span></div>
+    <div class="eq">V = (Nivel<sub>ini</sub> − Nivel<sub>fin</sub>) × Cap. tanque = <b>${NUM(L)} L</b></div>
+    <div class="step"><b>2</b><span>Equivalente en masa (densidad L.P. ≈ 0.54 kg/L):</span></div>
+    <div class="eq">m = ${NUM(L)} L × 0.54 kg/L = <b>${NUM(kg)} kg</b></div>
+    <div class="step"><b>3</b><span>Costo monetario = volumen × precio del litro L.P.:</span></div>
+    <div class="eq">Costo = ${NUM(L)} L × $${price.toFixed(2)}/L</div>
+    <div class="res">COSTO GAS JUL = <b style="color:var(--accent)">${MXN(cost)}</b> &nbsp;(${NUM(kg)} kg)</div>`;
+}
+{
+  document.getElementById('facturas').innerHTML=`<thead><tr><th>Mes 2026</th><th>Luz kWh</th><th>Agua m³</th><th>Gas L</th><th>Total MXN</th><th>PDF</th><th>Acción</th></tr></thead>
+    <tbody>${MESES.map((m,i)=>`<tr><td>${m}</td><td>${NUM(DATA.luz.serie[i])}</td><td>${NUM(DATA.agua.serie[i])}</td><td>${NUM(DATA.gas.serie[i])}</td><td>${MXN(costMes(i))}</td>
+      <td><span class="tag pdf">PDF</span></td><td><a class="dl" href="#" onclick="return false">descargar</a></td></tr>`).join('')}</tbody>`;
+}
+{
+  const insights=[{mk:'LUZ +10.1%',why:'Ocupación 92% + ola de calor: los chillers operaron a carga máxima más horas. Registrado el 03-jul.'},
+    {mk:'AGUA +12.1%',why:'Temporada alta — alberca con más reposición por evaporación y mayor carga de lavandería.'},
+    {mk:'GAS +10.5%',why:'Mayor demanda de ACS y cocina por ocupación; sin fugas detectadas en la revisión.'}];
+  const recs=[{rec:'Subir setpoint de chillers 7 °C → 8 °C en horas valle.',save:'AHORRO EST. ~6% ELECTRICIDAD'},
+    {rec:'Recuperación de calor de condensados hacia el ACS.',save:'AHORRO EST. ~10% GAS L.P.'},
+    {rec:'Cubierta nocturna de alberca para reducir evaporación.',save:'AHORRO EST. ~8% AGUA'}];
+  document.getElementById('insights').innerHTML=insights.map(i=>`<div class="item"><span class="mk up">${i.mk}</span><span class="why">${i.why}</span></div>`).join('');
+  document.getElementById('recs').innerHTML=recs.map(r=>`<div class="item"><span class="mk">→</span><span><span class="rec">${r.rec}</span><div class="save">${r.save}</div></span></div>`).join('');
+}
+
+// ==================== OPEN / CLOSE DASHBOARD ====================
+const dash=document.getElementById('dash');
+function openDash(){dash.classList.add('show')}
+function closeDash(){dash.classList.remove('show')}
+document.getElementById('openDash').addEventListener('click',openDash);
+document.getElementById('closeDash').addEventListener('click',closeDash);
+addEventListener('keydown',e=>{if(e.key==='Escape')closeDash()});
+
+// ============ 3D LANDING = iframe del hotel realista real (clean) + LECTURAS ============
+// El panel de lecturas usa el MISMO DATA que el dashboard -> lecturas idénticas garantizadas.
+{
+  const jul=k=>DATA[k].serie[5];
+  document.getElementById('readings').innerHTML=`
+    <div class="rh">Lecturas · Julio 2026</div>
+    <div class="r"><span class="n" style="color:var(--d1)">Electricidad</span><span class="v">${NUM(jul('luz'))} <small>kWh</small></span></div>
+    <div class="r"><span class="n" style="color:var(--d3)">Agua</span><span class="v">${NUM(jul('agua'))} <small>m³</small></span></div>
+    <div class="r"><span class="n" style="color:var(--d2)">Gas L.P.</span><span class="v">${NUM(jul('gas'))} <small>L</small></span></div>
+    <div class="r"><span class="n">Costo total</span><span class="v" style="color:var(--accent)">${MXN(costMes(5))}</span></div>`;
+  // click limpio sobre el gemelo 3D (iframe) -> abre el tablero (postMessage desde el ensamblado)
+  addEventListener('message',e=>{ if(e.data==='open-dash') openDash(); });
+}
+</script>
+</body>
+</html>
