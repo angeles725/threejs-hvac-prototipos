@@ -143,6 +143,42 @@ Client feedback after the first 4 iterations drove a second round (gaps G46-G48)
   claim: git shows all 6 prior commits were ADDITIVE — it was never enclosed in the realistic build,
   only in the voxel; so this ADDS parity rather than restoring a deletion. `[CERT]`
 
+## 41.8 — Verification constraint: NO WebGL in this environment (methodology) `[CERT-hw]`
+
+**Confirmed repeatedly** (2026-07-06): this WSL/headless environment cannot create a WebGL context.
+The chrome-devtools MCP browser fails at renderer init — `THREE.WebGLRenderer: A WebGL context could
+not be created ... GL_RENDERER = ANGLE (Mesa, llvmpipe) ... BindToCurrentSequence failed`. A direct
+probe (`canvas.getContext('webgl2')||'webgl'`) returns **false**; consequently the module's `<script>`
+throws at `new THREE.WebGLRenderer(...)` and `window.__hotel` / `window.__roomClick` are never defined
+(only the static DOM — `#roomPanel`, `#focusBadge` — exists). No system Chrome/SwiftShader binary is
+installed for a puppeteer fallback either. So **screenshots, renderer.info draw/tri probes, and any
+visual/interaction QA are impossible here** — there is no `[CERT-hw]` visual evidence for any 3D change
+in RUN 8.
+
+**Verification methodology actually used** (the ceiling of confidence available):
+1. `node --check` on the extracted `<script type="module">` body — a real JS syntax gate (catches the
+   brace/paren/label errors that are the main risk of large edits).
+2. Static reasoning about Three.js API correctness + declaration/scope order (grep the definitions).
+3. Deploy-byte verification: `curl ...?cb=<nonce>` vs `wc -c publish/...` to confirm production serves
+   the new build (cache-buster needed even after switching to `no-cache`).
+Visual sign-off is explicitly delegated to the user's real (GPU) browser at hotel.angeles-group.org.
+Selection/camera bugs (e.g. the equipment panel "no salía") were diagnosed by code inspection +
+robustness fixes (generous decoupled hitboxes, show-before-paint), NOT by observing the failure.
+
+## 41.9 — Selection system: rooms → all equipment, camera focus, per-type predictive `[CERT]`
+
+- Unified `selectUnit(id)` dispatches `roomData`→`selectRoom` / `equipData`→`selectEquip`; both share the
+  raycaster, `roomOutline`, `#roomPanel`, and `deselectRoom`. 88 room + 18 equipment opacity-0 hitboxes.
+- Equipment panel per-type 3rd metric (PRESIÓN/VIBRACIÓN/APROXIMACIÓN/NIVEL/ΔP), AMPERAJE, and a
+  predictive diagnosis; SETPOINT tile hidden where meaningless.
+- On select: `flyTo` frames the unit (dist ∝ size); a `#focusBadge` "VISTA ENFOCADA · <name> · Salir"
+  + teal edge `#focusVignette` signal the focused state; Salir → `deselectRoom` + `goView('general')`.
+- Panel anchored LEFT-center (`left:14px; top:50%`) so it doesn't block the view.
+- Fixes this round: `#roomPanel` removed from the `.clean` hide list (was invisible inside the
+  dashboard iframe `?clean=1`); equipment HITBOX decoupled from OUTLINE and made generous (exact-size
+  boxes were only center-clickable); show-before-paint + try/catch so the panel always appears; `#temps`
+  moved down (the enlarged legend overlapped it).
+
 ### Queued (G47/G48, needs the reference-dashboard pattern + hitbox architecture)
 - **Room selection** (client ask): click a guest room → highlight it (outline/emissive) → data panel
   with **temperature, amperage (A), humidity (%RH)**. Blocker: rooms are one merged InstancedMesh
