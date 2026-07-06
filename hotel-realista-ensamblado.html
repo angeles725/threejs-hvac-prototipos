@@ -300,6 +300,83 @@ if(new URLSearchParams(location.search).has('clean')){
   <button data-act="corte">Corte</button>
 </div>
 
+<!-- ============================================================
+     LAYOUT ZONES + RESPONSIVE (aditivo / quirurgico) — NO toca 3D.
+     Zonas escritorio:
+       · sup-IZQ apilada:  #views -> #info -> #temps
+       · centro-IZQ:       #roomPanel (transitorio, al seleccionar)
+       · inf-IZQ apilada:  #ctl2 sobre #ctl sobre #sys
+       · sup-DER:          #legend
+       · centro-DER:       #statusBar (+ #statusPop a su izquierda)
+       · inf-DER:          #hud
+       · sup-CENTRO:       #focusBadge (transitorio)
+     Este bloque va DESPUES de los estilos originales para ganar por
+     orden de cascada (misma especificidad de ID). !important solo
+     donde hay estilo inline (#ctl2) o clase .show (#statusPop).
+     ============================================================ -->
+<style>
+  /* --- Columna superior IZQUIERDA: #views -> #info -> #temps --- */
+  #info{ max-width:320px; max-height:calc(100vh - 360px); overflow:auto; }
+  /* #temps sale del centro-izq y baja bajo #info, anclado desde ARRIBA.
+     #roomPanel (centro, al seleccionar) puede cubrir su parte baja: es transitorio. */
+  #temps{ top:214px; left:14px; transform:none;
+    max-width:200px; max-height:calc(100vh - 414px); overflow:auto; }
+
+  /* --- Grupo inferior IZQUIERDA apilado: #ctl2 sobre #ctl sobre #sys (sin solapes) --- */
+  #ctl{ bottom:150px; left:14px; }
+  #ctl2{ bottom:182px !important; left:14px !important; }
+
+  /* --- DERECHA: capar alturas para que el #statusBar central no choque con #legend/#hud --- */
+  #legend{ max-height:calc(50vh - 24px); overflow:auto; }
+  #hud{ max-height:calc(50vh - 24px); overflow:auto; }
+  #statusBar{ max-height:calc(100vh - 24px); overflow:auto; }
+  #focusBadge{ max-width:calc(100vw - 20px); }
+
+  /* ===================== TABLET (<= 900px) ===================== */
+  @media (max-width:900px){
+    #info{ font-size:10px; padding:8px 11px; max-width:min(300px, calc(100vw - 28px)); }
+    #legend{ font-size:9px; padding:8px 11px; max-height:calc(50vh - 20px); }
+    #temps{ font-size:10px; padding:7px 10px; max-width:170px; max-height:calc(100vh - 400px); }
+    #roomPanel{ width:min(300px, calc(100vw - 28px)); }
+    #hud{ padding:9px 12px; font-size:11px; max-height:calc(50vh - 20px); }
+    #sys{ max-width:240px; }
+    #statusPop{ width:min(380px, calc(100vw - 96px)); }
+  }
+
+  /* ===================== PHONE (<= 600px) ====================== */
+  @media (max-width:600px){
+    /* #views: permitir wrap y no desbordar el viewport; targets tactiles >= 30px */
+    #views{ flex-wrap:wrap; max-width:calc(100vw - 28px); }
+    #views button, #sys button{ min-height:30px; padding:8px 10px; }
+    #sys{ max-width:calc(100vw - 28px); }
+    /* #info compacto y acotado */
+    #info{ font-size:10px; max-width:calc(100vw - 20px); max-height:110px; }
+    /* Ocultar hints de input de raton (irrelevantes en tactil; ya ocultos en clean) */
+    #ctl, #ctl2{ display:none !important; }
+    /* #roomPanel -> BOTTOM SHEET a ancho completo, con scroll interno */
+    #roomPanel{ left:0; right:0; bottom:0; top:auto; transform:none;
+      width:100%; max-width:100%; max-height:55vh; border-radius:12px 12px 0 0; }
+    /* #statusPop -> BOTTOM SHEET a ancho completo */
+    #statusPop{ left:0; right:0; bottom:0; top:auto; width:100%; max-width:100%;
+      max-height:60vh; border-radius:12px 12px 0 0; transform:translateY(6px) !important; }
+    #statusPop.show{ transform:none !important; }
+    /* #statusBar mas compacto, pegado al borde derecho */
+    #statusBar{ right:6px; padding:8px 8px; gap:5px; font-size:9px; max-height:calc(100vh - 16px); }
+    #statusBar .sb-dot{ width:6px; height:6px; }
+    #statusBar .sb-c{ padding:2px 4px; gap:6px; }
+    /* #hud compacto (oculto en clean) */
+    #hud{ padding:8px 10px; font-size:10px; }
+    #hud b{ font-size:13px; }
+    /* #focusBadge acotado por si #views hace wrap */
+    #focusBadge{ max-width:calc(100vw - 16px); font-size:10px; }
+  }
+
+  /* ===== Pantallas MUY pequenas (<= 520px): ocultar secundarios ===== */
+  @media (max-width:520px){
+    #legend, #temps{ display:none; }
+  }
+</style>
+
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -473,32 +550,12 @@ const shore = new THREE.Mesh(
 );
 shore.rotation.x=-Math.PI/2; shore.position.set(55, 0.04, SHORE_Z-6); shore.receiveShadow=true; scene.add(shore);
 
-// ====== MAR ANIMADO (olas GPU via onBeforeCompile) — "el mar bien" ======
-// Parche cercano frente a la playa: olas reales por vertice (suma de senos) + normal
-// analitica -> responde a luz y reflejo IBL. GPU-side: 0 costo CPU, 1 draw call.
-// Mas alla, un plano liso empujado al horizonte (se funde con la bruma del fog).
-const seaUniforms = { uTime: { value: 0 } };
-const seaMat = new THREE.MeshStandardMaterial({ color:0x17618f, roughness:0.36, metalness:0.15 });
-seaMat.onBeforeCompile = (sh) => {
-  sh.uniforms.uTime = seaUniforms.uTime;
-  // 4 olas DIRECCIONALES decorrelacionadas (direcciones/frecuencias/velocidades
-  // distintas) -> superficie de agua con ondas viajeras continuas, SIN el "beat"
-  // global (llenarse/vaciarse) que producian 3 senos de frecuencia parecida.
-  // Normal analitica -> responde a luz/reflejo IBL. GPU-side: 0 costo CPU.
-  sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader
-    .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
-      vec2 P = position.xy; float t = uTime; float ph = 0.0; vec2 g = vec2(0.0);
-      vec2 d0=normalize(vec2( 0.98, 0.20)); float a0=0.055,k0=0.16,s0=0.85; float r0=dot(P,d0)*k0+t*s0; ph+=a0*sin(r0); g+=a0*k0*cos(r0)*d0;
-      vec2 d1=normalize(vec2( 0.30, 0.95)); float a1=0.040,k1=0.26,s1=1.10; float r1=dot(P,d1)*k1+t*s1; ph+=a1*sin(r1); g+=a1*k1*cos(r1)*d1;
-      vec2 d2=normalize(vec2(-0.70, 0.71)); float a2=0.026,k2=0.38,s2=1.55; float r2=dot(P,d2)*k2+t*s2; ph+=a2*sin(r2); g+=a2*k2*cos(r2)*d2;
-      vec2 d3=normalize(vec2( 0.80,-0.60)); float a3=0.016,k3=0.52,s3=2.05; float r3=dot(P,d3)*k3+t*s3; ph+=a3*sin(r3); g+=a3*k3*cos(r3)*d3;
-      objectNormal = normalize(vec3(-g.x,-g.y,1.0));`)
-    .replace('#include <begin_vertex>', `#include <begin_vertex>
-      transformed.z += ph;`);
-};
-// Malla: longitudes de onda cortas -> 120x68 para muestrearlas bien. Animacion
-// 100% GPU (0 costo CPU); amplitud total ~0.14 m (brillo de agua, no oleaje).
-const sea = new THREE.Mesh(new THREE.PlaneGeometry(560, 320, 120, 68), seaMat);
+// ====== MAR (ESTATICO) — plano de agua liso, SIN animacion ======
+// La animacion de olas se veia mal; a pedido queda estatico como estaba antes.
+// Buen color de agua + reflejo IBL (metalness/roughness). Mas alla, un plano liso
+// al horizonte (se funde con la bruma del fog). 1 draw call c/u.
+const seaMat = new THREE.MeshStandardMaterial({ color:0x17618f, roughness:0.34, metalness:0.18 });
+const sea = new THREE.Mesh(new THREE.PlaneGeometry(560, 320, 1, 1), seaMat);
 sea.rotation.x=-Math.PI/2; sea.position.set(55, 0.05, SHORE_Z+150); sea.receiveShadow=false; scene.add(sea);
 const seaFar = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000),
   new THREE.MeshStandardMaterial({ color:0x14567d, roughness:0.30, metalness:0.12 }));
@@ -1451,7 +1508,6 @@ function animate(){
   updateFlight(now);
   _lastT = now;
   controls.update();
-  seaUniforms.uTime.value = now * 0.0011;          // olas del mar (GPU)
   updateFloorTemps(now);                           // temperatura por piso (1 Hz)
   if (ANIM_ON){
     for (let i = 0; i < spinners.fans.length; i++)  spinners.fans[i].rotation.y  += 0.16;
