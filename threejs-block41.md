@@ -124,7 +124,33 @@ Driven as a build loop, each iteration syntax-checked + committed + rebuilt to `
 
 **Deploy cadence**: each iteration is `node build-publish.mjs` (obfuscated) → `wrangler pages deploy
 publish --project-name=hotel-energia --branch=main`. Production live at hotel-energia.pages.dev /
-hotel.angeles-group.org. No git remote on this repo → commits are local only.
+hotel.angeles-group.org. No git remote on this repo → commits are local only. NOTE: the `cfut_`
+Cloudflare token is short-lived and expired mid-session (API error 10000) — deploys pause until a
+fresh token is supplied; committed work is unaffected and redeploys once the token is refreshed.
+
+## 41.7 — Follow-up round (client feedback): biome polish, pool-room, room selection `[CERT]`
+
+Client feedback after the first 4 iterations drove a second round (gaps G46-G48):
+- **Biome was "muy feo"** → rebuilt `terrainColor`/`terrainH` (`:240-270`): adopts the voxel's proven
+  palette (GRASS 0x66a851, SAND 0xd4c49a / SAND_D 0xc4b285, WET 0xb0997a) with `smoothstep`
+  blends replacing hard z-band cutoffs; two-scale grass variation; streaky sand; a sin-crest beach
+  dune that flattens at both the lawn (z=37) and the waterline (z=SHORE_Z). Displacement softened.
+- **Floating-equipment bug** → `BUILT` became a multi-rectangle union (`:229-238`): the pool machine
+  gear (filtrado x106.8, heater x109.8) was OUTSIDE the single flat rect (x1=84) since It.1, so the
+  relief lifted it. Rect 2 {x100-116, z26-46} flattens that pad.
+- **Pool machine-room ("cuarto de maquinas de alberca")** → added an open shelter (posts + back wall
+  + roof, `:~313`) around the pool gear, restoring the voxel pool-hut. Audited the "you removed it"
+  claim: git shows all 6 prior commits were ADDITIVE — it was never enclosed in the realistic build,
+  only in the voxel; so this ADDS parity rather than restoring a deletion. `[CERT]`
+
+### Queued (G47/G48, needs the reference-dashboard pattern + hitbox architecture)
+- **Room selection** (client ask): click a guest room → highlight it (outline/emissive) → data panel
+  with **temperature, amperage (A), humidity (%RH)**. Blocker: rooms are one merged InstancedMesh
+  (`roomsGroup`, `:6294+`) with no per-room identity → needs an invisible per-room hitbox grid +
+  an `instanceId`→(floor,room) map. Reference UX: `cliente/Tridium/datacenter-c3ntro` and
+  `dashboards-versiones/5-combinado.html` (under exploration).
+- **Predictive/diagnostic framing** (client ask): a "mantenimiento PREDICTIVO antes que correctivo"
+  panel/health read on the dashboard + per-room diagnosis (trend/anomaly/health score).
 
 Loop exit criterion (client lens): the realistic scene reads unmistakably as a beachfront resort
 (relief + coast + vegetation + life), carries every functional affordance the voxel scene had, and

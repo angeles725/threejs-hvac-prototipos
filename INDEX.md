@@ -160,6 +160,10 @@ This index guides through the **40 blocks** of this research. Each block is an i
 - [x] G43 — Living environment It.2 (vegetation, paths/boardwalk, beach & pool furniture) → [Block 41 §41.6] (run 8, +12 draws, deployed)
 - [x] G44 — Voxel-parity It.4 (scene labels + pipe connectivity fixes [CHW riser to roof AHU, pool loop, condenser 2-pipe] + rooftop AHU->shaft duct) → [Block 41 §41.6] (run 8, deployed). DEFERRED (optional next batch): zone isolation (AISLAR), per-unit detail panel (needs hitboxes on merged geo), pipe flow particles (voxel had them stripped — realistic already at parity).
 - [x] G45 — Per-floor average temperature It.3 (simulated °C, HUD panel + 8 floating color-coded labels, 1 Hz) → [Block 41 §41.6] (run 8, +8 draws, deployed)
+- [x] G46 — Biome polish + floating-equipment fix + pool machine-room (voxel palette, smooth blends, multi-rect BUILT, pool hut) → [Block 41 §41.7] (run 8, deployed)
+- [x] G47 — Room selection + predictive-maintenance panel (88 aligned hitboxes, EdgesGeometry outline by health, temp/setpoint/humidity/amperage + DIAGNOSTICO PREDICTIVO) → [Block 41 §41.7] (run 8, deployed)
+- [x] G49 — Sea rework (4 decorrelated directional waves, no global beat) + no-cache header so redeploys are visible → [Block 41 §41.7] (run 8, deployed)
+- [ ] G48 — Dashboard predictive section (dashboard-energetico-v1.html: 'mantenimiento PREDICTIVO antes que correctivo' diagnostic panel) → **requires-execution (§19)**, in-loop
 
 ## Non-investigable gaps (without lab / hardware / NDA)
 
