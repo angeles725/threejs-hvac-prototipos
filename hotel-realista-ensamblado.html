@@ -851,22 +851,49 @@ console.log(`[HOTEL FASE 2] draws equipo=${equipDraws} · +piso+grid=${totalDraw
   const red = [];
   const yR = 1.6, rR = 0.13, xRH = 13.2;
   red.push(seg(V(xRH, yR, 3.4), V(xRH, yR, 26.2), rR));              // header principal (corre en Z)
-  // ramal a la TORRE (x=2.2, z=6.2): sale del header, corre en -x, y baja al basin
+  // ramal HOT a la TORRE (x=2.2, z=6.2): el retorno caliente del chiller sube al
+  // riser de entrada caliente de la torre (no baja al basin; el basin lo alimenta
+  // el circuito verde/frio). Ver FIX 3. Endpoint elevado a la altura del hot-inlet.
   red.push(seg(V(xRH, yR, 6.2), V(3.1, yR, 6.2), rR));
-  red.push(seg(V(3.1, yR, 6.2), V(3.1, 0.55, 6.2), rR));
+  red.push(seg(V(3.1, yR, 6.2), V(3.1, 2.8, 6.2), rR));             // sube al hot-inlet de la torre
   red.push(joint(V(xRH, yR, 6.2), rR * 1.5));
   red.push(joint(V(3.1, yR, 6.2), rR * 1.5));
-  CHZ.forEach(z => {                                                 // drops a cada chiller (x=15)
+  CHZ.forEach(z => {                                                 // drops a cada chiller (salida condensador, x=15)
     red.push(seg(V(xRH, yR, z), V(15.0, yR, z), rR));
-    red.push(seg(V(15.0, yR, z), V(15.0, 0.9, z), rR));
+    red.push(seg(V(15.0, yR, z), V(15.0, 1.4, z), rR));             // FIX 5: baja a la boquilla lateral (~1.4 m)
     red.push(joint(V(xRH, yR, z), rR * 1.45));
     red.push(joint(V(15.0, yR, z), rR * 1.45));
   });
   CDZ.forEach(z => {                                                 // drops a cada bomba condensados (x=11.45)
     red.push(seg(V(xRH, yR, z), V(11.45, yR, z), rR));
-    red.push(seg(V(11.45, yR, z), V(11.45, 0.85, z), rR));
+    red.push(seg(V(11.45, yR, z), V(11.45, 1.4, z), rR));           // FIX 5: boquilla lateral de la bomba (~1.4 m)
     red.push(joint(V(xRH, yR, z), rR * 1.45));
     red.push(joint(V(11.45, yR, z), rR * 1.45));
+  });
+
+  // ---- CIRCUITO CONDENSADOS FRIO (verde 0x2f8f6a) — FIX 3 ----
+  // Agua fria del basin de la torre: TORRE(basin) -> bombas condensados -> entrada
+  // condensador de chillers. Header paralelo al rojo, ligeramente offset en x.
+  // Se fusiona en UNA sola geometria (1 draw). Mirror voxel 1246-1276.
+  const green = [];
+  const yG = 1.6, rG = 0.13, xGH = 12.4;
+  green.push(seg(V(xGH, yG, 3.4), V(xGH, yG, 26.2), rG));           // header verde (corre en Z)
+  // ramal COOLED al basin de la torre (z=5.6, offset del ramal rojo): baja al basin
+  green.push(seg(V(xGH, yG, 5.6), V(3.1, yG, 5.6), rG));
+  green.push(seg(V(3.1, yG, 5.6), V(3.1, 0.6, 5.6), rG));           // salida del basin (bajo)
+  green.push(joint(V(xGH, yG, 5.6), rG * 1.5));
+  green.push(joint(V(3.1, yG, 5.6), rG * 1.5));
+  CDZ.forEach(z => {                                                 // drops a cada bomba condensados (x=11.45)
+    green.push(seg(V(xGH, yG, z + 0.4), V(11.45, yG, z + 0.4), rG));
+    green.push(seg(V(11.45, yG, z + 0.4), V(11.45, 1.4, z + 0.4), rG));
+    green.push(joint(V(xGH, yG, z + 0.4), rG * 1.45));
+    green.push(joint(V(11.45, yG, z + 0.4), rG * 1.45));
+  });
+  CHZ.forEach(z => {                                                 // entrada condensador de cada chiller (x=15)
+    green.push(seg(V(xGH, yG, z + 0.5), V(15.0, yG, z + 0.5), rG));
+    green.push(seg(V(15.0, yG, z + 0.5), V(15.0, 1.4, z + 0.5), rG));
+    green.push(joint(V(xGH, yG, z + 0.5), rG * 1.45));
+    green.push(joint(V(15.0, yG, z + 0.5), rG * 1.45));
   });
 
   // ---- CIRCUITO AGUA HELADA (azul) — supply x=18.3 / return x=18.7, y=1.2 ----
@@ -893,10 +920,23 @@ console.log(`[HOTEL FASE 2] draws equipo=${equipDraws} · +piso+grid=${totalDraw
   // corrida hacia el EDIFICIO (cuarto de maquinas ~x=40, z=3): supply+return en +x
   blueS.push(seg(V(xS, yC, 3.0), V(39.0, yC, 2.7), rC));
   blueR.push(seg(V(xR, yC, 3.0), V(39.0, yC, 3.3), rC));
-  blueS.push(seg(V(39.0, yC, 2.7), V(39.0, 0.9, 2.7), rC));         // riser en el edificio
+  blueS.push(seg(V(39.0, yC, 2.7), V(39.0, 0.9, 2.7), rC));         // riser bajo en el cuarto de maquinas
   blueR.push(seg(V(39.0, yC, 3.3), V(39.0, 0.9, 3.3), rC));
   blueS.push(joint(V(39.0, yC, 2.7), rC * 1.5));
   blueR.push(joint(V(39.0, yC, 3.3), rC * 1.5));
+  // FIX 1: riser CHW a la azotea -> puertos de la UMA-1 (world ~45,28.5,-1.5).
+  // Sube vertical hasta y=28.5, corre en +x sobre la azotea y baja en -z al puerto.
+  // Mirror voxel 1293-1296. Supply y return con leve offset en z para no solaparse.
+  blueS.push(seg(V(39.0, yC, 2.7), V(39.0, 28.5, 2.7), rC));        // riser supply a azotea
+  blueS.push(seg(V(39.0, 28.5, 2.7), V(45.0, 28.5, 2.7), rC));      // corrida +x sobre la azotea
+  blueS.push(seg(V(45.0, 28.5, 2.7), V(45.0, 28.5, -1.7), rC));     // -z al puerto CHW UMA-1 (supply)
+  blueS.push(joint(V(39.0, 28.5, 2.7), rC * 1.5));
+  blueS.push(joint(V(45.0, 28.5, 2.7), rC * 1.5));
+  blueR.push(seg(V(39.0, yC, 3.3), V(39.0, 28.5, 3.3), rC));        // riser return a azotea
+  blueR.push(seg(V(39.0, 28.5, 3.3), V(45.4, 28.5, 3.3), rC));      // corrida +x sobre la azotea
+  blueR.push(seg(V(45.4, 28.5, 3.3), V(45.4, 28.5, -1.3), rC));     // -z al puerto CHW UMA-1 (return)
+  blueR.push(joint(V(39.0, 28.5, 3.3), rC * 1.5));
+  blueR.push(joint(V(45.4, 28.5, 3.3), rC * 1.5));
 
   function mkPipe(geos, color, metal, rough){
     const merged = BufferGeometryUtils.mergeGeometries(geos.filter(Boolean), false);
@@ -906,10 +946,71 @@ console.log(`[HOTEL FASE 2] draws equipo=${equipDraws} · +piso+grid=${totalDraw
     scene.add(m); SYS.tuberias.push(m);
     return merged.getAttribute('position').count / 3;
   }
-  const tRed = mkPipe(red,   0xc0563a, 0.35, 0.55);
+  const tRed = mkPipe(red,   0xc0563a, 0.35, 0.55);   // condensados CALIENTE (chiller->torre)
+  const tGrn = mkPipe(green, 0x2f8f6a, 0.35, 0.5);    // condensados FRIO (torre basin->bombas->chiller)
   const tBlS = mkPipe(blueS, 0x3f86c8, 0.35, 0.5);    // supply (azul claro)
   const tBlR = mkPipe(blueR, 0x2f6fae, 0.35, 0.5);    // return (azul)
-  console.log(`[TUBERIAS] draws=3 (CW + CHW supply + CHW return) · tris=${Math.round(tRed + tBlS + tBlR).toLocaleString()}`);
+  console.log(`[TUBERIAS] draws=4 (CW hot + CW cold + CHW supply + CHW return) · tris=${Math.round(tRed + tGrn + tBlS + tBlR).toLocaleString()}`);
+}
+
+// ==================================================================
+// FIX 2 — CIRCUITO DE AGUA DE ALBERCA (turquesa 0x2f8a86)
+// Lazo cerrado: ALBERCA (world ~55,37) -> FILTRADO (106.8,31.7) ->
+// INTERCAMBIADOR de placas (109.1,33.2) -> CALENTADOR (109.8,42.3) -> ALBERCA.
+// Ruteado a Y bajo (~0.8 m) con codos en angulo recto, igual que los headers
+// rojo/azul. Se fusiona en 1 draw. Mirror voxel 2880-2886 / 3180-3206.
+// Reusa V/seg/joint/mkPipe verbatim (bloque hermano; los helpers son de scope).
+// ==================================================================
+{
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const _up = new THREE.Vector3(0, 1, 0);
+  // Cilindro recto entre dos puntos world (eje Y del CylinderGeometry orientado a la direccion).
+  function seg(p0, p1, r, rad = 12){
+    const dir = new THREE.Vector3().subVectors(p1, p0);
+    const len = dir.length();
+    if (len < 1e-4) return null;
+    const g = new THREE.CylinderGeometry(r, r, len, rad, 1);
+    const q = new THREE.Quaternion().setFromUnitVectors(_up, dir.clone().normalize());
+    const mid = new THREE.Vector3().addVectors(p0, p1).multiplyScalar(0.5);
+    g.applyMatrix4(new THREE.Matrix4().compose(mid, q, new THREE.Vector3(1, 1, 1)));
+    return g;
+  }
+  // Esfera en un codo/union (suaviza el quiebre).
+  function joint(p, r){ const g = new THREE.SphereGeometry(r, 12, 8); g.translate(p.x, p.y, p.z); return g; }
+
+  function mkPipe(geos, color, metal, rough){
+    const merged = BufferGeometryUtils.mergeGeometries(geos.filter(Boolean), false);
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
+    const m = new THREE.Mesh(merged, mat);
+    m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false;
+    scene.add(m); SYS.tuberias.push(m);
+    return merged.getAttribute('position').count / 3;
+  }
+
+  const pool = [];
+  const yP = 0.8, rP = 0.12;
+  // --- SUPPLY: alberca -> filtrado -> intercambiador -> calentador ---
+  pool.push(seg(V(55, yP, 37), V(106.8, yP, 37), rP));             // corrida +x hacia el cuarto de maquinas
+  pool.push(seg(V(106.8, yP, 37), V(106.8, yP, 31.7), rP));        // -z al FILTRADO
+  pool.push(joint(V(106.8, yP, 37), rP * 1.4));
+  pool.push(seg(V(106.8, yP, 31.7), V(109.1, yP, 31.7), rP));      // +x al INTERCAMBIADOR
+  pool.push(seg(V(109.1, yP, 31.7), V(109.1, yP, 33.2), rP));      // +z al INTERCAMBIADOR
+  pool.push(joint(V(106.8, yP, 31.7), rP * 1.4));
+  pool.push(joint(V(109.1, yP, 31.7), rP * 1.4));
+  pool.push(seg(V(109.1, yP, 33.2), V(109.8, yP, 33.2), rP));      // +x al CALENTADOR
+  pool.push(seg(V(109.8, yP, 33.2), V(109.8, yP, 42.3), rP));      // +z al CALENTADOR
+  pool.push(joint(V(109.1, yP, 33.2), rP * 1.4));
+  pool.push(joint(V(109.8, yP, 33.2), rP * 1.4));
+  // --- RETURN: calentador -> alberca (offset en z para no solaparse con el supply) ---
+  const zRet = 44.5;
+  pool.push(seg(V(109.8, yP, 42.3), V(109.8, yP, zRet), rP));      // +z
+  pool.push(seg(V(109.8, yP, zRet), V(55, yP, zRet), rP));         // -x de vuelta hacia la alberca
+  pool.push(seg(V(55, yP, zRet), V(55, yP, 37), rP));              // -z de retorno a la alberca
+  pool.push(joint(V(109.8, yP, zRet), rP * 1.4));
+  pool.push(joint(V(55, yP, zRet), rP * 1.4));
+
+  const tPool = mkPipe(pool, 0x2f8a86, 0.2, 0.35);
+  console.log(`[TUBERIAS] pool loop draws=1 (turquesa) · tris=${Math.round(tPool).toLocaleString()}`);
 }
 
 // ==================================================================
