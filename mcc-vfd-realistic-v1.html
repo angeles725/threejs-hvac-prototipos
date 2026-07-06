@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MURO TÉCNICO · MCC + 3×VFD · ~4 m · Realistic PBR · 1 unidad = 1 m</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter:blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; color:#cfe0da; }
+  #legend i { width:12px; height:10px; display:inline-block; border-radius:2px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter:blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; gap:12px; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:60px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel button.alarm { color:#06080d; border-color:#ff2233; background:#ff2233; box-shadow:0 0 12px #ff223388; animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:0.55; } }
+</style>
+<script>
+// Inyeccion dinamica de importmap: String.fromCharCode(64) evita el mangling de '@' (package@version) por Cloudflare.
+(function(){
+  var AT = String.fromCharCode(64);
+  var tag = document.createElement('script');
+  tag.type = 'importmap';
+  tag.textContent = JSON.stringify({ imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }});
+  document.head.appendChild(tag);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>MURO TÉCNICO · MCC + 3×VFD</b><br>
+  <span>Muro ~4 m · MCC ~2 m · VFD 0.4–0.7 m · Realistic PBR · 1 unidad = 1 m</span>
+</div>
+<div id="legend">
+  <div><i style="background:#ffb300"></i> Alimentación (480 V)</div>
+  <div><i style="background:#3aa0ff"></i> Control (24 V)</div>
+  <div><i style="background:#ff7a30"></i> A motor</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>VFD-1 · 5.5 kW</label><button id="bV1" class="on">ON</button></div>
+  <div class="row"><label>VFD-2 · 11 kW</label><button id="bV2" class="on">ON</button></div>
+  <div class="row"><label>VFD-3 · 22 kW</label><button id="bV3" class="off">OFF</button></div>
+  <div class="row"><label>FALLA SIMULADA (VFD-2)</label><button id="bF" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 unidad = 1 m. Spec dimensional/composicion: voxel/mcc-vfd-voxel-v1.html (1 voxel = 0.025 m).
+// MURO TECNICO ~4.0 x 2.6 m con MCC de piso (~0.8 x 2.0 x 0.55 m) + 3 VFD de pared de tamanos
+//   distintos (0.4 / 0.55 / 0.7 m alto). ELECTRICO: sin circuitos de agua, sin partes giratorias.
+// MCC: gabinete de acero pintado gris (metalness 0 + roughnessMap), 2 secciones/puertas con manija,
+//   ranuras de ventilacion instanciadas, interruptor principal con operador rotativo, paro de
+//   emergencia, lamparas piloto, placa de datos y etiqueta arc-flash. Plinto/base.
+// VFD: cuerpo gris oscuro pintado + display de keypad (CanvasTexture 7-seg de frecuencia, NO cubos
+//   emisivos), botonera + potenciometro, aletas de disipador (instanciadas), lampara piloto rojo/verde.
+// CONDUIT: corridas galvanizadas (metal desnudo, metalness ~1, tono claro) con codos + condulets
+//   (cuerpos LB con tapa + tornillos). Bandas de color por servicio (alimentacion/control/a motor).
+// CANALETA PORTACABLES: escalera perforada superior con cables visibles.
+// ETIQUETAS arc-flash amarillas (CanvasTexture) en puertas/VFDs. Lamparas piloto emisivas por equipo.
+// ANIMACION: applyState() muta emisivos/visibilidad y REDIBUJA el canvas del display SOLO en cambio de
+//   estado. El loop solo hace autorotate + un pulso senoidal de emissiveIntensity para FALLA SIMULADA
+//   (sin asignaciones por frame, sin re-horneado de sombras).
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 9, 42);
+
+const camera = new THREE.PerspectiveCamera(46, window.innerWidth/window.innerHeight, 0.05, 200);
+camera.position.set(4.7, 1.95, 4.3);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;          // sombras horneadas: un solo horneado tras construir
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.5;
+controls.minDistance = 1.6;
+controls.maxDistance = 22;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(2.0, 1.15, 0.3);
+// Ground clamp (regla de la casa): ni el target ni la camara bajan del piso
+controls.addEventListener('change', () => {
+  if (controls.target.y < 0) controls.target.y = 0;
+  if (camera.position.y < 0.2) camera.position.y = 0.2;
+});
+
+// ====== RIG DE LUCES ======
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(5.0, 6.4, 4.2);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -4.0; sun.shadow.camera.right = 4.0;
+sun.shadow.camera.top = 4.0; sun.shadow.camera.bottom = -1.0;
+sun.shadow.camera.near = 1.5; sun.shadow.camera.far = 24;
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.02;
+sun.target.position.set(2.0, 1.1, 0.2);
+scene.add(sun); scene.add(sun.target);
+
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-3.4, 3.2, -2.4);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rim.position.set(1.0, 1.8, 4.0);
+scene.add(rim);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+// ====== PISO ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(80, 80),
+  new THREE.MeshStandardMaterial({ color:0x0a0d12, roughness:0.95, metalness:0 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(40, 80, 0x123f35, 0x0c1d1a);
+grid.position.y = 0.002;
+grid.material.transparent = true;
+grid.material.opacity = 0.35;
+scene.add(grid);
+
+// ====== TEXTURAS PROCEDURALES (CanvasTexture) ======
+function canvasTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  draw(ctx, w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  t._ctx = ctx;                     // guardado para redibujos en cambio de estado (displays)
+  return t;
+}
+function dataTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 4;
+  return t;
+}
+
+// Rugosidad sutil para la pintura (mapa lineal). roughnessMap MULTIPLICA el escalar:
+// escalar 1.0 * mapa (~0.55 medio) deja el producto en la banda de pintura percibida (0.5-0.6).
+const paintRoughTex = dataTex(256, 256, (g) => {
+  g.fillStyle = '#8c8c8c'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2600; i++){
+    const v = 120 + Math.floor(Math.random() * 60);
+    g.fillStyle = `rgba(${v},${v},${v},0.16)`;
+    g.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 3, 1 + Math.random() * 3);
+  }
+});
+paintRoughTex.wrapS = paintRoughTex.wrapT = THREE.RepeatWrapping;
+paintRoughTex.repeat.set(2, 3);
+
+// Placa de datos generica (nameplate metalica)
+function nameplateTex(title, sub, rows){
+  return canvasTex(512, 256, (g, w, h) => {
+    const grad = g.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#d8dade'); grad.addColorStop(0.5, '#b8bcc2'); grad.addColorStop(1, '#c8ccd2');
+    g.fillStyle = grad; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#3a3f46'; g.lineWidth = 6; g.strokeRect(10, 10, w - 20, h - 20);
+    g.fillStyle = '#22262c';
+    g.font = 'bold 30px monospace'; g.textAlign = 'center';
+    g.fillText(title, w/2, 54);
+    g.font = '20px monospace';
+    g.fillText(sub, w/2, 86);
+    g.font = '19px monospace'; g.textAlign = 'left';
+    rows.forEach((r, i) => g.fillText(r, 40, 128 + i * 30));
+    for (const [bx, by] of [[26, 26], [w-26, 26], [26, h-26], [w-26, h-26]]){
+      g.beginPath(); g.arc(bx, by, 7, 0, Math.PI*2); g.fillStyle = '#787c82'; g.fill();
+    }
+  });
+}
+const plateMccTex = nameplateTex('MCC-1 · CCM', 'CENTRO DE CONTROL DE MOTORES', [
+  'TENSION     480 V · 3F · 60 Hz', 'ICC         65 kA · NEMA 1', 'BUS         600 A COBRE']);
+
+// Etiqueta arc-flash / peligro (amarilla, triangulo de riesgo)
+const arcFlashTex = canvasTex(256, 320, (g, w, h) => {
+  g.fillStyle = '#f4c500'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#141414'; g.lineWidth = 8; g.strokeRect(6, 6, w - 12, h - 12);
+  g.fillStyle = '#141414'; g.fillRect(6, 6, w - 12, 66);
+  g.fillStyle = '#f4c500'; g.font = 'bold 40px monospace'; g.textAlign = 'center';
+  g.fillText('WARNING', w/2, 52);
+  // triangulo de peligro
+  g.fillStyle = '#141414';
+  g.beginPath(); g.moveTo(w/2, 92); g.lineTo(w/2 - 44, 168); g.lineTo(w/2 + 44, 168); g.closePath(); g.fill();
+  g.fillStyle = '#f4c500'; g.font = 'bold 54px monospace'; g.fillText('!', w/2, 162);
+  g.fillStyle = '#141414'; g.font = 'bold 22px monospace';
+  g.fillText('ARC FLASH &', w/2, 210);
+  g.fillText('SHOCK HAZARD', w/2, 236);
+  g.font = '16px monospace';
+  g.fillText('Appropriate PPE', w/2, 272);
+  g.fillText('Required', w/2, 294);
+});
+
+// ====== PALETA PBR (metalness 0 = pintado · metalness 1 = metal desnudo) ======
+// Leccion documentada: gris medio + metalness 1 lee NEGRO en este entorno. Gabinete/VFD pintados ->
+// metalness 0 con roughnessMap. Metal desnudo (conduit, condulets, manija de disconnect, bisagras,
+// tornillos, canaleta) -> metalness ~1 con TONOS CLAROS para que no lean negros.
+const M = {
+  WALL:    new THREE.MeshStandardMaterial({ color:0xbfc3c7, roughness:1.0, metalness:0, roughnessMap:paintRoughTex }),
+  WALLTRIM:new THREE.MeshStandardMaterial({ color:0x6a7077, roughness:0.5, metalness:0.8 }),   // unistrut / soleras
+  BASE:    new THREE.MeshStandardMaterial({ color:0x141519, roughness:0.85, metalness:0.1 }),  // plinto / zoclo
+  CAB:     new THREE.MeshStandardMaterial({ color:0x8b9299, roughness:1.0, metalness:0, roughnessMap:paintRoughTex }), // acero pintado gris ANSI61
+  CAB_D:   new THREE.MeshStandardMaterial({ color:0x767d84, roughness:0.85, metalness:0 }),     // marco / sombra
+  DOOR:    new THREE.MeshStandardMaterial({ color:0x929aa1, roughness:1.0, metalness:0, roughnessMap:paintRoughTex }),
+  VFD:     new THREE.MeshStandardMaterial({ color:0x3a3f45, roughness:0.7, metalness:0 }),       // drive gris oscuro pintado
+  VFD_D:   new THREE.MeshStandardMaterial({ color:0x2a2e33, roughness:0.7, metalness:0 }),
+  FIN:     new THREE.MeshStandardMaterial({ color:0x7d858e, roughness:0.42, metalness:0.85 }),   // aletas disipador (aluminio)
+  KEY:     new THREE.MeshStandardMaterial({ color:0x1c2026, roughness:0.6, metalness:0.1 }),     // teclas keypad
+  KNOB:    new THREE.MeshStandardMaterial({ color:0x555e69, roughness:0.5, metalness:0.55 }),    // potenciometro
+  STEEL:   new THREE.MeshStandardMaterial({ color:0x9aa0a8, roughness:0.34, metalness:1 }),      // metal desnudo claro
+  STEEL_D: new THREE.MeshStandardMaterial({ color:0x5c626b, roughness:0.5, metalness:0.55 }),
+  GALV:    new THREE.MeshStandardMaterial({ color:0xb7c0c7, roughness:0.32, metalness:0.95 }),   // conduit galvanizado
+  GALV_D:  new THREE.MeshStandardMaterial({ color:0x8a939b, roughness:0.42, metalness:0.9 }),    // condulet cuerpo
+  TRAY:    new THREE.MeshStandardMaterial({ color:0xc2cbd2, roughness:0.34, metalness:0.95 }),   // canaleta portacables
+  LOUVER:  new THREE.MeshStandardMaterial({ color:0x2a2f36, roughness:0.6, metalness:0.3 }),     // ranuras ventilacion (sombra)
+  BOLT:    new THREE.MeshStandardMaterial({ color:0x8b929a, roughness:0.4, metalness:1 }),
+  DISPBODY:new THREE.MeshStandardMaterial({ color:0x101318, roughness:0.5, metalness:0.1 }),     // bisel del display
+  DARK:    new THREE.MeshStandardMaterial({ color:0x1c1f24, roughness:0.7, metalness:0.1 }),
+  RED:     new THREE.MeshStandardMaterial({ color:0xb01f22, roughness:0.45, metalness:0.2 }),    // paro de emergencia / palanca
+  YEL:     new THREE.MeshStandardMaterial({ color:0xd8b41c, roughness:0.6, metalness:0.1 }),     // collar de E-stop
+  BAND_P:  new THREE.MeshStandardMaterial({ color:0xffb300, roughness:0.5, metalness:0.2 }),     // banda alimentacion (ambar)
+  BAND_C:  new THREE.MeshStandardMaterial({ color:0x3aa0ff, roughness:0.5, metalness:0.2 }),     // banda control (azul)
+  BAND_M:  new THREE.MeshStandardMaterial({ color:0xff7a30, roughness:0.5, metalness:0.2 }),     // banda a motor (naranja)
+  CABLE_C: new THREE.MeshStandardMaterial({ color:0x2f6fb0, roughness:0.6, metalness:0.1 }),     // cables de control en canaleta
+  CABLE_P: new THREE.MeshStandardMaterial({ color:0x9a6a20, roughness:0.6, metalness:0.1 })
+};
+
+// ====== HELPERS DE GEOMETRIA ======
+const staticG = new THREE.Group();
+scene.add(staticG);
+
+function mesh(geo, mat, x = 0, y = 0, z = 0, parent = staticG){
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+function box(w, h, d, mat, x, y, z, parent = staticG){
+  return mesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent);
+}
+function cylX(r, len, mat, x, y, z, seg = 16, parent = staticG){
+  const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+  m.rotation.z = Math.PI / 2;
+  return m;
+}
+function cylY(r, len, mat, x, y, z, seg = 16, parent = staticG){
+  return mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+}
+function cylZ(r, len, mat, x, y, z, seg = 16, parent = staticG){
+  const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+  m.rotation.x = Math.PI / 2;
+  return m;
+}
+
+// Conduit con codos suavizados (rigido/EMT) -> TubeGeometry sobre CurvePath con bezier en cada vertice
+function makePipe(points, r, mat, bend = 0.05, seg = 10, parent = staticG){
+  const path = new THREE.CurvePath();
+  const P = points.map(p => new THREE.Vector3(...p));
+  let prev = P[0];
+  for (let i = 1; i < P.length - 1; i++){
+    const a = P[i], b = P[i+1];
+    const dIn = a.clone().sub(prev).normalize();
+    const dOut = b.clone().sub(a).normalize();
+    const tIn = a.clone().sub(dIn.clone().multiplyScalar(bend));
+    const tOut = a.clone().add(dOut.clone().multiplyScalar(bend));
+    path.add(new THREE.LineCurve3(prev, tIn));
+    path.add(new THREE.QuadraticBezierCurve3(tIn, a, tOut));
+    prev = tOut;
+  }
+  path.add(new THREE.LineCurve3(prev, P[P.length - 1]));
+  const len = path.getLength();
+  const g = new THREE.TubeGeometry(path, Math.max(14, Math.round(len * 24)), r, seg);
+  return mesh(g, mat, 0, 0, 0, parent);
+}
+
+// ====== ACUMULADORES DE INSTANCIAS (una draw call por coleccion) ======
+const Q0 = new THREE.Quaternion();
+const S1 = new THREE.Vector3(1, 1, 1);
+function tMat(x, y, z, q, s){
+  return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q || Q0, s || S1);
+}
+function makeIM(geo, mat, mats, cast = true, parent = staticG){
+  const im = new THREE.InstancedMesh(geo, mat, mats.length);
+  mats.forEach((m, i) => im.setMatrixAt(i, m));
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = cast; im.receiveShadow = true;
+  parent.add(im);
+  return im;
+}
+const boltMats = [];      // tornillos / esparragos (condulets, bridas, tapas)
+const louverMats = [];    // ranuras de ventilacion del MCC
+const finMats = [];       // aletas de disipador de los VFD
+const rungMats = [];      // travesanos de la canaleta
+const keyMats = [];       // teclas del keypad de los VFD
+const bandPMats = [];     // bandas de alimentacion (ambar)
+const bandCMats = [];     // bandas de control (azul)
+const bandMMats = [];     // bandas a motor (naranja)
+
+const BOLT_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2, 0, 0)); // cilindro a lo largo de Z
+function boltFaceRing(cx, cy, z, radius, n){          // tornillos en la cara +Z de una tapa
+  for (let i = 0; i < n; i++){
+    const a = i / n * Math.PI * 2 + Math.PI / n;
+    boltMats.push(tMat(cx + Math.cos(a) * radius, cy + Math.sin(a) * radius, z, BOLT_Q));
+  }
+}
+
+// ==================================================================
+// COTAS (metros) — portadas del voxel (1 vox = 0.025 m)
+// ==================================================================
+const WALL_W = 4.0, WALL_H = 2.6, WALL_Z0 = -0.09;   // cara del muro en z=0
+// MCC de piso
+const MCC = { cx: 0.63, w: 0.80, d: 0.55, h: 2.0, zBack: 0.02 };
+const MCC_ZF = MCC.zBack + MCC.d;                     // cara frontal del gabinete
+// VFDs de pared (respaldo en z=0, protruyen +z) — familia 0.4 / 0.55 / 0.7 m
+const VFDS = [
+  { id: 1, cx: 1.575, w: 0.25,  y0: 1.05, h: 0.38, d: 0.175, kw: '5.5', hz: '45.0' },
+  { id: 2, cx: 2.20,  w: 0.30,  y0: 0.95, h: 0.53, d: 0.20,  kw: '11',  hz: '60.0' },
+  { id: 3, cx: 2.94,  w: 0.375, y0: 0.85, h: 0.68, d: 0.225, kw: '22',  hz: '52.0' }
+];
+const FAULT_VFD = 2;                                  // FALLA SIMULADA actua sobre VFD-2 (como el voxel)
+
+// ==================================================================
+// MURO / BACKING (panel industrial claro + soleras de montaje)
+// ==================================================================
+{
+  const wall = box(WALL_W, WALL_H, 0.09, M.WALL, WALL_W/2, WALL_H/2, WALL_Z0/2);
+  wall.castShadow = false;                            // fondo: no proyecta, solo recibe
+  // zoclo / rodapie oscuro
+  box(WALL_W, 0.12, 0.11, M.BASE, WALL_W/2, 0.06, 0.0);
+  // soleras verticales (unistrut) donde montan los VFD
+  for (const sx of [1.30, 2.55, 3.25]) box(0.05, 1.5, 0.03, M.WALLTRIM, sx, 1.25, 0.02);
+  // solera horizontal superior (soporte de canaleta/conduit)
+  box(3.0, 0.05, 0.03, M.WALLTRIM, 2.2, 2.05, 0.02);
+}
+
+// ==================================================================
+// MCC DE PISO (gabinete de acero pintado, 2 secciones/puertas)
+// ==================================================================
+const MX0 = MCC.cx - MCC.w/2, MX1 = MCC.cx + MCC.w/2;
+{
+  // plinto / base
+  box(MCC.w + 0.02, 0.09, MCC.d + 0.02, M.BASE, MCC.cx, 0.045, MCC.zBack + MCC.d/2);
+  // cuerpo del gabinete (enclosure)
+  box(MCC.w, MCC.h - 0.09, MCC.d, M.CAB, MCC.cx, 0.09 + (MCC.h - 0.09)/2, MCC.zBack + MCC.d/2);
+  // techo / hat
+  box(MCC.w + 0.03, 0.04, MCC.d + 0.03, M.CAB_D, MCC.cx, MCC.h + 0.01, MCC.zBack + MCC.d/2);
+
+  // --- 2 puertas (secciones verticales) ---
+  const doorY0 = 0.14, doorY1 = MCC.h - 0.06, doorH = doorY1 - doorY0, doorCy = (doorY0 + doorY1)/2;
+  const sections = [
+    { cx: MCC.cx - MCC.w/4 + 0.005, main: false },   // seccion izquierda
+    { cx: MCC.cx + MCC.w/4 - 0.005, main: true  }     // seccion derecha (interruptor principal)
+  ];
+  const doorW = MCC.w/2 - 0.03;
+  for (const s of sections){
+    // panel de puerta (ligeramente proud)
+    box(doorW, doorH, 0.02, M.DOOR, s.cx, doorCy, MCC_ZF + 0.005);
+    // marco de rebaje
+    const frame = box(doorW + 0.012, doorH + 0.012, 0.008, M.CAB_D, s.cx, doorCy, MCC_ZF - 0.006);
+    frame.castShadow = false;
+    // manija de leva (barra vertical) + escudo
+    box(0.03, 0.028, 0.02, M.STEEL_D, s.cx + doorW/2 - 0.05, doorCy - 0.02, MCC_ZF + 0.02);
+    box(0.022, 0.14, 0.028, M.STEEL, s.cx + doorW/2 - 0.05, doorCy - 0.09, MCC_ZF + 0.03);
+    // bisagras (lado interior)
+    for (const hy of [doorY0 + 0.12, doorCy, doorY1 - 0.12])
+      box(0.02, 0.06, 0.03, M.STEEL, s.cx - doorW/2 + 0.01, hy, MCC_ZF + 0.012);
+    // ranuras de ventilacion: 2 bandas de 6 ranuras (instanciadas)
+    for (const by of [doorY0 + 0.16, doorY0 + 0.30]){
+      for (let i = 0; i < 6; i++)
+        louverMats.push(tMat(s.cx, by + i * 0.022, MCC_ZF + 0.014, Q0, new THREE.Vector3(doorW * 0.62, 1, 1)));
+    }
+    // etiqueta arc-flash
+    const lbl = mesh(new THREE.PlaneGeometry(0.085, 0.106),
+      new THREE.MeshStandardMaterial({ map:arcFlashTex, roughness:0.55, metalness:0 }),
+      s.cx - doorW/2 + 0.075, doorY0 + 0.62, MCC_ZF + 0.018);
+    lbl.castShadow = false;
+
+    if (s.main){
+      // --- INTERRUPTOR PRINCIPAL: operador rotativo pasa-puerta (posicion ON) ---
+      cylZ(0.055, 0.03, M.STEEL_D, s.cx, doorCy + 0.30, MCC_ZF + 0.02, 20);     // base del operador
+      const lever = box(0.032, 0.16, 0.028, M.RED, s.cx, doorCy + 0.30, MCC_ZF + 0.05);
+      lever.geometry.translate(0, 0.06, 0);                                      // pivote en base
+      lever.rotation.z = -0.5;                                                    // palanca en ON (arriba)
+      box(0.05, 0.02, 0.01, M.DARK, s.cx, doorCy + 0.24, MCC_ZF + 0.036);        // marca I/O
+      // lamparas piloto del MCC (energizado permanente) sobre la puerta principal
+      const mg = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.02, 14), lampGmat(), s.cx - 0.05, doorY1 - 0.06, MCC_ZF + 0.02);
+      mg.rotation.x = Math.PI/2; mg.castShadow = false;
+      const mr = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.02, 14), lampRmat(0.1), s.cx + 0.02, doorY1 - 0.06, MCC_ZF + 0.02);
+      mr.rotation.x = Math.PI/2; mr.castShadow = false;
+    } else {
+      // --- PARO DE EMERGENCIA (hongo rojo con collar amarillo) ---
+      cylZ(0.032, 0.014, M.YEL, s.cx, doorCy + 0.28, MCC_ZF + 0.012, 18);
+      cylZ(0.024, 0.03, M.RED, s.cx, doorCy + 0.28, MCC_ZF + 0.028, 18);
+    }
+  }
+
+  // placa de datos del MCC (cara frontal, arriba)
+  const np = mesh(new THREE.PlaneGeometry(0.20, 0.10),
+    new THREE.MeshStandardMaterial({ map:plateMccTex, roughness:0.4, metalness:0 }),
+    MCC.cx, MCC.h - 0.16, MCC_ZF + 0.006);
+  np.castShadow = false;
+}
+
+// Fabricas de material de lampara piloto (emisivo, mutado por estado)
+function lampGmat(i){ return new THREE.MeshStandardMaterial({ color:0x0c3a1c, emissive:0x00ff66, emissiveIntensity:i ?? 1.6, roughness:0.35, metalness:0.1 }); }
+function lampRmat(i){ return new THREE.MeshStandardMaterial({ color:0x3a0c0e, emissive:0xff2233, emissiveIntensity:i ?? 1.2, roughness:0.35, metalness:0.1 }); }
+
+// ==================================================================
+// VFDs DE PARED (cuerpo + display CanvasTexture + keypad + pot + piloto + aletas)
+// ==================================================================
+// Display del VFD (CanvasTexture 7-seg de frecuencia). Se redibuja SOLO en cambio de estado.
+function drawVFDDisplay(v){
+  const g = v.tex._ctx, w = 256, h = 128;
+  const running = v.mode === 'run', fault = v.mode === 'fault';
+  g.fillStyle = '#05130d'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#0c3a2c'; g.lineWidth = 3; g.strokeRect(5, 5, w-10, h-10);
+  // fantasma de 7 segmentos (ghost) para el look de LCD
+  g.textAlign = 'left';
+  g.font = '700 46px "JetBrains Mono", ui-monospace, monospace';
+  g.fillStyle = 'rgba(120,180,150,0.07)'; g.fillText('88.8', 18, 66);
+  // encabezado
+  g.font = '600 15px "JetBrains Mono", ui-monospace, monospace';
+  g.fillStyle = fault ? '#ff5a4a' : '#5f9a86';
+  g.fillText('VFD-' + v.id, 18, 28);
+  g.textAlign = 'right';
+  g.fillText(v.kw + ' kW', w - 18, 28);
+  // lectura principal de frecuencia
+  g.textAlign = 'left';
+  g.font = '700 46px "JetBrains Mono", ui-monospace, monospace';
+  if (fault){ g.fillStyle = '#ff3a2e'; g.fillText('F 001', 18, 66); }
+  else if (running){ g.fillStyle = '#16ff9e'; g.fillText(v.hz, 18, 66); }
+  else { g.fillStyle = '#3a5a4c'; g.fillText('--.-', 18, 66); }
+  // unidad + estado
+  g.font = '600 20px "JetBrains Mono", ui-monospace, monospace';
+  g.fillStyle = fault ? '#ff5a4a' : (running ? '#16ff9e' : '#3a5a4c');
+  g.fillText('Hz', 176, 62);
+  g.font = '600 16px "JetBrains Mono", ui-monospace, monospace';
+  g.fillStyle = fault ? '#ff3a2e' : (running ? '#16ff9e' : '#54626c');
+  g.fillText(fault ? 'FALLA — SOBRECARGA' : (running ? 'RUN · FWD' : 'STOP · LISTO'), 18, 104);
+  v.tex.needsUpdate = true;
+}
+
+const rigs = [];
+for (const v of VFDS){
+  const zf = v.d, topY = v.y0 + v.h, x0 = v.cx - v.w/2, x1 = v.cx + v.w/2;
+  // cuerpo del drive (respaldo en z=0)
+  box(v.w, v.h, v.d, M.VFD, v.cx, v.y0 + v.h/2, v.d/2);
+  // bisel frontal (marco oscuro)
+  const bez = box(v.w + 0.006, v.h + 0.006, 0.01, M.VFD_D, v.cx, v.y0 + v.h/2, zf - 0.004);
+  bez.castShadow = false;
+  // pernos de montaje al muro (4 esquinas)
+  for (const sx of [x0 + 0.02, x1 - 0.02]) for (const sy of [v.y0 + 0.03, topY - 0.03])
+    boltMats.push(tMat(sx, sy, 0.012, BOLT_Q));
+  // aletas de disipador en el TOP (instanciadas) — a lo largo de z
+  const nfin = Math.max(4, Math.round(v.d / 0.028));
+  for (let i = 0; i < nfin; i++){
+    const fz = 0.03 + (i + 0.5) * (v.d - 0.05) / nfin;
+    finMats.push(tMat(v.cx, topY + 0.012, fz, Q0, new THREE.Vector3(v.w * 0.82, 1, 1)));
+  }
+  // franja de marca teal
+  const stripe = box(v.w * 0.9, 0.012, 0.004, new THREE.MeshStandardMaterial({ color:0x00d4aa, roughness:0.5, metalness:0.2 }),
+    v.cx, v.y0 + 0.03, zf + 0.001);
+  stripe.castShadow = false;
+
+  // --- display (bisel + plano con CanvasTexture emisiva) ---
+  const dispW = v.w * 0.66, dispH = Math.min(0.085, v.h * 0.20);
+  const dispY = v.y0 + v.h * 0.70;
+  box(dispW + 0.02, dispH + 0.02, 0.012, M.DISPBODY, v.cx, dispY, zf + 0.004);
+  v.tex = canvasTex(256, 128, (g) => { g.fillStyle = '#05130d'; g.fillRect(0, 0, 256, 128); });
+  v.dispMat = new THREE.MeshStandardMaterial({ map:v.tex, emissiveMap:v.tex, emissive:0xffffff,
+    emissiveIntensity:0.95, roughness:0.4, metalness:0 });
+  const disp = mesh(new THREE.PlaneGeometry(dispW, dispH), v.dispMat, v.cx, dispY, zf + 0.011);
+  disp.castShadow = false;
+
+  // --- keypad (housing + 6 teclas instanciadas) ---
+  const padY = v.y0 + v.h * 0.44;
+  box(v.w * 0.6, 0.07, 0.01, M.VFD_D, v.cx, padY, zf + 0.003).castShadow = false;
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++)
+    keyMats.push(tMat(v.cx + (c - 1) * v.w * 0.16, padY + 0.018 - r * 0.032, zf + 0.01, Q0,
+      new THREE.Vector3(v.w * 0.12, 0.022, 0.008)));
+  // potenciometro (knob + puntero)
+  const knY = v.y0 + v.h * 0.30, knX = v.cx + v.w * 0.28;
+  cylZ(0.018, 0.016, M.KNOB, knX, knY, zf + 0.006, 16);
+  box(0.005, 0.016, 0.006, M.STEEL, knX, knY + 0.012, zf + 0.014).castShadow = false;
+
+  // --- lamparas piloto (verde RUN / rojo STOP-FALLA) ---
+  const lampY = topY - 0.05;
+  const lampG = lampGmat(1.6), lampR = lampRmat(0.06);
+  const lg = mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.016, 14), lampG, v.cx - v.w * 0.28, lampY, zf + 0.006);
+  lg.rotation.x = Math.PI/2; lg.castShadow = false;
+  const lr = mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.016, 14), lampR, v.cx - v.w * 0.28 + 0.05, lampY, zf + 0.006);
+  lr.rotation.x = Math.PI/2; lr.castShadow = false;
+
+  rigs.push({ v, dispMat: v.dispMat, tex: v.tex, lampG, lampR });
+}
+
+// ==================================================================
+// CANALETA PORTACABLES (escalera perforada, corrida superior de control)
+// ==================================================================
+const TRAY = { y: 1.82, x0: 1.02, x1: 3.35, zB: 0.06, zF: 0.24 };
+{
+  const len = TRAY.x1 - TRAY.x0, cx = (TRAY.x0 + TRAY.x1)/2;
+  // rieles laterales (frontal y trasero)
+  box(len, 0.05, 0.012, M.TRAY, cx, TRAY.y, TRAY.zB);
+  box(len, 0.05, 0.012, M.TRAY, cx, TRAY.y, TRAY.zF);
+  // travesanos (rungs) instanciados
+  const nr = Math.round(len / 0.11);
+  for (let i = 0; i <= nr; i++)
+    rungMats.push(tMat(TRAY.x0 + i * len / nr, TRAY.y - 0.018, (TRAY.zB + TRAY.zF)/2, Q0, S1));
+  // mensulas de soporte al muro
+  for (const bx of [1.3, 2.2, 3.1]) box(0.02, 0.05, 0.22, M.STEEL_D, bx, TRAY.y + 0.02, (TRAY.zB + TRAY.zF)/2);
+  // cables dentro de la canaleta (control azul + un feeder)
+  for (const [dz, mat] of [[-0.05, M.CABLE_C], [-0.01, M.CABLE_C], [0.04, M.CABLE_P]]){
+    const cbl = cylX(0.014, len - 0.06, mat, cx, TRAY.y - 0.006, (TRAY.zB + TRAY.zF)/2 + dz, 8);
+    cbl.castShadow = false;
+  }
+}
+
+// ==================================================================
+// CONDULET (cuerpo LB con tapa + tornillos) — helper
+// ==================================================================
+function condulet(x, y, z){
+  box(0.06, 0.075, 0.05, M.GALV_D, x, y, z);           // cuerpo
+  box(0.05, 0.062, 0.012, M.GALV, x, y, z + 0.03);      // tapa
+  boltFaceRing(x, y, z + 0.037, 0.02, 4);               // 4 tornillos de la tapa
+}
+
+// ==================================================================
+// CONDUIT — ALIMENTACION (galvanizado + bandas ambar) del MCC a los VFD
+// ==================================================================
+const CDR = 0.017;   // radio del conduit rigido (~3/4")
+const zC = 0.05;     // plano de conduit sobre el muro
+{
+  // acometida de servicio: desde arriba del muro al techo del MCC
+  makePipe([[MCC.cx - 0.08, WALL_H - 0.05, zC], [MCC.cx - 0.08, MCC.h + 0.02, zC]], CDR, M.GALV);
+  condulet(MCC.cx - 0.08, MCC.h + 0.03, zC);
+  // header de distribucion: sube del MCC, corre horizontal a y=2.3, baja a cada VFD
+  makePipe([[MCC.cx + 0.18, MCC.h - 0.02, zC], [MCC.cx + 0.18, 2.30, zC], [VFDS[2].cx, 2.30, zC]], CDR, M.GALV);
+  condulet(MCC.cx + 0.18, 2.30, zC);
+  for (const v of VFDS){
+    const topY = v.y0 + v.h;
+    makePipe([[v.cx, 2.30, zC], [v.cx, topY + 0.02, zC]], CDR, M.GALV);
+    condulet(v.cx, 2.30, zC);
+    // bandas de alimentacion (ambar) sobre la bajada vertical
+    for (const by of [topY + 0.14, topY + 0.30]) bandPMats.push(tMat(v.cx, by, zC, Q0, S1));
+  }
+  for (const bx of [1.0, 1.5, 2.0, 2.5]) bandPMats.push(tMat(bx, 2.30, zC, BOLT_Q, S1)); // bandas en el header (horizontal)
+}
+
+// ==================================================================
+// CONTROL — bajadas flexibles de la canaleta a cada VFD (azul)
+// ==================================================================
+for (const v of VFDS){
+  const topY = v.y0 + v.h;
+  makePipe([[v.cx + 0.04, TRAY.y - 0.02, (TRAY.zB + TRAY.zF)/2], [v.cx + 0.04, topY + 0.01, zC + 0.02]], 0.012, M.CABLE_C, 0.04, 8);
+  bandCMats.push(tMat(v.cx + 0.04, (TRAY.y + topY)/2, zC + 0.02, Q0, S1));
+}
+
+// ==================================================================
+// CONDUIT — A MOTOR (galvanizado + bandas naranja) de cada VFD al piso/salida
+// ==================================================================
+{
+  let k = 0;
+  for (const v of VFDS){
+    const mz = 0.10 + k * 0.045;    // separacion en z para no solapar en el piso
+    makePipe([[v.cx, v.y0 - 0.01, v.d * 0.5], [v.cx, 0.12, mz], [WALL_W - 0.05, 0.12, mz]], CDR, M.GALV);
+    condulet(v.cx, 0.15, mz);
+    // bandas a motor (naranja) en la bajada vertical
+    for (const by of [v.y0 - 0.14, v.y0 - 0.30]) if (by > 0.2) bandMMats.push(tMat(v.cx, by, v.d * 0.5, Q0, S1));
+    k++;
+  }
+}
+
+// ==================================================================
+// CONSTRUCCION DE INSTANCIAS (una draw call por coleccion)
+// ==================================================================
+makeIM(new THREE.CylinderGeometry(0.006, 0.006, 0.02, 6), M.BOLT, boltMats, false);
+makeIM(new THREE.BoxGeometry(1, 0.011, 0.008), M.LOUVER, louverMats, false);
+makeIM(new THREE.BoxGeometry(1, 0.04, 0.006), M.FIN, finMats, false);
+makeIM(new THREE.BoxGeometry(0.012, 0.01, 0.17), M.TRAY, rungMats, false);
+makeIM(new THREE.BoxGeometry(1, 1, 1), M.KEY, keyMats, false);
+const bandGeo = new THREE.CylinderGeometry(0.021, 0.021, 0.018, 12);
+makeIM(bandGeo, M.BAND_P, bandPMats, false);
+makeIM(bandGeo, M.BAND_C, bandCMats, false);
+makeIM(bandGeo, M.BAND_M, bandMMats, false);
+
+// ==================================================================
+// ESTADO / CONTROL DE EQUIPO
+// ==================================================================
+const state = { v1: true, v2: true, v3: false, falla: false, rot: true };
+
+function refreshVFD(i){
+  const rig = rigs[i], n = i + 1;
+  const on = state['v' + n];
+  const fault = state.falla && on && (n === FAULT_VFD);
+  const running = on && !fault;
+  rig.v.mode = fault ? 'fault' : (running ? 'run' : 'off');
+  drawVFDDisplay(rig.v);                                       // redibujo del canvas SOLO en cambio de estado
+  rig.dispMat.emissiveIntensity = running ? 0.95 : (fault ? 0.9 : 0.22);
+  rig.lampG.emissiveIntensity = running ? 1.6 : 0.06;
+  rig.lampR.emissiveIntensity = fault ? 1.5 : (running ? 0.05 : 1.2);
+}
+function applyState(){
+  // Solo muta emisivos / canvas del display: NO se rehornean sombras aqui
+  for (let i = 0; i < 3; i++) refreshVFD(i);
+}
+
+// ====== UI ======
+const BSPEC = [['bV1','v1'], ['bV2','v2'], ['bV3','v3'], ['bF','falla'], ['bRot','rot']];
+function refreshUI(){
+  for (const [id, key] of BSPEC){
+    const b = document.getElementById(id);
+    b.textContent = state[key] ? 'ON' : 'OFF';
+    b.className = state[key] ? (key === 'falla' ? 'alarm' : 'on') : 'off';
+  }
+}
+for (const [id, key] of BSPEC){
+  document.getElementById(id).addEventListener('click', () => {
+    state[key] = !state[key];
+    refreshUI();
+    if (key !== 'rot') applyState();
+  });
+}
+refreshUI();
+applyState();
+renderer.shadowMap.needsUpdate = true;          // horneado unico tras construir la escena
+
+// ====== LOOP DE ANIMACION ======
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  clock.getDelta();                                            // avanza elapsedTime para el parpadeo de FALLA
+  const t = clock.elapsedTime;
+
+  // FALLA SIMULADA: pulso senoidal (allocation-free) sobre el display y el piloto rojo del VFD en falla
+  if (state.falla){
+    const rig = rigs[FAULT_VFD - 1];
+    const pulse = 0.35 + 1.4 * Math.abs(Math.sin(t * 7.5));
+    rig.dispMat.emissiveIntensity = pulse * 0.7;
+    rig.lampR.emissiveIntensity = pulse;
+  }
+
+  controls.autoRotate = state.rot;
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
