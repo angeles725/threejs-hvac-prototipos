@@ -165,6 +165,7 @@ This index guides through the **40 blocks** of this research. Each block is an i
 - [x] G49 — Sea rework (4 decorrelated directional waves, no global beat) + no-cache header so redeploys are visible → [Block 41 §41.7] (run 8, deployed)
 - [x] G48 — Dashboard predictive section (dashboard-energetico-v1.html: 'Mantenimiento predictivo', 7 subsystem health cards, PREDICTIVO ANTES QUE CORRECTIVO banner) → [Block 41 §41.7] (run 8, deployed)
 - [x] G50 — Room panel visibility fix: removed #roomPanel from the .clean hide list so it shows on select inside the dashboard iframe (?clean=1) → (run 8, deployed)
+- [x] G51 — Selection extended to all 18 equipment units (unified selectUnit, per-type metrics + predictive), panel moved LEFT-center, camera flyTo focus on select + 'VISTA ENFOCADA' badge/vignette with Salir → general → (run 8, deployed)
 
 ## Non-investigable gaps (without lab / hardware / NDA)
 
