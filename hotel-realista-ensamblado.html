@@ -89,12 +89,30 @@ if(new URLSearchParams(location.search).has('clean')){
      vidrio oscuro, borde #00d4aa44, mono, backdrop-blur. Colores de estado:
      teal #00d4aa (normal) · ambar #ffb84d (advertencia) · rojo #ff4d6d (alarma). -->
 <style>
-  #roomPanel{ position:fixed; top:14px; left:50%; transform:translateX(-50%);
-    width:322px; max-width:calc(100vw - 28px); z-index:30; display:none;
+  #roomPanel{ position:fixed; top:50%; left:14px; transform:translateY(-50%);
+    width:316px; max-width:calc(100vw - 28px); max-height:calc(100vh - 28px); z-index:30; display:none;
     background:rgba(6,8,13,0.9); border:1px solid #00d4aa44; border-radius:10px;
     font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#cfe0da;
-    backdrop-filter:blur(8px); box-shadow:0 8px 30px rgba(0,0,0,.5); overflow:hidden; }
+    backdrop-filter:blur(8px); box-shadow:0 8px 30px rgba(0,0,0,.5); overflow-y:auto; }
   #roomPanel.show{ display:block; }
+  /* Indicador de VISTA ENFOCADA (badge superior + viñeta de borde) */
+  #focusBadge{ position:fixed; top:14px; left:50%; transform:translateX(-50%) translateY(-8px);
+    z-index:31; display:none; align-items:center; gap:9px; padding:8px 10px 8px 13px;
+    background:rgba(6,8,13,0.9); border:1px solid #00d4aa66; border-radius:22px;
+    font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; font-size:11px; letter-spacing:.12em;
+    color:#bfe9dd; backdrop-filter:blur(8px); box-shadow:0 6px 24px rgba(0,0,0,.45),0 0 14px #00d4aa22;
+    opacity:0; transition:opacity .2s,transform .2s; }
+  #focusBadge.on{ display:flex; opacity:1; transform:translateX(-50%) translateY(0); }
+  #focusBadge .fb-dot{ width:9px; height:9px; border-radius:50%; background:#00d4aa;
+    box-shadow:0 0 8px #00d4aa; animation:fbpulse 1.4s ease-in-out infinite; }
+  #focusBadge b{ color:#fff; letter-spacing:.06em; }
+  #focusBadge #fb-exit{ margin-left:6px; padding:4px 9px; border-radius:14px; cursor:pointer;
+    background:transparent; border:1px solid #00d4aa55; color:#8fd8c8; font:inherit; letter-spacing:.1em; }
+  #focusBadge #fb-exit:hover{ background:#00d4aa1a; color:#fff; border-color:#00d4aa; }
+  @keyframes fbpulse{ 0%,100%{ opacity:1 } 50%{ opacity:.35 } }
+  #focusVignette{ position:fixed; inset:0; z-index:9; pointer-events:none; display:none;
+    box-shadow:inset 0 0 0 2px #00d4aa66, inset 0 0 42px #00d4aa22; }
+  #focusVignette.on{ display:block; }
   #roomPanel .rp-head{ position:relative; padding:13px 16px 11px; border-bottom:1px solid #00d4aa22; }
   #roomPanel .rp-id{ color:#fff; font-size:16px; letter-spacing:.1em; font-weight:600; }
   #roomPanel .rp-zone{ color:#7a8a98; font-size:10px; letter-spacing:.08em; margin-top:3px; }
@@ -131,6 +149,11 @@ if(new URLSearchParams(location.search).has('clean')){
     padding-top:8px; border-top:1px solid #00d4aa1a; font-size:10px; color:#7a8a98; }
   #roomPanel .rp-pred .meta b{ color:#9fb0aa; font-variant-numeric:tabular-nums; }
 </style>
+<div id="focusVignette"></div>
+<div id="focusBadge">
+  <span class="fb-dot"></span> VISTA ENFOCADA · <b id="fb-name"></b>
+  <button id="fb-exit">Salir ✕</button>
+</div>
 <div id="roomPanel">
   <div class="rp-head">
     <div class="rp-id" id="rp-id">CUARTO —</div>
@@ -140,22 +163,22 @@ if(new URLSearchParams(location.search).has('clean')){
   <div class="rp-pill"><span class="dot"></span><span id="rp-state">NORMAL</span></div>
   <div class="rp-temp">
     <div>
-      <div class="rp-lbl">TEMPERATURA</div>
+      <div class="rp-lbl" id="rp-temp-lbl">TEMPERATURA</div>
       <div class="big" id="rp-temp">—<span class="u"> °C</span></div>
     </div>
-    <div style="text-align:right">
-      <div class="rp-lbl">SETPOINT</div>
+    <div style="text-align:right" id="rp-sp-wrap">
+      <div class="rp-lbl" id="rp-sp-lbl">SETPOINT</div>
       <div class="sp" id="rp-sp">—<span class="u"> °C</span></div>
     </div>
   </div>
   <div class="rp-grid">
     <div class="rp-cell">
-      <div class="rp-lbl">HUMEDAD</div>
+      <div class="rp-lbl" id="rp-hum-lbl">HUMEDAD</div>
       <div class="val" id="rp-hum">—<span class="u"> %</span></div>
       <div class="rp-bar"><i id="rp-hum-bar" style="width:0%"></i></div>
     </div>
     <div class="rp-cell">
-      <div class="rp-lbl">AMPERAJE FCU</div>
+      <div class="rp-lbl" id="rp-amp-lbl">AMPERAJE FCU</div>
       <div class="val" id="rp-amp">—<span class="u"> A</span></div>
       <div class="rp-bar"><i id="rp-amp-bar" style="width:0%"></i></div>
     </div>
@@ -163,7 +186,7 @@ if(new URLSearchParams(location.search).has('clean')){
   <div class="rp-pred">
     <div class="ttl"><span>DIAGNÓSTICO PREDICTIVO</span><span id="rp-trend">—</span></div>
     <div class="diag" id="rp-diag">—</div>
-    <div class="meta"><span>VIDA ÚTIL FILTRO: <b id="rp-filter">—%</b></span><span>MANTENIMIENTO <b>PREDICTIVO</b></span></div>
+    <div class="meta"><span><span id="rp-filter-lbl">VIDA ÚTIL FILTRO:</span> <b id="rp-filter">—%</b></span><span>MANTENIMIENTO <b>PREDICTIVO</b></span></div>
   </div>
 </div>
 
@@ -6897,6 +6920,7 @@ function buildEdificio(detail = 'hi'){
     roomSelected = null;
     _disposeRoomOutline();
     panel.classList.remove('show');
+    hideFocus();
   }
 
   const $r = (i) => document.getElementById(i);
@@ -6908,6 +6932,13 @@ function buildEdificio(detail = 'hi'){
     const temp = d.temp + jT, hum = d.hum + jH, amp = d.amp + jA;
 
     panel.className = d.state + ' show';
+    // Restaura las etiquetas de CUARTO (una seleccion previa de equipo pudo cambiarlas).
+    $r('rp-temp-lbl').textContent = 'TEMPERATURA';
+    $r('rp-sp-wrap').style.display = '';
+    $r('rp-sp-lbl').textContent   = 'SETPOINT';
+    $r('rp-hum-lbl').textContent  = 'HUMEDAD';
+    $r('rp-amp-lbl').textContent  = 'AMPERAJE FCU';
+    $r('rp-filter-lbl').textContent = 'VIDA ÚTIL FILTRO:';
     $r('rp-id').textContent   = 'CUARTO P' + d.floor + '-' + d.room;
     $r('rp-zone').textContent = d.zone;
     $r('rp-state').textContent = STATE_TXT[d.state];
@@ -6925,15 +6956,232 @@ function buildEdificio(detail = 'hi'){
     $r('rp-filter').textContent = Math.round(d.filterLifePct) + '%';
   }
 
+  // ================================================================
+  // CLICK-TO-SELECT DE EQUIPO MECANICO (aditivo — reutiliza panel/outline/raycaster
+  // de los cuartos). Un hitbox invisible por unidad fisica en su centro world real
+  // (las places de FASE 1/2 son coords world directas: assemble() coloca las
+  // instancias en p.x/p.y/p.z sin transformada de edificio). 18 unidades -> 18
+  // hitboxes opacity:0 extra (draws baratos, frustumCulled por defecto). El panel
+  // reetiqueta su 3a metrica por tipo (PRESION/VIBRACION/APROXIMACION/NIVEL/...).
+  // ================================================================
+
+  // Parametros base por tipo de equipo (temp operativa, amperaje, 3a metrica, RUL).
+  const _EQ_TYPE = {
+    chiller:  { tempLbl:'TEMP. EVAPORADOR', tempU:'°C', temp:6.7,  sp:6.5,  spLbl:'SETPOINT',
+                amp:78,  ampMax:120, m3Lbl:'PRESIÓN COND', m3:12.6, m3U:'bar',  m3Max:20,  rulLbl:'PRÓX. SERVICIO:' },
+    pump:     { tempLbl:'TEMP. RODAMIENTO', tempU:'°C', temp:46,   sp:null,
+                amp:11,  ampMax:20,  m3Lbl:'VIBRACIÓN',    m3:2.4,  m3U:'mm/s', m3Max:7,   rulLbl:'PRÓX. SERVICIO:' },
+    tower:    { tempLbl:'TEMP. SALIDA',     tempU:'°C', temp:29.4, sp:29.0, spLbl:'SP AGUA',
+                amp:24,  ampMax:40,  m3Lbl:'APROXIMACIÓN',  m3:3.9,  m3U:'°C',   m3Max:8,   rulLbl:'PRÓX. SERVICIO:' },
+    boiler:   { tempLbl:'TEMP. CALDERA',    tempU:'°C', temp:80,   sp:82,   spLbl:'SETPOINT',
+                amp:6.5, ampMax:12,  m3Lbl:'PRESIÓN VAPOR', m3:3.2,  m3U:'bar',  m3Max:6,   rulLbl:'PRÓX. SERVICIO:' },
+    tanks:    { tempLbl:'TEMP. AGUA',       tempU:'°C', temp:12,   sp:null,
+                amp:2.8, ampMax:8,   m3Lbl:'NIVEL',         m3:72,   m3U:'%',    m3Max:100, rulLbl:'PRÓX. INSPECCIÓN:' },
+    hx:       { tempLbl:'TEMP. SECUNDARIO', tempU:'°C', temp:7.2,  sp:7.0,  spLbl:'SETPOINT',
+                amp:4.0, ampMax:10,  m3Lbl:'ΔP PLACAS',     m3:0.6,  m3U:'bar',  m3Max:2,   rulLbl:'PRÓX. LIMPIEZA:' },
+    filter:   { tempLbl:'TEMP. AGUA',       tempU:'°C', temp:27,   sp:null,
+                amp:14,  ampMax:24,  m3Lbl:'PRESIÓN FILTRO', m3:1.1, m3U:'bar',  m3Max:3,   rulLbl:'PRÓX. RETROLAVADO:' },
+    exhaust:  { tempLbl:'TEMP. MOTOR',      tempU:'°C', temp:52,   sp:null,
+                amp:9,   ampMax:16,  m3Lbl:'VIBRACIÓN',     m3:2.6,  m3U:'mm/s', m3Max:7,   rulLbl:'PRÓX. SERVICIO:' },
+    ahu:      { tempLbl:'TEMP. SUMINISTRO', tempU:'°C', temp:16.5, sp:16.0, spLbl:'SETPOINT',
+                amp:18,  ampMax:30,  m3Lbl:'ΔP FILTRO',     m3:180,  m3U:'Pa',   m3Max:400, rulLbl:'PRÓX. CAMBIO FILTRO:' },
+    poolheat: { tempLbl:'TEMP. ALBERCA',    tempU:'°C', temp:28.5, sp:29.0, spLbl:'SETPOINT',
+                amp:5,   ampMax:12,  m3Lbl:'PRESIÓN',       m3:1.4,  m3U:'bar',  m3Max:3,   rulLbl:'PRÓX. SERVICIO:' },
+  };
+
+  // Diagnostico PREDICTIVO por tipo + estado (predictivo antes que correctivo).
+  function _equipDiag(type, state){
+    if (state === 'normal') return 'Operación nominal — amperaje, temperatura y presión dentro de rango.';
+    const W = {
+      chiller:  'Amperaje del compresor +9% vs baseline → inspeccionar antes de falla.',
+      pump:     'Vibración de bomba al alza → posible desgaste de rodamiento.',
+      tower:    'Aproximación de torre subiendo → limpiar relleno y boquillas.',
+      boiler:   'Presión de vapor derivando → revisar quemador y válvulas de purga.',
+      tanks:    'Nivel de expansión fuera de banda → verificar precarga y membrana.',
+      hx:       'ΔP entre placas al alza → programar limpieza CIP preventiva.',
+      filter:   'Presión diferencial alta → programar retrolavado preventivo.',
+      exhaust:  'Vibración del extractor al alza → balancear rotor / revisar correa.',
+      ahu:      'ΔP de filtros elevado → reemplazo preventivo de filtros.',
+      poolheat: 'Presión de circuito baja → verificar bomba y purgar aire.',
+    };
+    const A = {
+      chiller:  'Amperaje compresor +18% y presión de condensado alta → intervenir antes del disparo por alta.',
+      pump:     'Vibración fuera de norma (ISO 10816) → rodamiento en falla, programar cambio inmediato.',
+      tower:    'Aproximación muy alta + amperaje del ventilador elevado → relleno obstruido, servicio urgente.',
+      boiler:   'Presión y temperatura sobre límite → revisar control de combustión de inmediato.',
+      tanks:    'Pérdida de presión de expansión → riesgo de golpe de ariete, atender de inmediato.',
+      hx:       'ΔP crítico → intercambiador ensuciado, limpieza CIP inmediata.',
+      filter:   'Presión de filtro crítica → canal preferencial, retrolavado inmediato.',
+      exhaust:  'Vibración crítica → desbalance/rodamiento, detener y revisar.',
+      ahu:      'ΔP de filtro crítico y amperaje del ventilador alto → cambio de filtros inmediato.',
+      poolheat: 'Presión crítica → sin caudal, riesgo de sobrecalentamiento, atender de inmediato.',
+    };
+    return (state === 'alarm' ? A : W)[type];
+  }
+
+  // Definicion de las 18 unidades: places world reales (FASE 1/2) + envelope aproximado
+  // por tipo. Rooftop (y=28.5): centro del hitbox = pad + media altura.
+  const _EQ_DEFS = [
+    // Chillers x4 (x=15, z 4.1..25.1) — planta enfriadora de agua helada
+    { type:'chiller', tag:'CH-1', label:'CHILLER CH-1', zone:'PLANTA ENFRIADORA · AGUA HELADA', wx:15.0, wy:1.2, wz:4.1,  sx:2.2, sy:2.3, sz:4.6, state:'normal' },
+    { type:'chiller', tag:'CH-2', label:'CHILLER CH-2', zone:'PLANTA ENFRIADORA · AGUA HELADA', wx:15.0, wy:1.2, wz:11.1, sx:2.2, sy:2.3, sz:4.6, state:'warning' },
+    { type:'chiller', tag:'CH-3', label:'CHILLER CH-3', zone:'PLANTA ENFRIADORA · AGUA HELADA', wx:15.0, wy:1.2, wz:18.1, sx:2.2, sy:2.3, sz:4.6, state:'normal' },
+    { type:'chiller', tag:'CH-4', label:'CHILLER CH-4', zone:'PLANTA ENFRIADORA · AGUA HELADA', wx:15.0, wy:1.2, wz:25.1, sx:2.2, sy:2.3, sz:4.6, state:'alarm' },
+    // Bombas x6 — banco condensado (CP) + banco primario (BP)
+    { type:'pump', tag:'CP-1', label:'BOMBA CP-1', zone:'BOMBEO CONDENSADO',              wx:11.45, wy:0.75, wz:24.7, sx:1.8, sy:1.5, sz:1.8, state:'normal' },
+    { type:'pump', tag:'CP-2', label:'BOMBA CP-2', zone:'BOMBEO CONDENSADO',              wx:11.45, wy:0.75, wz:6.7,  sx:1.8, sy:1.5, sz:1.8, state:'warning' },
+    { type:'pump', tag:'CP-3', label:'BOMBA CP-3', zone:'BOMBEO CONDENSADO',              wx:11.45, wy:0.75, wz:15.7, sx:1.8, sy:1.5, sz:1.8, state:'normal' },
+    { type:'pump', tag:'BP-1', label:'BOMBA BP-1', zone:'BOMBEO PRIMARIO · AGUA HELADA',  wx:21.95, wy:0.75, wz:24.7, sx:1.8, sy:1.5, sz:1.8, state:'alarm' },
+    { type:'pump', tag:'BP-2', label:'BOMBA BP-2', zone:'BOMBEO PRIMARIO · AGUA HELADA',  wx:21.95, wy:0.75, wz:6.7,  sx:1.8, sy:1.5, sz:1.8, state:'normal' },
+    { type:'pump', tag:'BP-3', label:'BOMBA BP-3', zone:'BOMBEO PRIMARIO · AGUA HELADA',  wx:21.95, wy:0.75, wz:15.7, sx:1.8, sy:1.5, sz:1.8, state:'normal' },
+    // Singleton FASE 2
+    { type:'tower',    tag:'TE-1',  label:'TORRE DE ENFRIAMIENTO',   zone:'RECHAZO DE CALOR · CONDENSADO',   wx:2.2,   wy:2.4,  wz:6.2,  sx:4.2, sy:4.8, sz:4.2, state:'warning' },
+    { type:'boiler',   tag:'CB-1',  label:'CALDERA + ACS',            zone:'AGUA CALIENTE SANITARIA',         wx:30.5,  wy:1.4,  wz:21.0, sx:4.6, sy:2.8, sz:3.2, state:'normal' },
+    { type:'tanks',    tag:'TQ-1',  label:'TANQUES EXPANSIÓN/BUFFER', zone:'HIDRÁULICA · BUFFER + EXPANSIÓN', wx:27.25, wy:1.7,  wz:13.25, sx:3.2, sy:3.4, sz:2.6, state:'normal' },
+    { type:'hx',       tag:'HX-1',  label:'INTERCAMBIADOR DE PLACAS', zone:'SEPARACIÓN HIDRÁULICA',           wx:109.1, wy:1.0,  wz:33.2, sx:2.2, sy:2.0, sz:1.8, state:'normal' },
+    { type:'filter',   tag:'FL-1',  label:'FILTRADO ALBERCA',         zone:'TRATAMIENTO DE AGUA · ALBERCA',   wx:106.8, wy:1.2,  wz:31.7, sx:3.2, sy:2.4, sz:2.6, state:'warning' },
+    { type:'exhaust',  tag:'EX-1',  label:'EXTRACTOR AZOTEA',         zone:'VENTILACIÓN · AZOTEA',            wx:48.0,  wy:29.5, wz:2.0,  sx:2.4, sy:2.0, sz:2.4, state:'normal' },
+    { type:'ahu',      tag:'UMA-1', label:'UMA-1',                    zone:'MANEJADORA DE AIRE · AZOTEA',     wx:45.0,  wy:29.6, wz:-1.5, sx:3.6, sy:2.2, sz:2.4, state:'normal' },
+    { type:'poolheat', tag:'CA-1',  label:'CALENTADOR ALBERCA',       zone:'CLIMATIZACIÓN ALBERCA',           wx:109.8, wy:1.1,  wz:42.3, sx:3.6, sy:2.2, sz:2.4, state:'normal' },
+  ];
+
+  const equipData = {};       // id -> modelo simulado de equipo
+  const equipHitboxes = [];   // meshes raycastables invisibles (18)
+  const _EQ_HITMAT = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+
+  _EQ_DEFS.forEach((u, idx) => {
+    const cfg = _EQ_TYPE[u.type];
+    const state = u.state;
+    const h = _rhash(idx + 1, u.wz | 0, 23);                // variacion determinista por unidad
+    const k = state === 'alarm' ? 1.18 : state === 'warning' ? 1.09 : 1.0;   // sobrecarga de amperaje
+    const m3k = state === 'alarm' ? 1.7 : state === 'warning' ? 1.35 : 1.0;  // deriva de la 3a metrica
+    const dT = state === 'alarm' ? 2.2 : state === 'warning' ? 1.0 : 0.0;    // deriva de temperatura
+    const temp = cfg.temp + dT + (h - 0.5) * 0.6;
+    const amp  = cfg.amp * k + h * cfg.amp * 0.04;
+    const m3v  = Math.min(cfg.m3Max, cfg.m3 * m3k + (h - 0.5) * cfg.m3 * 0.1);
+    // RUL / proximo servicio: alto en normal, corto en advertencia, inminente en alarma.
+    const rulVal = state === 'alarm'   ? '< ' + Math.round(3 + h * 4) + ' d'
+                 : state === 'warning' ? Math.round(18 + h * 22) + ' d'
+                 :                        Math.round(120 + h * 200) + ' d';
+    equipData[u.tag] = {
+      id: u.tag, kind: 'equip', type: u.type, label: u.label, zone: u.zone, state,
+      temp, tempLbl: cfg.tempLbl, tempU: cfg.tempU,
+      sp: cfg.sp, spLbl: cfg.spLbl || 'SETPOINT',
+      amp, ampMax: cfg.ampMax,
+      m3v, m3Lbl: cfg.m3Lbl, m3U: cfg.m3U, m3Max: cfg.m3Max,
+      trend: state === 'normal' ? 'stable' : 'rising',
+      diagnosis: _equipDiag(u.type, state),
+      rulLbl: cfg.rulLbl, rulVal,
+      wx: u.wx, wy: u.wy, wz: u.wz, sx: u.sx, sy: u.sy, sz: u.sz,
+    };
+    const hb = new THREE.Mesh(new THREE.BoxGeometry(u.sx, u.sy, u.sz), _EQ_HITMAT);
+    hb.position.set(u.wx, u.wy, u.wz);
+    hb.castShadow = false; hb.receiveShadow = false;
+    hb.frustumCulled = true;
+    hb.userData = { equipId: u.tag };
+    equipHitboxes.push(hb);
+    scene.add(hb);
+  });
+
+  function selectEquip(id){
+    const d = equipData[id]; if (!d) return;
+    roomSelected = id;                                   // estado de seleccion compartido con cuartos
+    _disposeRoomOutline();
+    const eg = new THREE.EdgesGeometry(new THREE.BoxGeometry(d.sx, d.sy, d.sz));
+    roomOutline = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({
+      color: STATE_COLOR[d.state], transparent: true, opacity: 0.95, depthTest: false
+    }));
+    roomOutline.position.set(d.wx, d.wy, d.wz);
+    roomOutline.renderOrder = 999;
+    scene.add(roomOutline);
+    _paintEquipPanel(d, 0);
+    panel.classList.add('show');
+  }
+
+  function _paintEquipPanel(d, phase){
+    const jT = Math.sin(phase * 0.9 + d.wz) * 0.06;
+    const jA = Math.sin(phase * 1.1 + d.wx) * 0.05;
+    const jM = Math.sin(phase * 0.7 + d.sx) * (d.m3Max * 0.008);
+    const temp = d.temp + jT, amp = d.amp + jA, m3v = d.m3v + jM;
+
+    panel.className = d.state + ' show';
+    $r('rp-id').textContent   = d.label;
+    $r('rp-zone').textContent = d.zone;
+    $r('rp-state').textContent = STATE_TXT[d.state];
+    // TEMPERATURA operativa (etiqueta por tipo)
+    $r('rp-temp-lbl').textContent = d.tempLbl;
+    $r('rp-temp').innerHTML = temp.toFixed(1) + '<span class="u"> ' + d.tempU + '</span>';
+    // SETPOINT: solo si tiene sentido, si no se oculta la celda
+    if (d.sp == null){
+      $r('rp-sp-wrap').style.display = 'none';
+    } else {
+      $r('rp-sp-wrap').style.display = '';
+      $r('rp-sp-lbl').textContent = d.spLbl;
+      $r('rp-sp').innerHTML = d.sp.toFixed(1) + '<span class="u"> ' + d.tempU + '</span>';
+    }
+    // 3a metrica reetiquetada por tipo (PRESION / VIBRACION / APROXIMACION / NIVEL / ...)
+    const m3dec = d.m3Max >= 50 ? 0 : (d.m3Max <= 3 ? 2 : 1);
+    $r('rp-hum-lbl').textContent = d.m3Lbl;
+    $r('rp-hum').innerHTML = m3v.toFixed(m3dec) + '<span class="u"> ' + d.m3U + '</span>';
+    $r('rp-hum-bar').style.width = Math.max(0, Math.min(100, m3v / d.m3Max * 100)) + '%';
+    // AMPERAJE motor/compresor
+    $r('rp-amp-lbl').textContent = 'AMPERAJE';
+    $r('rp-amp').innerHTML = amp.toFixed(1) + '<span class="u"> A</span>';
+    $r('rp-amp-bar').style.width = Math.max(0, Math.min(100, amp / d.ampMax * 100)) + '%';
+    const barColor = STATE_COLOR[d.state].toString(16).padStart(6, '0');
+    $r('rp-hum-bar').style.background = '#' + barColor;
+    $r('rp-amp-bar').style.background = '#' + barColor;
+    // DIAGNOSTICO PREDICTIVO
+    $r('rp-trend').textContent = d.trend === 'rising' ? '▲ AL ALZA' : '● ESTABLE';
+    $r('rp-diag').textContent = d.diagnosis;
+    $r('rp-filter-lbl').textContent = d.rulLbl;
+    $r('rp-filter').textContent = d.rulVal;
+  }
+
+  // ---- ENFOQUE DE CAMARA + INDICADOR DE VISTA ENFOCADA ----
+  const _focusBadge = document.getElementById('focusBadge');
+  const _focusVig   = document.getElementById('focusVignette');
+  const _fbName     = document.getElementById('fb-name');
+  function showFocus(name){ if (_fbName) _fbName.textContent = name; _focusBadge && _focusBadge.classList.add('on'); _focusVig && _focusVig.classList.add('on'); }
+  function hideFocus(){ _focusBadge && _focusBadge.classList.remove('on'); _focusVig && _focusVig.classList.remove('on'); }
+  const _fbExit = document.getElementById('fb-exit');
+  if (_fbExit) _fbExit.addEventListener('click', () => { deselectRoom(); goView('general'); });
+  // Vuela la camara para encuadrar la unidad (offset segun su tamaño, angulo elevado agradable).
+  function focusOnUnit(d){
+    const sx = d.sx || _RW, sy = d.sy || _RH, sz = d.sz || _RD;
+    const c = new THREE.Vector3(d.wx, d.wy, d.wz);
+    const radius = Math.max(sx, sy, sz, 2);
+    const dist = Math.max(10, radius * 3.4);
+    const dir = camera.position.clone().sub(c);
+    if (dir.lengthSq() < 1e-4) dir.set(1, 0.6, 1);
+    dir.y = Math.max(Math.abs(dir.y), dist * 0.4);
+    dir.normalize();
+    const pos = c.clone().addScaledVector(dir, dist);
+    if (pos.y < 2.5) pos.y = 2.5;
+    flyTo(pos, c, 850);
+  }
+
+  // Selector unificado: enruta a CUARTO o EQUIPO, ENFOCA la camara y marca vista enfocada.
+  function selectUnit(id){
+    let d = roomData[id], name;
+    if (d){ selectRoom(id); name = 'CUARTO P' + d.floor + '-' + d.room; }
+    else { d = equipData[id]; if (!d) return; selectEquip(id); name = d.label || d.id || id; }
+    focusOnUnit(d);
+    showFocus(name);
+  }
+
   // Intento de seleccion por click; expuesto al handler de zoom para dar PRIORIDAD.
   // Devuelve true si consumio el click (selecciono un cuarto o cerro el panel).
   window.__roomClick = function(e){
     _rndc.x =  (e.clientX / window.innerWidth)  * 2 - 1;
     _rndc.y = -(e.clientY / window.innerHeight) * 2 + 1;
     _rray.setFromCamera(_rndc, camera);
-    const hits = _rray.intersectObjects(roomHitboxes, false);
+    // Raycast unificado: cuartos + equipo, se toma el impacto mas cercano.
+    const hits = _rray.intersectObjects(roomHitboxes.concat(equipHitboxes), false);
     if (hits.length){
-      selectRoom(hits[0].object.userData.roomId);
+      const ud = hits[0].object.userData;
+      if (ud.roomId)       selectUnit(ud.roomId);
+      else if (ud.equipId) selectUnit(ud.equipId);
       return true;                                   // consumido: NO hacer zoom
     }
     if (roomSelected){ deselectRoom(); return true; } // click en vacio con panel abierto -> cerrar
@@ -6947,7 +7195,8 @@ function buildEdificio(detail = 'hi'){
   setInterval(() => {
     if (!roomSelected) return;
     _rphase += 1;
-    const d = roomData[roomSelected]; if (d) _paintPanel(d, _rphase);
+    const rd = roomData[roomSelected]; if (rd){ _paintPanel(rd, _rphase); return; }
+    const ed = equipData[roomSelected]; if (ed) _paintEquipPanel(ed, _rphase);
   }, 1000);
 }
 
