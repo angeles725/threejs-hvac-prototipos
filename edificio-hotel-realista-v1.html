@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EDIFICIO TORRE HOTEL · 44 × 18 × 30 m · Realistic PBR (instanciado)</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter:blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; color:#cfe0da; }
+  #legend i { width:12px; height:10px; display:inline-block; border-radius:2px; }
+  #hud { position:fixed; top:150px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); min-width:150px; }
+  #hud .ph { color:#fff; font-size:10px; letter-spacing:0.14em; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #00d4aa33; }
+  #hud .row { display:flex; justify-content:space-between; margin:4px 0; color:#7a8a98; }
+  #hud b { color:#00ffcc; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter:blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:78px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+</style>
+<script>
+// Inyeccion dinamica de importmap: String.fromCharCode(64) evita el mangling de '@' (package@version) por Cloudflare.
+(function(){
+  var AT = String.fromCharCode(64);
+  var tag = document.createElement('script');
+  tag.type = 'importmap';
+  tag.textContent = JSON.stringify({ imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }});
+  document.head.appendChild(tag);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>EDIFICIO TORRE HOTEL</b><br>
+  <span>44 × 18 × 30 m · PB + 8 pisos · VAV central · Realistic PBR instanciado · 1 unidad = 1 m</span>
+</div>
+<div id="legend">
+  <div><i style="background:#e6ddca"></i> Fachada / cuerpo</div>
+  <div><i style="background:#aad0cc"></i> Balcones / cristal</div>
+  <div><i style="background:#9a6a3c"></i> Madera (marquesina)</div>
+  <div><i style="background:#8f959b"></i> Ductos VAV / cajas</div>
+  <div><i style="background:#2c2e33"></i> Nucleo / shaft</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="hud">
+  <div class="ph">renderer.info (live)</div>
+  <div class="row"><label>DRAW CALLS</label><b id="drawN">–</b></div>
+  <div class="row"><label>TRIANGLES</label><b id="triN">–</b></div>
+</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>CORTE FACHADA</label><button id="bCorte" class="off">OFF</button></div>
+  <div class="row"><label>LUCES NOCHE</label><button id="bNoche" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+
+// SCALE: 1 unidad = 1 m. Spec dimensional: EQUIPOS-PENDIENTES.md item 13 (voxel 1 vox = 0.25 m).
+// Caja 44 (X, fachada SUR) x 18 (Z, fondo) x 30 (Y). PB 4 m + 8 pisos de 3 m + pretil ~2 m.
+// SUR = -Z (da a la alberca/mar, cara protagonista). NORTE = +Z (nucleo, shaft de ductos).
+// La FACHADA SUR de la torre se instancia por MODULO DE CUARTO (11 bahias x 8 pisos = 88) y es
+// removible (CORTE) para revelar cuartos amueblados + cajas VAV.
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 70, 260);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.set(52, 27, 62);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;          // sombras horneadas: un solo horneado tras construir
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.35;
+controls.minDistance = 22;
+controls.maxDistance = 220;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(0, 12, 0);
+// Ground clamp (regla de la casa): ni el target ni la camara bajan del piso
+controls.addEventListener('change', () => {
+  if (controls.target.y < 0) controls.target.y = 0;
+  if (camera.position.y < 0.5) camera.position.y = 0.5;
+});
+
+// ====== RIG DE LUCES ======
+const sun = new THREE.DirectionalLight(0xffffff, 1.55);
+sun.position.set(46, 74, 40);                    // sol alto sur-este
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -40; sun.shadow.camera.right = 40;
+sun.shadow.camera.top = 42; sun.shadow.camera.bottom = -42;
+sun.shadow.camera.near = 12; sun.shadow.camera.far = 190;
+sun.shadow.bias = -0.0004;
+scene.add(sun);
+
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-46, 34, -30);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.18);
+rim.position.set(-26, 22, 48);
+scene.add(rim);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.26));
+
+// ====== PISO / TERRENO (shadow-catcher arena) ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(600, 600),
+  new THREE.MeshStandardMaterial({ color:0x0c1016, roughness:0.96, metalness:0 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(240, 60, 0x123f35, 0x0c1d1a);
+grid.position.y = 0.01;
+grid.material.transparent = true;
+grid.material.opacity = 0.28;
+scene.add(grid);
+
+// ====== TEXTURAS PROCEDURALES (CanvasTexture) ======
+function dataTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 4;
+  return t;
+}
+// Variacion de rugosidad de pintura arena (mapa lineal escalar ~1.0)
+const paintRoughTex = dataTex(256, 256, (g) => {
+  g.fillStyle = '#8f8f8f'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2600; i++){
+    const v = 120 + Math.floor(Math.random() * 60);
+    g.fillStyle = `rgba(${v},${v},${v},0.14)`;
+    g.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 3, 1 + Math.random() * 3);
+  }
+});
+paintRoughTex.wrapS = paintRoughTex.wrapT = THREE.RepeatWrapping;
+paintRoughTex.repeat.set(6, 4);
+
+// ====== PALETA PBR (metalness 0 = pintado · metalness 1 = metal desnudo) ======
+// Leccion documentada: gris medio + metalness 1 lee NEGRO en entorno oscuro.
+// Cuerpo pintado arena -> metalness 0 + roughness ~1. Aluminio desnudo -> metalness 1, tono claro.
+const M = {
+  BODY:    new THREE.MeshStandardMaterial({ color:0xe6ddca, roughness:1.0, metalness:0, roughnessMap:paintRoughTex }),
+  BODY_D:  new THREE.MeshStandardMaterial({ color:0xd6ccb6, roughness:1.0, metalness:0, roughnessMap:paintRoughTex }),
+  SLAB:    new THREE.MeshStandardMaterial({ color:0xf2efe8, roughness:0.82, metalness:0 }),   // losas balcon blanco puro
+  PODIUM:  new THREE.MeshStandardMaterial({ color:0xe9e2d2, roughness:0.95, metalness:0 }),
+  ALUM:    new THREE.MeshStandardMaterial({ color:0xc0c5ca, roughness:0.32, metalness:1 }),   // postes / mullions
+  FRAME:   new THREE.MeshStandardMaterial({ color:0x33353b, roughness:0.55, metalness:0.5 }),
+  WOOD:    new THREE.MeshStandardMaterial({ color:0x9a6a3c, roughness:0.62, metalness:0 }),    // marquesina / cenefa
+  WOOD_D:  new THREE.MeshStandardMaterial({ color:0x6e4a2a, roughness:0.6,  metalness:0 }),
+  CORE:    new THREE.MeshStandardMaterial({ color:0x2c2e33, roughness:0.75, metalness:0.1 }),  // nucleo oscuro
+  INT:     new THREE.MeshStandardMaterial({ color:0xd8d2c4, roughness:0.9,  metalness:0, emissive:0xffb060, emissiveIntensity:0 }),
+  INT2:    new THREE.MeshStandardMaterial({ color:0xc8c2b6, roughness:0.92, metalness:0 }),
+  CONCRETE:new THREE.MeshStandardMaterial({ color:0x9a978f, roughness:0.92, metalness:0 }),
+  DECK:    new THREE.MeshStandardMaterial({ color:0xc7b393, roughness:0.85, metalness:0 }),
+  SAND:    new THREE.MeshStandardMaterial({ color:0xceb992, roughness:1.0,  metalness:0 }),
+  BEDDING: new THREE.MeshStandardMaterial({ color:0xece7dc, roughness:0.92, metalness:0 }),
+  PILLOW:  new THREE.MeshStandardMaterial({ color:0xf5f2ea, roughness:0.9,  metalness:0 }),
+  TV:      new THREE.MeshStandardMaterial({ color:0x111214, roughness:0.28, metalness:0.2 }),
+  VAV:     new THREE.MeshStandardMaterial({ color:0x9096a0, roughness:0.5, metalness:0.45 }), // galvanizado
+  DUCT:    new THREE.MeshStandardMaterial({ color:0x9aa0a6, roughness:0.55, metalness:0.35 }),
+  DIFF:    new THREE.MeshStandardMaterial({ color:0xe8e8e4, roughness:0.7,  metalness:0 }),
+  DOOR:    new THREE.MeshStandardMaterial({ color:0x7a5636, roughness:0.55, metalness:0 }),
+  CARBODY: new THREE.MeshPhysicalMaterial({ color:0x7d1f2b, roughness:0.32, metalness:0.25, clearcoat:0.7, clearcoatRoughness:0.25 }),
+  CARGLASS:new THREE.MeshStandardMaterial({ color:0x0a1418, roughness:0.15, metalness:0.4 }),
+  TIRE:    new THREE.MeshStandardMaterial({ color:0x131417, roughness:0.85, metalness:0 }),
+  TRUNK:   new THREE.MeshStandardMaterial({ color:0x8a6a44, roughness:0.85, metalness:0 }),
+  FROND:   new THREE.MeshStandardMaterial({ color:0x3f7a3a, roughness:0.8,  metalness:0, side:THREE.DoubleSide }),
+  // Cristales (MeshPhysicalMaterial transmision, tinte azul-verde)
+  GLASS:   new THREE.MeshPhysicalMaterial({ color:0x9ec6c2, roughness:0.06, metalness:0, transmission:0.82, thickness:0.25, ior:1.45, transparent:true, opacity:1, emissive:0xffcba0, emissiveIntensity:0, side:THREE.DoubleSide }),
+  RAIL:    new THREE.MeshPhysicalMaterial({ color:0xb0d2ce, roughness:0.05, metalness:0, transmission:0.9,  thickness:0.06, ior:1.45, transparent:true, opacity:1, side:THREE.DoubleSide }),
+  LGLASS:  new THREE.MeshPhysicalMaterial({ color:0xa9cdcb, roughness:0.05, metalness:0, transmission:0.8,  thickness:0.2,  ior:1.45, transparent:true, opacity:1, emissive:0xffd9a6, emissiveIntensity:0.04, side:THREE.DoubleSide }),
+  WATER:   new THREE.MeshPhysicalMaterial({ color:0x1f7fa6, roughness:0.08, metalness:0, transmission:0.55, thickness:1.2, ior:1.33, transparent:true, opacity:1, side:THREE.DoubleSide })
+};
+
+// ====== HELPERS ======
+const staticG = new THREE.Group();          // mundo estatico (sombras horneadas una vez)
+scene.add(staticG);
+const facadeGroup = new THREE.Group();      // fachada SUR de la torre (toggle CORTE)
+staticG.add(facadeGroup);
+const roomsGroup = new THREE.Group();       // interior de cuartos (siempre visible)
+staticG.add(roomsGroup);
+
+function mesh(geo, mat, x=0, y=0, z=0, parent=staticG, cast=true){
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = cast; m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+function box(w, h, d, mat, x, y, z, parent=staticG, cast=true){
+  return mesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent, cast);
+}
+function cylY(r, len, mat, x, y, z, seg=16, parent=staticG, cast=true){
+  return mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent, cast);
+}
+// Fusion de cajas (una BufferGeometry) para instanciar modulos compuestos en 1 draw
+function mergeBoxes(defs){
+  const gs = defs.map(b => { const g = new THREE.BoxGeometry(b.w, b.h, b.d); g.translate(b.x, b.y, b.z); return g; });
+  return BufferGeometryUtils.mergeGeometries(gs, false);
+}
+const _q0 = new THREE.Quaternion(), _s1 = new THREE.Vector3(1,1,1);
+function tMat(x, y, z){ return new THREE.Matrix4().compose(new THREE.Vector3(x,y,z), _q0, _s1); }
+function makeIM(geo, mat, mats, parent=staticG, cast=true){
+  const im = new THREE.InstancedMesh(geo, mat, mats.length);
+  mats.forEach((m, i) => im.setMatrixAt(i, m));
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = cast; im.receiveShadow = true;
+  parent.add(im);
+  return im;
+}
+
+// ==================================================================
+// COTAS GLOBALES (metros)
+// ==================================================================
+const HX = 22, HZ = 9;                       // medio largo (X) / medio fondo (Z)
+const PODIUM_H = 4, FLOOR_H = 3, NF = 8;     // PB 4 m + 8 pisos de 3 m
+const TOWER_Y0 = PODIUM_H, TOWER_Y1 = PODIUM_H + NF * FLOOR_H;   // 4 .. 28
+const ROOF_Y = TOWER_Y1;                      // 28
+const SOUTH_Z = -HZ;                          // plano de fachada sur
+// Modulos de cuarto: 11 bahias de 4 m, centradas en X = -20..20
+const MODX = []; for (let i = 0; i < 11; i++) MODX.push(-20 + i * 4);
+const FLOORY = []; for (let f = 0; f < NF; f++) FLOORY.push(PODIUM_H + f * FLOOR_H);   // base de cada piso
+// Matrices por modulo (11 x 8 = 88) — origen local en (mx, baseY, SOUTH_Z), +z hacia el interior (norte)
+const BAY = [];
+for (const fy of FLOORY) for (const mx of MODX) BAY.push(tMat(mx, fy, SOUTH_Z));
+
+// ==================================================================
+// CUERPO / MASA DEL EDIFICIO (muros solidos N/E/O + losas) — arroja la sombra grande
+// ==================================================================
+{
+  // Muros perimetrales de la torre (piso 1..8): NORTE, ESTE, OESTE. SUR queda abierto (fachada instanciada).
+  box(HX*2, NF*FLOOR_H, 0.4, M.BODY,  0, (TOWER_Y0+TOWER_Y1)/2, HZ);                 // muro NORTE
+  box(0.4, NF*FLOOR_H, HZ*2, M.BODY_D, HX, (TOWER_Y0+TOWER_Y1)/2, 0);               // muro ESTE
+  box(0.4, NF*FLOOR_H, HZ*2, M.BODY_D, -HX, (TOWER_Y0+TOWER_Y1)/2, 0);              // muro OESTE
+  // Losas de entrepiso (9: pisos 1..8 + azotea) instanciadas
+  const slabMats = [];
+  for (let f = 0; f <= NF; f++) slabMats.push(tMat(0, PODIUM_H + f * FLOOR_H - 0.15, 0));
+  makeIM(new THREE.BoxGeometry(HX*2 - 0.1, 0.3, HZ*2 - 0.1), M.SLAB, slabMats);
+  // Cenefa horizontal (canto de losa) que marca el ritmo en fachada sur — 8 fajas instanciadas
+  const bandMats = [];
+  for (const fy of FLOORY) bandMats.push(tMat(0, fy - 0.05, SOUTH_Z - 0.02));
+  makeIM(new THREE.BoxGeometry(HX*2 - 0.2, 0.24, 0.16), M.SLAB, bandMats);
+}
+
+// ==================================================================
+// FACHADA SUR INSTANCIADA (88 modulos) — bahia + cristal + mullions
+//   grupo removible (CORTE); castShadow=false (la masa ya proyecta la sombra)
+// ==================================================================
+{
+  // --- BAHIA (marco de muro pintado alrededor del ventanal) ---
+  const OP_W = 2.7, OP_Y0 = 0.15, OP_Y1 = 2.75;            // hueco del ventanal
+  const PIER = (4 - OP_W) / 2;                              // 0.65 pilastra
+  const WD = 0.25;                                          // espesor de muro
+  const bayGeo = mergeBoxes([
+    { w:PIER, h:3, d:WD, x:-(OP_W/2 + PIER/2), y:1.5, z:WD/2 },
+    { w:PIER, h:3, d:WD, x: (OP_W/2 + PIER/2), y:1.5, z:WD/2 },
+    { w:OP_W, h:OP_Y0, d:WD, x:0, y:OP_Y0/2, z:WD/2 },              // antepecho bajo (Juliet)
+    { w:OP_W, h:3 - OP_Y1, d:WD, x:0, y:(OP_Y1 + 3)/2, z:WD/2 }     // dintel
+  ]);
+  makeIM(bayGeo, M.BODY, BAY, facadeGroup, false);
+
+  // --- CRISTAL: puerta corrediza de 2 hojas (transmision, transparente) ---
+  const glassGeo = mergeBoxes([
+    { w:1.32, h:2.5, d:0.05, x:-0.68, y:1.45, z:0.06 },
+    { w:1.32, h:2.5, d:0.05, x: 0.68, y:1.45, z:0.06 }
+  ]);
+  makeIM(glassGeo, M.GLASS, BAY, facadeGroup, false);
+
+  // --- MULLIONS aluminio (marco + parteluz central) ---
+  const mullGeo = mergeBoxes([
+    { w:2.74, h:0.07, d:0.09, x:0, y:0.18, z:0.07 },
+    { w:2.74, h:0.07, d:0.09, x:0, y:2.72, z:0.07 },
+    { w:0.07, h:2.6, d:0.09, x:-1.36, y:1.45, z:0.07 },
+    { w:0.07, h:2.6, d:0.09, x: 1.36, y:1.45, z:0.07 },
+    { w:0.06, h:2.6, d:0.09, x:0, y:1.45, z:0.07 }
+  ]);
+  makeIM(mullGeo, M.ALUM, BAY, facadeGroup, false);
+
+  // --- BALCON JULIET: losa blanca someria (~0.4 m) ---
+  makeIM(new THREE.BoxGeometry(3.0, 0.14, 0.5), M.SLAB,
+    BAY.map(m => { const p = new THREE.Vector3().setFromMatrixPosition(m); return tMat(p.x, p.y - 0.07, p.z - 0.15); }),
+    facadeGroup, false);
+
+  // --- BARANDAL DE CRISTAL casi al ras (transparente) ---
+  makeIM(new THREE.BoxGeometry(3.0, 1.0, 0.03), M.RAIL,
+    BAY.map(m => { const p = new THREE.Vector3().setFromMatrixPosition(m); return tMat(p.x, p.y + 0.5, p.z - 0.4); }),
+    facadeGroup, false);
+
+  // --- PASAMANOS + POSTES aluminio del balcon ---
+  const handGeo = mergeBoxes([
+    { w:3.0, h:0.05, d:0.06, x:0, y:1.02, z:-0.4 },
+    { w:0.05, h:1.0, d:0.05, x:-1.46, y:0.5, z:-0.4 },
+    { w:0.05, h:1.0, d:0.05, x: 1.46, y:0.5, z:-0.4 }
+  ]);
+  // handGeo defs ya en coords locales relativas al origen del balcon (mismo origen de bahia); z ya desplazado
+  makeIM(handGeo, M.ALUM, BAY, facadeGroup, false);
+}
+
+// ==================================================================
+// CUARTOS AMUEBLADOS (revelados en CORTE) — kit instanciado x88
+//   coords locales: x centrado (0), z 0=fachada -> +z al interior, y desde piso
+//   roomsGroup; castShadow=false (interiores)
+// ==================================================================
+{
+  // Cascaron: muro trasero (a pasillo, z=7) + tabique divisorio izquierdo
+  const shellGeo = mergeBoxes([
+    { w:4, h:3, d:0.15, x:0, y:1.5, z:7 },              // muro a pasillo
+    { w:0.12, h:3, d:6.8, x:-2, y:1.5, z:3.6 }          // tabique divisorio
+  ]);
+  makeIM(shellGeo, M.INT, BAY, roomsGroup, false);
+
+  // Bano (pod solido esquina trasera-izq) + closet (madera) — cascaron duro
+  makeIM(mergeBoxes([{ w:1.3, h:2.7, d:1.8, x:-1.35, y:1.35, z:6.1 }]), M.INT2, BAY, roomsGroup, false);
+  makeIM(new THREE.BoxGeometry(0.7, 2.1, 0.05), M.DOOR,
+    BAY.map(m => { const p = new THREE.Vector3().setFromMatrixPosition(m); return tMat(p.x - 1.2, p.y + 1.05, p.z + 5.2); }),
+    roomsGroup, false);
+
+  // Muebles de madera (closet + base cama + cabecera + buros + consola)
+  const woodGeo = mergeBoxes([
+    { w:1.3, h:2.4, d:1.0, x:1.35, y:1.2,  z:6.5 },     // closet
+    { w:1.9, h:0.35, d:2.0, x:0, y:0.175, z:4.1 },      // base de cama
+    { w:2.0, h:1.1, d:0.1, x:0, y:0.55,  z:5.15 },      // cabecera
+    { w:0.4, h:0.45, d:0.4, x:-1.15, y:0.225, z:5.0 },  // buro izq
+    { w:0.4, h:0.45, d:0.4, x: 1.15, y:0.225, z:5.0 },  // buro der
+    { w:1.4, h:0.5, d:0.45, x:0, y:0.25, z:1.2 }        // consola TV
+  ]);
+  makeIM(woodGeo, M.WOOD_D, BAY, roomsGroup, false);
+
+  // Ropa de cama (colchon + almohadas)
+  const softGeo = mergeBoxes([
+    { w:1.9, h:0.2, d:2.0, x:0, y:0.45, z:4.1 },
+    { w:0.8, h:0.16, d:0.4, x:-0.5, y:0.6, z:4.9 },
+    { w:0.8, h:0.16, d:0.4, x: 0.5, y:0.6, z:4.9 }
+  ]);
+  makeIM(softGeo, M.BEDDING, BAY, roomsGroup, false);
+
+  // TV (pantalla oscura sobre consola, mira a la cama)
+  makeIM(new THREE.BoxGeometry(1.3, 0.75, 0.06), M.TV,
+    BAY.map(m => { const p = new THREE.Vector3().setFromMatrixPosition(m); return tMat(p.x, p.y + 1.05, p.z + 1.0); }),
+    roomsGroup, false);
+
+  // Puerta de cuarto a pasillo (en muro trasero)
+  makeIM(new THREE.BoxGeometry(0.9, 2.1, 0.05), M.DOOR,
+    BAY.map(m => { const p = new THREE.Vector3().setFromMatrixPosition(m); return tMat(p.x + 1.0, p.y + 1.05, p.z + 7.05); }),
+    roomsGroup, false);
+
+  // --- EQUIPO DE CLIMA POR CUARTO (VAV) en el plafon ---
+  // Caja VAV galvanizada
+  makeIM(new THREE.BoxGeometry(0.7, 0.35, 0.9), M.VAV,
+    BAY.map(m => { const p = new THREE.Vector3().setFromMatrixPosition(m); return tMat(p.x + 0.6, p.y + 2.72, p.z + 5.8); }),
+    roomsGroup, false);
+  // Ramal de ducto desde pasillo hasta la caja
+  makeIM(new THREE.BoxGeometry(0.35, 0.28, 1.7), M.DUCT,
+    BAY.map(m => { const p = new THREE.Vector3().setFromMatrixPosition(m); return tMat(p.x + 0.6, p.y + 2.76, p.z + 6.8); }),
+    roomsGroup, false);
+  // Difusor de suministro + rejilla de retorno (blancos, en plafon)
+  const diffGeo = mergeBoxes([
+    { w:0.5, h:0.05, d:0.5, x:0, y:2.94, z:3.5 },        // difusor
+    { w:0.4, h:0.04, d:0.4, x:-0.9, y:2.95, z:6.2 }      // retorno
+  ]);
+  makeIM(diffGeo, M.DIFF, BAY, roomsGroup, false);
+}
+
+// ==================================================================
+// NUCLEO NORTE: elevadores + escalera + SHAFT DE DUCTOS (troncal VAV vertical)
+// ==================================================================
+{
+  const coreY0 = 0.15, coreY1 = ROOF_Y, coreCy = (coreY0 + coreY1) / 2, coreH = coreY1 - coreY0;
+  // 2 elevadores
+  box(2.6, coreH, 2.6, M.CORE, -3.2, coreCy, 5.5);
+  box(2.6, coreH, 2.6, M.CORE,  0.2, coreCy, 5.5);
+  // escalera (caja)
+  box(3.0, coreH, 3.6, M.CORE, 4.5, coreCy, 5.6);
+  // SHAFT DE DUCTOS (troncal VAV) al extremo norte — sube y penetra la azotea
+  box(1.4, coreH + 2.6, 1.4, M.DUCT, 0, coreCy + 1.3, 7.6);
+  // costillas del shaft (marcan que es ducto metalico)
+  const ribMats = [];
+  for (let y = 3; y < ROOF_Y + 2; y += 2.5) ribMats.push(tMat(0, y, 7.6));
+  makeIM(new THREE.BoxGeometry(1.5, 0.12, 1.5), M.FRAME, ribMats);
+  // Pasillo central: plafon tenue (faja emisiva sutil) por piso
+  const corrMats = [];
+  for (const fy of FLOORY) corrMats.push(tMat(0, fy + 2.9, 2.2));
+  makeIM(new THREE.BoxGeometry(HX*1.7, 0.06, 1.6),
+    new THREE.MeshStandardMaterial({ color:0xe8e4d8, roughness:0.8, metalness:0, emissive:0xffe8c0, emissiveIntensity:0.12 }),
+    corrMats, roomsGroup, false);
+}
+
+// ==================================================================
+// PODIO / PLANTA BAJA — base de HOTEL de doble altura (distinta de la torre)
+// ==================================================================
+{
+  // Plinto/base ligeramente volado
+  box(HX*2 + 2, 0.3, HZ*2 + 2, M.PODIUM, 0, 0.15, 0);
+  // Muros solidos del podio a los COSTADOS del lobby (el centro va acristalado)
+  box(8, PODIUM_H, HZ*2, M.PODIUM, -18, PODIUM_H/2, 0);       // ala oeste PB
+  box(8, PODIUM_H, HZ*2, M.PODIUM,  18, PODIUM_H/2, 0);       // ala este PB
+  box(HX*2, PODIUM_H, 0.4, M.PODIUM, 0, PODIUM_H/2, HZ);      // muro trasero PB
+  // Losa de piso del lobby (pulida)
+  box(28, 0.12, HZ*2 - 0.5, M.DECK, 0, 0.34, 0, staticG, false);
+  // Losa/cornisa de remate del podio (transicion a la torre) + cenefa de MADERA (acento hotel)
+  box(HX*2 + 1, 0.4, HZ*2 + 1, M.PODIUM, 0, PODIUM_H + 0.2, 0);
+  box(HX*2 + 1.2, 0.28, 0.3, M.WOOD, 0, PODIUM_H + 0.1, SOUTH_Z - 0.5);   // cenefa madera sur
+
+  // --- LOBBY ACRISTALADO de doble altura (ventanal corrido sur) ---
+  box(28, PODIUM_H - 0.5, 0.06, M.LGLASS, 0, PODIUM_H/2 + 0.1, SOUTH_Z, staticG, false);
+  // rejilla de mullions del lobby (verticales cada 2 m + 1 horizontal)
+  const lmMats = [];
+  for (let x = -14; x <= 14; x += 2) lmMats.push(tMat(x, PODIUM_H/2 + 0.1, SOUTH_Z + 0.02));
+  makeIM(new THREE.BoxGeometry(0.09, PODIUM_H - 0.5, 0.1), M.ALUM, lmMats, staticG, false);
+  box(28, 0.1, 0.12, M.ALUM, 0, PODIUM_H/2 + 0.1, SOUTH_Z + 0.02, staticG, false);
+
+  // --- RECEPCION visible al interior ---
+  box(6, 1.1, 1.2, M.WOOD, -3, 0.9, -3.5, staticG, false);          // mostrador
+  box(6, 1.6, 0.2, M.WOOD_D, -3, 1.6, -1.5, staticG, false);        // muro back de recepcion
+  box(1.6, 0.9, 1.6, M.WOOD, 5, 0.75, -4, staticG, false);          // lounge del lobby (sillon vol.)
+  box(1.6, 0.9, 1.6, M.WOOD, 8, 0.75, -4, staticG, false);
+  box(2.4, 0.25, 1.0, M.WOOD_D, 6.5, 0.45, -5.6, staticG, false);   // mesa de centro
+}
+
+// ==================================================================
+// PORTE-COCHERE — marquesina volada sobre el drop-off (senal de HOTEL)
+// ==================================================================
+{
+  const canY = PODIUM_H - 0.4, canZ = -15.5;
+  // Losa de marquesina (volada al sur del lobby)
+  box(18, 0.5, 9, M.CONCRETE, 0, canY, canZ, staticG, true);
+  // Fascia de MADERA en el borde de la marquesina
+  box(18.4, 0.35, 0.2, M.WOOD, 0, canY - 0.05, canZ - 4.55);
+  box(0.2, 0.35, 9.2, M.WOOD, -9.1, canY - 0.05, canZ);
+  box(0.2, 0.35, 9.2, M.WOOD,  9.1, canY - 0.05, canZ);
+  // Columnas de apoyo (frente del drop-off)
+  cylY(0.32, canY, M.PODIUM, -6, canY/2, canZ - 3.5, 18);
+  cylY(0.32, canY, M.PODIUM,  6, canY/2, canZ - 3.5, 18);
+  cylY(0.32, canY, M.PODIUM, -6, canY/2, canZ + 3.0, 18);
+  cylY(0.32, canY, M.PODIUM,  6, canY/2, canZ + 3.0, 18);
+  // Vialidad de llegada (drop-off) + banqueta central
+  box(20, 0.06, 9, M.CONCRETE, 0, 0.2, canZ, staticG, false);
+  box(6, 0.18, 8, M.DECK, 0, 0.28, canZ, staticG, false);          // isleta central
+
+  // --- AUTO en el drop-off ---
+  {
+    const cz = canZ + 1.0, cbody = new THREE.Group();
+    box(4.4, 0.7, 1.9, M.CARBODY, 0, 0.75, cz);                    // carroceria baja
+    box(2.6, 0.7, 1.75, M.CARBODY, -0.1, 1.35, cz);               // cabina
+    box(2.5, 0.55, 1.65, M.CARGLASS, -0.1, 1.4, cz, staticG, false); // vidrios
+    for (const wx of [-1.5, 1.5]) for (const wz of [-0.85, 0.85]){
+      const w = cylY(0.4, 0.3, M.TIRE, wx, 0.4, cz + wz, 16);
+      w.rotation.x = Math.PI / 2;
+    }
+  }
+}
+
+// ==================================================================
+// AZOTEA (Y=28) — pretil, amenidad de playa, cuarto de maquinas, pad de equipos libre
+// ==================================================================
+{
+  // Losa de azotea
+  box(HX*2, 0.3, HZ*2, M.CONCRETE, 0, ROOF_Y + 0.15, 0);
+  // PRETIL perimetral (4 fajas)
+  box(HX*2, 1.2, 0.3, M.PODIUM, 0, ROOF_Y + 0.9, SOUTH_Z + 0.15);
+  box(HX*2, 1.2, 0.3, M.PODIUM, 0, ROOF_Y + 0.9, HZ - 0.15);
+  box(0.3, 1.2, HZ*2, M.PODIUM, HX - 0.15, ROOF_Y + 0.9, 0);
+  box(0.3, 1.2, HZ*2, M.PODIUM, -HX + 0.15, ROOF_Y + 0.9, 0);
+
+  // CUARTO DE MAQUINAS de elevadores (sobre el nucleo)
+  box(6.5, 3.0, 6.5, M.PODIUM, -1.5, ROOF_Y + 1.8, 5.5);
+  // Penetracion CAPADA del shaft troncal (donde conecta la UTA despues)
+  box(1.8, 0.6, 1.8, M.DUCT, 0, ROOF_Y + 0.6, 7.6);
+  box(2.0, 0.14, 2.0, M.FRAME, 0, ROOF_Y + 0.95, 7.6, staticG, false);
+  // PAD DE EQUIPOS ~10x8 (LIBRE — la UTA + extractor se colocan despues)
+  box(10, 0.2, 8, M.CONCRETE, 9, ROOF_Y + 0.4, 3);
+
+  // --- AMENIDAD DE PLAYA (solarium + pergola + jacuzzi) lado sur ---
+  // Deck de solarium
+  box(18, 0.14, 6, M.DECK, -6, ROOF_Y + 0.37, -4, staticG, false);
+  // PERGOLA/bar: 4 postes de madera + techo de listones
+  for (const px of [-13, -3]) for (const pz of [-6, -1.5]) cylY(0.14, 2.6, M.WOOD, px, ROOF_Y + 1.6, pz, 10);
+  box(11, 0.18, 5.4, M.WOOD_D, -8, ROOF_Y + 3.0, -3.8, staticG, false);   // vigas
+  { // listones instanciados
+    const slatMats = [];
+    for (let x = -13; x <= -3; x += 0.6) slatMats.push(tMat(x, ROOF_Y + 3.12, -3.8));
+    makeIM(new THREE.BoxGeometry(0.12, 0.08, 5.4), M.WOOD, slatMats, staticG, false);
+  }
+  // Barra del bar bajo la pergola
+  box(5, 1.0, 0.8, M.WOOD, -8, ROOF_Y + 0.9, -1.0, staticG, false);
+  // CAMASTROS instanciados (solarium)
+  const loungeGeo = mergeBoxes([
+    { w:0.7, h:0.12, d:2.0, x:0, y:0.35, z:0 },          // colchoneta
+    { w:0.7, h:0.5, d:0.1, x:0, y:0.55, z:-0.95 },       // respaldo
+    { w:0.05, h:0.35, d:2.0, x:-0.34, y:0.17, z:0 },
+    { w:0.05, h:0.35, d:2.0, x: 0.34, y:0.17, z:0 }
+  ]);
+  const loungeMats = [];
+  for (let i = 0; i < 6; i++) loungeMats.push(tMat(2 + (i % 3) * 2.2, ROOF_Y + 0.3, -6 + Math.floor(i / 3) * 3));
+  makeIM(loungeGeo, M.PILLOW, loungeMats, staticG, false);
+  // JACUZZI / alberca chica de azotea
+  box(4.5, 0.9, 3.0, M.PODIUM, 12, ROOF_Y + 0.75, -5, staticG, false);
+  box(3.9, 0.5, 2.4, M.WATER, 12, ROOF_Y + 1.0, -5, staticG, false);
+}
+
+// ==================================================================
+// FACHADAS N/E/O — ventaneria menor instanciada + escalera de emergencia norte
+// ==================================================================
+{
+  // Ventanas menores en muros ESTE / OESTE (2 columnas x 8 pisos)
+  const sideMats = [];
+  for (const fy of FLOORY) for (const zz of [-4, 4]){
+    sideMats.push(tMat(HX + 0.02, fy + 1.5, zz));
+    sideMats.push(tMat(-HX - 0.02, fy + 1.5, zz));
+  }
+  makeIM(new THREE.BoxGeometry(0.05, 1.4, 1.2), M.GLASS, sideMats, staticG, false);
+  // Ventanas del muro NORTE (pasillo) 4 x 8 pisos
+  const northMats = [];
+  for (const fy of FLOORY) for (const xx of [-14, -5, 5, 14]) northMats.push(tMat(xx, fy + 1.6, HZ + 0.02));
+  makeIM(new THREE.BoxGeometry(1.0, 1.3, 0.05), M.GLASS, northMats, staticG, false);
+
+  // ESCALERA DE EMERGENCIA exterior (norte-este) — descansos + barandal instanciados
+  const landMats = [], railMats = [];
+  for (let f = 0; f <= NF; f++){
+    const y = PODIUM_H + f * FLOOR_H;
+    landMats.push(tMat(HX + 1.6, y - 0.15, -6));
+    railMats.push(tMat(HX + 2.6, y + 0.55, -6));
+  }
+  makeIM(new THREE.BoxGeometry(3.2, 0.16, 2.6), M.FRAME, landMats);
+  makeIM(new THREE.BoxGeometry(0.08, 1.1, 2.6), M.FRAME, railMats, staticG, false);
+  // largueros verticales de la torre de escape
+  cylY(0.12, NF*FLOOR_H + 1, M.FRAME, HX + 3.0, TOWER_Y0 + NF*FLOOR_H/2, -7.2, 8);
+  cylY(0.12, NF*FLOOR_H + 1, M.FRAME, HX + 3.0, TOWER_Y0 + NF*FLOOR_H/2, -4.8, 8);
+}
+
+// ==================================================================
+// ENTORNO: ALBERCA sur + deck + palmeras
+// ==================================================================
+{
+  // Deck de alberca (plaza sur)
+  box(40, 0.1, 22, M.DECK, 0, 0.16, -34, staticG, false);
+  // Vaso de alberca (coping + agua)
+  box(18, 0.6, 9, M.PODIUM, 0, 0.2, -34, staticG, false);
+  box(16.4, 0.4, 7.6, M.WATER, 0, 0.35, -34, staticG, false);
+
+  // PALMERAS instanciadas: tronco (1 draw) + fronda fusionada (1 draw)
+  const palmPos = [
+    [-11, -22], [11, -22], [-16, -30], [16, -30], [-8, -40], [8, -40],
+    [-13, -14], [13, -14], [0, -44]
+  ];
+  const trunkMats = palmPos.map(([x, z]) => tMat(x, 2.6, z));
+  makeIM(new THREE.CylinderGeometry(0.18, 0.28, 5.2, 10), M.TRUNK, trunkMats);
+  // Fronda: 9 hojas (cajas alargadas) radiando e inclinadas, fusionadas
+  const frondDefs = [];
+  for (let i = 0; i < 9; i++){
+    const g = new THREE.BoxGeometry(0.12, 0.06, 2.6);
+    const a = i / 9 * Math.PI * 2;
+    const mtx = new THREE.Matrix4().compose(
+      new THREE.Vector3(Math.cos(a) * 1.1, -0.25, Math.sin(a) * 1.1),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(0.35, -a, 0)),
+      _s1
+    );
+    g.applyMatrix4(mtx);
+    frondDefs.push(g);
+  }
+  const frondGeo = BufferGeometryUtils.mergeGeometries(frondDefs, false);
+  const frondMats = palmPos.map(([x, z]) => tMat(x, 5.2, z));
+  makeIM(frondGeo, M.FROND, frondMats, staticG, false);
+}
+
+// ==================================================================
+// ESTADO / CONTROL DE EQUIPO
+// ==================================================================
+const state = { corte:false, noche:false, rot:true };
+function applyState(){
+  facadeGroup.visible = !state.corte;            // CORTE oculta la fachada sur -> revela cuartos
+  const gI = state.noche ? 0.55 : 0.0;
+  M.GLASS.emissiveIntensity = gI;
+  M.LGLASS.emissiveIntensity = state.noche ? 0.85 : 0.04;
+  M.INT.emissiveIntensity = state.noche ? 0.35 : 0.0;
+}
+function bindToggle(id, key, onTxt, offTxt){
+  const btn = document.getElementById(id);
+  btn.addEventListener('click', () => {
+    state[key] = !state[key];
+    btn.className = state[key] ? 'on' : 'off';
+    btn.textContent = state[key] ? onTxt : offTxt;
+    applyState();
+  });
+}
+bindToggle('bCorte', 'corte', 'ON', 'OFF');
+bindToggle('bNoche', 'noche', 'ON', 'OFF');
+const bRot = document.getElementById('bRot');
+bRot.addEventListener('click', () => {
+  state.rot = !state.rot;
+  bRot.className = state.rot ? 'on' : 'off';
+  bRot.textContent = state.rot ? 'ON' : 'OFF';
+});
+applyState();
+
+// ====== HORNEADO DE SOMBRAS (una sola pasada) ======
+renderer.shadowMap.needsUpdate = true;
+
+// ====== HUD renderer.info + LOOP ======
+const drawN = document.getElementById('drawN');
+const triN  = document.getElementById('triN');
+function animate(){
+  requestAnimationFrame(animate);
+  controls.autoRotate = state.rot;
+  controls.update();
+  renderer.render(scene, camera);
+  drawN.textContent = renderer.info.render.calls;
+  triN.textContent  = renderer.info.render.triangles.toLocaleString();
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
