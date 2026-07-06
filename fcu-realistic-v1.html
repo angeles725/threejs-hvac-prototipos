@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FAN COIL DE PLAFON (FCU) · 1.10 × 0.60 × 0.30 m · Realistic</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter:blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; color:#cfe0da; }
+  #legend i { width:12px; height:10px; display:inline-block; border-radius:2px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter:blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:78px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.lo  { color:#00ff66; border-color:#00ff66; background:transparent; box-shadow:0 0 8px #00ff6633; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+</style>
+<script>
+// Inyeccion dinamica de importmap: String.fromCharCode(64) evita el mangling de '@' (package@version) por Cloudflare.
+(function(){
+  var AT = String.fromCharCode(64);
+  var tag = document.createElement('script');
+  tag.type = 'importmap';
+  tag.textContent = JSON.stringify({ imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }});
+  document.head.appendChild(tag);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>FAN COIL DE PLAFON (FCU)</b><br>
+  <span>1.10 × 0.60 × 0.30 m · Realistic PBR · 1 unidad = 1 m</span>
+</div>
+<div id="legend">
+  <div><i style="background:#66ccff"></i> Agua helada</div>
+  <div><i style="background:#ff5533"></i> Aire retorno</div>
+  <div><i style="background:#44bbff"></i> Aire suministro</div>
+  <div><i style="background:#8adcd2"></i> Condensados</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>VENTILADOR</label><button id="bFan" class="off">OFF</button></div>
+  <div class="row"><label>CORTE</label><button id="bCorte" class="on">ON</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 unidad = 1 m. Spec dimensional: voxel/fcu-plafon-voxel.html (1 voxel = 0.02 m).
+// Gabinete DELGADO 1.10 (X, largo) x 0.60 (Z, fondo) x 0.30 (Y, alto). Suspendido de plafon.
+// Tren de aire: RETORNO+FILTRO (cara inferior) -> DOBLE TURBINA -> SERPENTIN (centro) ->
+// PLENUM -> REJILLA LINEAL (cara frontal +Z). Conexiones agua helada + control en extremo +X.
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 5.5, 30);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.05, 200);
+camera.position.set(1.45, 1.95, 1.6);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;          // sombras horneadas: un solo horneado tras construir
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.55;
+controls.minDistance = 0.8;
+controls.maxDistance = 8;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(0, 1.26, 0.03);
+// Ground clamp (regla de la casa): ni el target ni la camara bajan del piso
+controls.addEventListener('change', () => {
+  if (controls.target.y < 0) controls.target.y = 0;
+  if (camera.position.y < 0.25) camera.position.y = 0.25;
+});
+
+// ====== RIG DE LUCES ======
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.6, 4.6, 2.4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -1.3; sun.shadow.camera.right = 1.3;
+sun.shadow.camera.top = 1.3; sun.shadow.camera.bottom = -1.3;
+sun.shadow.camera.near = 1.5; sun.shadow.camera.far = 10;
+sun.shadow.bias = -0.0004;
+sun.target.position.set(0, 1.26, 0);
+scene.add(sun); scene.add(sun.target);
+
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-3.2, 2.4, -2.0);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rim.position.set(-1.8, 1.8, 3.2);
+scene.add(rim);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+// ====== PISO ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(80, 80),
+  new THREE.MeshStandardMaterial({ color:0x0a0d12, roughness:0.95, metalness:0 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(40, 80, 0x123f35, 0x0c1d1a);
+grid.position.y = 0.002;
+grid.material.transparent = true;
+grid.material.opacity = 0.35;
+scene.add(grid);
+
+// ====== TEXTURAS PROCEDURALES (CanvasTexture) ======
+function canvasTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+function dataTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 4;
+  return t;
+}
+
+// Chapa GALVANIZADA clara con lentejuela (spangle) y juntas suaves
+const galvTex = canvasTex(512, 512, (g, w, h) => {
+  g.fillStyle = '#cfd3d8'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 3000; i++){
+    const v = 190 + Math.floor(Math.random() * 55);
+    g.fillStyle = `rgba(${v},${v+3},${v+8},0.16)`;
+    g.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 7, 2 + Math.random() * 7);
+  }
+  for (let i = 0; i < 900; i++){
+    g.fillStyle = 'rgba(150,156,164,0.12)';
+    g.fillRect(Math.random() * w, Math.random() * h, 1, 1 + Math.random() * 2);
+  }
+  g.strokeStyle = 'rgba(150,156,164,0.55)'; g.lineWidth = 2;
+  for (let x = 0; x <= w; x += 170){ g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+});
+galvTex.wrapS = galvTex.wrapT = THREE.RepeatWrapping;
+
+// Variacion de rugosidad de la chapa (mapa lineal; escalar 1.0 * mapa ~0.55 cae en la banda percibida)
+const galvRoughTex = dataTex(256, 256, (g) => {
+  g.fillStyle = '#8f8f8f'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2400; i++){
+    const v = 120 + Math.floor(Math.random() * 60);
+    g.fillStyle = `rgba(${v},${v},${v},0.16)`;
+    g.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 3, 1 + Math.random() * 3);
+  }
+});
+galvRoughTex.wrapS = galvRoughTex.wrapT = THREE.RepeatWrapping;
+galvRoughTex.repeat.set(2, 1);
+
+// Media de filtro (crema fibrosa)
+const filterTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#e6dcc0'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 3200; i++){
+    g.fillStyle = Math.random() < 0.5 ? 'rgba(200,192,164,0.28)' : 'rgba(238,232,212,0.22)';
+    g.fillRect(Math.random() * w, Math.random() * h, 1 + Math.random() * 2, 1 + Math.random() * 2);
+  }
+});
+filterTex.wrapS = filterTex.wrapT = THREE.RepeatWrapping;
+
+// Placa de datos
+const nameplateTex = canvasTex(512, 256, (g, w, h) => {
+  const grad = g.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, '#d8dade'); grad.addColorStop(0.5, '#b8bcc2'); grad.addColorStop(1, '#c8ccd2');
+  g.fillStyle = grad; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#3a3f46'; g.lineWidth = 6; g.strokeRect(10, 10, w - 20, h - 20);
+  g.fillStyle = '#22262c';
+  g.font = 'bold 30px monospace'; g.textAlign = 'center';
+  g.fillText('FAN COIL DE PLAFON', w/2, 56);
+  g.font = '22px monospace';
+  g.fillText('FCU · 2 TUBOS · OCULTO', w/2, 90);
+  g.font = '20px monospace'; g.textAlign = 'left';
+  g.fillText('MODELO      FCU-11-06', 40, 134);
+  g.fillText('CAUDAL      680 m3/h HI', 40, 164);
+  g.fillText('SERP.       AGUA HELADA 7/12 C', 40, 194);
+  g.fillText('DIMS        1.10 x 0.60 x 0.30 m', 40, 224);
+  for (const [bx, by] of [[26, 26], [w-26, 26], [26, h-26], [w-26, h-26]]){
+    g.beginPath(); g.arc(bx, by, 7, 0, Math.PI*2); g.fillStyle = '#787c82'; g.fill();
+  }
+});
+
+// ====== PALETA PBR (metalness 0 = pintado/chapa clara · metalness 1 = metal desnudo) ======
+// Leccion documentada (torre/bomba/AHU): gris medio + metalness 1 lee NEGRO en este entorno.
+// Chapa galvanizada clara -> metalness 0. Metal que debe leer metal (valvulas, cobre, bridas,
+// pernos) -> metalness 1 con tonos claros/oscuros deliberados.
+const M = {
+  GALV:    new THREE.MeshStandardMaterial({ map:galvTex, roughness:1.0, metalness:0, roughnessMap:galvRoughTex }),
+  GALV_D:  new THREE.MeshStandardMaterial({ color:0xa6acb3, roughness:0.6, metalness:0 }),
+  FRAME:   new THREE.MeshStandardMaterial({ color:0x33353b, roughness:0.6, metalness:0 }),
+  DARK:    new THREE.MeshStandardMaterial({ color:0x22252a, roughness:0.7, metalness:0 }),
+  COIL_T:  new THREE.MeshStandardMaterial({ color:0x2f8f86, roughness:0.5, metalness:0.1 }),
+  COIL_T2: new THREE.MeshStandardMaterial({ color:0x3fae9f, roughness:0.5, metalness:0.1 }),
+  COPPER:  new THREE.MeshStandardMaterial({ color:0xb87333, roughness:0.35, metalness:1 }),
+  PAN:     new THREE.MeshStandardMaterial({ color:0x26292e, roughness:0.5, metalness:0.3 }),
+  PIPE:    new THREE.MeshStandardMaterial({ color:0xd0d5db, roughness:0.5, metalness:0 }),
+  BAND_B:  new THREE.MeshStandardMaterial({ color:0x2f5f96, roughness:0.5, metalness:0 }),
+  VALVE:   new THREE.MeshStandardMaterial({ color:0x40464e, roughness:0.45, metalness:0.6 }),
+  FLANGE:  new THREE.MeshStandardMaterial({ color:0x8a949c, roughness:0.35, metalness:1 }),
+  BOLT:    new THREE.MeshStandardMaterial({ color:0x33363c, roughness:0.4, metalness:1 }),
+  MOTOR:   new THREE.MeshStandardMaterial({ color:0x1a3388, roughness:0.5, metalness:0 }),
+  MOTOR_D: new THREE.MeshStandardMaterial({ color:0x112266, roughness:0.55, metalness:0 }),
+  HOUSING: new THREE.MeshStandardMaterial({ color:0x6a6d75, roughness:0.5, metalness:0.3, side:THREE.DoubleSide }),
+  HOUSING_D:new THREE.MeshStandardMaterial({ color:0x4a4d55, roughness:0.55, metalness:0.3, side:THREE.DoubleSide }),
+  STEEL:   new THREE.MeshStandardMaterial({ color:0x50555e, roughness:0.42, metalness:0.6 }),
+  HUB:     new THREE.MeshStandardMaterial({ color:0x55555c, roughness:0.45, metalness:0.4 }),
+  GRILLE:  new THREE.MeshStandardMaterial({ color:0xe2e6ea, roughness:0.5, metalness:0 }),
+  CREAM:   new THREE.MeshStandardMaterial({ map:filterTex, roughness:0.9, metalness:0 }),
+  WALL:    new THREE.MeshStandardMaterial({ color:0xb9b4a4, roughness:0.92, metalness:0 }),
+  TSTAT:   new THREE.MeshStandardMaterial({ color:0xe8e6df, roughness:0.5, metalness:0 }),
+  DRAIN:   new THREE.MeshStandardMaterial({ color:0xcdd0d5, roughness:0.55, metalness:0 }),
+  ROD:     new THREE.MeshStandardMaterial({ color:0x8a929c, roughness:0.4, metalness:1 })
+};
+// Rodete azul (animado: material propio, emisivo modulado por velocidad)
+const wheelMat = new THREE.MeshStandardMaterial({ color:0x3a7bd5, roughness:0.4, metalness:0.5, emissive:0x1f5fc0, emissiveIntensity:0.12 });
+
+// ====== HELPERS DE GEOMETRIA PARAMETRICA ======
+const staticG = new THREE.Group();       // todo lo estatico (sombras horneadas)
+scene.add(staticG);
+const accessGroup = new THREE.Group();   // panel de acceso removible (toggle CORTE): filtro inferior + frente
+staticG.add(accessGroup);
+
+function mesh(geo, mat, x = 0, y = 0, z = 0, parent = staticG){
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+function box(w, h, d, mat, x, y, z, parent = staticG){
+  return mesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent);
+}
+function cylX(r, len, mat, x, y, z, seg = 16, parent = staticG){
+  const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+  m.rotation.z = Math.PI / 2;
+  return m;
+}
+function cylY(r, len, mat, x, y, z, seg = 16, parent = staticG){
+  return mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+}
+// Tuberia con codos suavizados: polilinea -> CurvePath con filetes bezier
+function makePipe(points, r, mat, bend = 0.05, parent = staticG, seg = 10){
+  const path = new THREE.CurvePath();
+  const P = points.map(p => new THREE.Vector3(...p));
+  let prev = P[0];
+  for (let i = 1; i < P.length - 1; i++){
+    const a = P[i], b = P[i+1];
+    const dIn = a.clone().sub(prev).normalize();
+    const dOut = b.clone().sub(a).normalize();
+    const tIn = a.clone().sub(dIn.clone().multiplyScalar(bend));
+    const tOut = a.clone().add(dOut.clone().multiplyScalar(bend));
+    path.add(new THREE.LineCurve3(prev, tIn));
+    path.add(new THREE.QuadraticBezierCurve3(tIn, a, tOut));
+    prev = tOut;
+  }
+  path.add(new THREE.LineCurve3(prev, P[P.length - 1]));
+  const len = path.getLength();
+  const g = new THREE.TubeGeometry(path, Math.max(16, Math.round(len * 18)), r, seg);
+  return mesh(g, mat, 0, 0, 0, parent);
+}
+
+// Pernos instanciados globales (una sola draw call)
+const boltMatrices = [];
+const _bm = new THREE.Matrix4(), _bs = new THREE.Vector3(1,1,1);
+const AXQ = {
+  x: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI/2)),
+  y: new THREE.Quaternion(),
+  z: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2, 0, 0))
+};
+function boltRing(cx, cy, cz, axis, radius, n){
+  for (let i = 0; i < n; i++){
+    const a = i / n * Math.PI * 2 + Math.PI / n;
+    const u = Math.cos(a) * radius, v = Math.sin(a) * radius;
+    let px = cx, py = cy, pz = cz;
+    if (axis === 'x'){ py += u; pz += v; }
+    else if (axis === 'y'){ px += u; pz += v; }
+    else { px += u; py += v; }
+    _bm.compose(new THREE.Vector3(px, py, pz), AXQ[axis], _bs);
+    boltMatrices.push(_bm.clone());
+  }
+}
+// Brida (disco delgado) a ras + anillo de esparragos (leccion torre/bomba/AHU: brida flush)
+function flangeX(R, thick, x, y, z, nBolts, boltR, boltSide = 1){
+  cylX(R, thick, M.FLANGE, x, y, z, 18);
+  if (nBolts) boltRing(x + boltSide * (thick/2 + 0.006), y, z, 'x', boltR, nBolts);
+}
+// InstancedMesh util
+function makeIM(geo, mat, mats, parent = staticG, cast = true){
+  const im = new THREE.InstancedMesh(geo, mat, mats.length);
+  mats.forEach((m, i) => im.setMatrixAt(i, m));
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = cast; im.receiveShadow = true;
+  parent.add(im);
+  return im;
+}
+const _q0 = new THREE.Quaternion();
+function tMat(x, y, z, q = _q0, s = _bs){
+  return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q, s);
+}
+
+// ==================================================================
+// COTAS GLOBALES (metros) — gabinete DELGADO
+// ==================================================================
+const HX = 0.55, HZ = 0.30;                // medio largo (X) / medio fondo (Z)
+const YB = 1.15, HT = 0.30, YT = YB + HT;  // base (suspendida) / alto / techo = 1.45
+const CY = YB + HT/2;                       // centro vertical = 1.30
+const PT = 0.012;                           // espesor de chapa
+const ZB = -HZ, ZF = HZ;                    // trasera (-Z) / frente rejilla (+Z)
+// Turbinas
+const WX = [-0.28, 0.28];                   // centros de las dos turbinas (X)
+const WY = YB + 0.15;                       // eje de turbinas (Y)
+const WZ = -0.08;                           // turbinas hacia la trasera
+const WR = 0.095;                           // radio del rodete
+// Serpentin
+const COIL_X0 = -0.44, COIL_X1 = 0.44;
+const COIL_Y0 = YB + 0.045, COIL_Y1 = YB + 0.255, COIL_YC = (COIL_Y0+COIL_Y1)/2;
+const COIL_ZC = 0.05, COIL_ZD = 0.11;       // centro y fondo (Z) del serpentin
+
+// ==================================================================
+// GABINETE FIJO (chapa galvanizada) — techo, trasera, extremos, faldon inferior
+// ==================================================================
+{
+  // techo
+  box(HX*2, PT, HZ*2, M.GALV, 0, YT, 0);
+  // trasera (-Z)
+  box(HX*2, HT, PT, M.GALV, 0, CY, ZB);
+  // extremo izquierdo (-X) con placa de datos
+  box(PT, HT, HZ*2, M.GALV, -HX, CY, 0);
+  const np = mesh(new THREE.PlaneGeometry(0.30, 0.15),
+    new THREE.MeshStandardMaterial({ map:nameplateTex, roughness:0.4, metalness:0 }),
+    -HX - 0.007, CY, -0.02);
+  np.rotation.y = -Math.PI / 2;
+  np.castShadow = false;
+  // extremo derecho (+X) con pasos de tuberia (dos huecos: chapa alrededor)
+  // extremo +X centrado en la profundidad (sin voladizo), con ranura de tuberia en z 0.00-0.11
+  box(PT, HT, 0.30, M.GALV, HX, CY, -0.15);                    // franja trasera (-Z hasta la ranura)
+  box(PT, HT, 0.19, M.GALV, HX, CY, 0.205);                    // franja frontal (ranura hasta +Z)
+  // faldon inferior fijo (bordes de la cara inferior, alrededor del filtro removible)
+  box(HX*2, PT, 0.10, M.GALV, 0, YB, ZF - 0.05);               // borde frontal-inferior
+  box(0.10, PT, HZ*2, M.GALV, -HX + 0.05, YB, 0);              // borde izq-inferior
+  box(0.10, PT, HZ*2, M.GALV,  HX - 0.05, YB, 0);              // borde der-inferior
+  // costillas de refuerzo del techo (instanciadas)
+  const ribMats = [];
+  for (const rx of [-0.36, -0.12, 0.12, 0.36]) ribMats.push(tMat(rx, YT + 0.012, 0));
+  makeIM(new THREE.BoxGeometry(0.02, 0.02, HZ*2 - 0.04), M.GALV_D, ribMats);
+}
+
+// ==================================================================
+// MARCO ESTRUCTURAL INTERNO (postes de esquina + largueros) — instanciado
+// ==================================================================
+{
+  const postMats = [];
+  for (const px of [-HX + 0.02, HX - 0.02])
+    for (const pz of [ZB + 0.02, ZF - 0.02]) postMats.push(tMat(px, CY, pz));
+  makeIM(new THREE.BoxGeometry(0.02, HT - 0.02, 0.02), M.FRAME, postMats);
+  const railMats = [];
+  for (const zz of [ZB + 0.02, ZF - 0.02]){ railMats.push(tMat(0, YT - 0.02, zz)); railMats.push(tMat(0, YB + 0.02, zz)); }
+  makeIM(new THREE.BoxGeometry(HX*2 - 0.04, 0.02, 0.02), M.FRAME, railMats);
+}
+
+// ==================================================================
+// DOBLE TURBINA CENTRIFUGA (carcasas scroll fijas + rodetes animados) + MOTOR
+// ==================================================================
+const wheels = [];
+{
+  for (const wx of WX){
+    // Cradle (media voluta inferior; deja frente-arriba abierto para descarga y vista en CORTE)
+    const cradle = mesh(new THREE.CylinderGeometry(WR + 0.018, WR + 0.018, 0.185, 22, 1, true, Math.PI*0.9, Math.PI*1.1),
+      M.HOUSING, wx, WY, WZ);
+    cradle.rotation.z = Math.PI / 2;
+    // Placas laterales con oido de succion (anillo)
+    for (const sx of [wx - 0.096, wx + 0.096]){
+      const sp = mesh(new THREE.RingGeometry(0.05, WR + 0.02, 22), M.HOUSING_D, sx, WY, WZ);
+      sp.rotation.y = Math.PI / 2;
+      sp.castShadow = false;
+    }
+    // Garganta de descarga (dirige el aire al frente-arriba, hacia el serpentin)
+    box(0.17, 0.05, 0.05, M.HOUSING_D, wx, WY + WR + 0.02, WZ + 0.05);
+
+    // ---- RODETE (grupo giratorio, eje X) ----
+    const g = new THREE.Group();
+    g.position.set(wx, WY, WZ);
+    // placa posterior + aro frontal
+    const bp = mesh(new THREE.CylinderGeometry(WR, WR, 0.006, 22), wheelMat, 0.085, 0, 0, g);
+    bp.rotation.z = Math.PI / 2; bp.castShadow = false;
+    const fr = mesh(new THREE.TorusGeometry(WR * 0.86, 0.008, 8, 22), wheelMat, -0.085, 0, 0, g);
+    fr.rotation.y = Math.PI / 2; fr.castShadow = false;
+    // alabes (instanciados, curvados; una aspa oscura para que el giro LEA)
+    const bladeGeo = new THREE.BoxGeometry(0.16, 0.02, 0.016);
+    const bladeMats = [];
+    const nB = 15, rB = WR * 0.78;
+    for (let i = 0; i < nB; i++){
+      const a = i / nB * Math.PI * 2;
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(a + 0.3, 0, 0, 'XYZ'));
+      bladeMats.push(new THREE.Matrix4().compose(new THREE.Vector3(0, Math.cos(a) * rB, Math.sin(a) * rB), q, _bs));
+    }
+    const blIM = new THREE.InstancedMesh(bladeGeo, wheelMat, nB);
+    bladeMats.forEach((m, i) => blIM.setMatrixAt(i, m));
+    blIM.castShadow = false; blIM.receiveShadow = true;
+    g.add(blIM);
+    const hub = mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.17, 12), M.HUB, 0, 0, 0, g);
+    hub.rotation.z = Math.PI / 2; hub.castShadow = false;
+    const keyBlade = mesh(new THREE.BoxGeometry(0.165, 0.021, 0.02), M.DARK, 0, rB, 0, g);
+    keyBlade.rotation.x = 0.3; keyBlade.castShadow = false;
+    scene.add(g);
+    g.traverse(o => { o.castShadow = false; });   // animado: excluido del horneado
+    wheels.push(g);
+  }
+  // MOTOR central azul (coaxial, eje X) entre las turbinas
+  cylX(0.055, 0.16, M.MOTOR, 0, WY, WZ, 18);
+  cylX(0.06, 0.02, M.MOTOR_D, -0.085, WY, WZ, 18);
+  cylX(0.06, 0.02, M.MOTOR_D, 0.085, WY, WZ, 18);
+  box(0.05, 0.045, 0.05, M.MOTOR_D, 0, WY + 0.065, WZ);        // caja de conexiones
+  // aletas de enfriamiento (instanciadas)
+  const mfin = [];
+  const qfin = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI/2));
+  for (let i = 0; i < 8; i++){
+    const a = i / 8 * Math.PI * 2;
+    mfin.push(new THREE.Matrix4().compose(new THREE.Vector3(0, WY + Math.cos(a)*0.06, WZ + Math.sin(a)*0.06), qfin, new THREE.Vector3(0.14, 1, 0.012)));
+  }
+  makeIM(new THREE.BoxGeometry(1, 0.016, 0.02), M.MOTOR_D, mfin, staticG, false);
+  // patas del motor al piso del gabinete
+  box(0.05, 0.09, 0.05, M.FRAME, 0, YB + 0.05, WZ);
+}
+
+// ==================================================================
+// SERPENTIN 2 TUBOS (aletas teal + tubos/U-bends/cabezales de cobre) + CHAROLA + CHW
+// ==================================================================
+{
+  const coilH = COIL_Y1 - COIL_Y0;
+  // ALETAS: laminas delgadas apiladas en X (instanciadas, 1 draw) + tanda intercalada mas clara
+  const finMats = [];
+  const nF = 42, fx0 = COIL_X0, fStep = (COIL_X1 - COIL_X0) / (nF - 1);
+  for (let i = 0; i < nF; i++) finMats.push(tMat(fx0 + i * fStep, COIL_YC, COIL_ZC));
+  makeIM(new THREE.BoxGeometry(0.006, coilH, COIL_ZD), M.COIL_T, finMats);
+  const finMats2 = [];
+  for (let i = 0; i < nF - 1; i++) finMats2.push(tMat(fx0 + (i + 0.5) * fStep, COIL_YC, COIL_ZC));
+  makeIM(new THREE.BoxGeometry(0.004, coilH - 0.01, COIL_ZD - 0.012), M.COIL_T2, finMats2);
+  // TUBOS de cobre horizontales (eje X), filas en Y x 2 en Z (instanciados)
+  const tubeMats = [];
+  const qx = AXQ.x;
+  const rows = 4, ty0 = COIL_Y0 + 0.03, tStep = (coilH - 0.06) / (rows - 1);
+  const tzc = [COIL_ZC - 0.03, COIL_ZC + 0.03];
+  for (let r = 0; r < rows; r++)
+    for (const tz of tzc)
+      tubeMats.push(new THREE.Matrix4().compose(new THREE.Vector3(0, ty0 + r * tStep, tz), qx, _bs));
+  makeIM(new THREE.CylinderGeometry(0.009, 0.009, COIL_X1 - COIL_X0 + 0.02, 8), M.COPPER, tubeMats);
+  // U-bends de cobre (lado -X, conectan filas contiguas) instanciados
+  const ubMats = [];
+  const qub = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2, 0, 0));
+  for (let r = 0; r < rows; r++)
+    ubMats.push(new THREE.Matrix4().compose(new THREE.Vector3(COIL_X0 - 0.02, ty0 + r * tStep, COIL_ZC), qub, _bs));
+  makeIM(new THREE.TorusGeometry(0.03, 0.008, 6, 12, Math.PI), M.COPPER, ubMats);
+  // CABEZALES de cobre verticales (suministro/retorno) en el lado +X
+  cylY(0.014, coilH + 0.02, M.COPPER, COIL_X1 + 0.02, COIL_YC, COIL_ZC - 0.03, 12);
+  cylY(0.014, coilH + 0.02, M.COPPER, COIL_X1 + 0.02, COIL_YC, COIL_ZC + 0.03, 12);
+  // marco del serpentin
+  box(0.012, coilH + 0.02, COIL_ZD + 0.02, M.FRAME, COIL_X0 - 0.006, COIL_YC, COIL_ZC);
+  box(0.012, coilH + 0.02, COIL_ZD + 0.02, M.FRAME, COIL_X1 + 0.006, COIL_YC, COIL_ZC);
+
+  // CHAROLA DE CONDENSADOS (oscura) bajo el serpentin
+  box(COIL_X1 - COIL_X0 + 0.10, 0.012, COIL_ZD + 0.08, M.PAN, 0, COIL_Y0 - 0.02, COIL_ZC);
+  box(COIL_X1 - COIL_X0 + 0.10, 0.03, 0.012, M.PAN, 0, COIL_Y0 - 0.006, COIL_ZC - (COIL_ZD/2 + 0.04));
+  box(COIL_X1 - COIL_X0 + 0.10, 0.03, 0.012, M.PAN, 0, COIL_Y0 - 0.006, COIL_ZC + (COIL_ZD/2 + 0.04));
+  // Dren de condensados (estub que baja y descarga fuera del gabinete, hacia +X)
+  makePipe([[0.34, COIL_Y0 - 0.02, COIL_ZC], [0.34, YB - 0.03, COIL_ZC],
+            [0.34, YB - 0.05, COIL_ZC], [0.46, YB - 0.05, COIL_ZC], [0.50, YB - 0.07, COIL_ZC]], 0.011, M.DRAIN);
+  const barb = cylX(0.014, 0.02, M.DRAIN, 0.51, YB - 0.075, COIL_ZC, 10); barb.castShadow = false;
+
+  // TUBERIA DE AGUA HELADA (suministro abajo / retorno arriba) — bridas flush, bandas azules, valvulas
+  const wallX = HX;              // pared del extremo +X (brida a ras)
+  // SUMINISTRO (bajo): del cabezal -> sale por +X
+  makePipe([[COIL_X1 + 0.02, COIL_Y0 + 0.02, COIL_ZC - 0.03],
+            [wallX - 0.02, COIL_Y0 + 0.02, COIL_ZC - 0.03],
+            [0.74, COIL_Y0 + 0.02, COIL_ZC - 0.03]], 0.018, M.PIPE);
+  flangeX(0.038, 0.012, wallX, COIL_Y0 + 0.02, COIL_ZC - 0.03, 4, 0.026, 1);
+  const sBand = cylX(0.021, 0.02, M.BAND_B, 0.64, COIL_Y0 + 0.02, COIL_ZC - 0.03, 12); sBand.castShadow = false;
+  // valvula pequena (cuerpo + volante) en suministro
+  cylX(0.026, 0.03, M.VALVE, 0.70, COIL_Y0 + 0.02, COIL_ZC - 0.03, 12);
+  const svw = mesh(new THREE.TorusGeometry(0.026, 0.006, 6, 14), M.VALVE, 0.70, COIL_Y0 + 0.055, COIL_ZC - 0.03);
+  svw.castShadow = false;
+  cylY(0.005, 0.035, M.VALVE, 0.70, COIL_Y0 + 0.04, COIL_ZC - 0.03, 8);
+  // RETORNO (alto): del cabezal -> sale por +X
+  makePipe([[COIL_X1 + 0.02, COIL_Y1 - 0.02, COIL_ZC + 0.03],
+            [wallX - 0.02, COIL_Y1 - 0.02, COIL_ZC + 0.03],
+            [0.74, COIL_Y1 - 0.02, COIL_ZC + 0.03]], 0.018, M.PIPE);
+  flangeX(0.038, 0.012, wallX, COIL_Y1 - 0.02, COIL_ZC + 0.03, 4, 0.026, 1);
+  const rBand = cylX(0.021, 0.02, M.BAND_B, 0.64, COIL_Y1 - 0.02, COIL_ZC + 0.03, 12); rBand.castShadow = false;
+  cylX(0.026, 0.03, M.VALVE, 0.70, COIL_Y1 - 0.02, COIL_ZC + 0.03, 12);
+  const rvw = mesh(new THREE.TorusGeometry(0.026, 0.006, 6, 14), M.VALVE, 0.70, COIL_Y1 + 0.015, COIL_ZC + 0.03);
+  rvw.castShadow = false;
+  cylY(0.005, 0.035, M.VALVE, 0.70, COIL_Y1, COIL_ZC + 0.03, 8);
+}
+
+// ==================================================================
+// CAJA DE CONTROL (extremo +X) + LED + CABLEADO AL TERMOSTATO
+// ==================================================================
+let ledFan;
+{
+  const cbx = HX + 0.03, cby = YT - 0.07, cbz = 0.16;
+  box(0.08, 0.10, 0.07, M.DARK, cbx, cby, cbz);               // gabinete de control
+  box(0.06, 0.05, 0.008, M.FRAME, cbx + 0.042, cby, cbz);     // tapa
+  // LED de estado
+  const ledMat = new THREE.MeshStandardMaterial({ color:0xff2233, emissive:0xff2233, emissiveIntensity:1.3, roughness:0.3, metalness:0 });
+  const led = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.012, 12), ledMat, cbx + 0.05, cby + 0.03, cbz);
+  led.rotation.z = Math.PI / 2; led.castShadow = false;
+  const ledLight = new THREE.PointLight(0xff2233, 0.4, 0.4);
+  ledLight.position.set(cbx + 0.09, cby + 0.03, cbz);
+  staticG.add(ledLight);
+  ledFan = { mat: ledMat, light: ledLight };
+  // Conduit/cable de control -> termostato de pared (pieza aparte, ver mas abajo)
+  makePipe([[cbx + 0.02, cby, cbz + 0.02], [0.62, cby, 0.22],
+            [0.62, CY, 0.22], [0.96, CY, 0.22], [0.96, 1.22, 0.09]], 0.006, M.DARK, 0.04);
+}
+
+// ==================================================================
+// TERMOSTATO DE PARED — pieza aparte, a distancia, cableada al FCU
+// ==================================================================
+let tTex;
+{
+  const wx = 1.0;
+  // murete de contexto (del piso hacia arriba)
+  box(0.05, 1.6, 0.55, M.WALL, wx + 0.03, 0.8, 0.05);
+  // placa del termostato + cuerpo
+  box(0.02, 0.14, 0.10, M.TSTAT, wx, 1.22, 0.09);
+  box(0.012, 0.10, 0.075, M.DARK, wx - 0.012, 1.22, 0.09);   // marco del display
+  // display (canvas)
+  const tCanvas = document.createElement('canvas');
+  tCanvas.width = 256; tCanvas.height = 192;
+  const tCtx = tCanvas.getContext('2d');
+  tTex = new THREE.CanvasTexture(tCanvas);
+  tTex.colorSpace = THREE.SRGBColorSpace;
+  tTex._ctx = tCtx;
+  const disp = mesh(new THREE.PlaneGeometry(0.075, 0.058),
+    new THREE.MeshBasicMaterial({ map:tTex, toneMapped:false }), wx - 0.019, 1.235, 0.09);
+  disp.rotation.y = -Math.PI / 2;
+  disp.castShadow = false;
+  // botones
+  box(0.008, 0.014, 0.014, M.FRAME, wx - 0.012, 1.185, 0.065);
+  box(0.008, 0.014, 0.014, M.FRAME, wx - 0.012, 1.185, 0.115);
+}
+
+// ==================================================================
+// PANEL DE ACCESO REMOVIBLE (accessGroup, toggle CORTE):
+//   (a) filtro de retorno inferior  (b) frente de descarga + rejilla lineal
+// ==================================================================
+{
+  // (a) FILTRO DE RETORNO (cara inferior, mitad trasera): marco + media plisada
+  const filZ0 = -0.24, filZ1 = 0.02, filZC = (filZ0 + filZ1) / 2, filZD = filZ1 - filZ0;
+  const filX0 = -0.44, filX1 = 0.44, filXD = filX1 - filX0;
+  // marco del filtro
+  box(filXD + 0.04, 0.012, 0.02, M.GALV_D, 0, YB + 0.006, filZ0, accessGroup);
+  box(filXD + 0.04, 0.012, 0.02, M.GALV_D, 0, YB + 0.006, filZ1, accessGroup);
+  box(0.02, 0.012, filZD, M.GALV_D, filX0, YB + 0.006, filZC, accessGroup);
+  box(0.02, 0.012, filZD, M.GALV_D, filX1, YB + 0.006, filZC, accessGroup);
+  // media plisada: laminas en V alternadas (instanciadas, 1 draw)
+  const pleatMats = [];
+  const qA = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.5, 0, 0));
+  const qB = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.5, 0, 0));
+  const nP = 16, pz0 = filZ0 + 0.02, pStep = (filZD - 0.04) / (nP - 1);
+  for (let i = 0; i < nP; i++)
+    pleatMats.push(new THREE.Matrix4().compose(new THREE.Vector3(0, YB + 0.016, pz0 + i * pStep), (i % 2 ? qA : qB), _bs));
+  makeIM(new THREE.BoxGeometry(filXD, 0.02, 0.026), M.CREAM, pleatMats, accessGroup);
+
+  // (b) FRENTE DE DESCARGA + REJILLA LINEAL (cara +Z)
+  const gy0 = YB + 0.06, gy1 = YT - 0.05, gyc = (gy0 + gy1) / 2, gh = gy1 - gy0;
+  // paneles de plenum (arriba/abajo del hueco de rejilla) en la cara frontal
+  box(HX*2, YT - gy1, PT, M.GALV, 0, (gy1 + YT) / 2, ZF, accessGroup);
+  box(HX*2, gy0 - YB, PT, M.GALV, 0, (YB + gy0) / 2, ZF, accessGroup);
+  box(0.10, gh, PT, M.GALV, -HX + 0.05, gyc, ZF, accessGroup);
+  box(0.10, gh, PT, M.GALV,  HX - 0.05, gyc, ZF, accessGroup);
+  // marco de la rejilla lineal
+  box(HX*2 - 0.18, 0.012, 0.03, M.GRILLE, 0, gy1, ZF + 0.006, accessGroup);
+  box(HX*2 - 0.18, 0.012, 0.03, M.GRILLE, 0, gy0, ZF + 0.006, accessGroup);
+  // aletas/louvers de la rejilla (horizontales, inclinadas, instanciadas)
+  const louMats = [];
+  const qLou = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.5, 0, 0));
+  const nL = 6, ly0 = gy0 + 0.02, lStep = (gh - 0.04) / (nL - 1);
+  for (let i = 0; i < nL; i++)
+    louMats.push(new THREE.Matrix4().compose(new THREE.Vector3(0, ly0 + i * lStep, ZF + 0.006), qLou, _bs));
+  makeIM(new THREE.BoxGeometry(HX*2 - 0.20, 0.018, 0.022), M.GRILLE, louMats, accessGroup);
+  // manijas del panel de acceso frontal (instanciadas)
+  const hMats = [];
+  for (const hx of [-0.30, 0.30]) hMats.push(tMat(hx, YB + 0.03, ZF + 0.01));
+  makeIM(new THREE.BoxGeometry(0.05, 0.014, 0.02), M.STEEL, hMats, accessGroup, false);
+}
+
+// ==================================================================
+// COLGADORES DE PLAFON (varillas roscadas + clips de techo) — instanciados
+// ==================================================================
+{
+  const rodMats = [], clipMats = [];
+  for (const rx of [-0.45, 0.45])
+    for (const rz of [-0.22, 0.22]){
+      rodMats.push(tMat(rx, (YT + 1.9) / 2, rz));
+      clipMats.push(tMat(rx, 1.9, rz));
+    }
+  makeIM(new THREE.CylinderGeometry(0.006, 0.006, 1.9 - YT, 8), M.ROD, rodMats);
+  makeIM(new THREE.BoxGeometry(0.06, 0.02, 0.06), M.FRAME, clipMats);
+  // angulos de soporte en el techo del gabinete
+  const angMats = [];
+  for (const rx of [-0.45, 0.45])
+    for (const rz of [-0.22, 0.22]) angMats.push(tMat(rx, YT + 0.02, rz));
+  makeIM(new THREE.BoxGeometry(0.05, 0.02, 0.05), M.GALV_D, angMats);
+}
+
+// ==================================================================
+// INSTANCIADOS GLOBALES (esparragos de bridas)
+// ==================================================================
+{
+  const boltGeo = new THREE.CylinderGeometry(0.006, 0.006, 0.014, 6);
+  makeIM(boltGeo, M.BOLT, boltMatrices, staticG, false);
+}
+
+// ====== DISPLAY DEL TERMOSTATO (canvas; se redibuja solo en applyState) ======
+const FAN_LBL = ['OFF', 'LO', 'HI'];
+const FAN_TMP = ['26.5', '24.0', '22.5'];
+function drawTstat(fan){
+  const g = tTex._ctx;
+  const on = fan > 0;
+  g.fillStyle = '#0b0f14'; g.fillRect(0, 0, 256, 192);
+  g.strokeStyle = '#00d4aa66'; g.lineWidth = 4; g.strokeRect(4, 4, 248, 184);
+  g.textAlign = 'center';
+  g.fillStyle = on ? '#7fe8ff' : '#54626c';
+  g.font = '700 64px "JetBrains Mono", ui-monospace, monospace';
+  g.fillText(FAN_TMP[fan] + '°', 128, 84);
+  g.font = '600 24px "JetBrains Mono", ui-monospace, monospace';
+  g.fillStyle = '#5f7a86';
+  g.fillText('SET 23.0°', 128, 124);
+  g.fillStyle = on ? '#00ff66' : '#ff4455';
+  g.fillText('VENT: ' + FAN_LBL[fan], 128, 162);
+  tTex.needsUpdate = true;
+}
+
+// ====== ESTADO / CONTROL DE EQUIPO ======
+const COLOR_ON = 0x00ff66, COLOR_OFF = 0xff2233;
+const state = { fan: 0, corte: true, rot: true };   // fan: 0=OFF 1=LO 2=HI
+const WHEEL_SPD = [0, 6, 13];                        // velocidad objetivo del rodete por marcha
+
+function applyState(){
+  // Solo emisivos/visibilidad/velocidad objetivo: NO se rehornean sombras aqui
+  const on = state.fan > 0;
+  ledFan.mat.color.setHex(on ? COLOR_ON : COLOR_OFF);
+  ledFan.mat.emissive.setHex(on ? COLOR_ON : COLOR_OFF);
+  ledFan.mat.emissiveIntensity = on ? 1.7 : 1.3;
+  ledFan.light.color.setHex(on ? COLOR_ON : COLOR_OFF);
+  ledFan.light.intensity = on ? 0.6 : 0.35;
+  wheelMat.emissiveIntensity = state.fan === 0 ? 0.12 : (state.fan === 1 ? 0.4 : 0.65);
+  accessGroup.visible = !state.corte;
+  drawTstat(state.fan);
+}
+
+// ====== UI ======
+const bFan = document.getElementById('bFan');
+bFan.addEventListener('click', () => {
+  state.fan = (state.fan + 1) % 3;
+  bFan.textContent = FAN_LBL[state.fan];
+  bFan.className = state.fan === 0 ? 'off' : (state.fan === 1 ? 'lo' : 'on');
+  applyState();
+});
+const bCorte = document.getElementById('bCorte');
+bCorte.addEventListener('click', () => {
+  state.corte = !state.corte;
+  bCorte.className = state.corte ? 'on' : 'off';
+  bCorte.textContent = state.corte ? 'ON' : 'OFF';
+  applyState();
+});
+const bRot = document.getElementById('bRot');
+bRot.addEventListener('click', () => {
+  state.rot = !state.rot;
+  bRot.className = state.rot ? 'on' : 'off';
+  bRot.textContent = state.rot ? 'ON' : 'OFF';
+});
+
+applyState();                                   // accessGroup oculto (corte=true) antes del horneado
+renderer.shadowMap.needsUpdate = true;          // horneado unico tras construir la escena
+
+// ====== LOOP DE ANIMACION ======
+let fanSpd = 0;                                  // velocidad angular actual (inercia)
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  // Inercia asimetrica: arranque rapido, coast-down lento (voxel/bomba/AHU)
+  const target = WHEEL_SPD[state.fan];
+  const kk = target > fanSpd ? 1.6 : 0.5;
+  fanSpd += (target - fanSpd) * Math.min(1, dt * kk);
+  if (Math.abs(fanSpd - target) < 0.01) fanSpd = target;
+  for (let i = 0; i < wheels.length; i++)
+    wheels[i].rotation.x -= dt * (fanSpd + i * 0.35);   // ligera diferencia por rodete
+
+  controls.autoRotate = state.rot;
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
