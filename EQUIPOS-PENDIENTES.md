@@ -292,7 +292,9 @@ AUTO-ROTATE.
 
 ## 🏨 ARQUITECTURA
 
-- [ ] **13. Edificio torre hotel** → `voxel/edificio-hotel-voxel.html`
+- [ ] **13. Edificio torre hotel (VAV)** → `voxel/hotel-torre-voxel.html`
+  > Corrección cliente (2026-07-05): el sistema del hotel es **VAV** (aire central por ductos),
+  > NO minisplit. Sin condensadoras exteriores, fachadas limpias, sin letrero. Prompt reescrito abajo.
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: la TORRE DE UN
@@ -304,27 +306,33 @@ Partes obligatorias:
 sugerida al interior, arcada/columnas, jardineras.
 — PISOS TIPO (8): ~11 módulos de cuarto por piso en fachada sur (módulo ~4 m); CADA cuarto con
 balcón (losa volada), barandal de cristal con pasamanos de aluminio y puerta corrediza de vidrio
-de 2 hojas. La fachada SUR va LIMPIA (sin equipos colgados).
-— CLIMA POR CUARTO: cada cuarto tiene su MINISPLIT — evaporadora de pared visible en los
-cuartos en corte (unidad alta sobre la cabecera o junto a la puerta del balcón); las
-CONDENSADORAS van en RACKS por piso en la FACHADA NORTE (repisas metálicas con unidades
-pequeñas con rejilla de ventilador — patrón repetido, discreto y realista).
+de 2 hojas. TODAS las fachadas van LIMPIAS (sin equipos colgados, sin condensadoras) — el
+sistema es de AIRE CENTRAL VAV, toda la máquina va adentro o en azotea.
+— CLIMA CENTRAL VAV (aire por ductos, NO minisplit): una UTA/manejadora en azotea trata el aire
+y lo inyecta a un DUCTO TRONCAL VERTICAL que baja por el núcleo; en cada piso salen RAMALES por
+el plafón del pasillo hacia cada cuarto. En cada cuarto: una CAJA VAV (caja rectangular metálica
+en el plafón, con compuerta interna y actuador) sobre el ramal, y un DIFUSOR/rejilla de suministro
+en el plafón + una rejilla de retorno. NADA de unidades de pared, NADA de condensadoras exteriores.
 — CUARTOS EN CORTE: la fachada sur debe poder OCULTARSE por completo (toggle CORTE) revelando
-3-4 cuartos amueblados por piso: cama con cabecera, buró, TV en muro, clóset, puerta de baño,
-minisplit de pared — el resto de cuartos como volúmenes sugeridos.
-— NÚCLEO: pasillo central iluminado, núcleo de 2 elevadores + escalera en el extremo norte.
-— FACHADAS ESTE/OESTE/NORTE: ventanería menor, escalera de emergencia exterior en la norte.
-— AZOTEA: pretil perimetral, cuarto de máquinas de elevadores, bases libres para equipos
-(una UMA y un extractor se colocarán después — dejar zona plana ~10×8 m).
-— Letrero del hotel en el pretil sur ("HOTEL FRENTE AL MAR" en voxeles emisivos).
+3-4 cuartos amueblados por piso: cama con cabecera, buró, TV en muro, clóset, puerta de baño, y en
+el PLAFÓN el ramal de ducto + la caja VAV + el difusor (el equipo de clima del cuarto) — el resto
+de cuartos como volúmenes sugeridos.
+— NÚCLEO: pasillo central iluminado, núcleo de 2 elevadores + escalera, y un SHAFT DE DUCTOS (el
+ducto troncal vertical del VAV) en el extremo norte, visible en corte, subiendo hasta la azotea.
+— FACHADAS ESTE/OESTE/NORTE: ventanería menor, escalera de emergencia exterior en la norte. La
+fachada norte va LIMPIA (ya no lleva racks de condensadoras).
+— AZOTEA: pretil perimetral, cuarto de máquinas de elevadores, la SALIDA del ducto troncal
+(penetración capada donde conecta la UTA), y zona plana ~10×8 m de bases libres para equipos
+(la UTA/manejadora y un extractor se colocan después).
 Dimensión real: ~44 m largo (sur) × 18 m fondo × 30 m alto (PB 4 m + 8 pisos de 3 m + pretil).
 // SCALE: 1 voxel = 0.25 m.
 Colores: cuerpo blanco arena con losas de balcón en blanco puro, barandales de cristal
 azul-verde translúcido con postes aluminio, ventanería vidrio azul, acentos de madera clara
-(marquesina, cenefa), letrero blanco cálido emisivo.
-Leyenda: Fachada / Balcones / Núcleo / Azotea.
-Panel CONTROL DE EQUIPO: CORTE FACHADA ON-OFF (oculta fachada sur y muestra cuartos),
-LUCES NOCHE ON-OFF (ventanas y letrero emisivos), AUTO-ROTATE.
+(marquesina, cenefa); ductos y cajas VAV en gris galvanizado con difusores blancos.
+Leyenda: Fachada / Balcones / Núcleo / Ductos VAV / Azotea.
+Panel CONTROL DE EQUIPO: CORTE FACHADA ON-OFF (oculta fachada sur y muestra cuartos + ductos),
+LUCES NOCHE ON-OFF (ventanas emisivas), AUTO-ROTATE.
+SIN letrero de hotel — no incluir ningún cartel de texto.
 ```
 
 ---
