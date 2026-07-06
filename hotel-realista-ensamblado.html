@@ -33,6 +33,16 @@
 </script>
 </head>
 <body>
+<!-- Modo "clean" (?clean=1): oculta HUD/leyenda/controles para embeber como landing 3D.
+     El panel de VISTAS (#views) permanece visible. El click limpio ya NO abre el
+     dashboard (eso lo hace un boton del contenedor padre): ahora hace zoom-in al
+     equipo clickeado via raycast (ver modulo). -->
+<style>.clean #info,.clean #legend,.clean #ctl,.clean #hud,.clean #ctl2{display:none!important}.clean #views{top:48px!important}</style>
+<script>
+if(new URLSearchParams(location.search).has('clean')){
+  document.documentElement.classList.add('clean');
+}
+</script>
 <div id="info">
   <b>HOTEL REALISTA ENSAMBLADO · Fase 3: edificio + planta + singletons</b><br>
   <span>EDIFICIO TORRE HOTEL (44×18×30 m, frente al mar) &nbsp;+&nbsp; chillers x4 + bombas x6 + torre x1 &nbsp;+&nbsp; caldera+ACS, tanques, intercambiador, filtrado, extractor, UMA-1, calentador alberca (x1 c/u) · merge-by-material LOCAL + InstancedMesh @ posiciones reales del voxel (1 vox = 0.5 m)</span>
@@ -59,6 +69,51 @@
 </div>
 <div id="ctl2" style="position:fixed;left:12px;bottom:34px;font:11px monospace;color:#8fb;opacity:.7">L: forzar LOD edificio (auto / HI / LO)</div>
 
+<!-- Panel VISTAS (blueprint). Visible SIEMPRE, tambien en modo clean. -->
+<style>
+  #views{ position:fixed; top:14px; left:14px; z-index:20; display:flex; gap:6px;
+    background:#f4f1e6; border:1px solid #2a2f3a; padding:7px 8px;
+    font-family:ui-monospace,'JetBrains Mono',Consolas,monospace; box-shadow:0 2px 10px rgba(0,0,0,.25); }
+  #views button{ font:600 10px/1 ui-monospace,'JetBrains Mono',Consolas,monospace;
+    letter-spacing:.12em; text-transform:uppercase; color:#1a2230; background:#fbfaf3;
+    border:1px solid #2a2f3a; padding:7px 9px; cursor:pointer; transition:background .12s,color .12s; }
+  #views button:hover{ background:#1a2230; color:#f4f1e6; }
+  #views button.active{ background:#1a2230; color:#f4f1e6; }
+  /* En modo clean el panel de vistas SI se ve; solo baja el #info bajo el panel en modo normal. */
+  :not(.clean) #info{ top:64px; }
+</style>
+<div id="views">
+  <button data-view="tresq" class="active">3/4</button>
+  <button data-view="planta">Planta</button>
+  <button data-view="mar">Frente al mar</button>
+  <button data-view="general">General</button>
+</div>
+
+<!-- Panel TOGGLES por sistema (blueprint). Visible SIEMPRE, tambien en modo clean. -->
+<style>
+  #sys{ position:fixed; left:14px; bottom:14px; z-index:20; display:flex; flex-wrap:wrap;
+    max-width:280px; gap:6px; background:#f4f1e6; border:1px solid #2a2f3a; padding:8px;
+    font-family:ui-monospace,'JetBrains Mono',Consolas,monospace; box-shadow:0 2px 10px rgba(0,0,0,.25); }
+  #sys .hd{ flex:0 0 100%; font:600 9px/1.2 ui-monospace,Consolas,monospace; letter-spacing:.16em;
+    text-transform:uppercase; color:#5b6472; margin-bottom:1px; }
+  #sys button{ font:600 10px/1 ui-monospace,'JetBrains Mono',Consolas,monospace;
+    letter-spacing:.1em; text-transform:uppercase; color:#8a93a2; background:#fbfaf3;
+    border:1px solid #b9bcc4; padding:7px 9px; cursor:pointer; transition:background .12s,color .12s,border-color .12s; }
+  #sys button:hover{ border-color:#2a2f3a; color:#1a2230; }
+  /* active = sistema VISIBLE / animacion o corte ACTIVO */
+  #sys button.active{ background:#1a2230; color:#f4f1e6; border-color:#1a2230; }
+</style>
+<div id="sys">
+  <div class="hd">Sistemas</div>
+  <button data-sys="chillers" class="active">Chillers</button>
+  <button data-sys="bombas" class="active">Bombas</button>
+  <button data-sys="torre" class="active">Torre</button>
+  <button data-sys="tuberias" class="active">Tuberias</button>
+  <button data-sys="edificio" class="active">Edificio</button>
+  <button data-act="anim" class="active">Animacion</button>
+  <button data-act="corte">Corte</button>
+</div>
+
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -81,8 +136,8 @@ const PLANT = { cx: 10, cz: 14 };
 
 // ====== SCENE / RENDERER ======
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x06080d);
-scene.fog = new THREE.Fog(0x06080d, 55, 210);
+scene.background = new THREE.Color(0x9ec9e8);   // cielo de dia (antes: showroom negro)
+scene.fog = new THREE.Fog(0xc4dced, 95, 340);   // bruma marina clara al horizonte
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 500);
 camera.position.set(98, 52, 60);                 // vista que abarca hotel + yard + alberca
@@ -140,11 +195,59 @@ scene.add(rim);
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.25));
 
-// ====== PISO + GRID ======
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(320, 320),
-  new THREE.MeshStandardMaterial({ color:0x0a0d12, roughness:0.95, metalness:0 })
-);
+// ====== TERRENO RESORT (relieve + biomas por color de vertice) — 1 draw call ======
+// Reemplaza el plano de arena liso ("plano infinito") por un terreno segmentado con:
+//  · desplazamiento procedural suave (dunas de jardin periferico + duna de playa)
+//  · CERO relieve dentro de la zona construida (yard + hotel + alberca): nada flota
+//  · color por vertice = cesped / explanada / arena / arena humeda (sin draws extra)
+const SHORE_Z = 50;                              // linea de costa (donde empieza el agua)
+const _tc = new THREE.Color();
+function _hash(x,z){ const s=Math.sin(x*127.1 + z*311.7)*43758.5453; return s-Math.floor(s); }
+function _vnoise(x,z){
+  const xi=Math.floor(x), zi=Math.floor(z), xf=x-xi, zf=z-zi;
+  const u=xf*xf*(3-2*xf), v=zf*zf*(3-2*zf);
+  const a=_hash(xi,zi), b=_hash(xi+1,zi), c=_hash(xi,zi+1), d=_hash(xi+1,zi+1);
+  return a*(1-u)*(1-v)+b*u*(1-v)+c*(1-u)*v+d*u*v;
+}
+function _fbm(x,z){ let s=0,a=0.5,f=1; for(let i=0;i<4;i++){ s+=a*_vnoise(x*f,z*f); f*=2; a*=0.5; } return s; }
+// Zona construida (world m) donde el relieve se anula para que ningun equipo flote.
+const BUILT = { x0:2, x1:84, z0:-10, z1:40 };
+function _builtMask(x,z){
+  const dx=Math.max(BUILT.x0-x, 0, x-BUILT.x1), dz=Math.max(BUILT.z0-z, 0, z-BUILT.z1);
+  return Math.min(1, Math.hypot(dx,dz)/10);      // 0 dentro, sube a 1 a >=10 m del borde
+}
+function terrainH(x,z){
+  let h = _fbm(x*0.045, z*0.045) * 1.7 * _builtMask(x,z);    // dunas rodantes de jardin
+  if (z>38 && z<SHORE_Z){                                     // duna de playa: se aplana en la orilla
+    const t=(z-38)/(SHORE_Z-38);
+    h += Math.max(0, 0.35 + _fbm(x*0.18, z*0.18)) * (1-t) * 0.85;
+  }
+  return h;
+}
+const _GRASS=new THREE.Color(0x5f8f46), _GRASS2=new THREE.Color(0x77a755),
+      _YARD=new THREE.Color(0xbdb6a4), _SAND=new THREE.Color(0xd8caa4), _WET=new THREE.Color(0xad9a78);
+function terrainColor(x,z){
+  if (z>=46) return _WET;                                     // arena humeda junto al agua
+  if (z>=37) return _SAND;                                    // playa
+  if (x>=4 && x<=64 && z>=-8 && z<=34) return _YARD;          // explanada de planta/hotel
+  return _tc.copy(_GRASS).lerp(_GRASS2, _vnoise(x*0.3, z*0.3)); // cesped con variacion
+}
+const groundGeo = new THREE.PlaneGeometry(320, 320, 200, 200);
+{
+  const pos = groundGeo.attributes.position;
+  const col = new Float32Array(pos.count*3);
+  for (let i=0;i<pos.count;i++){
+    const wx =  pos.getX(i) + PLANT.cx;
+    const wz = -pos.getY(i) + PLANT.cz;                       // plano rotado -90deg: localY -> world -Z
+    pos.setZ(i, terrainH(wx, wz));                            // localZ -> world +Y
+    const c = terrainColor(wx, wz);
+    col[i*3]=c.r; col[i*3+1]=c.g; col[i*3+2]=c.b;
+  }
+  groundGeo.setAttribute('color', new THREE.BufferAttribute(col,3));
+  groundGeo.computeVertexNormals();
+}
+const ground = new THREE.Mesh(groundGeo,
+  new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.97, metalness:0 }));
 ground.rotation.x = -Math.PI/2;
 ground.position.set(PLANT.cx, 0, PLANT.cz);
 ground.receiveShadow = true;
@@ -152,9 +255,61 @@ scene.add(ground);
 
 const grid = new THREE.GridHelper(140, 140, 0x123f35, 0x0c1d1a);
 grid.position.set(PLANT.cx, 0.002, PLANT.cz);
-grid.material.transparent = true;
-grid.material.opacity = 0.35;
+grid.material.transparent = true; grid.material.opacity = 0.35; grid.visible = false;
 scene.add(grid);
+
+// Orilla (arena humeda) — banda fina entre playa y agua.
+const shore = new THREE.Mesh(
+  new THREE.PlaneGeometry(900, 14),
+  new THREE.MeshStandardMaterial({ color:0xad9a78, roughness:0.85, metalness:0 })
+);
+shore.rotation.x=-Math.PI/2; shore.position.set(55, 0.04, SHORE_Z-6); shore.receiveShadow=true; scene.add(shore);
+
+// ====== MAR ANIMADO (olas GPU via onBeforeCompile) — "el mar bien" ======
+// Parche cercano frente a la playa: olas reales por vertice (suma de senos) + normal
+// analitica -> responde a luz y reflejo IBL. GPU-side: 0 costo CPU, 1 draw call.
+// Mas alla, un plano liso empujado al horizonte (se funde con la bruma del fog).
+const seaUniforms = { uTime: { value: 0 } };
+const seaMat = new THREE.MeshStandardMaterial({ color:0x1f6f9e, roughness:0.30, metalness:0.35 });
+seaMat.onBeforeCompile = (sh) => {
+  sh.uniforms.uTime = seaUniforms.uTime;
+  sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader
+    .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+      float A1=0.16,A2=0.11,A3=0.07, k1=0.15,k2=0.22,k3=0.09;
+      float px=position.x, py=position.y;
+      float ph = A1*sin(px*k1+uTime*1.30)+A2*sin(py*k2+uTime*0.90)+A3*sin((px+py)*k3-uTime*1.70);
+      float dhx= A1*k1*cos(px*k1+uTime*1.30)+A3*k3*cos((px+py)*k3-uTime*1.70);
+      float dhy= A2*k2*cos(py*k2+uTime*0.90)+A3*k3*cos((px+py)*k3-uTime*1.70);
+      objectNormal = normalize(vec3(-dhx,-dhy,1.0));`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+      transformed.z += ph;`);
+};
+// Malla ligera: las olas son de baja frecuencia, ~96x56 basta para muestrearlas
+// sin aliasing (la animacion es 100% GPU, 0 costo CPU). Recursos minimos.
+const sea = new THREE.Mesh(new THREE.PlaneGeometry(560, 320, 96, 56), seaMat);
+sea.rotation.x=-Math.PI/2; sea.position.set(55, 0.05, SHORE_Z+150); sea.receiveShadow=false; scene.add(sea);
+const seaFar = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000),
+  new THREE.MeshStandardMaterial({ color:0x1a6690, roughness:0.22, metalness:0.3 }));
+seaFar.rotation.x=-Math.PI/2; seaFar.position.set(55, -0.5, SHORE_Z+2000); scene.add(seaFar);
+
+// ====== CIELO (degradado como scene.background — plano, sin fog/clipping, barato) ======
+const _skyCan = document.createElement('canvas'); _skyCan.width=8; _skyCan.height=256;
+{
+  const c2=_skyCan.getContext('2d'); const g=c2.createLinearGradient(0,0,0,256);
+  g.addColorStop(0.0,'#2f6fb0'); g.addColorStop(0.5,'#8fc0e6'); g.addColorStop(0.85,'#dcecf4'); g.addColorStop(1.0,'#eef4ee');
+  c2.fillStyle=g; c2.fillRect(0,0,8,256);
+}
+const _skyTex=new THREE.CanvasTexture(_skyCan); _skyTex.colorSpace=THREE.SRGBColorSpace;
+scene.background = _skyTex;                       // degradado de cielo (antes: color plano)
+// Disco solar (sprite) alineado con la luz principal, dentro del far-plane.
+const _sunCan=document.createElement('canvas'); _sunCan.width=_sunCan.height=128;
+{
+  const c2=_sunCan.getContext('2d'); const g=c2.createRadialGradient(64,64,4,64,64,64);
+  g.addColorStop(0,'rgba(255,250,232,1)'); g.addColorStop(0.28,'rgba(255,242,205,0.92)'); g.addColorStop(1,'rgba(255,232,185,0)');
+  c2.fillStyle=g; c2.fillRect(0,0,128,128);
+}
+const sunSpr=new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(_sunCan), fog:false, depthWrite:false, transparent:true }));
+sunSpr.scale.set(64,64,1); sunSpr.position.copy(sun.position).multiplyScalar(4); scene.add(sunSpr);
 
 // ==================================================================
 // AGGRESSIVE LOCAL-SPACE MERGE (verbatim del harness assembly-poc)
@@ -212,9 +367,12 @@ function aggressiveMergeLocal(rootGroup){
 // ASSEMBLE: build ONE unit -> merge LOCAL -> InstancedMesh @ N placements
 // ==================================================================
 const _im = new THREE.Matrix4();
-function assemble(unitRoot, places, label){
+// SYS: registro de los InstancedMesh por sistema, para toggles ON/OFF.
+const SYS = { chillers: [], bombas: [], torre: [], tuberias: [], edificio: [] };
+function assemble(unitRoot, places, label, sysKey){
   const buckets = aggressiveMergeLocal(unitRoot);
   let draws = 0, transp = 0, tris = 0;
+  const ims = [];
   for (const bucket of buckets){
     const im = new THREE.InstancedMesh(bucket.geometry, bucket.material, places.length);
     places.forEach((p, i) => {
@@ -228,11 +386,35 @@ function assemble(unitRoot, places, label){
     im.receiveShadow = !bucket.transparent;
     im.frustumCulled = false;                           // las N copias comparten geometria local
     scene.add(im);
+    ims.push(im);
+    if (sysKey && SYS[sysKey]) SYS[sysKey].push(im);    // ref para el toggle del sistema
     draws++; if (bucket.transparent) transp++;
     tris += (bucket.geometry.getAttribute('position').count / 3) * places.length;
   }
   console.log(`[${label}] buckets=${buckets.length} (transp=${transp}) · places=${places.length} · draws=${draws} · tris=${Math.round(tris).toLocaleString()}`);
-  return { draws, transp, tris };
+  return { draws, transp, tris, ims };
+}
+
+// ==================================================================
+// LOD DE EQUIPO INSTANCIADO (gap G41, B40 §40.2). THREE.LOD NO sirve para
+// InstancedMesh disperso: un solo origen no puede dar nivel por-copia. Patron
+// manual: DOS sets de InstancedMesh (buildFn('hi') / buildFn('lo')) en las
+// MISMAS places, conmutados por distancia de camara al CENTRO DEL CLUSTER en
+// el loop. El estado inicial se fija AQUI (antes del bake de sombras) para que
+// no horneen ambos niveles. (Las sombras horneadas no se re-hornean al togglear
+// hi/lo: aceptable — la silueta lo/hi es casi identica a >60 m.)
+// ==================================================================
+const EQUIP_LODS = [];
+const EQUIP_LOD_DIST = 60;                           // m: umbral near->far del cluster (calibrado)
+function assembleLOD(buildFn, places, label, sysKey, center){
+  const rHi = assemble(buildFn('hi'), places, label + ' HI');
+  const rLo = assemble(buildFn('lo'), places, label + ' LO');
+  const c = new THREE.Vector3(center.x, center.y || 0, center.z);
+  const far = camera.position.distanceTo(c) > EQUIP_LOD_DIST;   // estado inicial (pre-bake)
+  rHi.ims.forEach(m => { m.visible = !far; });
+  rLo.ims.forEach(m => { m.visible = far; });
+  EQUIP_LODS.push({ imHi: rHi.ims, imLo: rLo.ims, center: c, sysKey, on: true });
+  return { draws: rHi.draws, transp: rHi.transp, tris: rHi.tris };   // reporta el nivel HI (near)
 }
 
 // ==================================================================
@@ -252,9 +434,9 @@ const TOWER_PLACES = [
   { x: 2.2, z: 6.2 },
 ];
 
-const rC = assemble(buildChiller(), CHILLER_PLACES, 'CHILLERS x4');
-const rP = assemble(buildPump(),    PUMP_PLACES,    'PUMPS x6');
-const rT = assemble(buildTower(),   TOWER_PLACES,   'TOWER x1');
+const rC = assembleLOD(buildChiller, CHILLER_PLACES, 'CHILLERS x4', 'chillers', { x: 15.0,  z: 14.6 });
+const rP = assembleLOD(buildPump,    PUMP_PLACES,    'PUMPS x6',    'bombas',   { x: 16.7,  z: 15.7 });
+const rT = assemble(buildTower(),   TOWER_PLACES,   'TOWER x1',    'torre');
 
 // ==================================================================
 // FASE 2 — EQUIPO MECANICO SINGLETON (colocado 1 vez c/u)
@@ -307,6 +489,7 @@ edLOD.addLevel(edLo, EDIF_LOD_DIST);
 edLOD.rotation.y = Math.PI;
 edLOD.position.set(55, 0, 3);
 scene.add(edLOD);
+SYS.edificio.push(edLOD);                        // ref para el toggle EDIFICIO
 
 // DEMO: forzar nivel con la tecla L (auto -> HI -> LO) para capturar el antes/despues
 // sin alejar la camara. En 'auto' manda la distancia; forzado desactiva autoUpdate.
@@ -332,6 +515,189 @@ const totalDraws = equipDraws + 2; // +ground +grid
 const totalTris  = Math.round(equipTris);
 console.log(`[HOTEL FASE 2] draws equipo=${equipDraws} · +piso+grid=${totalDraws} · tris=${totalTris.toLocaleString()}`);
 
+// ==================================================================
+// TUBERIAS DE INTERCONEXION — 2 circuitos hidraulicos (como el voxel maestro,
+// bloque "water distribution: header + nozzle drops"). Cada circuito = header
+// horizontal corriendo en Z + drops verticales (codos) a cada equipo. Cada
+// circuito se FUSIONA en UNA sola geometria (mergeGeometries) -> 1 draw por
+// tubo. Registrados en SYS.tuberias para el toggle.
+//   - CW  (condensados, rojo-naranja 0xc0563a): TORRE -> bombas condensados -> chillers
+//   - CHW (agua helada, azul 0x2f6fae, supply+return): chillers -> bombas primarias -> edificio
+// ==================================================================
+{
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const _up = new THREE.Vector3(0, 1, 0);
+  // Cilindro recto entre dos puntos world (eje Y del CylinderGeometry orientado a la direccion).
+  function seg(p0, p1, r, rad = 12){
+    const dir = new THREE.Vector3().subVectors(p1, p0);
+    const len = dir.length();
+    if (len < 1e-4) return null;
+    const g = new THREE.CylinderGeometry(r, r, len, rad, 1);
+    const q = new THREE.Quaternion().setFromUnitVectors(_up, dir.clone().normalize());
+    const mid = new THREE.Vector3().addVectors(p0, p1).multiplyScalar(0.5);
+    g.applyMatrix4(new THREE.Matrix4().compose(mid, q, new THREE.Vector3(1, 1, 1)));
+    return g;
+  }
+  // Esfera en un codo/union (suaviza el quiebre).
+  function joint(p, r){ const g = new THREE.SphereGeometry(r, 12, 8); g.translate(p.x, p.y, p.z); return g; }
+
+  const CHZ = [4.1, 11.1, 18.1, 25.1];   // z de los 4 chillers (x=15)
+  const CDZ = [24.7, 6.7, 15.7];         // z de las 3 bombas de condensados (x=11.45)
+  const PPZ = [24.7, 6.7, 15.7];         // z de las 3 bombas primarias (x=21.95)
+
+  // ---- CIRCUITO CONDENSADOS (rojo) — header en x=13.2, y=1.6 ----
+  const red = [];
+  const yR = 1.6, rR = 0.13, xRH = 13.2;
+  red.push(seg(V(xRH, yR, 3.4), V(xRH, yR, 26.2), rR));              // header principal (corre en Z)
+  // ramal a la TORRE (x=2.2, z=6.2): sale del header, corre en -x, y baja al basin
+  red.push(seg(V(xRH, yR, 6.2), V(3.1, yR, 6.2), rR));
+  red.push(seg(V(3.1, yR, 6.2), V(3.1, 0.55, 6.2), rR));
+  red.push(joint(V(xRH, yR, 6.2), rR * 1.5));
+  red.push(joint(V(3.1, yR, 6.2), rR * 1.5));
+  CHZ.forEach(z => {                                                 // drops a cada chiller (x=15)
+    red.push(seg(V(xRH, yR, z), V(15.0, yR, z), rR));
+    red.push(seg(V(15.0, yR, z), V(15.0, 0.9, z), rR));
+    red.push(joint(V(xRH, yR, z), rR * 1.45));
+    red.push(joint(V(15.0, yR, z), rR * 1.45));
+  });
+  CDZ.forEach(z => {                                                 // drops a cada bomba condensados (x=11.45)
+    red.push(seg(V(xRH, yR, z), V(11.45, yR, z), rR));
+    red.push(seg(V(11.45, yR, z), V(11.45, 0.85, z), rR));
+    red.push(joint(V(xRH, yR, z), rR * 1.45));
+    red.push(joint(V(11.45, yR, z), rR * 1.45));
+  });
+
+  // ---- CIRCUITO AGUA HELADA (azul) — supply x=18.3 / return x=18.7, y=1.2 ----
+  const blueS = [], blueR = [];
+  const yC = 1.2, rC = 0.11, xS = 18.3, xR = 18.7;
+  blueS.push(seg(V(xS, yC, 3.0), V(xS, yC, 26.2), rC));             // header supply
+  blueR.push(seg(V(xR, yC, 3.0), V(xR, yC, 26.2), rC));             // header return
+  CHZ.forEach(z => {                                                // a cada chiller (evaporador, x=15)
+    blueS.push(seg(V(xS, yC, z - 0.32), V(15.0, yC, z - 0.32), rC));
+    blueS.push(seg(V(15.0, yC, z - 0.32), V(15.0, 0.62, z - 0.32), rC));
+    blueR.push(seg(V(xR, yC, z + 0.32), V(15.0, yC, z + 0.32), rC));
+    blueR.push(seg(V(15.0, yC, z + 0.32), V(15.0, 0.62, z + 0.32), rC));
+    blueS.push(joint(V(15.0, yC, z - 0.32), rC * 1.5));
+    blueR.push(joint(V(15.0, yC, z + 0.32), rC * 1.5));
+  });
+  PPZ.forEach(z => {                                                // a cada bomba primaria (x=21.95)
+    blueS.push(seg(V(xS, yC, z - 0.3), V(21.95, yC, z - 0.3), rC));
+    blueS.push(seg(V(21.95, yC, z - 0.3), V(21.95, 0.85, z - 0.3), rC));
+    blueR.push(seg(V(xR, yC, z + 0.3), V(21.95, yC, z + 0.3), rC));
+    blueR.push(seg(V(21.95, yC, z + 0.3), V(21.95, 0.85, z + 0.3), rC));
+    blueS.push(joint(V(21.95, yC, z - 0.3), rC * 1.5));
+    blueR.push(joint(V(21.95, yC, z + 0.3), rC * 1.5));
+  });
+  // corrida hacia el EDIFICIO (cuarto de maquinas ~x=40, z=3): supply+return en +x
+  blueS.push(seg(V(xS, yC, 3.0), V(39.0, yC, 2.7), rC));
+  blueR.push(seg(V(xR, yC, 3.0), V(39.0, yC, 3.3), rC));
+  blueS.push(seg(V(39.0, yC, 2.7), V(39.0, 0.9, 2.7), rC));         // riser en el edificio
+  blueR.push(seg(V(39.0, yC, 3.3), V(39.0, 0.9, 3.3), rC));
+  blueS.push(joint(V(39.0, yC, 2.7), rC * 1.5));
+  blueR.push(joint(V(39.0, yC, 3.3), rC * 1.5));
+
+  function mkPipe(geos, color, metal, rough){
+    const merged = BufferGeometryUtils.mergeGeometries(geos.filter(Boolean), false);
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
+    const m = new THREE.Mesh(merged, mat);
+    m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false;
+    scene.add(m); SYS.tuberias.push(m);
+    return merged.getAttribute('position').count / 3;
+  }
+  const tRed = mkPipe(red,   0xc0563a, 0.35, 0.55);
+  const tBlS = mkPipe(blueS, 0x3f86c8, 0.35, 0.5);    // supply (azul claro)
+  const tBlR = mkPipe(blueR, 0x2f6fae, 0.35, 0.5);    // return (azul)
+  console.log(`[TUBERIAS] draws=3 (CW + CHW supply + CHW return) · tris=${Math.round(tRed + tBlS + tBlR).toLocaleString()}`);
+}
+
+// ==================================================================
+// ANIMACION — elementos SEPARADOS (no mergeados) encima de los equipos.
+// La torre y las bombas quedaron fusionadas por aggressiveMergeLocal, asi que
+// no se pueden animar sus partes internas: agregamos aspas (torre) y un rotor
+// (cada bomba) sueltos, colocados en TOWER_PLACES / PUMP_PLACES, y los giramos
+// en el loop. Geometria simple + InstancedMesh para mantener el costo bajo.
+// ==================================================================
+const spinners = { fans: [], pumps: [] };
+let ANIM_ON = true;
+{
+  // -- Aspas de la torre (4 celdas del builder: FC local). Giran en Y.
+  const FAN_CELLS = [[-2.8, -1.52], [-2.8, 1.52], [2.8, -1.52], [2.8, 1.52]];
+  const HUB_Y = 10.52;                                // y del hub del ventilador (local del builder)
+  const bladeGeo = new THREE.BoxGeometry(1.15, 0.05, 0.34);
+  bladeGeo.translate(0.72, 0, 0);                     // pivote en el centro del hub
+  const bladeMat = new THREE.MeshStandardMaterial({ color:0x2b2e33, roughness:0.5, metalness:0.2 });
+  const hubGeo = new THREE.CylinderGeometry(0.16, 0.19, 0.16, 16);
+  const hubMat = new THREE.MeshStandardMaterial({ color:0xf2c14e, roughness:0.5, metalness:0.3 });
+  const _fm = new THREE.Matrix4(), _fs = new THREE.Vector3(1, 1, 1), _fq = new THREE.Quaternion();
+  TOWER_PLACES.forEach(tp => {
+    FAN_CELLS.forEach(([fx, fz]) => {
+      const g = new THREE.Group();
+      g.position.set(tp.x + fx, HUB_Y, tp.z + fz);
+      const hub = new THREE.Mesh(hubGeo, hubMat); hub.castShadow = false; g.add(hub);
+      const blIM = new THREE.InstancedMesh(bladeGeo, bladeMat, 6);
+      for (let i = 0; i < 6; i++){
+        _fq.setFromEuler(new THREE.Euler(0, i / 6 * Math.PI * 2, 0.45, 'YXZ'));
+        _fm.compose(new THREE.Vector3(0, 0, 0), _fq, _fs);
+        blIM.setMatrixAt(i, _fm);
+      }
+      blIM.castShadow = false; blIM.frustumCulled = false;
+      g.add(blIM);
+      scene.add(g);
+      spinners.fans.push(g);
+    });
+  });
+  // -- Rotor de cada bomba (eje del acoplamiento, CY=0.35). Gira en X.
+  const CY = 0.35;
+  const rotorMat = new THREE.MeshStandardMaterial({ color:0xff2233, emissive:0xff2233,
+    emissiveIntensity:0.5, roughness:0.4, metalness:0.2 });
+  const discGeo = new THREE.CylinderGeometry(0.058, 0.058, 0.06, 18); discGeo.rotateZ(Math.PI / 2);
+  const keyGeo = new THREE.BoxGeometry(0.11, 0.02, 0.13);   // paleta radial: hace visible el giro
+  PUMP_PLACES.forEach(pp => {
+    const g = new THREE.Group();
+    g.position.set(pp.x, CY, pp.z);
+    const disc = new THREE.Mesh(discGeo, rotorMat); disc.castShadow = false; g.add(disc);
+    const key = new THREE.Mesh(keyGeo, rotorMat); key.position.y = 0.06; key.castShadow = false; g.add(key);
+    scene.add(g);
+    spinners.pumps.push(g);
+  });
+}
+
+// ==================================================================
+// TOGGLES por sistema + ANIMACION + CORTE.
+// ==================================================================
+function toggleSys(key){
+  const lod = EQUIP_LODS.find(e => e.sysKey === key);
+  if (lod){ lod.on = !lod.on; return lod.on; }   // el loop LOD aplica hi/lo por distancia
+  const arr = SYS[key]; if (!arr || !arr.length) return true;
+  const next = !arr.some(o => o.visible);
+  arr.forEach(o => { o.visible = next; });
+  return next;
+}
+function toggleAnim(){
+  ANIM_ON = !ANIM_ON;
+  spinners.fans.forEach(g => { g.visible = ANIM_ON; });
+  spinners.pumps.forEach(g => { g.visible = ANIM_ON; });
+  return ANIM_ON;
+}
+let CORTE_ON = false;
+function toggleCorte(){
+  CORTE_ON = !CORTE_ON;
+  const fg = edHi.userData.facadeGroup;
+  if (CORTE_ON){ edLodMode = 'hi'; applyEdLod(); }   // forzar HI para revelar los cuartos
+  if (fg) fg.visible = !CORTE_ON;
+  return CORTE_ON;
+}
+document.querySelectorAll('#sys button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const key = btn.dataset.sys, act = btn.dataset.act;
+    let on;
+    if (key) on = toggleSys(key);
+    else if (act === 'anim') on = toggleAnim();
+    else if (act === 'corte') on = toggleCorte();
+    btn.classList.toggle('active', !!on);
+  });
+});
+
 // ====== HORNEADO DE SOMBRAS (una sola pasada) ======
 renderer.shadowMap.needsUpdate = true;
 
@@ -339,15 +705,102 @@ renderer.shadowMap.needsUpdate = true;
 const drawN = document.getElementById('drawN');
 const triN  = document.getElementById('triN');
 const lodN  = document.getElementById('lodN');
+// ==================================================================
+// MOTOR flyTo — anima camera.position + controls.target con easeInOutCubic.
+// Desactiva autoRotate al iniciar; el loop lerpea por frame y respeta el
+// controls.update() existente (damping/clamp). Al terminar el vuelo, quien lo
+// llamo decide si reactiva autoRotate (los presets lo dejan apagado).
+// ==================================================================
+const flight = {
+  active:false, t:0, dur:900,
+  p0:new THREE.Vector3(), p1:new THREE.Vector3(),
+  g0:new THREE.Vector3(), g1:new THREE.Vector3(),
+};
+function easeInOutCubic(x){ return x < 0.5 ? 4*x*x*x : 1 - Math.pow(-2*x+2,3)/2; }
+function flyTo(pos, tgt, dur=900){
+  controls.autoRotate = false;                    // el vuelo manda: sin auto-giro
+  flight.active = true; flight.t = 0; flight.dur = Math.max(1, dur);
+  flight.p0.copy(camera.position);   flight.p1.copy(pos);
+  flight.g0.copy(controls.target);   flight.g1.copy(tgt);
+}
+let _lastT = performance.now();
+function updateFlight(now){
+  if (!flight.active) return;
+  flight.t += (now - _lastT);
+  const k = easeInOutCubic(Math.min(1, flight.t / flight.dur));
+  camera.position.lerpVectors(flight.p0, flight.p1, k);
+  controls.target.lerpVectors(flight.g0, flight.g1, k);
+  if (flight.t >= flight.dur) flight.active = false;
+}
+
+// ====== PRESETS DE VISTA (afinados con las coords world del hotel) ======
+const VIEWS = {
+  tresq:   { pos:[98,52,60],  tgt:[48,11,6] },     // 3/4 general (vista por defecto)
+  planta:  { pos:[55,135,24], tgt:[55,6,4]  },     // cenital sobre el centro del hotel
+  mar:     { pos:[55,21,96],  tgt:[55,13,6] },     // desde el mar (+Z) mirando la fachada heroe
+  general: { pos:[98,52,60],  tgt:[48,11,6] },     // reset a 3/4
+};
+const viewBtns = Array.from(document.querySelectorAll('#views button'));
+function goView(name){
+  const v = VIEWS[name]; if (!v) return;
+  flyTo(new THREE.Vector3(...v.pos), new THREE.Vector3(...v.tgt), 950);
+  viewBtns.forEach(b => b.classList.toggle('active', b.dataset.view === name));
+}
+viewBtns.forEach(b => b.addEventListener('click', () => goView(b.dataset.view)));
+
+// ====== CLICK EN EQUIPO -> ZOOM (raycast). Reemplaza el postMessage del modo clean.
+// Un click limpio (sin arrastre) vuela la camara a ~12 m del punto clickeado.
+// Doble-click o el boton GENERAL alejan de vuelta a la 3/4.
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+let _dx=0, _dy=0, _down=false;
+renderer.domElement.addEventListener('pointerdown', e => { _dx=e.clientX; _dy=e.clientY; _down=true; });
+renderer.domElement.addEventListener('pointerup', e => {
+  const moved = Math.hypot(e.clientX-_dx, e.clientY-_dy) >= 5;
+  const wasDown = _down; _down = false;
+  if (!wasDown || moved) return;                   // fue un drag: no hacer zoom
+  ndc.x =  (e.clientX / window.innerWidth)  * 2 - 1;
+  ndc.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  ray.setFromCamera(ndc, camera);
+  const hits = ray.intersectObjects(scene.children, true)
+    .filter(h => h.object !== sea && h.object !== seaFar && h.object !== shore && h.object !== sunSpr);
+  if (!hits.length) return;
+  const p = hits[0].point;
+  const dir = camera.position.clone().sub(p).normalize();
+  const newPos = p.clone().addScaledVector(dir, 12);   // camara a ~12 m del punto
+  if (newPos.y < 2) newPos.y = 2;                       // no bajar del piso
+  flyTo(newPos, p.clone(), 800);
+  viewBtns.forEach(b => b.classList.remove('active'));
+});
+renderer.domElement.addEventListener('dblclick', () => goView('general'));
+
 function animate(){
   requestAnimationFrame(animate);
+  const now = performance.now();
+  updateFlight(now);
+  _lastT = now;
   controls.update();
+  seaUniforms.uTime.value = now * 0.0011;          // olas del mar (GPU)
+  if (ANIM_ON){
+    for (let i = 0; i < spinners.fans.length; i++)  spinners.fans[i].rotation.y  += 0.16;
+    for (let i = 0; i < spinners.pumps.length; i++) spinners.pumps[i].rotation.x += 0.34;
+  }
+  // LOD de equipo instanciado (G41): conmuta hi/lo por distancia al centro del cluster.
+  for (let i = 0; i < EQUIP_LODS.length; i++){
+    const e = EQUIP_LODS[i];
+    const far = camera.position.distanceTo(e.center) > EQUIP_LOD_DIST;
+    const showHi = e.on && !far, showLo = e.on && far;
+    for (let k = 0; k < e.imHi.length; k++) e.imHi[k].visible = showHi;
+    for (let k = 0; k < e.imLo.length; k++) e.imLo[k].visible = showLo;
+  }
   renderer.render(scene, camera);                 // aqui el renderer corre edLOD.update(camera)
   drawN.textContent = renderer.info.render.calls;
   triN.textContent  = renderer.info.render.triangles.toLocaleString();
   lodN.textContent  = (edHi.visible ? 'HI' : 'LO') + ' · ' + edLodMode;
 }
 animate();
+// Hook de depuracion/medicion (inofensivo): permite mover la camara y leer el LOD de equipo.
+window.__hotel = { camera, controls, EQUIP_LODS, EQUIP_LOD_DIST };
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -362,7 +815,8 @@ window.addEventListener('resize', () => {
 
 // ================= CHILLER DE TORNILLO (agua) ==================
 // Envolvente 4.5 (X) x 1.8 (Z) x 2.2 (Y) m. Barriles en Z=0, unidad centrada en X=0.
-function buildChiller(){
+function buildChiller(detail = 'hi'){
+  const hi = detail === 'hi';              // 'lo': cilindros de bajo seg + sin detalle fino (LOD lejano)
   const chillerRoot = new THREE.Group();
   const staticG = new THREE.Group();       // partes estaticas
   const compG = new THREE.Group();         // ensamble compresor+motor (rigido)
@@ -468,14 +922,17 @@ function buildChiller(){
     return m;
   }
   function cylX(r, len, mat, x, y, z, seg = 24, parent = staticG){
+    if (!hi) seg = Math.min(seg, 8);       // LOD lejano: octagonal
     const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
     m.rotation.z = Math.PI / 2;
     return m;
   }
   function cylY(r, len, mat, x, y, z, seg = 24, parent = staticG){
+    if (!hi) seg = Math.min(seg, 8);
     return mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
   }
   function cylZ(r, len, mat, x, y, z, seg = 24, parent = staticG){
+    if (!hi) seg = Math.min(seg, 8);
     const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
     m.rotation.x = Math.PI / 2;
     return m;
@@ -494,6 +951,7 @@ function buildChiller(){
     return mesh(g, mat, x, y, z, parent);
   }
   function dishedHead(R, depth, mat, x, y, z, sign = 1, seg = 32, parent = staticG){
+    if (!hi) seg = Math.min(seg, 8);
     const pts = [];
     for (let i = 0; i <= 10; i++){
       const a = i / 10 * Math.PI / 2;
@@ -519,7 +977,8 @@ function buildChiller(){
     }
     path.add(new THREE.LineCurve3(prev, P[P.length - 1]));
     const len = path.getLength();
-    const g = new THREE.TubeGeometry(path, Math.max(16, Math.round(len * 22)), r, seg);
+    const tub = hi ? Math.max(16, Math.round(len * 22)) : Math.max(6, Math.round(len * 8));
+    const g = new THREE.TubeGeometry(path, tub, r, hi ? seg : Math.min(seg, 6));
     return mesh(g, mat, 0, 0, 0, parent);
   }
 
@@ -605,15 +1064,17 @@ function buildChiller(){
   // ---- EVAPORADOR
   {
     cylX(EV.r, EV.half * 2, M.GREEN, 0, EV.cy, 0, 32);
-    const weldGeo = new THREE.TorusGeometry(EV.r + 0.003, 0.011, 8, 40);
-    const weldIM = new THREE.InstancedMesh(weldGeo, M.GREEN_D, 5);
-    const wq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI/2, 0));
-    [-1.2, -0.5, 0.2, 0.9, 1.6].forEach((wx, i) => {
-      _bm.compose(new THREE.Vector3(wx, EV.cy, 0), wq, _bs);
-      weldIM.setMatrixAt(i, _bm);
-    });
-    weldIM.castShadow = weldIM.receiveShadow = true;
-    staticG.add(weldIM);
+    if (hi){
+      const weldGeo = new THREE.TorusGeometry(EV.r + 0.003, 0.011, 8, 40);
+      const weldIM = new THREE.InstancedMesh(weldGeo, M.GREEN_D, 5);
+      const wq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI/2, 0));
+      [-1.2, -0.5, 0.2, 0.9, 1.6].forEach((wx, i) => {
+        _bm.compose(new THREE.Vector3(wx, EV.cy, 0), wq, _bs);
+        weldIM.setMatrixAt(i, _bm);
+      });
+      weldIM.castShadow = weldIM.receiveShadow = true;
+      staticG.add(weldIM);
+    }
     for (const sgn of [-1, 1]){
       flangeX(EV.r + 0.07, 0.09, sgn * (EV.half + 0.045), EV.cy, 0, 16, EV.r + 0.035);
       cylX(EV.r - 0.015, 0.16, M.GREEN, sgn * (EV.half + 0.17), EV.cy, 0, 32);
@@ -625,15 +1086,17 @@ function buildChiller(){
   // ---- CONDENSADOR
   {
     cylX(CO.r, CO.half * 2, M.GREEN, 0, CO.cy, 0, 32);
-    const weldGeo = new THREE.TorusGeometry(CO.r + 0.003, 0.011, 8, 40);
-    const weldIM = new THREE.InstancedMesh(weldGeo, M.GREEN_D, 4);
-    const wq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI/2, 0));
-    [-1.0, -0.2, 0.6, 1.1].forEach((wx, i) => {
-      _bm.compose(new THREE.Vector3(wx, CO.cy, 0), wq, _bs);
-      weldIM.setMatrixAt(i, _bm);
-    });
-    weldIM.castShadow = weldIM.receiveShadow = true;
-    staticG.add(weldIM);
+    if (hi){
+      const weldGeo = new THREE.TorusGeometry(CO.r + 0.003, 0.011, 8, 40);
+      const weldIM = new THREE.InstancedMesh(weldGeo, M.GREEN_D, 4);
+      const wq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI/2, 0));
+      [-1.0, -0.2, 0.6, 1.1].forEach((wx, i) => {
+        _bm.compose(new THREE.Vector3(wx, CO.cy, 0), wq, _bs);
+        weldIM.setMatrixAt(i, _bm);
+      });
+      weldIM.castShadow = weldIM.receiveShadow = true;
+      staticG.add(weldIM);
+    }
     for (const sgn of [-1, 1]){
       flangeX(CO.r + 0.07, 0.09, sgn * (CO.half + 0.045), CO.cy, 0, 14, CO.r + 0.035);
       cylX(CO.r - 0.015, 0.14, M.GREEN, sgn * (CO.half + 0.16), CO.cy, 0, 32);
@@ -679,15 +1142,17 @@ function buildChiller(){
   // ---- ENSAMBLE COMPRESOR DE TORNILLO + MOTOR (compG)
   {
     cylX(0.29, 1.15, M.STEEL_D, -1.075, CP.cy, CP.cz, 28, compG);
-    const finGeo = new THREE.TorusGeometry(0.3, 0.008, 6, 36);
-    const finIM = new THREE.InstancedMesh(finGeo, M.STEEL_D, 16);
-    const fq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI/2, 0));
-    for (let i = 0; i < 16; i++){
-      _bm.compose(new THREE.Vector3(-1.55 + i * 0.06, CP.cy, CP.cz), fq, _bs);
-      finIM.setMatrixAt(i, _bm);
+    if (hi){
+      const finGeo = new THREE.TorusGeometry(0.3, 0.008, 6, 36);
+      const finIM = new THREE.InstancedMesh(finGeo, M.STEEL_D, 16);
+      const fq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI/2, 0));
+      for (let i = 0; i < 16; i++){
+        _bm.compose(new THREE.Vector3(-1.55 + i * 0.06, CP.cy, CP.cz), fq, _bs);
+        finIM.setMatrixAt(i, _bm);
+      }
+      finIM.castShadow = false; finIM.receiveShadow = true;
+      compG.add(finIM);
     }
-    finIM.castShadow = false; finIM.receiveShadow = true;
-    compG.add(finIM);
     dishedHead(0.26, 0.12, M.STEEL_D, -1.66, CP.cy, CP.cz, -1, 28, compG);
     const gr = cylX(0.16, 0.02, M.GRILLE, -1.755, CP.cy, CP.cz, 20, compG);
     gr.castShadow = false;
@@ -725,15 +1190,17 @@ function buildChiller(){
     pts.push(new THREE.Vector2(0.0001, 1.6));
     const body = mesh(new THREE.LatheGeometry(pts, 30), M.STEEL, -0.12, CP.cy, CP.cz, compG);
     body.rotation.z = -Math.PI / 2;
-    const ribGeo = new THREE.TorusGeometry(0.256, 0.014, 8, 32);
-    const ribIM = new THREE.InstancedMesh(ribGeo, M.STEEL_D, 3);
-    const rq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI/2, 0));
-    [0.28, 0.68, 1.08].forEach((rx, i) => {
-      _bm.compose(new THREE.Vector3(rx, CP.cy, CP.cz), rq, _bs);
-      ribIM.setMatrixAt(i, _bm);
-    });
-    ribIM.castShadow = false; ribIM.receiveShadow = true;
-    compG.add(ribIM);
+    if (hi){
+      const ribGeo = new THREE.TorusGeometry(0.256, 0.014, 8, 32);
+      const ribIM = new THREE.InstancedMesh(ribGeo, M.STEEL_D, 3);
+      const rq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI/2, 0));
+      [0.28, 0.68, 1.08].forEach((rx, i) => {
+        _bm.compose(new THREE.Vector3(rx, CP.cy, CP.cz), rq, _bs);
+        ribIM.setMatrixAt(i, _bm);
+      });
+      ribIM.castShadow = false; ribIM.receiveShadow = true;
+      compG.add(ribIM);
+    }
     bevelBox(0.28, 0.22, 0.15, M.DARK, 0.5, CP.cy + 0.02, CP.cz + 0.22, 0.012, compG);
     cylY(0.03, 0.1, M.YELLOW, 0.5, CP.cy + 0.17, CP.cz + 0.22, 12, compG);
     const cp = mesh(new THREE.PlaneGeometry(0.24, 0.12), M.WHITE, 0.2, CP.cy + 0.05, CP.cz + 0.245, compG);
@@ -798,7 +1265,7 @@ function buildChiller(){
   cylY(0.028, 0.04, M.DARK, -0.95, EV.cy + 0.26, -0.52, 8);
   waterNozzle(0.95, CO.cy, CO.r, M.RED, true);
   waterNozzle(1.45, CO.cy, CO.r, M.RED, true);
-  buildNozzleValves();
+  if (hi) buildNozzleValves();
 
   // ---- LINEAS DE REFRIGERANTE
   {
@@ -924,8 +1391,8 @@ function buildChiller(){
   }
   makePipe([[-0.24, 1.65, 0.55], [-1.05, 1.65, 0.55], [-1.05, 1.71, 0.57]], 0.025, M.DARK, 0.05);
 
-  // ---- INSTANCIADOS GLOBALES (pernos + rayos de volante)
-  {
+  // ---- INSTANCIADOS GLOBALES (pernos + rayos de volante) — solo detalle HI
+  if (hi){
     const boltGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.032, 6);
     const boltIM = new THREE.InstancedMesh(boltGeo, M.BOLT, boltMatrices.length);
     boltMatrices.forEach((m, i) => boltIM.setMatrixAt(i, m));
@@ -944,7 +1411,8 @@ function buildChiller(){
 
 // ================= BOMBA CENTRIFUGA END-SUCTION ==================
 // Base 1.55 x 0.6 m centrada en el origen · eje de flecha y=0.35, z=0.
-function buildPump(){
+function buildPump(detail = 'hi'){
+  const hi = detail === 'hi';              // 'lo': cilindros de bajo seg + sin detalle fino (LOD lejano)
   const root = new THREE.Group();
   const staticG = new THREE.Group();
   const pumpG = new THREE.Group();
@@ -1113,14 +1581,17 @@ function buildPump(){
     return m;
   }
   function cylX(r, len, mat, x, y, z, seg = 20, parent = staticG){
+    if (!hi) seg = Math.min(seg, 8);       // LOD lejano: octagonal
     const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
     m.rotation.z = Math.PI / 2;
     return m;
   }
   function cylY(r, len, mat, x, y, z, seg = 20, parent = staticG){
+    if (!hi) seg = Math.min(seg, 8);
     return mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
   }
   function cylZ(r, len, mat, x, y, z, seg = 20, parent = staticG){
+    if (!hi) seg = Math.min(seg, 8);
     const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
     m.rotation.x = Math.PI / 2;
     return m;
@@ -1154,7 +1625,8 @@ function buildPump(){
     }
     path.add(new THREE.LineCurve3(prev, P[P.length - 1]));
     const len = path.getLength();
-    const g = new THREE.TubeGeometry(path, Math.max(16, Math.round(len * 60)), r, seg);
+    const tub = hi ? Math.max(16, Math.round(len * 60)) : Math.max(6, Math.round(len * 20));
+    const g = new THREE.TubeGeometry(path, tub, r, hi ? seg : Math.min(seg, 6));
     return mesh(g, mat, 0, 0, 0, parent);
   }
   const boltMatrices = [];
@@ -1299,7 +1771,7 @@ function buildPump(){
 
   // ---- Motor electrico aletado
   cylX(0.15, 0.55, M.MOTOR, 0.375, CY, 0, 32, pumpG);
-  {
+  if (hi){
     const finGeo = new THREE.TorusGeometry(0.157, 0.0075, 6, 36);
     const finIM = new THREE.InstancedMesh(finGeo, M.FIN, 12);
     const fq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI/2, 0));
@@ -1470,8 +1942,8 @@ function buildPump(){
     bevelBox(0.125, 0.025, 0.15, M.DARK, -1.2, 0.0125, 0, 0.006);
   }
 
-  // ---- Instanciados globales
-  {
+  // ---- Instanciados globales (pernos + rayos de volante) — solo detalle HI
+  if (hi){
     const boltGeo = new THREE.CylinderGeometry(0.009, 0.009, 0.02, 6);
     const boltIM = new THREE.InstancedMesh(boltGeo, M.BOLT, boltMatrices.length);
     boltMatrices.forEach((m, i) => boltIM.setMatrixAt(i, m));
@@ -5412,6 +5884,9 @@ function buildEdificio(detail = 'hi'){
   staticG.add(facadeGroup);
   const roomsGroup = new THREE.Group();
   staticG.add(roomsGroup);
+  // Expuestos para el toggle CORTE (ocultar fachada sur -> revelar cuartos).
+  root.userData.facadeGroup = facadeGroup;
+  root.userData.roomsGroup = roomsGroup;
 
   function mesh(geo, mat, x=0, y=0, z=0, parent=staticG, cast=true){
     const m = new THREE.Mesh(geo, mat);
