@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TANQUE EXPANSIÓN + BUFFER · Ø0.6×1.5 / Ø1.2×2.0 m · Realistic</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter:blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; color:#cfe0da; }
+  #legend i { width:12px; height:10px; display:inline-block; border-radius:2px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter:blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel .pct { font-size:9px; color:#7a8a98; text-align:right; margin-top:-3px; letter-spacing:0.06em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:80px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel button.lvl { color:#06080d; border-color:#00d4aa; background:#00d4aa; box-shadow:0 0 12px #00d4aa55; }
+</style>
+<script>
+// Inyeccion dinamica de importmap: String.fromCharCode(64) evita el mangling de '@' (package@version) por Cloudflare.
+(function(){
+  var AT = String.fromCharCode(64);
+  var tag = document.createElement('script');
+  tag.type = 'importmap';
+  tag.textContent = JSON.stringify({ imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }});
+  document.head.appendChild(tag);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>TANQUE EXPANSIÓN + BUFFER</b><br>
+  <span>Ø0.6×1.5 / Ø1.2×2.0 m · Realistic PBR · 1 unidad = 1 m</span>
+</div>
+<div id="legend">
+  <div><i style="background:#2f8fe6"></i> Agua helada</div>
+  <div><i style="background:#ffd166"></i> Aire precarga</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>NIVEL / PRECARGA</label><button id="bLvl" class="lvl">NORMAL</button></div>
+  <div class="pct" id="lvlPct">agua 45% · aire 50%</div>
+  <div class="row"><label>CORTE (membrana)</label><button id="bCorte" class="on">ON</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 unidad = 1 m. Spec dimensional: voxel/tanques-expansion-buffer-voxel-v1.html (1 voxel = 0.05 m).
+// EXPANSION (membrana, vertical): Ø0.60 x 1.50 m, cuerpo cilindrico + tapas abombadas, pintado ROJO.
+//   Banda de color marca la linea de membrana (diafragma) -> SUBE/BAJA con NIVEL/PRECARGA.
+//   Valvula Schrader de aire arriba, conexion inferior con valvula, placa de datos.
+// BUFFER (agua helada): Ø1.20 x 2.00 m, cuerpo AZUL con CAMISA de aislamiento GRIS (bandada).
+//   4 bocas bridadas (pares in/out) con bandas de ID AZULES, termometros + manometros, patas, placa.
+// Cutaway (CORTE): oculta la media-carcasa frontal de la expansion para revelar la membrana interna.
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 6, 30);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.05, 200);
+camera.position.set(2.7, 1.9, 3.1);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;          // sombras horneadas: un solo horneado tras construir
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.55;
+controls.minDistance = 1.1;
+controls.maxDistance = 14;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(0.0, 1.05, 0.0);
+// Ground clamp (regla de la casa): ni el target ni la camara bajan del piso
+controls.addEventListener('change', () => {
+  if (controls.target.y < 0) controls.target.y = 0;
+  if (camera.position.y < 0.2) camera.position.y = 0.2;
+});
+
+// ====== RIG DE LUCES ======
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.4, 5.2, 2.6);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -2.6; sun.shadow.camera.right = 2.6;
+sun.shadow.camera.top = 2.8; sun.shadow.camera.bottom = -0.4;
+sun.shadow.camera.near = 1.5; sun.shadow.camera.far = 14;
+sun.shadow.bias = -0.0004;
+sun.target.position.set(0, 1.0, 0);
+scene.add(sun); scene.add(sun.target);
+
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-3.2, 2.6, -2.2);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rim.position.set(-1.6, 1.6, 3.4);
+scene.add(rim);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+// ====== PISO ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(80, 80),
+  new THREE.MeshStandardMaterial({ color:0x0a0d12, roughness:0.95, metalness:0 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(40, 80, 0x123f35, 0x0c1d1a);
+grid.position.y = 0.002;
+grid.material.transparent = true;
+grid.material.opacity = 0.35;
+scene.add(grid);
+
+// ====== TEXTURAS PROCEDURALES (CanvasTexture) ======
+function canvasTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+function dataTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 4;
+  return t;
+}
+
+// Variacion sutil de rugosidad para la pintura (mapa lineal). roughnessMap MULTIPLICA el escalar:
+// escalar 1.0 * mapa (~0.55 medio) deja el producto en la banda de pintura percibida (0.5-0.6).
+const paintRoughTex = dataTex(256, 256, (g) => {
+  g.fillStyle = '#8c8c8c'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2600; i++){
+    const v = 120 + Math.floor(Math.random() * 60);
+    g.fillStyle = `rgba(${v},${v},${v},0.16)`;
+    g.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 3, 1 + Math.random() * 3);
+  }
+});
+paintRoughTex.wrapS = paintRoughTex.wrapT = THREE.RepeatWrapping;
+paintRoughTex.repeat.set(2, 3);
+
+// Placa de datos generica
+function nameplateTex(title, sub, rows){
+  return canvasTex(512, 256, (g, w, h) => {
+    const grad = g.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#d8dade'); grad.addColorStop(0.5, '#b8bcc2'); grad.addColorStop(1, '#c8ccd2');
+    g.fillStyle = grad; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#3a3f46'; g.lineWidth = 6; g.strokeRect(10, 10, w - 20, h - 20);
+    g.fillStyle = '#22262c';
+    g.font = 'bold 30px monospace'; g.textAlign = 'center';
+    g.fillText(title, w/2, 54);
+    g.font = '20px monospace';
+    g.fillText(sub, w/2, 86);
+    g.font = '19px monospace'; g.textAlign = 'left';
+    rows.forEach((r, i) => g.fillText(r, 40, 128 + i * 30));
+    for (const [bx, by] of [[26, 26], [w-26, 26], [26, h-26], [w-26, h-26]]){
+      g.beginPath(); g.arc(bx, by, 7, 0, Math.PI*2); g.fillStyle = '#787c82'; g.fill();
+    }
+  });
+}
+const plateExpTex = nameplateTex('TANQUE EXPANSIÓN', 'MEMBRANA · PRECARGA AIRE', [
+  'MODELO      EXP-060-D', 'VOLUMEN     80 L · PRE 1.5 bar', 'PMAX        6 bar · 70 C']);
+const plateBufTex = nameplateTex('TANQUE BUFFER', 'AGUA HELADA · INERCIA', [
+  'MODELO      BUF-120-I', 'VOLUMEN     500 L', 'SERV.       AGUA 6/12 C']);
+
+// Caratula de gauge (fondo segun servicio, escala 270°, aguja horneada)
+function gaugeTex(bg, unit, label, frac){
+  return canvasTex(256, 256, (g, w, h) => {
+    const cx = w/2, cy = h/2;
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#22262c'; g.lineWidth = 8;
+    g.beginPath(); g.arc(cx, cy, 118, 0, Math.PI*2); g.stroke();
+    const a0 = Math.PI * 0.75, sweep = Math.PI * 1.5;
+    for (let i = 0; i <= 30; i++){
+      const a = a0 + sweep * i / 30, major = i % 5 === 0;
+      const r1 = 108, r0 = major ? 90 : 99;
+      g.strokeStyle = '#22262c'; g.lineWidth = major ? 5 : 2;
+      g.beginPath();
+      g.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+      g.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      g.stroke();
+      if (major){
+        g.fillStyle = '#22262c'; g.font = 'bold 20px monospace'; g.textAlign = 'center';
+        g.fillText(String(i / 5 * 2), cx + Math.cos(a) * 70, cy + Math.sin(a) * 70 + 7);
+      }
+    }
+    g.fillStyle = '#22262c'; g.font = 'bold 17px monospace'; g.textAlign = 'center';
+    g.fillText(unit, cx, cy + 46);
+    g.font = '13px monospace';
+    g.fillText(label, cx, cy + 66);
+    const na = a0 + sweep * frac;
+    g.strokeStyle = '#d0242e'; g.lineWidth = 6; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(cx - Math.cos(na) * 18, cy - Math.sin(na) * 18);
+    g.lineTo(cx + Math.cos(na) * 92, cy + Math.sin(na) * 92); g.stroke();
+    g.fillStyle = '#22262c';
+    g.beginPath(); g.arc(cx, cy, 12, 0, Math.PI*2); g.fill();
+    g.fillStyle = '#d0242e';
+    g.beginPath(); g.arc(cx, cy, 6, 0, Math.PI*2); g.fill();
+  });
+}
+// Termometros: caratula fria (azul claro, agua helada). Manometros: caratula neutra.
+const faceThermo = gaugeTex('#cfe3f6', 'C', 'AGUA HELADA', 0.14);   // ~7 C -> aguja baja (frio)
+const faceManoBuf = gaugeTex('#e7edf3', 'bar', 'BUFFER', 0.38);
+const faceManoExp = gaugeTex('#f3ece0', 'bar', 'PRECARGA', 0.30);
+
+// ====== PALETA PBR (metalness 0 = pintado · metalness 1 = metal desnudo) ======
+// Leccion documentada (torre/bomba/vav): gris medio + metalness 1 lee NEGRO en este entorno.
+// Tanques pintados (rojo/azul) y camisa gris -> metalness 0 con roughnessMap. Metal desnudo
+// (valvulas, bridas, pernos, laton, Schrader, biseles) -> metalness 1. Agua helada: identificacion AZUL.
+const M = {
+  RED:      new THREE.MeshStandardMaterial({ color:0xc0392b, roughness:1.0, metalness:0, roughnessMap:paintRoughTex }),
+  RED_D:    new THREE.MeshStandardMaterial({ color:0x9c2b20, roughness:0.6, metalness:0 }),
+  BLUE:     new THREE.MeshStandardMaterial({ color:0x1f5fa8, roughness:1.0, metalness:0, roughnessMap:paintRoughTex }),
+  INSUL:    new THREE.MeshStandardMaterial({ color:0x9aa3ad, roughness:1.0, metalness:0, roughnessMap:paintRoughTex }),
+  JBAND:    new THREE.MeshStandardMaterial({ color:0xb9c0c8, roughness:0.32, metalness:1 }),   // fleje de camisa (inox)
+  STEEL:    new THREE.MeshStandardMaterial({ color:0x9aa0a8, roughness:0.34, metalness:1 }),   // bridas / metal desnudo
+  STEEL_D:  new THREE.MeshStandardMaterial({ color:0x5c626b, roughness:0.5, metalness:0.55 }), // cuerpos de valvula (fundicion pintada)
+  BOLT:     new THREE.MeshStandardMaterial({ color:0x22242a, roughness:0.4, metalness:1 }),
+  BRASS:    new THREE.MeshStandardMaterial({ color:0xb87333, roughness:0.35, metalness:1 }),
+  BANDBLUE: new THREE.MeshStandardMaterial({ color:0x2f6fb5, roughness:0.5, metalness:0 }),     // ID agua helada
+  PIPE:     new THREE.MeshStandardMaterial({ color:0x2f7fce, roughness:0.45, metalness:0 }),    // tuberia agua helada (azul)
+  FRAME:    new THREE.MeshStandardMaterial({ color:0x3a3a3e, roughness:0.6, metalness:0.3 }),   // patas
+  WHEEL:    new THREE.MeshStandardMaterial({ color:0xc22a34, roughness:0.5, metalness:0.2 }),   // volante de valvula
+  DARK:     new THREE.MeshStandardMaterial({ color:0x24242a, roughness:0.7, metalness:0 }),
+  GLASS:    new THREE.MeshPhysicalMaterial({ color:0xeef4ff, roughness:0.06, metalness:0,
+              transmission:0.92, thickness:0.01, ior:1.45 })
+};
+// Banda de membrana (marcador, animado, emisiva ambar)
+const bandMat = new THREE.MeshStandardMaterial({ color:0xffd23f, roughness:0.4, metalness:0, emissive:0xffd23f, emissiveIntensity:0.35 });
+// Interior de la expansion (revelado en CORTE, animado)
+const waterMat = new THREE.MeshStandardMaterial({ color:0x2f8fe6, roughness:0.35, metalness:0.15, emissive:0x0d3a63, emissiveIntensity:0.4 });
+const airMat   = new THREE.MeshStandardMaterial({ color:0xffd166, roughness:0.5, metalness:0, emissive:0x8a6414, emissiveIntensity:0.3 });
+const memMat   = new THREE.MeshStandardMaterial({ color:0x23262e, roughness:0.9, metalness:0.2 });
+
+// ====== HELPERS DE GEOMETRIA PARAMETRICA ======
+const staticG = new THREE.Group();       // todo lo estatico (sombras horneadas)
+scene.add(staticG);
+const cutGroup = new THREE.Group();       // media-carcasa frontal removible de la expansion (toggle CORTE)
+staticG.add(cutGroup);
+
+function mesh(geo, mat, x = 0, y = 0, z = 0, parent = staticG){
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+function box(w, h, d, mat, x, y, z, parent = staticG){
+  return mesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent);
+}
+function cylX(r, len, mat, x, y, z, seg = 20, parent = staticG){
+  const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+  m.rotation.z = Math.PI / 2;
+  return m;
+}
+function cylY(r, len, mat, x, y, z, seg = 20, parent = staticG){
+  return mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+}
+function cylZ(r, len, mat, x, y, z, seg = 20, parent = staticG){
+  const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+  m.rotation.x = Math.PI / 2;
+  return m;
+}
+// Cupula semi-elipsoidal (cabezal torisferico simplificado) via lathe: ecuador (R,0) -> polo (0,h)
+function domeGeo(R, h, segRad = 36, segArc = 12){
+  const pts = [];
+  for (let i = 0; i <= segArc; i++){
+    const a = i / segArc * Math.PI / 2;
+    pts.push(new THREE.Vector2(Math.cos(a) * R, Math.sin(a) * h));
+  }
+  return new THREE.LatheGeometry(pts, segRad);
+}
+// Tuberia con codos suavizados
+function makePipe(points, r, mat, bend = 0.05, parent = staticG, seg = 12){
+  const path = new THREE.CurvePath();
+  const P = points.map(p => new THREE.Vector3(...p));
+  let prev = P[0];
+  for (let i = 1; i < P.length - 1; i++){
+    const a = P[i], b = P[i+1];
+    const dIn = a.clone().sub(prev).normalize();
+    const dOut = b.clone().sub(a).normalize();
+    const tIn = a.clone().sub(dIn.clone().multiplyScalar(bend));
+    const tOut = a.clone().add(dOut.clone().multiplyScalar(bend));
+    path.add(new THREE.LineCurve3(prev, tIn));
+    path.add(new THREE.QuadraticBezierCurve3(tIn, a, tOut));
+    prev = tOut;
+  }
+  path.add(new THREE.LineCurve3(prev, P[P.length - 1]));
+  const len = path.getLength();
+  const g = new THREE.TubeGeometry(path, Math.max(16, Math.round(len * 24)), r, seg);
+  return mesh(g, mat, 0, 0, 0, parent);
+}
+
+// Pernos instanciados globales (una sola draw call)
+const boltMatrices = [];
+const _bm = new THREE.Matrix4(), _bs = new THREE.Vector3(1,1,1);
+const AXQ = {
+  x: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI/2)),
+  y: new THREE.Quaternion(),
+  z: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2, 0, 0))
+};
+function boltRing(cx, cy, cz, axis, radius, n){
+  for (let i = 0; i < n; i++){
+    const a = i / n * Math.PI * 2 + Math.PI / n;
+    const u = Math.cos(a) * radius, v = Math.sin(a) * radius;
+    let px = cx, py = cy, pz = cz;
+    if (axis === 'x'){ py += u; pz += v; }
+    else if (axis === 'y'){ px += u; pz += v; }
+    else { px += u; py += v; }
+    _bm.compose(new THREE.Vector3(px, py, pz), AXQ[axis], _bs);
+    boltMatrices.push(_bm.clone());
+  }
+}
+// Brida a ras + anillo de esparragos (leccion: brida flush o enterrada 0.03, nunca air gap)
+function flangeX(R, thick, x, y, z, nBolts, boltR, boltSide = 1){
+  cylX(R, thick, M.STEEL, x, y, z, 24);
+  if (nBolts) boltRing(x + boltSide * (thick/2 + 0.006), y, z, 'x', boltR, nBolts);
+}
+// InstancedMesh util
+function makeIM(geo, mat, mats, parent = staticG, cast = true){
+  const im = new THREE.InstancedMesh(geo, mat, mats.length);
+  mats.forEach((m, i) => im.setMatrixAt(i, m));
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = cast; im.receiveShadow = true;
+  parent.add(im);
+  return im;
+}
+const _q0 = new THREE.Quaternion();
+function tMat(x, y, z, q = _q0, s = _bs){
+  return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q, s);
+}
+
+// Gauge (dial en canvas) mirando a +Z: stub laton + biselado + caratula + lente
+function gaugeZ(x, y, z, faceTex, parent = staticG){
+  cylZ(0.012, 0.05, M.BRASS, x, y, z - 0.03, 12, parent);        // stub de conexion
+  cylZ(0.058, 0.035, M.DARK, x, y, z, 22, parent);               // cuerpo/bisel
+  mesh(new THREE.TorusGeometry(0.052, 0.007, 8, 26), M.BRASS, x, y, z + 0.02, parent);
+  const face = mesh(new THREE.CircleGeometry(0.049, 26),
+    new THREE.MeshStandardMaterial({ map:faceTex, emissiveMap:faceTex, emissive:0xffffff,
+      emissiveIntensity:0.2, roughness:0.35, metalness:0 }), x, y, z + 0.021, parent);
+  face.castShadow = false;
+  const lens = cylZ(0.05, 0.006, M.GLASS, x, y, z + 0.024, 24, parent);
+  lens.castShadow = false;
+}
+
+// ==================================================================
+// COTAS (metros) — dos vasijas cilindricas verticales
+// ==================================================================
+const EX = -1.0;   // eje de la expansion
+const BX = 0.9;    // eje del buffer
+
+// ---- EXPANSION Ø0.60 x ~1.50 m ----
+const ER = 0.30;                 // radio del cuerpo (Ø0.60)
+const E_B0 = 0.45, E_B1 = 1.55;  // cuerpo cilindrico (alto 1.10)
+const E_DH = 0.18;               // altura de cada cupula -> vasija 0.27 .. 1.73 (~1.46 m)
+// niveles de membrana (fracciones del voxel: 0.26 / 0.47 / 0.74 del cuerpo)
+const E_LEV = [E_B0 + 0.26 * (E_B1 - E_B0), E_B0 + 0.47 * (E_B1 - E_B0), E_B0 + 0.74 * (E_B1 - E_B0)];
+
+// ---- BUFFER Ø1.20 x ~2.00 m ----
+const BR = 0.58;                 // radio de vasija (Ø1.16)
+const BRJ = 0.605;               // radio exterior de la camisa (Ø1.21)
+const B_B0 = 0.47, B_B1 = 1.98;  // cuerpo cilindrico (alto 1.51)
+const B_DH = 0.22;               // cupula -> vasija 0.25 .. 2.20 (~1.95 m)
+
+// ==================================================================
+// EXPANSION TANK (rojo, membrana)
+// ==================================================================
+let expWater, expAir, expMembrane, expBand;   // partes animadas por NIVEL/PRECARGA
+{
+  // --- 3 patas + placas base + anclas ---
+  for (let i = 0; i < 3; i++){
+    const a = i / 3 * Math.PI * 2 + Math.PI / 2;
+    const lx = EX + Math.cos(a) * 0.20, lz = Math.sin(a) * 0.20;
+    box(0.045, 0.30, 0.045, M.FRAME, lx, 0.15, lz);              // alma de la pata
+    box(0.11, 0.02, 0.11, M.STEEL_D, lx, 0.012, lz);            // placa base
+    for (const [ox, oz] of [[-0.035,-0.035],[0.035,-0.035],[-0.035,0.035],[0.035,0.035]])
+      boltRing(lx + ox, 0.024, lz + oz, 'y', 0.0001, 1);        // ancla (perno unico)
+  }
+
+  // --- cupulas (rojo) ---
+  const dTop = mesh(domeGeo(ER, E_DH), M.RED, EX, E_B1, 0);      // cupula superior
+  const dBot = mesh(domeGeo(ER, E_DH), M.RED, EX, E_B0, 0);      // cupula inferior
+  dBot.rotation.x = Math.PI;
+
+  // --- cuerpo dividido en media-carcasa trasera (fija) + frontal (removible, CORTE) ---
+  // theta 0 = +Z. Frontal (+Z): thetaStart=-PI/2 span PI. Trasera (-Z): thetaStart=+PI/2 span PI.
+  const bodyH = E_B1 - E_B0, bodyYc = (E_B0 + E_B1) / 2;
+  const backHalf = mesh(new THREE.CylinderGeometry(ER, ER, bodyH, 28, 1, true, Math.PI/2, Math.PI),
+    new THREE.MeshStandardMaterial({ color:0xc0392b, roughness:1.0, metalness:0, roughnessMap:paintRoughTex, side:THREE.DoubleSide }),
+    EX, bodyYc, 0);
+  const frontHalf = mesh(new THREE.CylinderGeometry(ER, ER, bodyH, 28, 1, true, -Math.PI/2, Math.PI),
+    new THREE.MeshStandardMaterial({ color:0xc0392b, roughness:1.0, metalness:0, roughnessMap:paintRoughTex, side:THREE.DoubleSide }),
+    EX, bodyYc, 0, cutGroup);
+
+  // soldadura ecuatorial (aros finos donde el cuerpo encuentra las cupulas)
+  mesh(new THREE.TorusGeometry(ER + 0.004, 0.008, 8, 40), M.RED_D, EX, E_B0, 0).rotation.x = Math.PI/2;
+  mesh(new THREE.TorusGeometry(ER + 0.004, 0.008, 8, 40), M.RED_D, EX, E_B1, 0).rotation.x = Math.PI/2;
+
+  // --- INTERIOR (revelado en CORTE): agua (abajo) + aire precarga (arriba) + disco de membrana ---
+  // cilindros de alto unitario -> se escalan/posicionan por nivel (solo transform, sin rebuild)
+  const water = mesh(new THREE.CylinderGeometry(ER - 0.03, ER - 0.03, 1, 24), waterMat, EX, 0, 0);
+  const air   = mesh(new THREE.CylinderGeometry(ER - 0.035, ER - 0.035, 1, 24), airMat, EX, 0, 0);
+  const membrane = mesh(new THREE.CylinderGeometry(ER - 0.02, ER - 0.02, 0.022, 24), memMat, EX, 0, 0);
+  water.castShadow = air.castShadow = membrane.castShadow = false;
+  expWater = water; expAir = air; expMembrane = membrane;
+
+  // --- banda de color exterior (marcador de membrana, animado) ---
+  const band = mesh(new THREE.CylinderGeometry(ER + 0.012, ER + 0.012, 0.05, 32), bandMat, EX, E_LEV[1], 0);
+  band.castShadow = false;
+  expBand = band;
+
+  // --- valvula Schrader (aire) en el apice superior ---
+  cylY(0.018, 0.05, M.BRASS, EX, E_B1 + E_DH + 0.02, 0, 14);     // cuerpo del vastago
+  cylY(0.026, 0.016, M.STEEL, EX, E_B1 + E_DH + 0.05, 0, 12);    // tuerca hexagonal (tapa)
+  cylY(0.007, 0.02, M.STEEL, EX, E_B1 + E_DH + 0.07, 0, 8);      // nucleo del Schrader
+
+  // --- conexion inferior de sistema: brida + valvula + volante ---
+  const cy0 = E_B0 - E_DH;                                        // apice inferior ~0.27
+  cylY(0.03, 0.09, M.PIPE, EX, cy0 - 0.045, 0, 16);              // stub inferior
+  cylY(0.06, 0.02, M.STEEL, EX, cy0 - 0.10, 0, 20);              // brida
+  boltRing(EX, cy0 - 0.11, 0, 'y', 0.046, 4);
+  cylY(0.045, 0.08, M.STEEL_D, EX, cy0 - 0.16, 0, 18);           // cuerpo de valvula de corte
+  cylX(0.016, 0.10, M.STEEL, EX + 0.07, cy0 - 0.16, 0, 10);      // vastago lateral
+  const wheelE = mesh(new THREE.TorusGeometry(0.05, 0.009, 8, 22), M.WHEEL, EX + 0.13, cy0 - 0.16, 0);
+  wheelE.rotation.y = Math.PI / 2;
+
+  // --- manometro de precarga (frente, lado aire) — en cutGroup: se oculta con la carcasa en CORTE ---
+  gaugeZ(EX, 1.28, ER + 0.02, faceManoExp, cutGroup);
+
+  // --- placa de datos (frente, bajo el recorrido de la banda) ---
+  const npE = mesh(new THREE.PlaneGeometry(0.20, 0.10),
+    new THREE.MeshStandardMaterial({ map:plateExpTex, roughness:0.4, metalness:0 }),
+    EX + 0.02, 0.60, ER + 0.015, cutGroup);                      // frente plano (+Z), se oculta con la carcasa en CORTE
+  npE.castShadow = false;
+}
+
+// ==================================================================
+// BUFFER TANK (azul + camisa gris, agua helada)
+// ==================================================================
+{
+  // --- 4 patas + placas base + anclas ---
+  const legMats = [], plateMats = [];
+  for (let i = 0; i < 4; i++){
+    const a = i / 4 * Math.PI * 2 + Math.PI / 4;
+    const lx = BX + Math.cos(a) * 0.42, lz = Math.sin(a) * 0.42;
+    legMats.push(tMat(lx, 0.15, lz));
+    plateMats.push(tMat(lx, 0.012, lz));
+    for (const [ox, oz] of [[-0.045,-0.045],[0.045,-0.045],[-0.045,0.045],[0.045,0.045]])
+      boltRing(lx + ox, 0.024, lz + oz, 'y', 0.0001, 1);
+  }
+  makeIM(new THREE.BoxGeometry(0.055, 0.30, 0.055), M.FRAME, legMats);
+  makeIM(new THREE.BoxGeometry(0.14, 0.02, 0.14), M.STEEL_D, plateMats);
+
+  // --- cupulas azules (vasija expuesta) ---
+  const dTop = mesh(domeGeo(BR, B_DH), M.BLUE, BX, B_B1, 0);
+  const dBot = mesh(domeGeo(BR, B_DH), M.BLUE, BX, B_B0, 0);
+  dBot.rotation.x = Math.PI;
+
+  // --- vasija azul (cilindro; queda visible un anillo en los extremos del barril) ---
+  cylY(BR, (B_B1 - B_B0), M.BLUE, BX, (B_B0 + B_B1) / 2, 0, 40);
+
+  // --- CAMISA de aislamiento gris (ligeramente proud, dejando ver el azul en los extremos) ---
+  const jH = (B_B1 - 0.04) - (B_B0 + 0.04);
+  const jacket = mesh(new THREE.CylinderGeometry(BRJ, BRJ, jH, 44, 1, true), M.INSUL, BX, (B_B0 + B_B1) / 2, 0);
+  jacket.material.side = THREE.DoubleSide;
+
+  // --- flejes metalicos de camisa (instanciados) ---
+  const bandMats = [];
+  const bandGeo = new THREE.TorusGeometry(BRJ + 0.004, 0.012, 8, 48);
+  bandGeo.rotateX(Math.PI / 2);
+  for (const by of [0.62, 0.98, 1.34, 1.70]) bandMats.push(tMat(BX, by, 0));
+  makeIM(bandGeo, M.JBAND, bandMats);
+  // costura vertical de la camisa
+  box(0.02, jH, 0.014, M.JBAND, BX, (B_B0 + B_B1) / 2, BRJ + 0.005);
+
+  // --- 4 bocas bridadas (pares in/out): 2 en -X, 2 en +X, con banda AZUL de ID y brida flush ---
+  // low ~0.72, high ~1.72
+  const ports = [
+    { s:-1, y:0.72 }, { s:-1, y:1.72 }, { s:1, y:0.72 }, { s:1, y:1.72 }
+  ];
+  for (const p of ports){
+    const dir = p.s;                                  // -1 hacia -X, +1 hacia +X
+    const rootX = BX + dir * (BRJ - 0.01);            // arranca en la camisa
+    const stubL = 0.20;
+    const cx = rootX + dir * stubL / 2;
+    cylX(0.045, stubL, M.PIPE, cx, p.y, 0, 16);       // stub de tuberia (azul)
+    const bandX = cylX(0.048, 0.035, M.BANDBLUE, rootX + dir * 0.12, p.y, 0, 16);  // banda ID agua helada
+    bandX.castShadow = false;
+    const fx = rootX + dir * (stubL + 0.01);
+    flangeX(0.075, 0.022, fx, p.y, 0, 6, 0.058, dir); // brida flush con anillo de esparragos
+    // contrabrida enterrada (pareja flush, sin air gap)
+    cylX(0.075, 0.022, M.STEEL, fx + dir * 0.021, p.y, 0, 24);
+  }
+
+  // --- 2 termometros (frente, en termopozos) ---
+  gaugeZ(BX - 0.22, 0.95, BRJ + 0.02, faceThermo);
+  gaugeZ(BX - 0.22, 1.60, BRJ + 0.02, faceThermo);
+  // termopozo (stub que penetra la camisa)
+  cylX(0.014, 0.10, M.STEEL, BX - 0.22 + 0.0, 0.95, BRJ - 0.06, 8);
+  cylX(0.014, 0.10, M.STEEL, BX - 0.22 + 0.0, 1.60, BRJ - 0.06, 8);
+
+  // --- manometro (frente, parte alta de la vasija) ---
+  gaugeZ(BX + 0.24, 1.72, BRJ + 0.02, faceManoBuf);
+
+  // --- venteo/purga superior en el apice ---
+  cylY(0.02, 0.06, M.BRASS, BX, B_B1 + B_DH + 0.02, 0, 12);
+  const wheelB = mesh(new THREE.TorusGeometry(0.045, 0.008, 8, 20), M.WHEEL, BX, B_B1 + B_DH + 0.075, 0);
+  wheelB.rotation.x = Math.PI / 2;
+
+  // --- placa de datos (frente) ---
+  const npB = mesh(new THREE.PlaneGeometry(0.24, 0.12),
+    new THREE.MeshStandardMaterial({ map:plateBufTex, roughness:0.4, metalness:0 }),
+    BX + 0.10, 1.25, BRJ + 0.015);
+  npB.castShadow = false;
+}
+
+// ==================================================================
+// INTERCONEXION (agua helada): conexion inferior de la expansion -> boca baja del buffer
+// ==================================================================
+{
+  const eBot = E_B0 - E_DH - 0.20;                    // salida de la valvula de la expansion
+  const bPort = BX - (BRJ + 0.20);                    // boca baja -X del buffer (x)
+  makePipe([
+    [EX, eBot, 0], [EX, 0.16, 0],
+    [bPort, 0.16, 0], [bPort, 0.72, 0], [BX - (BRJ - 0.01), 0.72, 0]
+  ], 0.032, M.PIPE, 0.06);
+  // soportes de tuberia a piso
+  box(0.05, 0.16, 0.05, M.FRAME, (EX + bPort) / 2, 0.08, 0);
+}
+
+// ==================================================================
+// INSTANCIADO GLOBAL (esparragos de bridas + anclas)
+// ==================================================================
+{
+  const boltGeo = new THREE.CylinderGeometry(0.008, 0.008, 0.02, 6);
+  makeIM(boltGeo, M.BOLT, boltMatrices, staticG, false);
+}
+
+// ====== ESTADO / CONTROL DE EQUIPO ======
+const LVL = {
+  y: E_LEV,
+  names: ['BAJO', 'NORMAL', 'ALTO'],
+  pct: ['agua 25% · aire 70%', 'agua 45% · aire 50%', 'agua 70% · aire 25%']
+};
+const state = { level: 1, corte: true, rot: true };
+let memTarget = LVL.y[state.level];
+let memY = memTarget;                                  // se interpola hacia el objetivo (banda que se mueve)
+
+function applyState(){
+  // Solo cambia objetivo de nivel / visibilidad: NO se rehornean sombras aqui
+  memTarget = LVL.y[state.level];
+  cutGroup.visible = !state.corte;                     // CORTE on = cutaway (carcasa frontal oculta -> membrana visible)
+  document.getElementById('bLvl').textContent = LVL.names[state.level];
+  document.getElementById('lvlPct').textContent = LVL.pct[state.level];
+}
+
+// posiciona interior + banda para una altura de membrana dada (solo transform)
+function layoutMembrane(y){
+  const wH = Math.max(y - E_B0, 0.001);
+  expWater.scale.y = wH; expWater.position.y = E_B0 + wH / 2;
+  const aH = Math.max(E_B1 - y, 0.001);
+  expAir.scale.y = aH; expAir.position.y = y + aH / 2;
+  expMembrane.position.y = y;
+  expBand.position.y = y;
+}
+
+// ====== UI ======
+const bLvl = document.getElementById('bLvl');
+bLvl.addEventListener('click', () => {
+  state.level = (state.level + 1) % 3;
+  applyState();
+});
+const bCorte = document.getElementById('bCorte');
+bCorte.addEventListener('click', () => {
+  state.corte = !state.corte;
+  bCorte.className = state.corte ? 'on' : 'off';
+  bCorte.textContent = state.corte ? 'ON' : 'OFF';
+  applyState();
+});
+const bRot = document.getElementById('bRot');
+bRot.addEventListener('click', () => {
+  state.rot = !state.rot;
+  bRot.className = state.rot ? 'on' : 'off';
+  bRot.textContent = state.rot ? 'ON' : 'OFF';
+});
+
+layoutMembrane(memY);
+applyState();
+renderer.shadowMap.needsUpdate = true;          // horneado unico tras construir la escena
+
+// ====== LOOP DE ANIMACION ======
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  // NIVEL / PRECARGA: la banda (y el interior) migra suavemente hacia el objetivo
+  if (Math.abs(memY - memTarget) > 0.0002){
+    memY += (memTarget - memY) * Math.min(1, dt * 3.0);
+    layoutMembrane(memY);
+  }
+
+  controls.autoRotate = state.rot;
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
