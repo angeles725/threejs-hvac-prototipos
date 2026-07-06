@@ -7,7 +7,7 @@ HVAC equipment prototype corpus in this directory (25 standalone HTML files: 7 r
 context7 MCP (`/mrdoob/three.js`), WebSearch/WebFetch over threejs.org + official wiki,
 fetch-doc.sh for preservation. Block style and markers: see `research-sdd/METHODOLOGY.md`.
 
-This index guides through the **33 blocks** of this research. Each block is an independent
+This index guides through the **40 blocks** of this research. Each block is an independent
 `.md`, linked to the rest with `[Block K]`. The auto-generated flat catalog lives in
 [CATALOG.md](CATALOG.md) (regenerate with `python3 tools/gen-catalog.py`).
 
@@ -92,6 +92,7 @@ This index guides through the **33 blocks** of this research. Each block is an i
 |---|--------|---------|------------|
 | 26 | DYNAMIC PHASE: measured baseline of the prototypes | [block26](threejs-block26.md) | live Puppeteer/SwiftShader probes, draw-call/triangle counts per prototype, shadow-pass double-draw mechanism, environment caveats (software GPU → FPS excluded) |
 | 27 | Performance budgets per device class | [block27](threejs-block27.md) | frame-time math (16.6/8.3 ms), MDN/Unity/community draw-call guidance, adaptive-quality ladder (DPR/quality-toggle/shadow-size), device-class budget tables gap-checked against B26's measured numbers, real-hardware measurement protocol |
+| 40 | LOD applied & measured: hotel building far-shell (run 7) | [block40](threejs-block40.md) | `THREE.LOD` auto-update contract (r106+, no manual loop call), singleton-vs-dispersed-InstancedMesh applicability rule, far-shell technique (omit `roomsGroup` interior + swap `transmission` glass for opaque), `[CERT-hw]` before/after (HI 692/921,744 → LO 656/854,424 = −5.2%/−7.3%), honest finding: equipment (chillers+pumps = 65% of equipment tris) dominates the budget, not the building; transmission fillrate cost unmeasured under SwiftShader → G41 equipment-LOD (requires-execution) |
 
 ### Layer 7 — HVAC domain (run 5)
 
@@ -153,6 +154,8 @@ This index guides through the **33 blocks** of this research. Each block is an i
 - [x] G19 — MapLibre GL JS interop → [Block 16]
 - [x] G15 — BatchedMesh evaluation → closed by remittance, [Block 11] §11.3
 - [x] G14 — SYNTHESIS → [Block 12] + WORKFLOW.md
+- [x] G40 — LOD applied & measured (run 7, reopen) → [Block 40]
+- [ ] G41 — Equipment LOD (dual hi/lo InstancedMesh for chillers/pumps) → **requires-execution (§19)**, not read-only
 
 ## Non-investigable gaps (without lab / hardware / NDA)
 
@@ -160,4 +163,5 @@ This index guides through the **33 blocks** of this research. Each block is an i
 
 ## Estimated coverage
 
-39/39 — RUN 6 COMPLETE. All research gaps closed across 6 runs. Terminal: Spanish designer handbook.
+40/40 read-only gaps closed across 7 runs — RUN 7 COMPLETE (reopen §8, B40 applied+measured LOD).
+1 requires-execution gap queued (G41 equipment LOD, §19 build phase). Terminal: Spanish designer handbook.

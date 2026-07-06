@@ -10,9 +10,10 @@
 
 ## Coverage
 
+- **RUN 7 (REOPEN §8, 2026-07-06, supervised — user present)**: applied+measured LOD on the assembled hotel (G40). Cap +1 (B40). Prompted by live implementation of a building LOD in `hotel-realista-ensamblado.html`; documents the before/after with a `[CERT-hw]` browser probe. Emergent G41 (equipment LOD) is **requires-execution**, not read-only → does not reopen the static count.
 - **RUN 6 (REOPEN §8, 2026-07-04, AUTO/orchestrated — queued behind the WORKFLOW.md fix writers)**: design-craft completion from the graphic-designer + 3D-designer lens (G33-G39). Cap +7 (B33-B39). Order per driver recommendation: template-system first (multiplier), then motion/UX, then 2D tokens/accessibility, then art direction/deliverables/dataviz.
-- **Covered blocks**: 39 (B1-B39)
-- **Coverage metric**: 39 / 39 closed — **RUN 6 COMPLETE (investigable=0). Terminal deliverable pending: Spanish designer handbook.**
+- **Covered blocks**: 40 (B1-B40)
+- **Coverage metric**: 40 / 40 closed — **RUN 7 COMPLETE (read-only-investigable=0). G41 queued as requires-execution (§19 build phase).**
 - **RUN 5 STOPPED (2026-07-04): read-only-investigable = 0 — ALL RUNS COMPLETE (32/32 gaps, 5 runs)**
 - **RUN 5 (2026-07-04, AUTO/orchestrated)**: HVAC-domain design (G29-G32) — G29 (HVAC/industrial equipment visualization domain, B29), G30 (dashboards & telemetry, B30), G31 (terrain/relief, B31), and G32 (buildings/BIM, B32) covered — **RUN 5 COMPLETE, all 4 gaps closed**. User authorized auto-chaining incl. emergent gaps; RUN 5 ran to exhaustion of the backlog with no new gaps left. Hard-stops: failed self-report, cap, exhaustion, destructive step.
 - **RUN 4 (REOPEN §8, 2026-07-04, AUTO/orchestrated)**: 3D-design craft + optimization (G22-G28) — **RUN 4 COMPLETE**, all 7 gaps covered (B22-B28).
@@ -62,6 +63,8 @@
 | medium | G19 — MapLibre GL JS: what it is, three.js custom-layer interop, site-map use cases (NEW, run 2) | web (official docs/repo) | **covered → [Block 16]** |
 | low | G15 — BatchedMesh: availability in r160, API, fit for multi-geometry realistic scenes (NEW, from B2) | context7 + web | **closed by remittance → [Block 11] §11.3** (availability r160 proven at cuarto-3d.html:103, API + fit covered; no new substance) |
 | high (terminal) | G14 — SYNTHESIS: team workflow doc — voxel-first → realistic-second pipeline | corpus blocks + prototypes | **covered → [Block 12] + WORKFLOW.md** |
+| high | G40 — LOD applied & measured: `THREE.LOD` on the assembled hotel building (near full tower / far shell), before/after draws+tris via browser probe (run 7) | local prototype + Puppeteer probe + context7 | **covered → [Block 40]** (`[CERT-hw]`; finding: building is not the tri bottleneck — equipment dominates) |
+| high | G41 — Equipment LOD (the high-return target from B40 §40.4): dual hi/lo `InstancedMesh` for chillers/pumps (65% of equipment tris) or geometry decimation | prototype build | **requires-execution → §19** (not read-only; needs building + re-measure) |
 
 ## Iteration history
 
@@ -106,6 +109,7 @@
 | 37 | 2026-07-04 | G37 art direction (run 6, parallel) | B37 | yes · sonnet (parallel block-writer, central archive) | 0 |
 | 38 | 2026-07-04 | G38 deliverables + visual QA (run 6, parallel) | B38 + tools/capture.mjs | yes · sonnet (parallel block-writer, central archive) | 0 |
 | 39 | 2026-07-04 | G39 dataviz craft (run 6, parallel) | B39 | yes · sonnet (parallel block-writer, central archive) | 0 |
+| 40 | 2026-07-06 | G40 LOD applied & measured (run 7, reopen) | B40 | no · inline (§12 dynamic probe — narrow live probe, not delegated) | 1 (G41 equipment LOD, requires-execution) |
 
 **RUN 4 gaps complete** (G22-G28, all covered). **RUN 5 COMPLETE** (G29-G32 — HVAC domain,
 dashboards, terrain, buildings/BIM) — G29 (B29), G30 (B30), G31 (B31), and G32 (B32) all covered,
@@ -118,11 +122,11 @@ iteration) covered, template-as-a-system architecture proposal. 6 gaps remain qu
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 0 — **RUN 6 STOP** (parallel block-writers B34-B39 + central archive)
-- **Open gaps — requires-execution**: 0
+- **Open gaps — read-only investigable**: 0 — **RUN 7 STOP** (reopen §8, single measured block B40)
+- **Open gaps — requires-execution**: 1 (G41 equipment LOD — needs a build + re-measure, §19)
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2
-- Budget cap (safety net): run 1 = 12 blocks (fired). **Run 2 (reopen): +7 blocks (B13-B19).**
+- Budget cap (safety net): run 1 = 12 blocks (fired). Run 2 (reopen): +7 (B13-B19). **Run 7 (reopen): +1 (B40, fired).**
 
 ## Pre-flight source existence (BOOTSTRAP e2)
 

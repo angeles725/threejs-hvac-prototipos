@@ -107,3 +107,5 @@ possible preserved from, threejs.org (fetch-doc.sh → web-snapshots/).
 | web-snapshots/www.w3.org_WAI_WCAG21_Understanding_non-text-contrast.html.md | web-snapshot | https://www.w3.org/WAI/WCAG21/Understanding/non-text-contrast.html | 2026-07-05T04:06:51Z | 333ee155332d4474… | |
 | web-snapshots/www.w3.org_WAI_WCAG21_Understanding_use-of-color.html.md | web-snapshot | https://www.w3.org/WAI/WCAG21/Understanding/use-of-color.html | 2026-07-05T04:06:51Z | 70a5c7d6f83ca9b3… | |
 | web-snapshots/www.w3.org_WAI_WCAG22_Understanding_target-size-minimum.html.md | web-snapshot | https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html | 2026-07-05T04:06:51Z | 1131a5692628cb65… | |
+| probes/2026-07-06-lod-edificio-B40.txt | probe | local browser probe (Puppeteer + Chrome/SwiftShader) over hotel-realista-ensamblado.html | 2026-07-06 | 225a833a07db6e4a… | B40 |
+| web-snapshots/2026-07-06-lod-autoupdate-context7.md | web-snapshot | context7 MCP `/mrdoob/three.js` — LOD.autoUpdate + migration r105→r106 + webgl_lod.html | 2026-07-06 | 4eb14a256e627c85… | B40 |

@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **39 blocks**
+Total: **40 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -45,3 +45,4 @@ Total: **39 blocks**
 | 37 | [threejs-block37.md](threejs-block37.md) | Composition & art direction for equipment/facility shots |
 | 38 | [threejs-block38.md](threejs-block38.md) | High-quality deliverables and visual QA |
 | 39 | [threejs-block39.md](threejs-block39.md) | Data-viz craft for the HVAC dashboards |
+| 40 | [threejs-block40.md](threejs-block40.md) | THREE.LOD applied & measured: the hotel building far-shell (before/after) |

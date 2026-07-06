@@ -1,0 +1,49 @@
+LOD del edificio — probe antes/después  [CERT-hw]
+=================================================
+Target : hotel-realista-ensamblado.html  (three.js r0.160.0)
+Fecha  : 2026-07-06
+Entorno: Puppeteer headless + Chrome linux-150.0.7871.46, SwiftShader
+         (--use-angle=swiftshader --enable-unsafe-swiftshader), viewport 1280x900.
+Método : GL-hook draw*-counter (ver [Block 26] §26.2); mediana de los últimos
+         ~180 frames con draws>0. draws = llamadas draw* por frame (incluye el pase
+         de sombras y, en HI, el pase de refracción de transmission). tris = suma
+         (count/3)*instances por frame.
+Cámara : posición inicial (46,27,48); centro del edificio en (55,0,3) -> dist ~53 m,
+         por debajo del umbral EDIF_LOD_DIST=95 m, así que 'auto' resuelve a HI.
+Forzado: tecla 'L' cicla auto -> HI -> LO; el probe presiona 'L' x2 para fijar LO.
+         Nivel confirmado por el HUD (#lodN): "HI · auto" y "LO · lo".
+
+--- scratchpad/lod-probe.mjs hotel-realista-ensamblado.html ---
+{
+ "file": "hotel-realista-ensamblado.html",
+ "hi": { "draws": 692, "tris": 921744, "sampled": 7, "lodHud": "HI · auto" },
+ "lo": { "draws": 656, "tris": 854424, "sampled": 5, "lodHud": "LO · lo" }
+}
+
+Ahorro edificio HI->LO (escena completa):
+  draws: 692 -> 656  =  -36  (-5.2%)
+  tris : 921744 -> 854424  =  -67,320  (-7.3%)
+
+--- scratchpad/logs.mjs hotel-realista-ensamblado.html (assemble console.log, [CERT]) ---
+[CHILLERS x4]          buckets=24 (transp=1) · places=4 · draws=24 · tris=142,688
+[PUMPS x6]             buckets=29 (transp=1) · places=6 · draws=29 · tris=131,028
+[TOWER x1]             buckets=41 (transp=0) · places=1 · draws=41 · tris=39,946
+[CALDERA+ACS x1]       buckets=32 (transp=3) · places=1 · draws=32 · tris=24,874
+[TANQUES x1]           buckets=27 (transp=1) · places=1 · draws=27 · tris=16,356
+[INTERCAMBIADOR x1]    buckets=24 (transp=1) · places=1 · draws=24 · tris=18,246
+[FILTRADO ALBERCA x1]  buckets=36 (transp=1) · places=1 · draws=36 · tris=20,522
+[EXTRACTOR AZOTEA x1]  buckets=25 (transp=1) · places=1 · draws=25 · tris=8,756
+[UMA-1 x1]             buckets=34 (transp=0) · places=1 · draws=34 · tris=9,088
+[CALENTADOR ALBERCA x1] buckets=34 (transp=0) · places=1 · draws=34 · tris=9,088
+[HOTEL FASE 2] draws equipo=306 · +piso+grid=308 · tris=420,592
+
+Lectura: la geometría de equipos suma 420,592 tris (color pass); chillers+bombas
+solos = 273,716 tris (65% de los equipos). El edificio se agrega aparte (no en este
+log); su tránsito HI->LO libera 67,320 tris del total de 921,744 -> el edificio no
+domina el presupuesto de esta escena. Los draws del probe (692) exceden los buckets
+de geometría (~308) por el pase de sombras (~2x) + el pase de transmission en HI.
+
+Limitación: draws/tris NO reflejan el coste de FILLRATE del transmission (render
+target extra del backbuffer) que el nivel LO elimina; el beneficio real en GPU-time
+puede exceder el -7.3%, pero no se midió: bajo SwiftShader (software) el fps no es
+representativo de una GPU real.
