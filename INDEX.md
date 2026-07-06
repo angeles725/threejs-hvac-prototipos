@@ -163,7 +163,8 @@ This index guides through the **40 blocks** of this research. Each block is an i
 - [x] G46 — Biome polish + floating-equipment fix + pool machine-room (voxel palette, smooth blends, multi-rect BUILT, pool hut) → [Block 41 §41.7] (run 8, deployed)
 - [x] G47 — Room selection + predictive-maintenance panel (88 aligned hitboxes, EdgesGeometry outline by health, temp/setpoint/humidity/amperage + DIAGNOSTICO PREDICTIVO) → [Block 41 §41.7] (run 8, deployed)
 - [x] G49 — Sea rework (4 decorrelated directional waves, no global beat) + no-cache header so redeploys are visible → [Block 41 §41.7] (run 8, deployed)
-- [ ] G48 — Dashboard predictive section (dashboard-energetico-v1.html: 'mantenimiento PREDICTIVO antes que correctivo' diagnostic panel) → **requires-execution (§19)**, in-loop
+- [x] G48 — Dashboard predictive section (dashboard-energetico-v1.html: 'Mantenimiento predictivo', 7 subsystem health cards, PREDICTIVO ANTES QUE CORRECTIVO banner) → [Block 41 §41.7] (run 8, deployed)
+- [x] G50 — Room panel visibility fix: removed #roomPanel from the .clean hide list so it shows on select inside the dashboard iframe (?clean=1) → (run 8, deployed)
 
 ## Non-investigable gaps (without lab / hardware / NDA)
 
