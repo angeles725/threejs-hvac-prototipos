@@ -167,7 +167,9 @@ This index guides through the **40 blocks** of this research. Each block is an i
 - [x] G50 — Room panel visibility fix: removed #roomPanel from the .clean hide list so it shows on select inside the dashboard iframe (?clean=1) → (run 8, deployed)
 - [x] G51 — Selection extended to all 18 equipment units (unified selectUnit, per-type metrics + predictive), panel moved LEFT-center, camera flyTo focus on select + 'VISTA ENFOCADA' badge/vignette with Salir → general → (run 8, deployed)
 - [x] G52 — Equipment outlines from real per-type AABB (fix swapped/mis-sized boxes) + persistent warning/alarm highlights (always-on outline, alarm pulses) + badge moved off the views bar → (run 8, deployed)
-- [x] G53 — Status bar + warning/danger drill-down ported from Honeywell-MX60 (`ALSER/Proyectos/Pagina/Honeywell-MX60` [CERT], AlarmIndicatorView/HomeMap/StatusResolver): bottom-center counters + pulsing ALARMA indicator → popover of warning/danger units (danger-first) → row click = selectUnit + focus → (run 8, deployed)
+- [x] G53 — Status bar + warning/danger drill-down ported from Honeywell-MX60 (`ALSER/Proyectos/Pagina/Honeywell-MX60` [CERT], AlarmIndicatorView/HomeMap/StatusResolver): now VERTICAL right-center with per-state click filter (alarm/warning/ok) → popover → row click = selectUnit + focus → (run 8, deployed)
+- [x] G54 — Dashboard PDF report: print-to-PDF (@media print, dependency-free) + jsPDF direct download (CDN, offline fallback) of the collected data (health summary, KPIs, predictive subsystems) → (run 8, deployed)
+- [x] G55 — UI de-overlap + full responsive pass (distinct panel zones; #temps off left-center; #sys/#ctl/#ctl2 stacked; tablet/phone breakpoints, #roomPanel/#statusPop bottom-sheets <=600, hide secondary <=520) + SEA reverted to STATIC (wave animation looked bad; client asked for static) → (run 8, deployed)
 
 ## Non-investigable gaps (without lab / hardware / NDA)
 
