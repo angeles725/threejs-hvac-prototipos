@@ -433,7 +433,7 @@ if(new URLSearchParams(location.search).has('clean')){
   #floorOverlay .fo-sec.clima{ border-left:4px solid var(--accent); }
   #floorOverlay .fo-sec.graf{ border-left:4px solid var(--ink); }
   #floorOverlay .fo-h{ font-family:var(--cond); text-transform:uppercase; font-size:11px; letter-spacing:.12em; opacity:.8; margin-bottom:12px; }
-  #floorOverlay .fo-kpis{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  #floorOverlay .fo-kpis{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
   #floorOverlay .fo-kpi{ border:1px solid var(--rule); background:var(--paper2); padding:12px 14px; }
   #floorOverlay .fo-kpi .k{ font-family:var(--cond); text-transform:uppercase; font-size:9px; letter-spacing:.14em; opacity:.7; }
   #floorOverlay .fo-kpi .v{ font-family:var(--mono); font-size:26px; font-variant-numeric:tabular-nums; margin-top:4px; line-height:1; }
@@ -446,6 +446,7 @@ if(new URLSearchParams(location.search).has('clean')){
   #floorOverlay .fo-card .st{ display:flex; align-items:center; gap:6px; font-size:10px; text-transform:uppercase; letter-spacing:.04em; opacity:.85; }
   #floorOverlay .fo-card .st i{ width:8px; height:8px; border-radius:50%; display:inline-block; }
   #floorOverlay .fo-charts{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  #floorOverlay .fo-chart.full{ grid-column:1 / -1; }
   #floorOverlay .fo-chart .cl{ font-family:var(--cond); text-transform:uppercase; font-size:10px; letter-spacing:.1em; opacity:.7; margin-bottom:6px; }
   @media(max-width:760px){ #floorOverlay .fo-kpis, #floorOverlay .fo-charts{ grid-template-columns:1fr; } }
 </style>
@@ -7885,6 +7886,18 @@ function buildEdificio(detail = 'hi'){
   // _resolveHover directamente. Se expone por window como __roomClick/__openDetail.
   window.__resolveHover = _resolveHover;
 
+  // Notificacion al dashboard padre con REF-COUNT: 'detail-open' al abrir el PRIMER
+  // overlay, 'detail-close' al cerrar el ULTIMO. Evita que abrir/cerrar el detalle
+  // per-unidad DENTRO del floor overlay haga reaparecer el chrome del dashboard.
+  let _overlayDepth = 0;
+  function _notifyOverlay(opening){
+    const was = _overlayDepth;
+    _overlayDepth = Math.max(0, _overlayDepth + (opening ? 1 : -1));
+    const msg = (was === 0 && _overlayDepth > 0) ? 'detail-open'
+              : (was > 0 && _overlayDepth === 0) ? 'detail-close' : null;
+    if (msg){ try { if (window.parent !== window) window.parent.postMessage(msg, '*'); } catch(e){} }
+  }
+
   // ============================================================================
   // FLOOR DETAIL VIEW: click en un piso -> overlay con TODOS sus cuartos (grid de
   // cards temp+estado) + KPIs promedio + graficas SVG (tecnica del dashboard: path
@@ -7929,34 +7942,38 @@ function buildEdificio(detail = 'hi'){
       '<span><i style="background:'+_foHex('alarm')+'"></i>'+cnt.alarm+' ALARMA</span>';
     const avgT = rooms.reduce((s,r)=>s+r.temp,0)/rooms.length;
     const avgD = rooms.reduce((s,r)=>s+(r.temp-r.setpoint),0)/rooms.length;
+    const avgH = rooms.reduce((s,r)=>s+r.hum,0)/rooms.length;
     document.getElementById('fo-kpis').innerHTML =
       '<div class="fo-kpi"><div class="k">Temp promedio</div><div class="v">'+avgT.toFixed(1)+'<span class="u"> °C</span></div></div>' +
       '<div class="fo-kpi"><div class="k">Δ vs setpoint</div><div class="v">'+(avgD>=0?'+':'')+avgD.toFixed(1)+'<span class="u"> °C</span></div></div>' +
+      '<div class="fo-kpi"><div class="k">Humedad promedio</div><div class="v">'+avgH.toFixed(0)+'<span class="u"> %</span></div></div>' +
       '<div class="fo-kpi"><div class="k">Cuartos en alarma</div><div class="v">'+cnt.alarm+'<span class="u"> / '+rooms.length+'</span></div></div>';
     document.getElementById('fo-grid').innerHTML = rooms.map(r => {
       const hex = '#'+tempColor(r.temp).getHexString();
-      return '<div class="fo-card" data-room="'+r.id+'">' +
+      return '<div class="fo-card" data-room="'+r.id+'" style="border-left:3px solid '+_foHex(r.state)+'">' +
         '<div class="id">'+r.id+'</div>' +
         '<div class="tp" style="color:'+hex+'">'+r.temp.toFixed(1)+'°</div>' +
         '<div class="st"><i style="background:'+_foHex(r.state)+'"></i>'+STATE_TXT[r.state].split(' ')[0]+'</div></div>';
     }).join('');
     const trend = []; for (let h=0; h<24; h++) trend.push(avgT + Math.sin(h/24*Math.PI*2 - 1)*1.2 + (h>10 && h<18 ? 0.6 : 0));
-    const bars = rooms.map(r => ({ label:'R'+r.room, val:r.temp }));
+    const barsT = rooms.map(r => ({ label:'R'+r.room, val:r.temp }));
+    const barsH = rooms.map(r => ({ label:'R'+r.room, val:r.hum }));
     document.getElementById('fo-charts').innerHTML =
-      '<div class="fo-chart"><div class="cl">Temperatura promedio · 24 h</div>'+_svgLineChart(trend, '#C2410C')+'</div>' +
-      '<div class="fo-chart"><div class="cl">Temperatura por cuarto</div>'+_svgBars(bars, '#1F3A5F')+'</div>';
+      '<div class="fo-chart full"><div class="cl">Temperatura promedio del piso · 24 h</div>'+_svgLineChart(trend, '#C2410C')+'</div>' +
+      '<div class="fo-chart"><div class="cl">Temperatura por cuarto (°C)</div>'+_svgBars(barsT, '#C2410C')+'</div>' +
+      '<div class="fo-chart"><div class="cl">Humedad por cuarto (%)</div>'+_svgBars(barsH, '#7A8450')+'</div>';
     _foOverlay.querySelectorAll('.fo-card').forEach(c =>
       c.addEventListener('click', () => window.__openDetail(c.getAttribute('data-room'))));
     _foOpen = true;
     _foOverlay.classList.add('show');
-    try { if (window.parent !== window) window.parent.postMessage('detail-open', '*'); } catch(e){}
+    _notifyOverlay(true);
     _foOverlay.setAttribute('aria-hidden', 'false');
     if (_foVisT) clearTimeout(_foVisT);
     _foVisT = setTimeout(() => _foOverlay.classList.add('vis'), 20);
   }
   function closeFloorDetail(){
     if (!_foOpen) return; _foOpen = false;
-    try { if (window.parent !== window) window.parent.postMessage('detail-close', '*'); } catch(e){}
+    _notifyOverlay(false);
     _foOverlay.classList.remove('vis');
     _foOverlay.setAttribute('aria-hidden', 'true');
     if (_foVisT) clearTimeout(_foVisT);
@@ -8235,7 +8252,7 @@ function buildEdificio(detail = 'hi'){
     _dvOverlay.classList.add('show');
     // Si estamos embebidos (iframe del dashboard), avisar al padre para que oculte
     // su chrome (stage-meta/readings/hint/open-btn) mientras el detalle esta abierto.
-    try { if (window.parent !== window) window.parent.postMessage('detail-open', '*'); } catch(e){}
+    _notifyOverlay(true);
     _dvOverlay.setAttribute('aria-hidden', 'false');
     if (_dvVisT) clearTimeout(_dvVisT);
     _dvVisT = setTimeout(() => _dvOverlay.classList.add('vis'), 20);
@@ -8254,7 +8271,7 @@ function buildEdificio(detail = 'hi'){
   function _dvClose(immediate){
     if (!_dvOpen && !immediate) return;
     _dvOpen = false;
-    try { if (window.parent !== window) window.parent.postMessage('detail-close', '*'); } catch(e){}
+    _notifyOverlay(false);
     if (_dvTimer){ clearInterval(_dvTimer); _dvTimer = 0; }
     _dvDisposeScene();
     if (immediate){
