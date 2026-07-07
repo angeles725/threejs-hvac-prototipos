@@ -1235,14 +1235,29 @@ SYS.edificio.push(edLOD);                        // ref para el toggle EDIFICIO
 // Rampa de color por temperatura (20 azul -> 23 verde -> 25 ambar -> 27 rojo).
 // La reutiliza el panel de temperaturas por planta (hover). Devuelve un THREE.Color
 // compartido; leer getHexString() de inmediato es seguro.
-const _tCold = new THREE.Color(0x2f7fd6), _tCool = new THREE.Color(0x36c46a),
-      _tWarm = new THREE.Color(0xf2c14e), _tHot = new THREE.Color(0xe0533a);
+// Rampa termica de ALTO CONTRASTE: 6 paradas vivas y bien separadas sobre el rango
+// real de los cuartos (~20-27 °C). Al comprimir el espectro completo en ese rango,
+// diferencias de ~1 °C dan un salto de color claro -> facil de distinguir de un vistazo.
+const _tStops = [
+  [20.0, new THREE.Color(0x1e63c4)],   // frio        — azul fuerte
+  [21.5, new THREE.Color(0x2fa8d8)],   // fresco      — celeste
+  [22.5, new THREE.Color(0x1fb257)],   // confort     — verde
+  [23.5, new THREE.Color(0xf4c020)],   // tibio       — amarillo
+  [25.0, new THREE.Color(0xf07a1e)],   // caliente    — naranja
+  [26.5, new THREE.Color(0xdb2140)],   // muy caliente — rojo
+];
 const _tCol = new THREE.Color();
 function tempColor(t){
-  if (t <= 20) return _tCol.copy(_tCold);
-  if (t <= 23) return _tCol.copy(_tCold).lerp(_tCool, (t-20)/3);
-  if (t <= 25) return _tCol.copy(_tCool).lerp(_tWarm, (t-23)/2);
-  return _tCol.copy(_tWarm).lerp(_tHot, Math.min(1, (t-25)/2));
+  const last = _tStops[_tStops.length - 1];
+  if (t <= _tStops[0][0]) return _tCol.copy(_tStops[0][1]);
+  if (t >= last[0])       return _tCol.copy(last[1]);
+  for (let i = 1; i < _tStops.length; i++){
+    if (t <= _tStops[i][0]){
+      const a = _tStops[i-1], b = _tStops[i];
+      return _tCol.copy(a[1]).lerp(b[1], (t - a[0]) / (b[0] - a[0]));
+    }
+  }
+  return _tCol.copy(last[1]);
 }
 
 // Etiquetas de escena (MAR CARIBE / PLAYA / MALECON / CASA DE MAQUINAS / HOTEL)
@@ -7188,18 +7203,20 @@ function buildEdificio(detail = 'hi'){
   const roomPills = [];
   const _PILL_W = 220, _PILL_H = 74, _FACADE_Z = 12.5;         // canvas hi-res (texto crocante)
   function _pillRRect(g, x, y, w, h, r){ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
+  function _lighten(hex, amt){ const n=parseInt(hex.slice(1),16), r=(n>>16)&255, gg=(n>>8)&255, b=n&255;
+    return 'rgb('+Math.round(r+(255-r)*amt)+','+Math.round(gg+(255-gg)*amt)+','+Math.round(b+(255-b)*amt)+')'; }
   function _drawPill(g, id, temp, hex){
     g.clearRect(0, 0, _PILL_W, _PILL_H);
     _pillRRect(g, 4, 4, _PILL_W-8, _PILL_H-8, (_PILL_H-8)/2);   // stadium (rectangulo redondeado)
-    g.fillStyle = '#ECE3CF'; g.fill();                          // papel B11
+    g.fillStyle = '#16273F'; g.fill();                          // navy oscuro -> el valor resalta
     g.lineWidth = 6; g.strokeStyle = hex; g.stroke();           // borde por temperatura
     g.textBaseline = 'middle';
-    g.fillStyle = '#1F3A5F';                                    // navy
-    g.font = '700 26px "IBM Plex Mono", ui-monospace, monospace';
-    g.textAlign = 'left';  g.fillText(id, 24, _PILL_H/2 + 1);
-    g.fillStyle = hex;
-    g.font = '700 30px "IBM Plex Mono", ui-monospace, monospace';
-    g.textAlign = 'right'; g.fillText(temp.toFixed(1) + '°', _PILL_W-24, _PILL_H/2 + 1);
+    g.fillStyle = '#93A6C4';                                    // id (P{piso}-{cuarto}) — azul claro tenue
+    g.font = '600 22px "IBM Plex Mono", ui-monospace, monospace';
+    g.textAlign = 'left';  g.fillText(id, 22, _PILL_H/2 + 1);
+    g.fillStyle = _lighten(hex, 0.30);                          // VALOR — color por temp aclarado, resalta
+    g.font = '800 34px "IBM Plex Mono", ui-monospace, monospace';
+    g.textAlign = 'right'; g.fillText(temp.toFixed(1) + '°', _PILL_W-22, _PILL_H/2 + 1);
   }
   for (const _pid in roomData){
     const d = roomData[_pid];
