@@ -37,12 +37,6 @@
   #hud .ph { color:var(--ink); font-family:var(--cond); text-transform:uppercase; font-size:10px; letter-spacing:0.14em; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid var(--rule); }
   #hud .row { display:flex; justify-content:space-between; gap:22px; margin:4px 0; color:rgba(31,58,95,0.72); font-family:var(--cond); text-transform:uppercase; letter-spacing:0.06em; }
   #hud b { color:var(--accent); font-size:15px; font-family:var(--mono); font-variant-numeric:tabular-nums; }
-  #temps { position:fixed; top:50%; left:14px; transform:translateY(-50%); background:rgba(236,227,207,0.94); border:1px solid var(--ink); border-radius:0; padding:9px 12px; font-size:11px; letter-spacing:0.05em; z-index:19; font-family:var(--mono); }
-  #temps .ph { color:var(--ink); font-family:var(--cond); text-transform:uppercase; font-size:10px; letter-spacing:0.14em; margin-bottom:7px; padding-bottom:5px; border-bottom:1px solid var(--rule); }
-  #temps .trow { display:flex; align-items:center; gap:8px; margin:3px 0; }
-  #temps .trow i { width:11px; height:9px; border-radius:0; display:inline-block; background:#2f7fd6; } /* color de calor dinamico (JS): se conserva */
-  #temps .trow label { color:rgba(31,58,95,0.72); width:26px; font-family:var(--cond); }
-  #temps .trow b { color:var(--ink); font-variant-numeric:tabular-nums; font-family:var(--mono); }
 
   /* ====== STATUS BAR + drill-down (patron Honeywell-MX60) — aditivo ======
      Barra fija VERTICAL en el borde DERECHO-CENTRO (zona libre; en el embed
@@ -156,10 +150,6 @@ if(new URLSearchParams(location.search).has('clean')){
   <div><i style="background:#2f8a86"></i> Agua de alberca (filtro&rarr;HX&rarr;calentador)</div>
 </div>
 <div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
-<div id="temps">
-  <div class="ph">TEMP · PISO (°C)</div>
-  <div id="tempList"></div>
-</div>
 <div id="hud">
   <div class="ph">renderer.info (live)</div>
   <div class="row"><label>DRAW CALLS</label><b id="drawN">–</b></div>
@@ -280,6 +270,25 @@ if(new URLSearchParams(location.search).has('clean')){
     <div class="meta"><span><span id="rp-filter-lbl">VIDA ÚTIL FILTRO:</span> <b id="rp-filter">—%</b></span><span>MANTENIMIENTO <b>PREDICTIVO</b></span></div>
   </div>
 </div>
+
+<!-- Panel de temperaturas por planta (aditivo): aparece al hacer hover sobre un piso.
+     Valor + fondo de color por rango termico (heatmap). Estilo B11 papel/marino. -->
+<style>
+  #floorTempPanel{ position:fixed; top:44px; left:50%; transform:translateX(-50%); z-index:200; display:none;
+    min-width:198px; background:rgba(236,227,207,.94); border:1px solid var(--ink);
+    font-family:var(--mono); color:var(--ink); box-shadow:2px 3px 0 rgba(31,58,95,.12); }
+  #floorTempPanel.show{ display:block; }
+  #floorTempPanel .ft-h{ font-family:var(--cond); font-weight:600; text-transform:uppercase;
+    letter-spacing:.08em; font-size:11px; padding:7px 11px; border-bottom:1px solid var(--ink);
+    background:var(--paper2); }
+  #floorTempPanel .ft-row{ display:flex; justify-content:space-between; align-items:baseline;
+    gap:14px; padding:5px 11px 5px 8px; border-bottom:1px solid var(--rule); }
+  #floorTempPanel .ft-row:last-child{ border-bottom:0; }
+  #floorTempPanel .ft-id{ font-size:10px; letter-spacing:.04em; opacity:.85; text-transform:uppercase; }
+  #floorTempPanel .ft-v{ font-size:15px; font-weight:500; font-variant-numeric:tabular-nums; }
+  #floorTempPanel .ft-v small{ font-size:9px; opacity:.7; }
+</style>
+<div id="floorTempPanel" aria-hidden="true"></div>
 
 <!-- ============ DETAIL OVERLAY · cabina 3D por unidad (aditivo) ============
      Overlay a pantalla completa SOBRE la escena principal (que sigue viva por
@@ -1040,11 +1049,15 @@ function assemble(unitRoot, places, label, sysKey){
 // ==================================================================
 const EQUIP_LODS = [];
 const EQUIP_LOD_DIST = 60;                           // m: umbral near->far del cluster (calibrado)
-// MARCAS PERSISTENTES (FIX 2): outlines siempre visibles (sin seleccion) para
-// unidades en warning/alarm. Se pueblan en el bloque de seleccion (carga sincrona,
-// antes del 1er frame); el loop de animacion lee persistAlarmMarks para el pulso.
-const persistMarks = [];        // todas las marcas persistentes (cuartos + equipo)
-const persistAlarmMarks = [];   // subconjunto en alarma -> pulso en el loop
+// MARCAS DE ALARMA/ADVERTENCIA (CONTEXTUALES): outlines por unidad en warning/alarm.
+// Antes se mostraban SIEMPRE (saturaban la escena); ahora nacen OCULTAS y se revelan
+// por contexto — las de cuartos al hacer hover sobre su planta, las de equipo al
+// seleccionar la unidad. Se pueblan en el bloque de seleccion (carga sincrona, antes
+// del 1er frame); el loop de animacion lee persistAlarmMarks para el pulso.
+const persistMarks = [];        // todas las marcas (cuartos + equipo)
+const persistAlarmMarks = [];   // subconjunto en alarma -> pulso en el loop (solo si visible)
+const floorMarks = {};          // piso (num) -> [LineSegments] de sus cuartos warn/alarm
+const equipMarks = {};          // equipId -> LineSegments de ese equipo
 function assembleLOD(buildFn, places, label, sysKey, center){
   const rHi = assemble(buildFn('hi'), places, label + ' HI');
   const rLo = assemble(buildFn('lo'), places, label + ' LO');
@@ -1167,68 +1180,18 @@ scene.add(edLOD);
 SYS.edificio.push(edLOD);                        // ref para el toggle EDIFICIO
 
 // ==================================================================
-// TEMPERATURA PROMEDIO POR PISO (It.3) — simulacion + lectura por piso.
-// Setpoint ~22.5C + gradiente por altura (carga solar / efecto stack) + una
-// oscilacion lenta por piso para lectura "viva". Se muestra en (a) panel HUD
-// #temps y (b) 8 etiquetas flotantes (sprites) sobre la esquina mar/este de la
-// torre (edificio en (55,0,3): borde este x~77, fachada al mar z~12). 1 Hz.
-// ==================================================================
-const FLOORS_N = 8;
-const FLOOR_BASE_Y = 5.5;                        // centro del piso 1 = PODIUM_H(4) + FLOOR_H/2(1.5)
-const FLOOR_DY = 3;                              // FLOOR_H
-const floorTemps = new Float32Array(FLOORS_N);
+// Rampa de color por temperatura (20 azul -> 23 verde -> 25 ambar -> 27 rojo).
+// La reutiliza el panel de temperaturas por planta (hover). Devuelve un THREE.Color
+// compartido; leer getHexString() de inmediato es seguro.
 const _tCold = new THREE.Color(0x2f7fd6), _tCool = new THREE.Color(0x36c46a),
       _tWarm = new THREE.Color(0xf2c14e), _tHot = new THREE.Color(0xe0533a);
 const _tCol = new THREE.Color();
-function tempColor(t){                            // 20 azul -> 23 verde -> 25 ambar -> 27 rojo
+function tempColor(t){
   if (t <= 20) return _tCol.copy(_tCold);
   if (t <= 23) return _tCol.copy(_tCold).lerp(_tCool, (t-20)/3);
   if (t <= 25) return _tCol.copy(_tCool).lerp(_tWarm, (t-23)/2);
   return _tCol.copy(_tWarm).lerp(_tHot, Math.min(1, (t-25)/2));
 }
-function _roundRect(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
-// Etiquetas 3D: un sprite por piso.
-const floorSprites = [];
-for (let i = 0; i < FLOORS_N; i++){
-  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
-  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
-  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, depthTest:true, depthWrite:false, transparent:true }));
-  spr.scale.set(6.4, 1.6, 1);
-  spr.position.set(79, FLOOR_BASE_Y + FLOOR_DY*i, 10);
-  scene.add(spr);
-  floorSprites.push({ spr, cv, tex });
-}
-// Filas del panel HUD (P8 arriba .. P1 abajo).
-const tempRows = [];
-{
-  const host = document.getElementById('tempList');
-  for (let i = FLOORS_N-1; i >= 0; i--){
-    const row = document.createElement('div'); row.className = 'trow';
-    row.innerHTML = '<i></i><label>P'+(i+1)+'</label><b>–</b>';
-    host.appendChild(row);
-    tempRows[i] = { chip: row.querySelector('i'), val: row.querySelector('b') };
-  }
-}
-let _tempLast = -1e9;
-function updateFloorTemps(now){
-  if (now - _tempLast < 1000) return;            // refresco 1 Hz (barato)
-  _tempLast = now; const s = now * 0.001;
-  for (let i = 0; i < FLOORS_N; i++){
-    const t = 22.5 + i*0.35 + Math.sin(s*0.5 + i*0.9)*0.6;   // gradiente + vida
-    floorTemps[i] = t;
-    const hex = '#' + tempColor(t).getHexString();
-    if (tempRows[i]){ tempRows[i].chip.style.background = hex; tempRows[i].val.textContent = t.toFixed(1) + '°'; }
-    const fs = floorSprites[i], cx = fs.cv.getContext('2d');
-    cx.clearRect(0,0,256,64);
-    cx.fillStyle = 'rgba(8,12,18,0.72)'; cx.strokeStyle = hex; cx.lineWidth = 4;
-    _roundRect(cx, 3, 3, 250, 58, 10); cx.fill(); cx.stroke();
-    cx.textBaseline = 'middle';
-    cx.fillStyle = '#eaf2f0'; cx.font = 'bold 26px monospace'; cx.fillText('P'+(i+1), 18, 34);
-    cx.fillStyle = hex;       cx.font = 'bold 30px monospace'; cx.fillText(t.toFixed(1)+'°C', 96, 34);
-    fs.tex.needsUpdate = true;
-  }
-}
-updateFloorTemps(performance.now());             // primer render inmediato
 
 // Etiquetas de escena (MAR CARIBE / PLAYA / MALECON / CASA DE MAQUINAS / HOTEL)
 // removidas a pedido del cliente.
@@ -1627,7 +1590,6 @@ function animate(){
   updateFlight(now);
   _lastT = now;
   controls.update();
-  updateFloorTemps(now);                           // temperatura por piso (1 Hz)
   if (ANIM_ON){
     for (let i = 0; i < spinners.fans.length; i++)  spinners.fans[i].rotation.y  += 0.16;
     for (let i = 0; i < spinners.pumps.length; i++) spinners.pumps[i].rotation.x += 0.34;
@@ -1646,6 +1608,7 @@ function animate(){
     const _pulse = 0.55 + 0.35 * (0.5 + 0.5 * Math.sin(now * 0.006));   // ~[0.55, 0.90]
     for (let i = 0; i < persistAlarmMarks.length; i++) persistAlarmMarks[i].material.opacity = _pulse;
   }
+  if (window.__resolveHover) window.__resolveHover();   // hover de planta (scope interno, expuesto por window)
   renderer.render(scene, camera);                 // aqui el renderer corre edLOD.update(camera)
   drawN.textContent = renderer.info.render.calls;
   triN.textContent  = renderer.info.render.triangles.toLocaleString();
@@ -2176,12 +2139,9 @@ function buildChiller(detail = 'hi'){
     staticG.add(slatIM);
   }
   mesh(new THREE.BoxGeometry(0.028, 0.22, 0.024), M.STEEL, 0.28, 0.95, 0.712);
-  {
-    const lb = mesh(new THREE.PlaneGeometry(0.12, 0.15),
-      new THREE.MeshStandardMaterial({ map:hazardLabelTex, roughness:0.5, metalness:0 }),
-      -0.17, 1.28, 0.703);
-    lb.castShadow = false;
-  }
+  // [gate] Etiqueta "PELIGRO" retirada del render por defecto: era un decal siempre
+  // visible que leia como alarma permanente. La textura (hazardLabelTex) se conserva
+  // por si se quiere re-habilitar de forma condicional.
   bevelBox(0.06, 0.12, 0.16, M.PANEL_D, -0.15, 0.26, 0.55, 0.006);
   bevelBox(0.06, 0.12, 0.16, M.PANEL_D, 1.15, 0.26, 0.55, 0.006);
 
@@ -3449,11 +3409,8 @@ function buildTower(){
       emissiveIntensity:1.3, roughness:0.35, metalness:0 });
     const eLed = cylX(0.035, 0.05, elecLedMat, HX + 0.32, 6.1, 2.28, 12);
     eLed.castShadow = false;
-    const lbl = mesh(new THREE.PlaneGeometry(0.24, 0.3),
-      new THREE.MeshStandardMaterial({ map:hazardLabelTex, roughness:0.5, metalness:0 }),
-      HX + 0.325, 5.55, 2.62);
-    lbl.rotation.y = Math.PI / 2;
-    lbl.castShadow = false;
+    // [gate] Etiqueta "PELIGRO" (torre) retirada del render por defecto — decal siempre
+    // visible que leia como alarma permanente. Textura conservada para re-uso condicional.
     makePipe([[HX + 0.16, 6.42, 2.28], [HX + 0.16, 9.7, 2.28], [HX - 0.2, 9.7, 2.28]], 0.03, M.DARK, 0.1);
     bevelBox(0.7, 0.7, 0.55, M.MOTOR, HX + 0.36, 4.0, -2.66, 0.03);
     cylX(0.05, 0.3, M.HUB, HX + 0.05, 4.0, -2.66, 10);
@@ -6012,11 +5969,8 @@ function buildExtractor(){
     // gabinete (cuerpo + puerta biselada + bisagra)
     box(0.10, 0.20, 0.16, M.BOX, DX, DY, DZ);
     box(0.012, 0.185, 0.15, M.BOX_D, DX + 0.052, DY, DZ);       // puerta (cara +X)
-    // etiqueta de peligro
-    const lbl = mesh(new THREE.PlaneGeometry(0.07, 0.05),
-      new THREE.MeshStandardMaterial({ map:discLabelTex, roughness:0.5, metalness:0 }),
-      DX + 0.059, DY + 0.04, DZ);
-    lbl.rotation.y = Math.PI/2; lbl.castShadow = false;
+    // [gate] Etiqueta "DESCON. 480V" retirada del render por defecto — decal de peligro
+    // siempre visible. Textura (discLabelTex) conservada para re-uso condicional.
     // palanca roja (operador lateral, cara +Z)
     box(0.03, 0.09, 0.02, M.RED, DX, DY - 0.02, DZ + 0.09);
     cylZ(0.014, 0.03, M.RED, DX, DY - 0.06, DZ + 0.095, 12);
@@ -7206,6 +7160,7 @@ function buildEdificio(detail = 'hi'){
   function deselectRoom(){
     roomSelected = null;
     _disposeRoomOutline();
+    hideAllEquipMarks();
     panel.classList.remove('show');
     hideFocus();
   }
@@ -7408,7 +7363,7 @@ function buildEdificio(detail = 'hi'){
   // alarmas pulsan en el loop; las advertencias quedan fijas. NO interfieren con
   // la seleccion ni se remueven al deseleccionar.
   // ================================================================
-  function _persistMark(sx, sy, sz, cx, cy, cz, state){
+  function _persistMark(sx, sy, sz, cx, cy, cz, state, ownerFloor, ownerEquipId){
     const eg = new THREE.EdgesGeometry(new THREE.BoxGeometry(sx, sy, sz));
     const mat = new THREE.LineBasicMaterial({
       color: STATE_COLOR[state], transparent: true,
@@ -7417,16 +7372,19 @@ function buildEdificio(detail = 'hi'){
     const ls = new THREE.LineSegments(eg, mat);
     ls.position.set(cx, cy, cz);
     ls.renderOrder = 997;
+    ls.visible = false;                                  // CONTEXTUAL: oculta por defecto
     scene.add(ls);
     persistMarks.push(ls);
     if (state === 'alarm') persistAlarmMarks.push(ls);
+    if (ownerFloor != null){ (floorMarks[ownerFloor] || (floorMarks[ownerFloor] = [])).push(ls); }
+    if (ownerEquipId != null){ equipMarks[ownerEquipId] = ls; }
   }
   let _persistRooms = 0, _persistEquip = 0;
   // Cuartos: caja _RW x _RH x _RD en el centro del cuarto.
   for (const id in roomData){
     const d = roomData[id];
     if (d.state === 'warning' || d.state === 'alarm'){
-      _persistMark(_RW, _RH, _RD, d.wx, d.wy, d.wz, d.state);
+      _persistMark(_RW, _RH, _RD, d.wx, d.wy, d.wz, d.state, d.floor, null);
       _persistRooms++;
     }
   }
@@ -7434,13 +7392,25 @@ function buildEdificio(detail = 'hi'){
   for (const id in equipData){
     const d = equipData[id];
     if (d.state === 'warning' || d.state === 'alarm'){
-      _persistMark(d.sx, d.sy, d.sz, d.wx, d.wy, d.wz, d.state);
+      _persistMark(d.sx, d.sy, d.sz, d.wx, d.wy, d.wz, d.state, null, id);
       _persistEquip++;
     }
   }
   // Conteo esperado: ~6 equipos (4 warn: CH-2/CP-2/TE-1/FL-1 + 2 alarm: CH-4/BP-1)
   // + cuartos warning/alarm (~20% de 88). Una sola LineSegments por unidad.
   console.log('[persist marks] rooms=' + _persistRooms + ' equip=' + _persistEquip + ' total=' + persistMarks.length);
+
+  // Revela SOLO las marcas warn/alarm de una planta; oculta las del resto de pisos.
+  function showFloorMarks(floorNum){
+    for (const fn in floorMarks){
+      const on = (+fn === floorNum), arr = floorMarks[fn];
+      for (let i = 0; i < arr.length; i++) arr[i].visible = on;
+    }
+  }
+  function hideAllFloorMarks(){
+    for (const fn in floorMarks){ const arr = floorMarks[fn]; for (let i = 0; i < arr.length; i++) arr[i].visible = false; }
+  }
+  function hideAllEquipMarks(){ for (const k in equipMarks) equipMarks[k].visible = false; }
 
   function selectEquip(id){
     const d = equipData[id]; if (!d) return;
@@ -7453,6 +7423,8 @@ function buildEdificio(detail = 'hi'){
     roomOutline.position.set(d.wx, d.wy, d.wz);
     roomOutline.renderOrder = 999;
     scene.add(roomOutline);
+    hideAllEquipMarks();
+    if (equipMarks[id]) equipMarks[id].visible = true;   // revela la marca de ESTE equipo
     panel.classList.add('show');                         // mostrar SIEMPRE al seleccionar
     try { _paintEquipPanel(d, 0); } catch(err){ /* el panel queda visible aunque una lectura falle */ }
   }
@@ -7712,6 +7684,104 @@ function buildEdificio(detail = 'hi'){
   };
 
   document.getElementById('rp-close').addEventListener('click', deselectRoom);
+
+  // ============================================================================
+  // HOVER DE PLANTA (aditivo): al pasar el mouse sobre un piso se resalta la planta,
+  // se muestra un panel con la temperatura de sus termostatos (valor + color por rango
+  // termico) y se revelan SOLO las marcas de alarma de esa planta. Todo se limpia al
+  // salir. Raycaster propio + variable de outline SEPARADA para no colisionar con la
+  // seleccion por click (roomSelected/roomOutline).
+  // ============================================================================
+  const _hray = new THREE.Raycaster();
+  const _hndc = new THREE.Vector2();
+  let hoverFloor = null, hoverFloorOutline = null;
+  let _hx = 0, _hy = 0, _hInside = false;
+  const _floorPanel = document.getElementById('floorTempPanel');
+
+  // Color por rango termico: REUSA la funcion tempColor() existente (~L1206) que ya
+  // alimenta el HUD de temperatura por piso -> rampa consistente en toda la escena.
+  // (Devuelve un THREE.Color compartido; leer getHexString() de inmediato es seguro.)
+  function _hexA(hex, a){ const n = parseInt(hex.slice(1), 16); return 'rgba(' + ((n>>16)&255) + ',' + ((n>>8)&255) + ',' + (n&255) + ',' + a + ')'; }
+  function _floorRooms(fn){ const out = []; for (const id in roomData){ if (roomData[id].floor === fn) out.push(roomData[id]); } return out.sort((a,b) => a.room - b.room); }
+
+  function _disposeHoverOutline(){
+    if (!hoverFloorOutline) return;
+    scene.remove(hoverFloorOutline);
+    hoverFloorOutline.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+    hoverFloorOutline = null;
+  }
+
+  function _paintFloorPanel(fn){
+    if (!_floorPanel) return;
+    const rooms = _floorRooms(fn);
+    let rows = '';
+    for (let i = 0; i < rooms.length; i++){
+      const r = rooms[i], hex = '#' + tempColor(r.temp).getHexString();
+      rows += '<div class="ft-row" style="background:' + _hexA(hex, 0.16) + ';border-left:3px solid ' + hex + '">' +
+                '<span class="ft-id">' + r.id + '</span>' +
+                '<span class="ft-v">' + r.temp.toFixed(1) + '<small> °C</small></span>' +
+              '</div>';
+    }
+    _floorPanel.innerHTML = '<div class="ft-h">PISO ' + fn + ' · TERMOSTATOS</div>' + rows;
+    _floorPanel.classList.add('show');
+  }
+
+  function _showFloorHover(fn){
+    if (hoverFloor === fn) return;                        // ya resaltada: nada que hacer
+    hoverFloor = fn;
+    _disposeHoverOutline();
+    const rooms = _floorRooms(fn);
+    if (!rooms.length){ hoverFloor = null; return; }
+    let minx = Infinity, maxx = -Infinity;
+    for (let i = 0; i < rooms.length; i++){ minx = Math.min(minx, rooms[i].wx); maxx = Math.max(maxx, rooms[i].wx); }
+    const cx = (minx + maxx) / 2, w = (maxx - minx) + _RW + 0.8, cy = rooms[0].wy, cz = rooms[0].wz;
+    const box = new THREE.BoxGeometry(w, _RH + 0.5, _RD + 0.5);
+    const grp = new THREE.Group();
+    const fill = new THREE.Mesh(box, new THREE.MeshBasicMaterial({ color: 0xC2410C, transparent: true, opacity: 0.22, depthTest: false, side: THREE.DoubleSide }));
+    fill.renderOrder = 998;
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: 0xF97316, transparent: true, opacity: 1, depthTest: false }));
+    edges.renderOrder = 999;
+    grp.add(fill); grp.add(edges);
+    grp.position.set(cx, cy, cz);
+    hoverFloorOutline = grp;
+    scene.add(hoverFloorOutline);
+    showFloorMarks(fn);                                  // revela SOLO las alarmas de esta planta
+    _paintFloorPanel(fn);
+    renderer.domElement.style.cursor = 'pointer';
+  }
+  function _hideFloorHover(){
+    if (hoverFloor === null && !hoverFloorOutline) return;
+    hoverFloor = null;
+    _disposeHoverOutline();
+    hideAllFloorMarks();
+    if (_floorPanel) _floorPanel.classList.remove('show');
+    if (!roomSelected) renderer.domElement.style.cursor = '';
+  }
+
+  renderer.domElement.addEventListener('pointermove', e => {
+    if (e.pointerType === 'touch') return;               // hover solo con mouse
+    _hx = (e.clientX / window.innerWidth) * 2 - 1;
+    _hy = -(e.clientY / window.innerHeight) * 2 + 1;
+    _hInside = true;
+  });
+  renderer.domElement.addEventListener('pointerleave', () => { _hInside = false; _hideFloorHover(); });
+
+  // Resolucion por-frame (llamada desde animate). Barato: 88 cajas, recursive=false.
+  // No durante pan (_down, compartido con el handler de zoom) ni con el mouse fuera.
+  function _resolveHover(){
+    if (!_hInside || _down) return;
+    _hndc.set(_hx, _hy);
+    _hray.setFromCamera(_hndc, camera);
+    const hits = _hray.intersectObjects(roomHitboxes, false);
+    if (hits.length && hits[0].object.userData.roomId){
+      _showFloorHover(roomData[hits[0].object.userData.roomId].floor);
+    } else {
+      _hideFloorHover();
+    }
+  }
+  // El bloque de interaccion vive en un scope interno; animate() (scope externo) no ve
+  // _resolveHover directamente. Se expone por window como __roomClick/__openDetail.
+  window.__resolveHover = _resolveHover;
 
   // Refresco ~1 Hz del cuarto seleccionado (barato, sin trabajo por-frame).
   let _rphase = 0;
