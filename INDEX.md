@@ -181,3 +181,4 @@ This index guides through the **40 blocks** of this research. Each block is an i
 1 requires-execution gap queued (G41 equipment LOD, §19 build phase). Terminal: Spanish designer handbook.
 - [x] G56 — Per-unit DETAIL VIEW pattern analysis (MX60-web + chihuahua/Niagara): dedicated page = header+KPI cockpit+focused single-unit 3D+Chart.js trends; portable (Niagara only binds the data source) → [Block 42], port plan pending user go-ahead
 - [x] G57 — Casino BMS reference (niagara-casino React/Vite) analysis + consolidated hotel detail-OVERLAY build plan (overlay over persistent scene; focused per-unit mini-3D via existing builders; Chart.js trends+comfort bands+ayer baseline; insights engine) → [Block 43]
+- [x] G58 — Hotel detail OVERLAY It.A (focused mini-3D via existing builders + KPI cockpit) + cross-iframe chrome-hide + full 3D-UI restyle to B11 Industrial (paper/navy/rust, IBM Plex, flat) + scene labels removed + navy blueprint viewer bg → [Block 43], deployed
