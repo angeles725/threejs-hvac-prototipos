@@ -185,6 +185,10 @@ if(new URLSearchParams(location.search).has('clean')){
     border:1px solid #00d4aa33; background:transparent; color:#7a8a98; cursor:pointer;
     border-radius:5px; font-size:15px; line-height:1; }
   #roomPanel .rp-close:hover{ color:#fff; border-color:#00d4aa88; }
+  #roomPanel .rp-detail{ position:absolute; top:9px; right:44px; padding:5px 9px;
+    border:1px solid #00d4aa55; background:#00d4aa14; color:#8fd8c8; cursor:pointer;
+    border-radius:6px; font:600 10px/1 'JetBrains Mono',ui-monospace,Consolas,monospace; letter-spacing:.05em; }
+  #roomPanel .rp-detail:hover{ color:#fff; border-color:#00d4aa; background:#00d4aa26; }
   #roomPanel .rp-pill{ display:flex; align-items:center; gap:8px; margin:11px 16px;
     padding:7px 11px; border-radius:6px; font-size:11px; letter-spacing:.12em;
     background:#00d4aa1a; border:1px solid #00d4aa55; color:#00d4aa; }
@@ -223,6 +227,7 @@ if(new URLSearchParams(location.search).has('clean')){
   <div class="rp-head">
     <div class="rp-id" id="rp-id">CUARTO —</div>
     <div class="rp-zone" id="rp-zone">—</div>
+    <button class="rp-detail" id="rp-detail" title="Ver detalle 3D">🔍 Ver detalle</button>
     <button class="rp-close" id="rp-close" title="Cerrar">×</button>
   </div>
   <div class="rp-pill"><span class="dot"></span><span id="rp-state">NORMAL</span></div>
@@ -252,6 +257,127 @@ if(new URLSearchParams(location.search).has('clean')){
     <div class="ttl"><span>DIAGNÓSTICO PREDICTIVO</span><span id="rp-trend">—</span></div>
     <div class="diag" id="rp-diag">—</div>
     <div class="meta"><span><span id="rp-filter-lbl">VIDA ÚTIL FILTRO:</span> <b id="rp-filter">—%</b></span><span>MANTENIMIENTO <b>PREDICTIVO</b></span></div>
+  </div>
+</div>
+
+<!-- ============ DETAIL OVERLAY · cabina 3D por unidad (aditivo) ============
+     Overlay a pantalla completa SOBRE la escena principal (que sigue viva por
+     debajo). Se abre desde #roomPanel (🔍 Ver detalle) o window.__openDetail(id).
+     Mini-escena WebGL dedicada montada al abrir y DESTRUIDA al cerrar. -->
+<style>
+  #detailOverlay{ position:fixed; inset:0; z-index:300; background:#070A15;
+    font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#cfe0da;
+    display:none; opacity:0; transition:opacity .3s ease; grid-template-rows:auto 1fr; }
+  #detailOverlay.show{ display:grid; }
+  #detailOverlay.vis{ opacity:1; }
+  /* barra superior */
+  #detailOverlay .dv-top{ display:flex; align-items:center; gap:14px; padding:12px 18px;
+    border-bottom:1px solid #00d4aa22; background:rgba(6,10,21,.85); backdrop-filter:blur(6px); }
+  #detailOverlay .dv-back{ width:34px; height:34px; flex:0 0 auto; border:1px solid #00d4aa44;
+    background:transparent; color:#8fd8c8; border-radius:7px; cursor:pointer; font-size:16px; line-height:1; }
+  #detailOverlay .dv-back:hover{ color:#fff; border-color:#00d4aa; background:#00d4aa1a; }
+  #detailOverlay .dv-tt{ min-width:0; }
+  #detailOverlay .dv-tt .t{ color:#fff; font-size:15px; letter-spacing:.08em; font-weight:600;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #detailOverlay .dv-tt .z{ color:#7a8a98; font-size:10px; letter-spacing:.08em; margin-top:2px; }
+  #detailOverlay .dv-pill{ margin-left:auto; display:flex; align-items:center; gap:8px; padding:6px 12px;
+    border-radius:20px; font-size:11px; letter-spacing:.12em; white-space:nowrap;
+    background:#00d4aa1a; border:1px solid #00d4aa55; color:#00d4aa; }
+  #detailOverlay .dv-pill .dot{ width:9px; height:9px; border-radius:50%; background:currentColor;
+    box-shadow:0 0 8px currentColor; }
+  #detailOverlay.warning .dv-pill{ background:#ffb84d1a; border-color:#ffb84d55; color:#ffb84d; }
+  #detailOverlay.alarm   .dv-pill{ background:#ff4d6d1f; border-color:#ff4d6d66; color:#ff4d6d; }
+  #detailOverlay .dv-tag{ padding:6px 10px; border-radius:6px; font-size:10px; letter-spacing:.1em;
+    white-space:nowrap; background:#0d141c; border:1px solid #00d4aa22; color:#8fd8c8; }
+  /* cuerpo en grid */
+  #detailOverlay .dv-body{ display:grid; grid-template-columns:210px minmax(0,1fr) 300px; gap:14px;
+    padding:14px; min-height:0; overflow:hidden; }
+  #detailOverlay .dv-col{ min-height:0; min-width:0; display:flex; flex-direction:column; gap:12px; overflow:auto; }
+  #detailOverlay .dv-card{ padding:12px 14px; border-radius:9px; background:#0d141c; border:1px solid #00d4aa22; }
+  #detailOverlay .dv-card .h{ color:#7a8a98; font-size:9px; letter-spacing:.14em; margin-bottom:8px; }
+  /* columna izquierda */
+  #detailOverlay .dv-brand{ color:#fff; font-size:13px; letter-spacing:.05em; }
+  #detailOverlay .dv-brand small{ display:block; color:#7a8a98; font-size:10px; margin-top:4px; letter-spacing:.04em; }
+  #detailOverlay .dv-led{ display:flex; align-items:center; gap:9px; margin-top:11px; color:#cfe0da; font-size:11px; }
+  #detailOverlay .dv-led i{ width:12px; height:12px; border-radius:50%; box-shadow:0 0 9px currentColor; background:currentColor; }
+  #detailOverlay .dv-set .big{ font-size:30px; font-weight:600; color:#00d4aa; font-variant-numeric:tabular-nums; line-height:1; }
+  #detailOverlay .dv-set .big .u{ font-size:13px; color:#7a8a98; }
+  #detailOverlay.warning .dv-set .big{ color:#ffb84d; }
+  #detailOverlay.alarm   .dv-set .big{ color:#ff4d6d; }
+  #detailOverlay .dv-leg div{ display:flex; align-items:center; gap:8px; margin:5px 0; font-size:10px; color:#9fb0aa; }
+  #detailOverlay .dv-leg i{ width:11px; height:11px; border-radius:2px; }
+  #detailOverlay .dv-diag{ color:#cfe0da; font-size:11px; line-height:1.5; }
+  /* centro · visor 3D */
+  #detailOverlay .dv-viewwrap{ position:relative; border-radius:10px; overflow:hidden;
+    border:1px solid #00d4aa22; background:#06080d; min-height:0; }
+  #detailViewer{ position:absolute; inset:0; }
+  #detailViewer canvas{ display:block; width:100%; height:100%; }
+  #detailOverlay .dv-hint{ position:absolute; left:12px; bottom:10px; font-size:9px; letter-spacing:.14em;
+    color:#6f8a83; background:rgba(6,8,13,.6); padding:5px 9px; border-radius:5px; pointer-events:none; }
+  #detailOverlay .dv-rotbtn{ position:absolute; right:12px; top:12px; padding:6px 11px; border-radius:16px;
+    background:rgba(6,8,13,.7); border:1px solid #00d4aa44; color:#8fd8c8; font:inherit; font-size:10px;
+    letter-spacing:.1em; cursor:pointer; }
+  #detailOverlay .dv-rotbtn.on{ background:#00d4aa1a; color:#fff; border-color:#00d4aa; }
+  /* columna derecha · KPIs */
+  #detailOverlay .dv-kpi{ padding:12px 14px; border-radius:9px; background:#0d141c; border:1px solid #00d4aa22; }
+  #detailOverlay .dv-kpi .h{ color:#7a8a98; font-size:9px; letter-spacing:.14em; margin-bottom:6px; }
+  #detailOverlay .dv-kpi .v{ font-size:24px; color:#e6efe9; font-variant-numeric:tabular-nums; line-height:1; }
+  #detailOverlay .dv-kpi .v .u{ font-size:12px; color:#7a8a98; }
+  #detailOverlay .dv-kpi.accent .v{ color:#00d4aa; }
+  #detailOverlay.warning .dv-kpi.accent .v{ color:#ffb84d; }
+  #detailOverlay.alarm   .dv-kpi.accent .v{ color:#ff4d6d; }
+  #detailOverlay .dv-bar{ height:5px; margin-top:8px; border-radius:3px; background:#1b2530; overflow:hidden; }
+  #detailOverlay .dv-bar i{ display:block; height:100%; border-radius:3px; background:#00d4aa; width:0%; }
+  #detailOverlay .dv-gauge{ display:block; margin:4px auto 0; width:150px; max-width:100%; }
+  #detailOverlay .dv-gauge .trk{ fill:none; stroke:#1b2530; stroke-width:8; stroke-linecap:round; }
+  #detailOverlay .dv-gauge .val{ fill:none; stroke:#00d4aa; stroke-width:8; stroke-linecap:round; }
+  @media (max-width:900px){
+    #detailOverlay .dv-body{ grid-template-columns:1fr; overflow:auto; }
+    #detailOverlay .dv-viewwrap{ min-height:44vh; }
+    #detailOverlay .dv-pill{ margin-left:0; }
+  }
+  @media (max-width:600px){
+    #detailOverlay.show{ display:flex; flex-direction:column; }
+    #detailOverlay .dv-body{ flex:1 1 auto; }
+    #detailOverlay .dv-viewwrap{ height:46vh; min-height:46vh; flex:0 0 auto; }
+    #detailOverlay .dv-top{ flex-wrap:wrap; gap:8px; }
+  }
+</style>
+<div id="detailOverlay" aria-hidden="true">
+  <div class="dv-top">
+    <button class="dv-back" id="dv-back" title="Cerrar (Esc)">←</button>
+    <div class="dv-tt"><div class="t" id="dv-title">—</div><div class="z" id="dv-zone">—</div></div>
+    <span class="dv-pill"><span class="dot"></span><span id="dv-state">—</span></span>
+    <span class="dv-tag" id="dv-tag">—</span>
+  </div>
+  <div class="dv-body" id="dv-body">
+    <div class="dv-col">
+      <div class="dv-card">
+        <div class="h">IDENTIFICACIÓN</div>
+        <div class="dv-brand" id="dv-brand">—<small id="dv-brand-sub">—</small></div>
+        <div class="dv-led"><i id="dv-led"></i><span id="dv-led-txt">—</span></div>
+      </div>
+      <div class="dv-card dv-set">
+        <div class="h" id="dv-setlbl">SETPOINT</div>
+        <div class="big" id="dv-setval">—</div>
+      </div>
+      <div class="dv-card dv-leg">
+        <div class="h">LEYENDA DE ESTADO</div>
+        <div><i style="background:#00ff66"></i> Verde · ON / operativo</div>
+        <div><i style="background:#2f7fd6"></i> Azul · standby</div>
+        <div><i style="background:#ff2233"></i> Rojo · alarma</div>
+      </div>
+      <div class="dv-card">
+        <div class="h">DIAGNÓSTICO PREDICTIVO</div>
+        <div class="dv-diag" id="dv-diag">—</div>
+      </div>
+    </div>
+    <div class="dv-viewwrap">
+      <div id="detailViewer"></div>
+      <button class="dv-rotbtn on" id="dv-rot">↻ Rotar</button>
+      <div class="dv-hint">ARRASTRAR · ROTAR | RUEDA · ZOOM</div>
+    </div>
+    <div class="dv-col" id="dv-kpis"></div>
   </div>
 </div>
 
@@ -7602,6 +7728,313 @@ function buildEdificio(detail = 'hi'){
     const rd = roomData[roomSelected]; if (rd){ _paintPanel(rd, _rphase); return; }
     const ed = equipData[roomSelected]; if (ed) _paintEquipPanel(ed, _rphase);
   }, 1000);
+
+  // ================================================================
+  // DETAIL OVERLAY — cabina 3D a pantalla completa por unidad (aditivo).
+  // Reutiliza roomData/equipData/STATE_COLOR/STATE_TXT y los builders de equipo
+  // (solo se LLAMAN, no se modifican). Mini-escena WebGL dedicada montada AL
+  // ABRIR y DESTRUIDA por completo al cerrar (sin fuga de contexto WebGL). La
+  // escena principal sigue viva por debajo del overlay (no se pausa).
+  // ================================================================
+  const _dvBuilders = {
+    chiller:  () => buildChiller('hi'),
+    pump:     () => buildPump('hi'),
+    tower:    () => buildTower(),
+    boiler:   () => buildCaldera(),
+    tanks:    () => buildTanques(),
+    hx:       () => buildHX(),
+    filter:   () => buildFiltrado(),
+    exhaust:  () => buildExtractor(),
+    ahu:      () => buildAHU(),
+    poolheat: () => buildAHU(),
+  };
+  const _dvLedColor = { normal: 0x2fd6b0, warning: 0xffb84d, alarm: 0xff2233 };
+
+  const _dvOverlay = document.getElementById('detailOverlay');
+  const _dvViewer  = document.getElementById('detailViewer');
+  const _dvKpiWrap = document.getElementById('dv-kpis');
+  const _dvRotBtn  = document.getElementById('dv-rot');
+  let _dvOpen = false, _dvRAF = 0, _dvVisT = 0;
+  let _dvRenderer = null, _dvScene = null, _dvCam = null, _dvControls = null;
+  let _dvRO = null, _dvModel = null, _dvLed = null, _dvState = 'normal';
+  let _dvKpis = [], _dvKphase = 0, _dvTimer = 0;
+
+  // Modelo de CUARTO representativo (~10 meshes) — el modulo de cuarto no es un
+  // builder autonomo. Coloreado por estado. Centrado con el piso en y=0.
+  function _dvBuildRoomModel(state){
+    const g = new THREE.Group();
+    const acc = new THREE.Color(_dvLedColor[state] || _dvLedColor.normal);
+    const wallMat  = new THREE.MeshStandardMaterial({ color:0x2a3340, roughness:.92, metalness:0 });
+    const ceilMat  = new THREE.MeshStandardMaterial({ color:0x333d49, roughness:.9,  metalness:0 });
+    const floorMat = new THREE.MeshStandardMaterial({ color:0x1a222c, roughness:.8,  metalness:.05 });
+    const bedMat   = new THREE.MeshStandardMaterial({ color:0xdfe6ee, roughness:.75, metalness:0 });
+    const pillowMat= new THREE.MeshStandardMaterial({ color:0xf2f5f8, roughness:.85, metalness:0 });
+    const accMat   = new THREE.MeshStandardMaterial({ color:acc, emissive:acc, emissiveIntensity:.4, roughness:.5, metalness:.1 });
+    const glassMat = new THREE.MeshStandardMaterial({ color:0x0b1a24, roughness:.1, metalness:.2, transparent:true, opacity:.55 });
+    const W=4, H=2.8, D=6.5;
+    const add=(geo,mat,x,y,z)=>{ const m=new THREE.Mesh(geo,mat); m.position.set(x,y,z); g.add(m); return m; };
+    add(new THREE.BoxGeometry(W,0.12,D), floorMat,  0,0,0);              // piso
+    add(new THREE.BoxGeometry(W,0.1,D),  ceilMat,   0,H,0);              // techo
+    add(new THREE.BoxGeometry(0.12,H,D), wallMat,  -W/2,H/2,0);          // pared izq
+    add(new THREE.BoxGeometry(0.12,H,D), wallMat,   W/2,H/2,0);          // pared der
+    add(new THREE.BoxGeometry(W,H,0.12), wallMat,   0,H/2,-D/2);         // pared fondo
+    add(new THREE.BoxGeometry(2.0,H*0.62,0.06), glassMat, 0,H*0.55,D/2-0.06); // ventana (fachada)
+    add(new THREE.BoxGeometry(2.0,0.42,3.0), bedMat,   -0.65,0.33,-0.7); // cama base
+    add(new THREE.BoxGeometry(1.9,0.2,0.7),  pillowMat,-0.65,0.6,-2.0);  // almohadas
+    add(new THREE.CylinderGeometry(0.3,0.3,0.08,20), accMat, 0.95,H-0.07,0.7); // difusor (accent)
+    add(new THREE.BoxGeometry(0.55,0.85,0.06), accMat, W/2-0.09,1.25,1.7);     // termostato/panel (accent)
+    return g;
+  }
+
+  function _dvClamp(v,a,b){ return v<a?a:(v>b?b:v); }
+  // Arco de gauge (semicirculo superior) — devuelve el atributo d para 'frac' [0..1].
+  function _dvArcD(frac){
+    frac = _dvClamp(frac, 0.001, 1);
+    const cx=60, cy=58, r=50, ang=(180 - frac*180) * Math.PI/180;
+    const x=(cx + r*Math.cos(ang)).toFixed(2), y=(cy - r*Math.sin(ang)).toFixed(2);
+    return 'M10 58 A50 50 0 0 1 ' + x + ' ' + y;
+  }
+
+  // Config de KPIs por tipo de unidad. Cada item lee de la data en vivo con jitter.
+  function _dvKpiConfig(kind, d){
+    if (kind === 'room'){
+      return [
+        { lbl:'TEMPERATURA', unit:'°C', accent:true, gauge:true, gLo:16, gHi:30, dec:1, get:p=>d.temp + Math.sin(p*0.9+d.floor)*0.08 },
+        { lbl:'SETPOINT',    unit:'°C', dec:1, get:()=>d.setpoint },
+        { lbl:'HUMEDAD',     unit:'%',  bar:true, max:100, dec:0, get:p=>d.hum + Math.sin(p*0.7+d.room)*0.6 },
+        { lbl:'AMPERAJE FCU',unit:'A',  bar:true, max:12,  dec:1, get:p=>d.amp + Math.sin(p*1.1+d.floor*2)*0.06 },
+      ];
+    }
+    const gLo = d.sp != null ? d.sp - 10 : d.temp * 0.5;
+    const gHi = d.sp != null ? d.sp + 10 : d.temp * 1.5;
+    const m3dec = d.m3Max >= 50 ? 0 : (d.m3Max <= 3 ? 2 : 1);
+    const out = [
+      { lbl:d.tempLbl, unit:d.tempU, accent:true, gauge:true, gLo, gHi, dec:1, get:p=>d.temp + Math.sin(p*0.9+d.wz)*0.06 },
+    ];
+    if (d.sp != null) out.push({ lbl:d.spLbl, unit:d.tempU, dec:1, get:()=>d.sp });
+    out.push({ lbl:d.m3Lbl, unit:d.m3U, bar:true, max:d.m3Max, dec:m3dec, get:p=>d.m3v + Math.sin(p*0.7+d.sx)*(d.m3Max*0.008) });
+    out.push({ lbl:'AMPERAJE', unit:'A', bar:true, max:d.ampMax, dec:1, get:p=>d.amp + Math.sin(p*1.1+d.wx)*0.05 });
+    return out;
+  }
+
+  // Construye el DOM de la pila de KPIs y devuelve refs para refrescar.
+  function _dvBuildKpis(cfgs){
+    _dvKpiWrap.innerHTML = '';
+    return cfgs.map((c, i) => {
+      const card = document.createElement('div');
+      card.className = 'dv-kpi' + (c.accent ? ' accent' : '');
+      let html = '<div class="h">' + c.lbl + '</div>'
+        + '<div class="v"><span class="kv">—</span><span class="u"> ' + c.unit + '</span></div>';
+      if (c.gauge) html += '<svg class="dv-gauge" viewBox="0 0 120 66"><path class="trk" d="M10 58 A50 50 0 0 1 110 58"></path><path class="val" d=""></path></svg>';
+      if (c.bar)   html += '<div class="dv-bar"><i></i></div>';
+      card.innerHTML = html;
+      _dvKpiWrap.appendChild(card);
+      return { cfg:c, vEl:card.querySelector('.kv'), gEl:card.querySelector('.val'), bEl:card.querySelector('.dv-bar i') };
+    });
+  }
+
+  function _dvRefreshKpis(){
+    _dvKphase += 1;
+    const hex = '#' + STATE_COLOR[_dvState].toString(16).padStart(6, '0');
+    _dvKpis.forEach(k => {
+      const c = k.cfg, val = c.get(_dvKphase);
+      k.vEl.textContent = val.toFixed(c.dec);
+      if (k.gEl){
+        k.gEl.setAttribute('d', _dvArcD((val - c.gLo) / (c.gHi - c.gLo)));
+        k.gEl.style.stroke = hex;
+      }
+      if (k.bEl){
+        k.bEl.style.width = _dvClamp(val / c.max * 100, 0, 100) + '%';
+        k.bEl.style.background = hex;
+      }
+    });
+  }
+
+  // ---- mini-escena WebGL dedicada ----
+  function _dvBuildScene(kind, d){
+    const w = Math.max(1, _dvViewer.clientWidth), h = Math.max(1, _dvViewer.clientHeight);
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+    _dvRenderer = new THREE.WebGLRenderer({ antialias: dpr < 1.9, alpha:false, powerPreference:'high-performance' });
+    _dvRenderer.setPixelRatio(dpr);
+    _dvRenderer.setSize(w, h);
+    _dvRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+    _dvRenderer.toneMappingExposure = 1.05;
+    _dvRenderer.outputColorSpace = THREE.SRGBColorSpace;
+    _dvViewer.appendChild(_dvRenderer.domElement);
+
+    _dvScene = new THREE.Scene();
+    _dvScene.background = new THREE.Color(0x06080d);
+    _dvScene.environment = scene.environment;                // reutiliza el PMREM ya generado
+    _dvScene.fog = new THREE.Fog(0x06080d, 18, 80);
+
+    // luces: ambiente + key + fill + rim
+    _dvScene.add(new THREE.AmbientLight(0xbfd8e0, 0.55));
+    const key = new THREE.DirectionalLight(0xffffff, 1.7); key.position.set(6, 10, 7); _dvScene.add(key);
+    const fill = new THREE.DirectionalLight(0x9fc4d6, 0.6); fill.position.set(-8, 5, -4); _dvScene.add(fill);
+    const rim = new THREE.DirectionalLight(0x00d4aa, 0.5);  rim.position.set(-3, 6, -10); _dvScene.add(rim);
+
+    // modelo: equipo via builder, o cuarto representativo
+    _dvModel = (kind === 'equip') ? (_dvBuilders[d.type] || _dvBuilders.ahu)() : _dvBuildRoomModel(d.state);
+    _dvScene.add(_dvModel);
+
+    // encuadre segun bbox
+    const box = new THREE.Box3().setFromObject(_dvModel);
+    const size = new THREE.Vector3(); box.getSize(size);
+    const center = new THREE.Vector3(); box.getCenter(center);
+    const sphR = Math.max(size.length() * 0.5, 0.6);
+    const dist = sphR * 2.4;
+    _dvCam = new THREE.PerspectiveCamera(42, w / h, Math.max(0.05, sphR * 0.02), sphR * 40 + 60);
+    _dvCam.position.set(center.x + dist * 0.85, center.y + dist * 0.62, center.z + dist * 1.0);
+
+    // LED de estado sobre el modelo
+    const ledR = _dvClamp(sphR * 0.06, 0.06, 0.5);
+    const ledCol = new THREE.Color(_dvLedColor[d.state] || _dvLedColor.normal);
+    _dvLed = new THREE.Mesh(
+      new THREE.SphereGeometry(ledR, 20, 14),
+      new THREE.MeshStandardMaterial({ color:ledCol, emissive:ledCol, emissiveIntensity:1.4, roughness:.35 })
+    );
+    _dvLed.position.set(center.x, box.max.y + ledR * 2.2, center.z);
+    _dvScene.add(_dvLed);
+
+    _dvControls = new OrbitControls(_dvCam, _dvRenderer.domElement);
+    _dvControls.enableDamping = true; _dvControls.dampingFactor = 0.08;
+    _dvControls.target.copy(center);
+    _dvControls.autoRotate = _dvRotBtn.classList.contains('on');
+    _dvControls.autoRotateSpeed = 0.5;
+    _dvControls.minDistance = sphR * 0.6; _dvControls.maxDistance = sphR * 12;
+    _dvControls.update();
+
+    _dvRO = new ResizeObserver(() => {
+      if (!_dvRenderer) return;
+      const nw = Math.max(1, _dvViewer.clientWidth), nh = Math.max(1, _dvViewer.clientHeight);
+      _dvCam.aspect = nw / nh; _dvCam.updateProjectionMatrix();
+      _dvRenderer.setSize(nw, nh);
+    });
+    _dvRO.observe(_dvViewer);
+  }
+
+  function _dvTick(){
+    if (!_dvOpen) return;
+    _dvRAF = requestAnimationFrame(_dvTick);
+    if (_dvControls) _dvControls.update();
+    if (_dvLed && _dvState === 'alarm'){
+      _dvLed.material.emissiveIntensity = 0.8 + (0.5 + 0.5 * Math.sin(performance.now() * 0.006)) * 1.6;
+    }
+    if (_dvRenderer) _dvRenderer.render(_dvScene, _dvCam);
+  }
+
+  function _dvDisposeScene(){
+    if (_dvRAF) cancelAnimationFrame(_dvRAF);
+    _dvRAF = 0;
+    if (_dvRO){ _dvRO.disconnect(); _dvRO = null; }
+    if (_dvControls){ _dvControls.dispose(); _dvControls = null; }
+    if (_dvScene){
+      // OJO: NO se descarta scene.environment (es del render principal, compartido).
+      _dvScene.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+        mats.forEach(m => {
+          for (const key in m){ const v = m[key]; if (v && v.isTexture) v.dispose(); }
+          if (m.dispose) m.dispose();
+        });
+      });
+      _dvScene = null;
+    }
+    if (_dvRenderer){
+      _dvRenderer.dispose();
+      if (_dvRenderer.forceContextLoss) _dvRenderer.forceContextLoss();
+      const cv = _dvRenderer.domElement;
+      if (cv && cv.parentNode) cv.parentNode.removeChild(cv);
+      _dvRenderer = null;
+    }
+    _dvModel = null; _dvLed = null; _dvCam = null;
+  }
+
+  // ---- abrir / cerrar ----
+  function _dvOpenUnit(id){
+    const room = roomData[id];
+    const d = room || equipData[id];
+    if (!d) return;
+    const kind = room ? 'room' : 'equip';
+    if (_dvOpen) _dvClose(true);                 // re-abrir limpio
+
+    _dvState = d.state;
+    const title = kind === 'room' ? ('CUARTO P' + d.floor + '-' + d.room) : (d.label || d.id || id);
+    document.getElementById('dv-title').textContent = title;
+    document.getElementById('dv-zone').textContent  = d.zone || '—';
+    document.getElementById('dv-state').textContent = STATE_TXT[d.state];
+    document.getElementById('dv-tag').textContent   = kind === 'room' ? 'HABITACIÓN · FCU' : String(d.type || '').toUpperCase();
+    _dvOverlay.className = d.state;               // pill/colores por estado
+
+    // columna izquierda
+    document.getElementById('dv-brand').childNodes[0].nodeValue = kind === 'room' ? 'UNIDAD FAN-COIL' : (d.label || id);
+    document.getElementById('dv-brand-sub').textContent = d.zone || '';
+    const led = document.getElementById('dv-led');
+    const ledHex = '#' + STATE_COLOR[d.state].toString(16).padStart(6, '0');
+    led.style.color = ledHex;
+    document.getElementById('dv-led-txt').textContent = STATE_TXT[d.state];
+    const spVal = kind === 'room' ? d.setpoint : d.sp;
+    const spU   = kind === 'room' ? '°C' : (d.tempU || '°C');
+    document.getElementById('dv-setlbl').textContent = kind === 'room' ? 'SETPOINT' : (d.spLbl || 'SETPOINT');
+    document.getElementById('dv-setval').innerHTML = (spVal == null)
+      ? 'N/A' : (spVal.toFixed(1) + '<span class="u"> ' + spU + '</span>');
+    document.getElementById('dv-diag').textContent = d.diagnosis || '—';
+
+    // KPIs
+    _dvKphase = 0;
+    _dvKpis = _dvBuildKpis(_dvKpiConfig(kind, d));
+
+    // mostrar overlay con fade
+    _dvOpen = true;
+    _dvOverlay.classList.add('show');
+    _dvOverlay.setAttribute('aria-hidden', 'false');
+    if (_dvVisT) clearTimeout(_dvVisT);
+    _dvVisT = setTimeout(() => _dvOverlay.classList.add('vis'), 20);
+
+    // mini-escena (tras layout para medir el visor)
+    requestAnimationFrame(() => {
+      if (!_dvOpen) return;
+      _dvBuildScene(kind, d);
+      _dvRefreshKpis();
+      _dvTick();
+      if (_dvTimer) clearInterval(_dvTimer);
+      _dvTimer = setInterval(_dvRefreshKpis, 1000);
+    });
+  }
+
+  function _dvClose(immediate){
+    if (!_dvOpen && !immediate) return;
+    _dvOpen = false;
+    if (_dvTimer){ clearInterval(_dvTimer); _dvTimer = 0; }
+    _dvDisposeScene();
+    if (immediate){
+      _dvOverlay.classList.remove('vis', 'show');
+      _dvOverlay.setAttribute('aria-hidden', 'true');
+      return;
+    }
+    _dvOverlay.classList.remove('vis');
+    _dvOverlay.setAttribute('aria-hidden', 'true');
+    if (_dvVisT) clearTimeout(_dvVisT);
+    _dvVisT = setTimeout(() => { if (!_dvOpen) _dvOverlay.classList.remove('show'); }, 320);
+  }
+
+  // API publica + triggers
+  window.__openDetail = function(id){ _dvOpenUnit(id); };
+  const _rpDetail = document.getElementById('rp-detail');
+  if (_rpDetail) _rpDetail.addEventListener('click', () => { if (roomSelected) _dvOpenUnit(roomSelected); });
+  document.getElementById('dv-back').addEventListener('click', () => _dvClose(false));
+  _dvRotBtn.addEventListener('click', () => {
+    const on = _dvRotBtn.classList.toggle('on');
+    if (_dvControls) _dvControls.autoRotate = on;
+  });
+  // click en el margen oscuro (fuera de la cabina) -> cerrar
+  _dvOverlay.addEventListener('click', e => {
+    if (e.target === _dvOverlay || e.target.id === 'dv-body') _dvClose(false);
+  });
+  // ESC cierra el overlay (captura, con prioridad sobre otros handlers)
+  document.addEventListener('keydown', e => {
+    if (_dvOpen && (e.key === 'Escape' || e.key === 'Esc')){ e.stopPropagation(); _dvClose(false); }
+  }, true);
 }
 
 </script>
