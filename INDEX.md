@@ -179,3 +179,4 @@ This index guides through the **40 blocks** of this research. Each block is an i
 
 40/40 read-only gaps closed across 7 runs — RUN 7 COMPLETE (reopen §8, B40 applied+measured LOD).
 1 requires-execution gap queued (G41 equipment LOD, §19 build phase). Terminal: Spanish designer handbook.
+- [x] G56 — Per-unit DETAIL VIEW pattern analysis (MX60-web + chihuahua/Niagara): dedicated page = header+KPI cockpit+focused single-unit 3D+Chart.js trends; portable (Niagara only binds the data source) → [Block 42], port plan pending user go-ahead
