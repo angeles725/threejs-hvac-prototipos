@@ -411,6 +411,57 @@ if(new URLSearchParams(location.search).has('clean')){
   </div>
 </div>
 
+<!-- ============ FLOOR OVERLAY · detalle de piso (todos los cuartos + KPIs + graficas) ============
+     Overlay hermano del detail per-unidad. Se abre al hacer click en un piso; sus cards de
+     cuarto abren el overlay per-unidad (z 300) por ENCIMA (este es z 290). Estilo B11 papel. -->
+<style>
+  #floorOverlay{ position:fixed; inset:0; z-index:290; background:var(--bg); color:var(--ink);
+    font-family:var(--mono); display:none; opacity:0; transition:opacity .28s; overflow:auto; }
+  #floorOverlay.show{ display:block; }
+  #floorOverlay.vis{ opacity:1; }
+  #floorOverlay .fo-top{ position:sticky; top:0; display:flex; align-items:center; gap:14px;
+    padding:11px 20px; background:var(--paper2); border-bottom:2px solid var(--ink); z-index:2; }
+  #floorOverlay .fo-back{ width:34px; height:34px; border:1px solid var(--ink); background:var(--bg);
+    color:var(--ink); font-size:18px; cursor:pointer; border-radius:0; }
+  #floorOverlay .fo-tt .t{ font-family:var(--cond); font-weight:700; text-transform:uppercase; letter-spacing:.04em; font-size:20px; }
+  #floorOverlay .fo-tt .z{ font-size:11px; opacity:.7; letter-spacing:.06em; text-transform:uppercase; }
+  #floorOverlay .fo-roll{ margin-left:auto; display:flex; gap:8px; }
+  #floorOverlay .fo-roll span{ display:inline-flex; align-items:center; gap:5px; font-family:var(--cond); font-size:12px; padding:3px 9px; border:1px solid var(--rule); }
+  #floorOverlay .fo-roll i{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+  #floorOverlay .fo-body{ padding:20px; display:flex; flex-direction:column; gap:18px; max-width:1180px; margin:0 auto; }
+  #floorOverlay .fo-sec{ border:1px solid var(--rule); background:var(--bg); padding:16px; }
+  #floorOverlay .fo-sec.clima{ border-left:4px solid var(--accent); }
+  #floorOverlay .fo-sec.graf{ border-left:4px solid var(--ink); }
+  #floorOverlay .fo-h{ font-family:var(--cond); text-transform:uppercase; font-size:11px; letter-spacing:.12em; opacity:.8; margin-bottom:12px; }
+  #floorOverlay .fo-kpis{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  #floorOverlay .fo-kpi{ border:1px solid var(--rule); background:var(--paper2); padding:12px 14px; }
+  #floorOverlay .fo-kpi .k{ font-family:var(--cond); text-transform:uppercase; font-size:9px; letter-spacing:.14em; opacity:.7; }
+  #floorOverlay .fo-kpi .v{ font-family:var(--mono); font-size:26px; font-variant-numeric:tabular-nums; margin-top:4px; line-height:1; }
+  #floorOverlay .fo-kpi .v .u{ font-size:12px; opacity:.6; }
+  #floorOverlay .fo-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
+  #floorOverlay .fo-card{ border:1px solid var(--rule); background:var(--paper2); padding:12px; cursor:pointer; display:flex; flex-direction:column; gap:8px; transition:border-color .15s; }
+  #floorOverlay .fo-card:hover{ border-color:var(--accent); }
+  #floorOverlay .fo-card .id{ font-family:var(--cond); font-weight:600; letter-spacing:.05em; font-size:13px; }
+  #floorOverlay .fo-card .tp{ font-family:var(--mono); font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1; }
+  #floorOverlay .fo-card .st{ display:flex; align-items:center; gap:6px; font-size:10px; text-transform:uppercase; letter-spacing:.04em; opacity:.85; }
+  #floorOverlay .fo-card .st i{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+  #floorOverlay .fo-charts{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  #floorOverlay .fo-chart .cl{ font-family:var(--cond); text-transform:uppercase; font-size:10px; letter-spacing:.1em; opacity:.7; margin-bottom:6px; }
+  @media(max-width:760px){ #floorOverlay .fo-kpis, #floorOverlay .fo-charts{ grid-template-columns:1fr; } }
+</style>
+<div id="floorOverlay" aria-hidden="true">
+  <div class="fo-top">
+    <button class="fo-back" id="fo-back" title="Cerrar (Esc)">←</button>
+    <div class="fo-tt"><div class="t" id="fo-title">—</div><div class="z" id="fo-zone">—</div></div>
+    <div class="fo-roll" id="fo-roll"></div>
+  </div>
+  <div class="fo-body">
+    <div class="fo-sec clima"><div class="fo-h">Resumen del piso</div><div class="fo-kpis" id="fo-kpis"></div></div>
+    <div class="fo-sec"><div class="fo-h">Cuartos · temperatura (click para detalle)</div><div class="fo-grid" id="fo-grid"></div></div>
+    <div class="fo-sec graf"><div class="fo-h">Gráficas</div><div class="fo-charts" id="fo-charts"></div></div>
+  </div>
+</div>
+
 <!-- Panel VISTAS (blueprint). Visible SIEMPRE, tambien en modo clean. -->
 <style>
   #views{ position:fixed; top:14px; left:14px; z-index:20; display:flex; gap:6px;
@@ -559,7 +610,7 @@ scene.background = new THREE.Color(0x9ec9e8);   // cielo de dia (antes: showroom
 scene.fog = new THREE.Fog(0xc4dced, 95, 340);   // bruma marina clara al horizonte
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 500);
-camera.position.set(98, 52, 60);                 // vista que abarca hotel + yard + alberca
+camera.position.set(52.1, 33.1, 49.5);           // encuadre elegido por el cliente (edificio domina)
 
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -583,7 +634,7 @@ controls.autoRotateSpeed = 0.4;
 controls.minDistance = 8;
 controls.maxDistance = 130;
 controls.maxPolarAngle = Math.PI * 0.495;
-controls.target.set(48, 11, 6);                  // centro del hotel (era la planta mecanica)
+controls.target.set(52.9, 12.4, 5.0);            // target del encuadre elegido por el cliente
 // Ground clamp (regla de la casa): ni el target ni la camara bajan del piso
 controls.addEventListener('change', () => {
   if (controls.target.y < 0) controls.target.y = 0;
@@ -1544,7 +1595,7 @@ const VIEWS = {
   tresq:   { pos:[98,52,60],  tgt:[48,11,6] },     // 3/4 general (vista por defecto)
   planta:  { pos:[55,135,24], tgt:[55,6,4]  },     // cenital sobre el centro del hotel
   mar:     { pos:[55,21,96],  tgt:[55,13,6] },     // desde el mar (+Z) mirando la fachada heroe
-  general: { pos:[98,52,60],  tgt:[48,11,6] },     // reset a 3/4
+  general: { pos:[52.1,33.1,49.5], tgt:[52.9,12.4,5.0] },   // reset a 3/4 (encuadre cliente)
 };
 const viewBtns = Array.from(document.querySelectorAll('#views button'));
 function goView(name){
@@ -1609,6 +1660,7 @@ function animate(){
     for (let i = 0; i < persistAlarmMarks.length; i++) persistAlarmMarks[i].material.opacity = _pulse;
   }
   if (window.__resolveHover) window.__resolveHover();   // hover de planta (scope interno, expuesto por window)
+  if (window.__updatePills)  window.__updatePills(now);  // pills de temperatura por cuarto (1 Hz)
   renderer.render(scene, camera);                 // aqui el renderer corre edLOD.update(camera)
   drawN.textContent = renderer.info.render.calls;
   triN.textContent  = renderer.info.render.triangles.toLocaleString();
@@ -7126,6 +7178,56 @@ function buildEdificio(detail = 'hi'){
     }
   }
 
+  // ============================================================================
+  // PILLS DE TEMPERATURA POR CUARTO (88): etiqueta redondeada SIEMPRE visible,
+  // enfrente de la ventana de CADA cuarto (fachada al mar, world z~12). Muestra
+  // "P{f}-{r} · {temp}°C", fondo papel B11 con borde tintado por rango termico.
+  // Sprite + CanvasTexture; refresco 1 Hz con leve jitter.
+  // ============================================================================
+  const roomPills = [];
+  const _PILL_W = 220, _PILL_H = 74, _FACADE_Z = 12.5;         // canvas hi-res (texto crocante)
+  function _pillRRect(g, x, y, w, h, r){ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
+  function _drawPill(g, id, temp, hex){
+    g.clearRect(0, 0, _PILL_W, _PILL_H);
+    _pillRRect(g, 4, 4, _PILL_W-8, _PILL_H-8, (_PILL_H-8)/2);   // stadium (rectangulo redondeado)
+    g.fillStyle = '#ECE3CF'; g.fill();                          // papel B11
+    g.lineWidth = 6; g.strokeStyle = hex; g.stroke();           // borde por temperatura
+    g.textBaseline = 'middle';
+    g.fillStyle = '#1F3A5F';                                    // navy
+    g.font = '700 26px "IBM Plex Mono", ui-monospace, monospace';
+    g.textAlign = 'left';  g.fillText(id, 24, _PILL_H/2 + 1);
+    g.fillStyle = hex;
+    g.font = '700 30px "IBM Plex Mono", ui-monospace, monospace';
+    g.textAlign = 'right'; g.fillText(temp.toFixed(1) + '°', _PILL_W-24, _PILL_H/2 + 1);
+  }
+  for (const _pid in roomData){
+    const d = roomData[_pid];
+    const cv = document.createElement('canvas'); cv.width = _PILL_W; cv.height = _PILL_H;
+    const g = cv.getContext('2d');
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: true, depthWrite: false, transparent: true }));
+    spr.scale.set(3.8, 1.28, 1);                               // world size (entra en el modulo de 4 m)
+    spr.position.set(d.wx, d.wy, _FACADE_Z);                   // enfrente de SU propia ventana
+    spr.renderOrder = 6;
+    scene.add(spr);
+    roomPills.push({ d, g, tex, spr });
+  }
+  function _paintAllPills(phase){
+    for (let i = 0; i < roomPills.length; i++){
+      const p = roomPills[i];
+      const t = p.d.temp + Math.sin(phase * 0.5 + p.d.floor * 0.9 + p.d.room) * 0.15;
+      _drawPill(p.g, p.d.id, t, '#' + tempColor(t).getHexString());
+      p.tex.needsUpdate = true;
+    }
+  }
+  _paintAllPills(0);                                           // primer render inmediato
+  let _pillLast = 0, _pillPhase = 0;
+  window.__updatePills = function(now){                        // refresco 1 Hz (llamado desde animate)
+    if (now - _pillLast < 1000) return;
+    _pillLast = now; _pillPhase++;
+    _paintAllPills(_pillPhase);
+  };
+
   // ---------- seleccion + visuales ----------
   const _rray = new THREE.Raycaster();
   const _rndc = new THREE.Vector2();
@@ -7675,7 +7777,7 @@ function buildEdificio(detail = 'hi'){
     const hits = _rray.intersectObjects(roomHitboxes.concat(equipHitboxes), false);
     if (hits.length){
       const ud = hits[0].object.userData;
-      if (ud.roomId)       selectUnit(ud.roomId);
+      if (ud.roomId)       openFloorDetail(roomData[ud.roomId].floor);   // click en cuarto -> detalle del PISO
       else if (ud.equipId) selectUnit(ud.equipId);
       return true;                                   // consumido: NO hacer zoom
     }
@@ -7782,6 +7884,87 @@ function buildEdificio(detail = 'hi'){
   // El bloque de interaccion vive en un scope interno; animate() (scope externo) no ve
   // _resolveHover directamente. Se expone por window como __roomClick/__openDetail.
   window.__resolveHover = _resolveHover;
+
+  // ============================================================================
+  // FLOOR DETAIL VIEW: click en un piso -> overlay con TODOS sus cuartos (grid de
+  // cards temp+estado) + KPIs promedio + graficas SVG (tecnica del dashboard: path
+  // desde un array, sin libreria). Cada card abre el detalle per-unidad existente.
+  // ============================================================================
+  function _foHex(state){ return '#' + STATE_COLOR[state].toString(16).padStart(6, '0'); }
+  function _svgLineChart(series, color){
+    const W=520,H=170,L=42,R=12,T=12,B=24, iw=W-L-R, ih=H-T-B;
+    const mx=Math.max(...series), mn=Math.min(...series), pad=(mx-mn)*0.15+0.3;
+    const max=mx+pad, min=mn-pad, span=max-min||1;
+    const X=i=>L+iw*i/(series.length-1), Y=v=>T+ih*(1-(v-min)/span);
+    const path=series.map((v,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1)).join(' ');
+    const area=path+' L '+X(series.length-1).toFixed(1)+' '+(T+ih)+' L '+L+' '+(T+ih)+' Z';
+    let grid='';
+    for(let k=0;k<=4;k++){ const gy=T+ih*k/4, val=max-span*k/4;
+      grid+='<line x1="'+L+'" y1="'+gy.toFixed(1)+'" x2="'+(W-R)+'" y2="'+gy.toFixed(1)+'" stroke="#BFB49A" stroke-width="0.5"/>'
+          +'<text x="'+(L-5)+'" y="'+(gy+3).toFixed(1)+'" text-anchor="end" font-size="9" fill="#1F3A5F" opacity="0.55" font-family="monospace">'+val.toFixed(1)+'</text>'; }
+    return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+grid
+         +'<path d="'+area+'" fill="'+color+'" opacity="0.10"/>'
+         +'<path d="'+path+'" fill="none" stroke="'+color+'" stroke-width="1.7"/></svg>';
+  }
+  function _svgBars(items, color){
+    const W=520,H=170,L=42,R=12,T=12,B=30, iw=W-L-R, ih=H-T-B;
+    const vals=items.map(d=>d.val), mx=Math.max(...vals)+0.5, mn=Math.min(...vals)-0.5, span=mx-mn||1;
+    const gap=iw/items.length, bw=gap*0.62;
+    let bars='';
+    items.forEach((d,i)=>{ const h=ih*(d.val-mn)/span, x=L+gap*i+(gap-bw)/2, y=T+ih-h;
+      bars+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(0,h).toFixed(1)+'" fill="'+color+'" opacity="0.82"/>'
+          +'<text x="'+(x+bw/2).toFixed(1)+'" y="'+(H-9)+'" text-anchor="middle" font-size="8" fill="#1F3A5F" opacity="0.6" font-family="monospace">'+d.label+'</text>'; });
+    return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+bars+'</svg>';
+  }
+  const _foOverlay = document.getElementById('floorOverlay');
+  let _foOpen = false, _foVisT = 0;
+  function openFloorDetail(fn){
+    const rooms = _floorRooms(fn); if (!rooms.length) return;
+    document.getElementById('fo-title').textContent = 'PISO ' + fn;
+    document.getElementById('fo-zone').textContent  = rooms[0].zone || '—';
+    const cnt = { normal:0, warning:0, alarm:0 }; rooms.forEach(r => cnt[r.state]++);
+    document.getElementById('fo-roll').innerHTML =
+      '<span><i style="background:'+_foHex('normal')+'"></i>'+cnt.normal+' OK</span>' +
+      '<span><i style="background:'+_foHex('warning')+'"></i>'+cnt.warning+' AVISO</span>' +
+      '<span><i style="background:'+_foHex('alarm')+'"></i>'+cnt.alarm+' ALARMA</span>';
+    const avgT = rooms.reduce((s,r)=>s+r.temp,0)/rooms.length;
+    const avgD = rooms.reduce((s,r)=>s+(r.temp-r.setpoint),0)/rooms.length;
+    document.getElementById('fo-kpis').innerHTML =
+      '<div class="fo-kpi"><div class="k">Temp promedio</div><div class="v">'+avgT.toFixed(1)+'<span class="u"> °C</span></div></div>' +
+      '<div class="fo-kpi"><div class="k">Δ vs setpoint</div><div class="v">'+(avgD>=0?'+':'')+avgD.toFixed(1)+'<span class="u"> °C</span></div></div>' +
+      '<div class="fo-kpi"><div class="k">Cuartos en alarma</div><div class="v">'+cnt.alarm+'<span class="u"> / '+rooms.length+'</span></div></div>';
+    document.getElementById('fo-grid').innerHTML = rooms.map(r => {
+      const hex = '#'+tempColor(r.temp).getHexString();
+      return '<div class="fo-card" data-room="'+r.id+'">' +
+        '<div class="id">'+r.id+'</div>' +
+        '<div class="tp" style="color:'+hex+'">'+r.temp.toFixed(1)+'°</div>' +
+        '<div class="st"><i style="background:'+_foHex(r.state)+'"></i>'+STATE_TXT[r.state].split(' ')[0]+'</div></div>';
+    }).join('');
+    const trend = []; for (let h=0; h<24; h++) trend.push(avgT + Math.sin(h/24*Math.PI*2 - 1)*1.2 + (h>10 && h<18 ? 0.6 : 0));
+    const bars = rooms.map(r => ({ label:'R'+r.room, val:r.temp }));
+    document.getElementById('fo-charts').innerHTML =
+      '<div class="fo-chart"><div class="cl">Temperatura promedio · 24 h</div>'+_svgLineChart(trend, '#C2410C')+'</div>' +
+      '<div class="fo-chart"><div class="cl">Temperatura por cuarto</div>'+_svgBars(bars, '#1F3A5F')+'</div>';
+    _foOverlay.querySelectorAll('.fo-card').forEach(c =>
+      c.addEventListener('click', () => window.__openDetail(c.getAttribute('data-room'))));
+    _foOpen = true;
+    _foOverlay.classList.add('show');
+    try { if (window.parent !== window) window.parent.postMessage('detail-open', '*'); } catch(e){}
+    _foOverlay.setAttribute('aria-hidden', 'false');
+    if (_foVisT) clearTimeout(_foVisT);
+    _foVisT = setTimeout(() => _foOverlay.classList.add('vis'), 20);
+  }
+  function closeFloorDetail(){
+    if (!_foOpen) return; _foOpen = false;
+    try { if (window.parent !== window) window.parent.postMessage('detail-close', '*'); } catch(e){}
+    _foOverlay.classList.remove('vis');
+    _foOverlay.setAttribute('aria-hidden', 'true');
+    if (_foVisT) clearTimeout(_foVisT);
+    _foVisT = setTimeout(() => { if (!_foOpen) _foOverlay.classList.remove('show'); }, 320);
+  }
+  document.getElementById('fo-back').addEventListener('click', closeFloorDetail);
+  _foOverlay.addEventListener('click', e => { if (e.target === _foOverlay) closeFloorDetail(); });
+  document.addEventListener('keydown', e => { if (_foOpen && (e.key === 'Escape' || e.key === 'Esc')){ e.stopPropagation(); closeFloorDetail(); } });
 
   // Refresco ~1 Hz del cuarto seleccionado (barato, sin trabajo por-frame).
   let _rphase = 0;
