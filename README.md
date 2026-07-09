@@ -47,7 +47,22 @@ Una carpeta por equipo, con sus versiones realistic y voxel. Cada carpeta tiene 
 | [vav/](disenos/vav/) | Cajas VAV (terminales) | 1 | 3 |
 | [escenas/](disenos/escenas/) | Escenas compuestas (hoteles, campus, datacenter) | 1 | 6 |
 
-**Total: 59 diseños** — 22 realistic + 35 voxel en `disenos/`, + 2 deployables en la raíz.
+### Equipos de datacenter
+
+Conjunto generado para elevar la escena de datacenter al nivel de un render de referencia
+(imagen objetivo). Todos voxel; los prompts viven en [`EQUIPOS-PENDIENTES.md`](EQUIPOS-PENDIENTES.md) (sección DATACENTER).
+
+| Carpeta | Equipo | Voxel |
+|---|---|:---:|
+| [server-rack/](disenos/server-rack/) | Rack de servidores (42U) | 1 |
+| [crac/](disenos/crac/) | CRAC/CRAH de precisión (downflow) | 2 |
+| [in-row/](disenos/in-row/) | Enfriador in-row | 1 |
+| [pdu/](disenos/pdu/) | PDU · distribución de energía | 1 |
+| [dry-cooler/](disenos/dry-cooler/) | Dry cooler (banco de condensadores) | 1 |
+| [contencion-pasillo/](disenos/contencion-pasillo/) | Contención de pasillo | 1 |
+| [ups/](disenos/ups/) | UPS + banco de baterías (oficial claude.ai + 2 alternativas propias) | 3 |
+
+**Total: 69 diseños** — 22 realistic + 45 voxel en `disenos/`, + 2 deployables en la raíz.
 
 ## Deployables (raíz, NO mover)
 

@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RACK 42U — Gabinete de Servidores · Voxel Art</title>
+<style>
+  :root{ --bg:#06080d; --accent:#00d4aa; --on:#00ff66; --off:#ff2233; }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
+    font-family:'JetBrains Mono','Cascadia Code',Consolas,monospace;color:#cdd6e4;}
+  canvas{display:block;}
+  .panel{position:absolute;background:rgba(8,12,20,.72);border:1px solid rgba(0,212,170,.25);
+    border-radius:8px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:12px 16px;}
+  #hdr{top:16px;left:16px;}
+  #hdr h1{font-size:15px;letter-spacing:2px;color:var(--accent);font-weight:600;}
+  #hdr .sub{font-size:10px;color:#7f8ba0;margin-top:4px;letter-spacing:1px;}
+  #legend{top:16px;right:16px;font-size:10px;letter-spacing:.5px;}
+  #legend .ttl{color:var(--accent);font-size:10px;letter-spacing:2px;margin-bottom:8px;}
+  #legend .row{display:flex;align-items:center;gap:8px;margin:5px 0;}
+  #legend .chip{width:11px;height:11px;border-radius:2px;flex:0 0 auto;}
+  #ctl{bottom:16px;right:16px;min-width:230px;}
+  #ctl .ttl{color:var(--accent);font-size:10px;letter-spacing:2px;margin-bottom:10px;}
+  .btn{display:block;width:100%;margin:7px 0;padding:8px 10px;font-family:inherit;font-size:11px;
+    letter-spacing:1px;cursor:pointer;border-radius:5px;background:rgba(0,0,0,.35);
+    transition:all .15s;text-align:left;}
+  .btn.on {border:1px solid var(--on); color:var(--on);}
+  .btn.off{border:1px solid var(--off);color:var(--off);}
+  .btn:hover{background:rgba(255,255,255,.06);}
+  #hint{bottom:16px;left:16px;font-size:9px;color:#5c6780;letter-spacing:.5px;padding:8px 12px;}
+</style>
+</head>
+<body>
+
+<div id="hdr" class="panel">
+  <h1>RACK DE SERVIDORES 42U</h1>
+  <div class="sub">GABINETE 19&Prime; &middot; 0.60 &times; 0.85 &times; 2.00 m &middot; DATACENTER &middot; VOXEL 3D</div>
+</div>
+
+<div id="legend" class="panel">
+  <div class="ttl">FLUJOS</div>
+  <div class="row"><span class="chip" style="background:#4fc3f7"></span>Aire fr&iacute;o (frente)</div>
+  <div class="row"><span class="chip" style="background:#ff7043"></span>Aire caliente (atr&aacute;s)</div>
+  <div class="row"><span class="chip" style="background:#00bcd4"></span>Red</div>
+  <div class="row"><span class="chip" style="background:#ff8f00"></span>Energ&iacute;a</div>
+</div>
+
+<div id="ctl" class="panel">
+  <div class="ttl">CONTROL DE EQUIPO</div>
+  <button id="btnDoor"  class="btn off">PUERTA: CERRADA</button>
+  <button id="btnLoad"  class="btn off">CARGA TI: LO</button>
+  <button id="btnFault" class="btn off">FALLA SIMULADA: OFF</button>
+  <button id="btnRot"   class="btn off">AUTO-ROTATE: OFF</button>
+</div>
+
+<div id="hint" class="panel">arrastrar &middot; girar &nbsp;|&nbsp; rueda &middot; zoom</div>
+
+<script>
+// Fix Cloudflare: inyección dinámica del importmap para evitar mangling de package@version
+(function(){
+  var AT = String.fromCharCode(64);
+  var im = document.createElement('script');
+  im.type = 'importmap';
+  im.textContent = JSON.stringify({ imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }});
+  document.head.appendChild(im);
+})();
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls }   from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ===PURE-GEN-START===
+// SCALE: 1 voxel = 0.02 m
+// DESVIACIÓN DECLARADA: la escala estándar 0.1 m/voxel daría 6×8.5×20 voxeles,
+// insuficiente para micro-detalle 42U. Se usa 0.02 m/voxel → 30×42×100 voxeles
+// (0.60 × 0.84 × 2.00 m; fondo 0.85 m redondeado a 42 voxeles = 0.84 m).
+
+const C = {
+  FRAME   : 0x2d2d3a,  // gabinete gris-azulado oscuro
+  FRAME_D : 0x232330,
+  DOOR    : 0x1a1a28,  // puerta perforada casi negra
+  RAIL    : 0x1f1f2a,
+  GRAF    : 0x3a3a46,  // cuerpo de servidores grafito
+  FRONT   : 0x16161e,  // frentes negros
+  BAY     : 0x24242f,  // bahías de disco
+  GRILLE  : 0x0e0e16,
+  BLANK   : 0x2a2a36,
+  ORG     : 0x262633,  // organizador de cables
+  PDU     : 0x1c1c26,
+  COPPER  : 0xb87333,
+  PORT    : 0x0a0a12,
+  DARKIN  : 0x08080e,
+  HANDLE  : 0x8a8a98,
+  HINGE   : 0x3c3c48,
+  WHEEL   : 0x101014,
+  LEVELER : 0x50505c,
+  BEZEL   : 0x0f0f18,
+  BRAND   : 0x3d3d4d,
+  PP      : 0x20202c,
+  SW      : 0x14141c,
+  UPLINK  : 0x30303e,
+  PWR     : 0x00d4aa,
+  CBL_B   : 0x1565c0,
+  CBL_G   : 0x2e7d32,
+  CBL_Y   : 0xf9a825,
+  CBL_K   : 0x0d0d12
+};
+
+const LED = { GREEN:0x4caf50, CYAN:0x00bcd4, RED:0xf44336, AMBER:0xff8f00 };
+
+function newWorld(){ return { cells:new Map(), colors:{}, dupSkipped:0, count:0 }; }
+
+function vox(w, x, y, z, c){
+  x = Math.round(x); y = Math.round(y); z = Math.round(z);
+  const k = x + ',' + y + ',' + z;
+  if (w.cells.has(k)) { w.dupSkipped++; return; }   // first-wins
+  w.cells.set(k, c);
+  (w.colors[c] = w.colors[c] || []).push([x, y, z]);
+  w.count++;
+}
+
+function box(w, x0, x1, y0, y1, z0, z1, c){
+  for (let x = x0; x <= x1; x++)
+    for (let y = y0; y <= y1; y++)
+      for (let z = z0; z <= z1; z++) vox(w, x, y, z, c);
+}
+
+// Relleno de fondo tras dibujar detalle: solo celdas vacías, NO cuenta como duplicado.
+// dupSkipped queda reservado para colisiones accidentales (condición de paso: 0).
+function fillBox(w, x0, x1, y0, y1, z0, z1, c){
+  for (let x = x0; x <= x1; x++)
+    for (let y = y0; y <= y1; y++)
+      for (let z = z0; z <= z1; z++){
+        const k = x + ',' + y + ',' + z;
+        if (w.cells.has(k)) continue;
+        w.cells.set(k, c);
+        (w.colors[c] = w.colors[c] || []).push([x, y, z]);
+        w.count++;
+      }
+}
+
+// ---------- GABINETE (marco, laterales, base, ruedas) ----------
+function genRack(w){
+  // Ruedas (4)
+  box(w,  3,  5, 0, 3,  3,  6, C.WHEEL);
+  box(w, 24, 26, 0, 3,  3,  6, C.WHEEL);
+  box(w,  3,  5, 0, 3, 35, 38, C.WHEEL);
+  box(w, 24, 26, 0, 3, 35, 38, C.WHEEL);
+  // Niveladores (4)
+  box(w,  1,  2, 0, 3,  1,  2, C.LEVELER);
+  box(w, 27, 28, 0, 3,  1,  2, C.LEVELER);
+  box(w,  1,  2, 0, 3, 39, 40, C.LEVELER);
+  box(w, 27, 28, 0, 3, 39, 40, C.LEVELER);
+  // Placa inferior y superior
+  box(w, 0, 29,  4,  5, 0, 41, C.FRAME_D);
+  box(w, 0, 29, 96, 97, 0, 41, C.FRAME);
+  box(w, 2, 27, 98, 98, 2, 39, C.FRAME_D);
+  // Postes de esquina
+  box(w,  0,  1,  6, 95,  0,  1, C.FRAME);
+  box(w, 28, 29,  6, 95,  0,  1, C.FRAME);
+  box(w,  0,  1,  6, 95, 40, 41, C.FRAME);
+  box(w, 28, 29,  6, 95, 40, 41, C.FRAME);
+  // Paneles laterales
+  box(w,  0,  0, 6, 95, 2, 39, C.FRAME);
+  box(w, 29, 29, 6, 95, 2, 39, C.FRAME);
+  // Rieles 19" frontales y traseros
+  box(w,  3,  3, 6, 89,  2,  2, C.RAIL);
+  box(w, 26, 26, 6, 89,  2,  2, C.RAIL);
+  box(w,  3,  3, 6, 89, 35, 35, C.RAIL);
+  box(w, 26, 26, 6, 89, 35, 35, C.RAIL);
+  // Fascia frontal superior: bisel de LEDs + placa de marca (detalle primero, first-wins)
+  box(w, 11, 18, 91, 94, 0, 0, C.BEZEL);
+  box(w, 20, 25, 92, 93, 0, 0, C.BRAND);
+  fillBox(w,  2, 27, 90, 95, 0, 1, C.FRAME);
+}
+
+// ---------- PUERTA PERFORADA (mundo aparte → Group animado, pivote en x local 0) ----------
+// Ocupa absoluto x2..27, y6..89, z=0. Local: x0..25, group.position=(2,0,0).
+function genDoor(w){
+  // Bordes sólidos
+  box(w, 0, 25,  6,  7, 0, 0, C.DOOR);
+  box(w, 0, 25, 88, 89, 0, 0, C.DOOR);
+  box(w, 0,  1,  8, 87, 0, 0, C.DOOR);
+  box(w, 24, 25,  8, 87, 0, 0, C.DOOR);
+  // Malla perforada (patrón ajedrez)
+  for (let x = 2; x <= 23; x++)
+    for (let y = 8; y <= 87; y++)
+      if ((x + y) % 2 === 0) vox(w, x, y, 0, C.DOOR);
+  // Manija (lado libre, derecho)
+  box(w, 23, 23, 44, 50, -1, -1, C.HANDLE);
+  vox(w, 23, 44, 0, C.HANDLE); vox(w, 23, 50, 0, C.HANDLE);
+  // Bisagras (lado del pivote, izquierdo)
+  box(w, 0, 0, 12, 14, -1, -1, C.HINGE);
+  box(w, 0, 0, 46, 48, -1, -1, C.HINGE);
+  box(w, 0, 0, 82, 84, -1, -1, C.HINGE);
+}
+
+// ---------- STACK DE EQUIPOS ----------
+// s2 = servidor 2U · s1 = servidor 1U · sw = switch · pp = patch panel
+// org = organizador de cables · bl = blanking panel   (1U = 2 voxeles)
+const STACK = [
+  ['s2', 6],['s2',10],['s1',14],['s1',16],['bl',18],['s2',20],['s1',24],
+  ['org',26],['pp',28],['sw',30],['sw',32],['org',34],['bl',36],
+  ['s2',38],['s1',42],['s1',44],['bl',46],['s2',48],['s1',52],['s1',54],
+  ['bl',56],['s2',58],['s1',62],['bl',64],['s2',66],['s1',70],['s1',72],
+  ['bl',74],['s2',76],['s1',80],['bl',82],['s2',84],['bl',88]
+];
+const FAULT_Y = 48;  // servidor 2U designado para FALLA SIMULADA
+
+function genServer(w, meta, y0, h, srvIdx){
+  const yT = y0 + h - 1;
+  // Detalle del frente PRIMERO (first-wins), luego bisel de relleno
+  for (let x = 5; x <= 14; x++) if (x % 2 === 1) vox(w, x, y0, 3, C.BAY);           // bahías
+  if (h === 4) for (let x = 5; x <= 14; x++) if (x % 2 === 1) vox(w, x, y0+1, 3, C.BAY);
+  const gy0 = (h === 4) ? y0 + 2 : y0;                                              // rejilla
+  for (let x = 16; x <= 19; x++) for (let y = gy0; y <= yT; y++)
+    if ((x + y) % 2 === 0) vox(w, x, y, 3, C.GRILLE);
+  vox(w, 24, yT, 3, C.PWR);                                                         // botón power
+  fillBox(w, 4, 25, y0, yT, 3, 3, C.FRONT);                                         // bisel
+  // Cuerpo en cáscara (no relleno sólido): laterales + placa trasera interna
+  box(w,  4,  4, y0, yT, 4, 32, C.GRAF);
+  box(w, 25, 25, y0, yT, 4, 32, C.GRAF);
+  if (h === 2){
+    box(w, 4, 25, y0, yT, 33, 33, C.GRILLE);          // 1U: cara trasera ventilada
+  } else {
+    box(w, 5, 24, y0, yT, 32, 32, C.DARKIN);          // 2U: fondo oscuro tras ventiladores
+    box(w,  4,  6, y0, yT, 33, 33, C.GRILLE);         // franjas laterales traseras
+    box(w, 23, 25, y0, yT, 33, 33, C.GRILLE);
+    meta.fans.push({ x:10, y:y0+2, z:33.7 });          // 2 ventiladores por 2U
+    meta.fans.push({ x:20, y:y0+2, z:33.7 });
+  }
+  // LEDs de estado frontales (4 por servidor, meshes animados)
+  const ly = yT + 0.5;
+  const bases = ['GREEN','GREEN','CYAN','AMBER'];
+  for (let i = 0; i < 4; i++)
+    meta.leds.push({ x:20.5+i, y:ly, z:2.68, base:bases[i], kind:'srv', srv:srvIdx });
+  if (y0 === FAULT_Y) meta.faultLed = { x:24.5, y:y0+0.5, z:2.62 };
+}
+
+function genBlank(w, y0){
+  vox(w,  5, y0, 3, C.FRAME_D); vox(w, 24, y0, 3, C.FRAME_D);   // tornillos
+  vox(w,  5, y0+1, 3, C.FRAME_D); vox(w, 24, y0+1, 3, C.FRAME_D);
+  fillBox(w, 4, 25, y0, y0+1, 3, 3, C.BLANK);
+}
+
+function genOrganizer(w, y0){
+  box(w, 4, 25, y0, y0, 3, 4, C.ORG);                            // base
+  for (let x = 4; x <= 25; x++) if (x % 2 === 0) vox(w, x, y0+1, 3, C.ORG);  // dedos
+}
+
+function genPatchPanel(w, meta, y0){
+  for (let x = 5; x <= 22; x++) vox(w, x, y0, 3, C.PORT);        // puertos
+  fillBox(w, 4, 25, y0, y0+1, 3, 3, C.PP);
+  // 8 cables de red de colores: 4 bajan al organizador, 4 suben al switch
+  const cols = [C.CBL_B, C.CBL_G, C.CBL_Y, C.CBL_B, C.CBL_G, C.CBL_Y, C.CBL_B, C.CBL_G];
+  const down = [5, 7, 9, 11], up = [14, 16, 18, 20];
+  down.forEach((x, i) => { vox(w, x, y0-1, 2, cols[i]);   vox(w, x, y0-2, 2, cols[i]); });
+  up.forEach((x, i)   => { vox(w, x, y0+2, 2, cols[i+4]); vox(w, x, y0+3, 2, cols[i+4]); });
+}
+
+function genSwitch(w, meta, y0){
+  for (let x = 5; x <= 20; x++) vox(w, x, y0, 3, C.PORT);        // puertos RJ45
+  vox(w, 22, y0, 3, C.UPLINK); vox(w, 23, y0, 3, C.UPLINK);      // uplinks SFP
+  fillBox(w, 4, 25, y0, y0+1, 3, 3, C.SW);
+  for (let x = 5; x <= 19; x += 2)                               // LEDs de enlace
+    meta.leds.push({ x:x+0.5, y:y0+1.5, z:2.68, base:'GREEN', kind:'sw', srv:-1 });
+}
+
+function genUnits(w, meta){
+  let srvIdx = 0;
+  for (const [type, y0] of STACK){
+    if (type === 's1') genServer(w, meta, y0, 2, srvIdx++);
+    else if (type === 's2') genServer(w, meta, y0, 4, srvIdx++);
+    else if (type === 'bl') genBlank(w, y0);
+    else if (type === 'org') genOrganizer(w, y0);
+    else if (type === 'pp') genPatchPanel(w, meta, y0);
+    else if (type === 'sw') genSwitch(w, meta, y0);
+  }
+  meta.serverCount = srvIdx;
+}
+
+// ---------- PDUs VERTICALES + cables de energía ----------
+function genPDUs(w, meta){
+  for (const px of [2, 27]){
+    for (let y = 10; y <= 86; y += 4) vox(w, px, y, 38, C.COPPER);   // salidas (cobre)
+    fillBox(w, px, px, 8, 88, 37, 38, C.PDU);
+    meta.pduLeds.push({ x:px+0.5, y:89.0, z:38.8 });
+  }
+  // 3 cables de energía servidor → PDU derecha
+  // Ruta x=25→26 esquivando riel trasero (x=26,z=35) y cuerpo PDU (x=27,z=37)
+  for (const cy of [8, 40, 68]){
+    vox(w, 25, cy, 34, C.CBL_K); vox(w, 25, cy, 35, C.CBL_K);
+    vox(w, 26, cy, 36, C.CBL_K); vox(w, 26, cy, 37, C.CBL_K);
+  }
+}
+
+// ---------- Tira de 12 LEDs de estado (fascia frontal, 6 filas × 2 columnas) ----------
+function genStatusStrip(meta){
+  const bases = ['GREEN','CYAN','GREEN','AMBER','GREEN','CYAN'];
+  for (let r = 0; r < 6; r++)
+    for (let c = 0; c < 2; c++)
+      meta.strip.push({ x: c === 0 ? 13.6 : 16.4, y: 91.5 + r * 0.6, z: -0.22, base: bases[r] });
+}
+
+function generateAll(){
+  const staticWorld = newWorld();
+  const doorWorld   = newWorld();
+  const meta = { leds:[], strip:[], fans:[], pduLeds:[], faultLed:null, serverCount:0 };
+  genRack(staticWorld);
+  genUnits(staticWorld, meta);
+  genPDUs(staticWorld, meta);
+  genDoor(doorWorld);
+  genStatusStrip(meta);
+  return { staticWorld, doorWorld, meta };
+}
+// ===PURE-GEN-END===
+
+// ================= ESCENA =================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 260, 520);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 2000);
+camera.position.set(95, 82, 118);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+// Rig de luces
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(70, 140, 60);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -90; sun.shadow.camera.right = 90;
+sun.shadow.camera.top = 120;  sun.shadow.camera.bottom = -20;
+sun.shadow.camera.near = 10;  sun.shadow.camera.far = 400;
+sun.shadow.bias = -0.0004;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4); fill.position.set(-50, 50, -70); scene.add(fill);
+const rim  = new THREE.DirectionalLight(0x00d4aa, 0.2); rim.position.set(-70, 35, 80);  scene.add(rim);
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+// Piso
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(600, 600),
+  new THREE.MeshStandardMaterial({ color:0x07090f, roughness:1.0, metalness:0.0 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(360, 36, 0x11202a, 0x0c1219);
+grid.position.y = 0.02;
+scene.add(grid);
+
+// ================= CONSTRUCCIÓN DE VOXELES =================
+const { staticWorld, doorWorld, meta } = generateAll();
+const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+const dummy = new THREE.Object3D();
+
+function matFor(hex){
+  const metallic = (hex === C.COPPER || hex === C.HANDLE || hex === C.LEVELER);
+  return new THREE.MeshStandardMaterial({
+    color: hex,
+    roughness: metallic ? 0.35 : 0.62,
+    metalness: metallic ? 0.85 : 0.25
+  });
+}
+
+function buildWorld(w, parent){
+  for (const key of Object.keys(w.colors)){
+    const cells = w.colors[key];
+    const im = new THREE.InstancedMesh(cubeGeo, matFor(Number(key)), cells.length);
+    for (let i = 0; i < cells.length; i++){
+      dummy.position.set(cells[i][0] + 0.5, cells[i][1] + 0.5, cells[i][2] + 0.5);
+      dummy.updateMatrix();
+      im.setMatrixAt(i, dummy.matrix);
+    }
+    im.instanceMatrix.needsUpdate = true;
+    im.castShadow = true;
+    im.receiveShadow = true;
+    parent.add(im);
+  }
+}
+
+buildWorld(staticWorld, scene);
+
+// Puerta: Group con pivote en el borde izquierdo (x absoluto = 2)
+const doorGroup = new THREE.Group();
+doorGroup.position.set(2, 0, 0);
+buildWorld(doorWorld, doorGroup);
+scene.add(doorGroup);
+
+// ================= PARTES ANIMADAS (fuera de InstancedMesh) =================
+// Ventiladores internos (flujo frente → atrás)
+const fanGroups = [];
+const bladeMat = new THREE.MeshStandardMaterial({ color:0x11131c, roughness:0.5, metalness:0.4 });
+const hubMat   = new THREE.MeshStandardMaterial({ color:0x30323e, roughness:0.4, metalness:0.6 });
+for (const f of meta.fans){
+  const g = new THREE.Group();
+  g.position.set(f.x, f.y, f.z);
+  const hub = new THREE.Mesh(cubeGeo, hubMat); hub.scale.setScalar(0.85); g.add(hub);
+  for (let b = 0; b < 5; b++){
+    const a = b * Math.PI * 2 / 5;
+    for (const r of [0.75, 1.45]){
+      const m = new THREE.Mesh(cubeGeo, bladeMat);
+      m.scale.setScalar(0.68);
+      m.position.set(Math.cos(a) * r, Math.sin(a) * r, 0);
+      g.add(m);
+    }
+  }
+  scene.add(g);
+  fanGroups.push(g);
+}
+
+// LEDs (servidores + switches), tira de estado, PDU, falla
+const ledGeo   = new THREE.BoxGeometry(0.55, 0.55, 0.32);
+const faultGeo = new THREE.BoxGeometry(0.75, 0.75, 0.34);
+function makeLed(spec, sizeGeo){
+  const hex = LED[spec.base] !== undefined ? LED[spec.base] : LED.GREEN;
+  const m = new THREE.Mesh(sizeGeo, new THREE.MeshStandardMaterial({
+    color: hex, emissive: hex, emissiveIntensity: 0.15, roughness: 0.4, metalness: 0.1
+  }));
+  m.position.set(spec.x, spec.y, spec.z);
+  scene.add(m);
+  return { mesh:m, base:hex, on:false, kind:spec.kind || 'strip' };
+}
+const srvLeds   = meta.leds.filter(l => l.kind === 'srv').map(l => makeLed(l, ledGeo));
+const swLeds    = meta.leds.filter(l => l.kind === 'sw' ).map(l => makeLed(l, ledGeo));
+const stripLeds = meta.strip.map(l => makeLed(l, ledGeo));
+const pduLeds   = meta.pduLeds.map(p => makeLed({ ...p, base:'GREEN' }, ledGeo));
+pduLeds.forEach(L => { L.on = true; L.mesh.material.emissiveIntensity = 2.0; });
+const faultLed = makeLed({ ...meta.faultLed, base:'RED' }, faultGeo);
+faultLed.mesh.visible = false;
+
+// Partículas de flujo de aire: frío (frente) / caliente (atrás)
+const partGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+function makeParticles(n, hex, zMin, zMax){
+  const mat = new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.7 });
+  const arr = [];
+  for (let i = 0; i < n; i++){
+    const m = new THREE.Mesh(partGeo, mat);
+    m.position.set(5 + Math.random() * 20, 8 + Math.random() * 80, zMin + Math.random() * (zMax - zMin));
+    m.userData.v = 4 + Math.random() * 5;
+    scene.add(m);
+    arr.push(m);
+  }
+  return arr;
+}
+const coldParts = makeParticles(50, 0x4fc3f7, -10, 0);
+const hotParts  = makeParticles(50, 0xff7043, 34, 44);
+
+// ================= CONTROLES DE CÁMARA =================
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(15, 48, 20);
+controls.autoRotate = false;          // OFF por defecto (evita layout invertido)
+controls.autoRotateSpeed = 0.6;
+controls.update();
+
+// ================= ESTADO Y LÓGICA =================
+const state = { door:false, load:'LO', fault:false, rot:false };
+let doorCur = 0, frame = 0;
+
+function tick(dt){
+  frame++;
+  // Puerta: bisagra izquierda, abre ~112° hacia afuera; auto-oculta al abrir del todo
+  const target = state.door ? 1.95 : 0;
+  doorCur += (target - doorCur) * Math.min(1, dt * 3.2);
+  doorGroup.rotation.y = doorCur;
+  doorGroup.visible = doorCur < 1.80;
+
+  // Ventiladores: velocidad según carga
+  const fanSpeed = state.load === 'HI' ? 15 : 6.5;
+  for (const g of fanGroups) g.rotation.z += dt * fanSpeed;
+
+  // LEDs de servidores: unos pocos cambian cada ~15 frames
+  const pOn = state.load === 'HI' ? 0.85 : 0.40;
+  if (frame % 15 === 0){
+    for (let i = 0; i < 4; i++){
+      const L = srvLeds[(Math.random() * srvLeds.length) | 0];
+      L.on = Math.random() < pOn;
+      L.mesh.material.emissiveIntensity = L.on ? 2.2 : 0.15;
+    }
+    for (let i = 0; i < 3; i++){
+      const S = stripLeds[(Math.random() * stripLeds.length) | 0];
+      S.on = Math.random() < 0.7;
+      S.mesh.material.emissiveIntensity = S.on ? 2.2 : 0.15;
+    }
+  }
+  // LEDs de switch: parpadeo rápido de enlace
+  if (frame % 6 === 0){
+    for (let i = 0; i < 5; i++){
+      const L = swLeds[(Math.random() * swLeds.length) | 0];
+      L.on = Math.random() < 0.65;
+      const amber = Math.random() < 0.3;
+      L.mesh.material.emissive.setHex(amber ? LED.AMBER : LED.GREEN);
+      L.mesh.material.color.setHex(amber ? LED.AMBER : LED.GREEN);
+      L.mesh.material.emissiveIntensity = L.on ? 2.2 : 0.15;
+    }
+  }
+  // Falla simulada: LED rojo parpadeante
+  faultLed.mesh.visible = state.fault;
+  if (state.fault){
+    const blink = Math.sin(performance.now() * 0.012) > 0;
+    faultLed.mesh.material.emissiveIntensity = blink ? 3.0 : 0.2;
+  }
+  // Partículas de aire
+  const mult = state.load === 'HI' ? 1.5 : 0.7;
+  for (const p of coldParts){
+    p.position.z += p.userData.v * mult * dt;
+    if (p.position.z > 18){
+      p.position.z = -10 - Math.random() * 4;
+      p.position.x = 5 + Math.random() * 20;
+      p.position.y = 8 + Math.random() * 80;
+    }
+  }
+  for (const p of hotParts){
+    p.position.z += p.userData.v * mult * dt;
+    if (p.position.z > 58){
+      p.position.z = 34 + Math.random() * 4;
+      p.position.x = 5 + Math.random() * 20;
+      p.position.y = 10 + Math.random() * 78;
+    }
+  }
+  controls.autoRotate = state.rot;
+  controls.update();
+}
+
+// ================= UI =================
+function setBtn(el, on, label){
+  el.className = 'btn ' + (on ? 'on' : 'off');
+  el.textContent = label;
+}
+const btnDoor  = document.getElementById('btnDoor');
+const btnLoad  = document.getElementById('btnLoad');
+const btnFault = document.getElementById('btnFault');
+const btnRot   = document.getElementById('btnRot');
+
+function setDoor(v){ state.door = v; setBtn(btnDoor, v, 'PUERTA: ' + (v ? 'ABIERTA' : 'CERRADA')); }
+function setLoad(v){ state.load = v; setBtn(btnLoad, v === 'HI', 'CARGA TI: ' + v); }
+function setFault(v){ state.fault = v; setBtn(btnFault, v, 'FALLA SIMULADA: ' + (v ? 'ON' : 'OFF')); }
+function setRot(v){ state.rot = v; setBtn(btnRot, v, 'AUTO-ROTATE: ' + (v ? 'ON' : 'OFF')); }
+
+btnDoor.addEventListener('click',  () => setDoor(!state.door));
+btnLoad.addEventListener('click',  () => setLoad(state.load === 'LO' ? 'HI' : 'LO'));
+btnFault.addEventListener('click', () => setFault(!state.fault));
+btnRot.addEventListener('click',   () => setRot(!state.rot));
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ================= LOOP =================
+const clock = new THREE.Clock();
+function loop(){
+  requestAnimationFrame(loop);
+  tick(Math.min(clock.getDelta(), 0.05));
+  renderer.render(scene, camera);
+}
+loop();
+
+// Hook de pruebas / integración BMS
+window.__APP = {
+  state, setDoor, setLoad, setFault, setRot, tick,
+  doorGroup, fanGroups, srvLeds, swLeds, stripLeds, faultLed, pduLeds,
+  get doorCur(){ return doorCur; },
+  stats: {
+    voxelsStatic: staticWorld.count,
+    voxelsDoor: doorWorld.count,
+    dupStatic: staticWorld.dupSkipped,
+    dupDoor: doorWorld.dupSkipped,
+    servers: meta.serverCount,
+    fans: meta.fans.length,
+    ledsSrv: srvLeds.length,
+    ledsSw: swLeds.length,
+    ledsStrip: stripLeds.length
+  }
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>CRAC/CRAH DOWNFLOW · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:236px; font-size:11px; backdrop-filter: blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:54px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>CRAC / CRAH DOWNFLOW · SALA DE CÓMPUTO</b><br>
+  <span>Enfriamiento de precisión · Piso técnico elevado · Voxel Art · Corte</span>
+</div>
+<div id="legend">
+  <div><i style="background:#ff5533"></i> Aire caliente (retorno · arriba)</div>
+  <div><i style="background:#44bbff"></i> Aire frío (impulsión · abajo)</div>
+  <div><i style="background:#66ccff"></i> Agua helada (suministro)</div>
+  <div><i style="background:#ff6644"></i> Agua helada (retorno)</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>VENTILADORES EC</label><button id="bFan">OFF</button></div>
+  <div class="row"><label>AGUA HELADA</label><button id="bAgua">OFF</button></div>
+  <div class="row"><label>CORTE FRONTAL</label><button id="bCorte">ON</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 voxel = 0.025 m
+// Override del template (0.1 m): micro-voxel para gabinete de 0.9 × 0.9 × 2.0 m
+// → 36 × 36 × 80 vóxeles. Piso técnico 0.6 m = 24 vóxeles. Loseta 0.6 m = 24 vóxeles.
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 260, 720);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 1400);
+camera.position.set(158, 112, -78);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(60, 52, 42);
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.6;
+
+// ====== LIGHTS ======
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(120, 220, 90);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+const sc = sun.shadow.camera;
+sc.left=-160; sc.right=160; sc.top=160; sc.bottom=-160; sc.near=1; sc.far=520;
+sun.shadow.bias = -0.0003;
+sun.target.position.set(60, 40, 40);
+scene.add(sun); scene.add(sun.target);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-80, 70, -60);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rim.position.set(60, 40, 160);
+scene.add(rim);
+// Luz interior teal para leer los internos en el corte
+const inLight = new THREE.PointLight(0x00d4aa, 0.4, 90);
+inLight.position.set(60, 72, 44);
+scene.add(inLight);
+
+// ====== GROUND ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(900,900),
+  new THREE.MeshStandardMaterial({ color:0x0a0e16, roughness:0.92, metalness:0.05 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.position.set(60, 0, 36);
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(900, 150, 0x00d4aa, 0x142028);
+grid.material.opacity = 0.12;
+grid.material.transparent = true;
+grid.position.set(60, 0.01, 36);
+scene.add(grid);
+
+// ====== VOXEL STORES (S = estático · F = facade removible por CORTE) ======
+// Mapas empaquetados con last-wins para detección de duplicados
+const S = new Map(), F = new Map();
+const K = (x,y,z) => ((x+64)*1048576 + (y+64)*1024 + (z+64));
+const voxS = (x,y,z,c) => S.set(K(x,y,z), c);
+const voxF = (x,y,z,c) => F.set(K(x,y,z), c);
+const delS = (x,y,z) => S.delete(K(x,y,z));
+
+const COL = {
+  CAB:     0x232329,   // gabinete negro/gris oscuro (estilo Liebert/Vertiv)
+  CAB_D:   0x17171b,   // seams / paneles oscuros
+  SKID:    0xa8a8ac,   // metal claro (bridas, manijas, charola)
+  DARK:    0x2a2a2e,
+  FRAME:   0x3a3a3e,
+  GRILLE:  0x1a1a1e,
+  HOUSING: 0x6a6a72,
+  MOTOR:   0x55555c,
+  TEAL:    0x2f8a86,   // serpentín (celosía teal)
+  TEAL_H:  0x3fbfae,
+  COPPER:  0xb87333,
+  PIPE_B:  0x2f5f96,   // agua helada suministro
+  PIPE_R:  0x8a3226,   // agua helada retorno
+  WATER:   0x1e6f8f,
+  PANEL:   0xd8d4c8,   // filtros
+  TILE:    0x74747c,   // losetas piso técnico
+  TILE_D:  0x4a4a52,   // juntas de loseta
+  PED:     0x55555c,   // pedestales
+  HUB:     0x2f5f96,   // buje azul ventilador EC
+  SCREEN:  0x0e3844,   // display HMI (emisivo)
+};
+
+// ====== LAYOUT ======
+// Piso técnico: x 0..119 (5 losetas de 24), z 0..71 (3 losetas), altura 24 (0.6 m)
+// Gabinete: x 42..77, z 26..61 (frente en z=26), base y=25, tope y=104 (80 de alto)
+const UX0=42, UX1=77, UZ0=26, UZ1=61;
+const BASE_Y=25, TOP_Y=104;
+const FAN_CX=[51,68], FAN_CZ=43, FAN_R=7;
+
+// ====== PISO TÉCNICO ELEVADO ======
+// Pedestales en intersecciones de la retícula de losetas
+const GX=[0,24,48,72,96,118], GZ=[0,24,48,70];
+GX.forEach(px => GZ.forEach(pz => {
+  for (let y=1; y<=22; y++) {
+    voxS(px,y,pz,COL.PED); voxS(px+1,y,pz,COL.PED);
+    voxS(px,y,pz+1,COL.PED); voxS(px+1,y,pz+1,COL.PED);
+  }
+  // cabezal del pedestal
+  for (let x=px-1; x<=px+2; x++)
+    for (let z=pz-1; z<=pz+2; z++)
+      voxS(x,23,z,COL.FRAME);
+}));
+// Largueros (stringers) sobre líneas de retícula
+GX.forEach(px => { for (let z=0; z<=71; z++) voxS(px, 23, z, COL.FRAME); });
+GZ.forEach(pz => { for (let x=0; x<=119; x++) voxS(x, 23, pz, COL.FRAME); });
+
+// Losetas (y=24) con juntas oscuras; abertura bajo el gabinete;
+// losetas PERFORADAS frente a la unidad (x 24..71, z 0..23)
+for (let x=0; x<=119; x++)
+  for (let z=0; z<=71; z++) {
+    // Abertura de descarga bajo el gabinete
+    if (x>=45 && x<=74 && z>=29 && z<=58) continue;
+    const seam = (x%24===0 || z%24===0 || x===119 || z===71);
+    const perfZone = (x>=25 && x<=70 && z>=2 && z<=21);
+    if (perfZone && !seam) {
+      if ((x+z)%2===0) voxS(x,24,z,COL.TILE);   // patrón perforado (huecos reales)
+    } else {
+      voxS(x,24,z, seam ? COL.TILE_D : COL.TILE);
+    }
+  }
+
+// ====== GABINETE (paredes laterales, trasera, base y tope) ======
+// Base con abertura de descarga
+for (let x=UX0; x<=UX1; x++)
+  for (let z=UZ0; z<=UZ1; z++)
+    if (!(x>=45 && x<=74 && z>=29 && z<=58))
+      voxS(x, BASE_Y, z, COL.CAB_D);
+// Paredes laterales
+for (let y=BASE_Y+1; y<TOP_Y; y++)
+  for (let z=UZ0; z<=UZ1; z++) {
+    voxS(UX0, y, z, COL.CAB);
+    voxS(UX1, y, z, COL.CAB);
+  }
+// Pared trasera
+for (let y=BASE_Y+1; y<TOP_Y; y++)
+  for (let x=UX0; x<=UX1; x++)
+    voxS(x, y, UZ1, COL.CAB);
+// Seams horizontales en costados y trasera
+for (const y of [46, 68, 90]) {
+  for (let z=UZ0; z<=UZ1; z++) { voxS(UX0,y,z,COL.CAB_D); voxS(UX1,y,z,COL.CAB_D); }
+  for (let x=UX0; x<=UX1; x++) voxS(x,y,UZ1,COL.CAB_D);
+}
+// Postes esquineros
+for (let y=BASE_Y; y<=TOP_Y; y++) {
+  voxS(UX0,y,UZ0,COL.FRAME); voxS(UX1,y,UZ0,COL.FRAME);
+  voxS(UX0,y,UZ1,COL.FRAME); voxS(UX1,y,UZ1,COL.FRAME);
+}
+// Tope (deck de ventiladores) con dos aberturas circulares
+for (let x=UX0; x<=UX1; x++)
+  for (let z=UZ0; z<=UZ1; z++) {
+    let open = false;
+    for (const cx of FAN_CX) {
+      const dx=x-cx, dz=z-FAN_CZ;
+      if (dx*dx + dz*dz <= (FAN_R-1)*(FAN_R-1)) { open = true; break; }
+    }
+    if (!open) voxS(x, TOP_Y, z, COL.CAB);
+  }
+// Aros de los ventiladores + guarda
+FAN_CX.forEach(cx => {
+  for (let x=cx-FAN_R; x<=cx+FAN_R; x++)
+    for (let z=FAN_CZ-FAN_R; z<=FAN_CZ+FAN_R; z++) {
+      const dx=x-cx, dz=z-FAN_CZ, d2=dx*dx+dz*dz;
+      if (d2 <= FAN_R*FAN_R && d2 >= (FAN_R-1)*(FAN_R-1)) {
+        voxS(x, TOP_Y+1, z, COL.HOUSING);
+        voxS(x, TOP_Y+2, z, COL.HOUSING);
+      }
+    }
+  // Guarda: cruz sobre la boca
+  for (let x=cx-FAN_R+1; x<=cx+FAN_R-1; x++) voxS(x, TOP_Y+3, FAN_CZ, COL.FRAME);
+  for (let z=FAN_CZ-FAN_R+1; z<=FAN_CZ+FAN_R-1; z++) voxS(cx, TOP_Y+3, z, COL.FRAME);
+});
+
+// ====== BANCO DE FILTROS (plano, arriba) ======
+for (let x=UX0+2; x<=UX1-2; x++)
+  for (let z=UZ0+2; z<=UZ1-2; z++) {
+    voxS(x, 95, z, (x%2===0) ? COL.PANEL : COL.FRAME);   // pliegues
+    voxS(x, 96, z, (x%2===0) ? COL.FRAME : COL.PANEL);
+  }
+// Marco perimetral de filtros
+for (let x=UX0+1; x<=UX1-1; x++) { voxS(x,95,UZ0+1,COL.FRAME); voxS(x,96,UZ0+1,COL.FRAME); voxS(x,95,UZ1-1,COL.FRAME); voxS(x,96,UZ1-1,COL.FRAME); }
+for (let z=UZ0+1; z<=UZ1-1; z++) { voxS(UX0+1,95,z,COL.FRAME); voxS(UX0+1,96,z,COL.FRAME); voxS(UX1-1,95,z,COL.FRAME); voxS(UX1-1,96,z,COL.FRAME); }
+
+// ====== SERPENTÍN DE AGUA HELADA (inclinado, celosía teal) ======
+// Plano inclinado: a y=52 el frente del serpentín está en z=28; sube hasta z=54 en y=84
+const COIL_Y0=52, COIL_Y1=84;
+function coilZ(y) { return 28 + Math.round((y-COIL_Y0) * 26 / (COIL_Y1-COIL_Y0)); }
+for (let y=COIL_Y0; y<=COIL_Y1; y++) {
+  const zc = coilZ(y);
+  for (let x=UX0+3; x<=UX1-3; x++)
+    for (let dz=0; dz<3; dz++) {
+      const celosia = ((x + y) % 2 === 0);
+      voxS(x, y, zc+dz, celosia ? COL.TEAL : COL.TEAL_H);
+    }
+  // Marco lateral del serpentín
+  voxS(UX0+2, y, zc+1, COL.FRAME);
+  voxS(UX1-2, y, zc+1, COL.FRAME);
+}
+// Cabezales de cobre (bordes superior e inferior)
+for (let x=UX0+3; x<=UX1-3; x++) {
+  voxS(x, COIL_Y0-1, coilZ(COIL_Y0)+1, COL.COPPER);
+  voxS(x, COIL_Y1+1, coilZ(COIL_Y1)+1, COL.COPPER);
+}
+
+// ====== BANDEJA DE CONDENSADOS + DRENAJE ======
+for (let x=UX0+2; x<=UX1-2; x++)
+  for (let z=UZ0+1; z<=UZ1-2; z++)
+    voxS(x, 49, z, COL.SKID);
+for (let x=UX0+2; x<=UX1-2; x++) { voxS(x,50,UZ0+1,COL.SKID); voxS(x,50,UZ1-2,COL.SKID); }
+for (let z=UZ0+1; z<=UZ1-2; z++) { voxS(UX0+2,50,z,COL.SKID); voxS(UX1-2,50,z,COL.SKID); }
+// Drenaje de cobre: baja de la bandeja al plenum
+for (let y=12; y<=48; y++) voxS(75, y, 30, COL.COPPER);
+voxS(75, 12, 31, COL.COPPER); voxS(75, 12, 32, COL.COPPER);
+
+// ====== HUMIDIFICADOR (sección con lámina de agua) ======
+const HX0=46, HX1=54, HZ0=44, HZ1=54;
+for (let y=27; y<=42; y++) {
+  voxS(HX0, y, HZ0, COL.FRAME); voxS(HX1, y, HZ0, COL.FRAME);
+  voxS(HX0, y, HZ1, COL.FRAME); voxS(HX1, y, HZ1, COL.FRAME);
+  for (let x=HX0; x<=HX1; x++) voxS(x, y, HZ1, COL.MOTOR);   // respaldo
+}
+for (let x=HX0; x<=HX1; x++) { voxS(x,42,HZ0,COL.FRAME); voxS(x,27,HZ0,COL.FRAME); }
+// Charola superior (distribuidor) y batea inferior con agua
+for (let x=HX0; x<=HX1; x++)
+  for (let z=HZ0; z<=HZ1; z++) {
+    voxS(x, 43, z, COL.HOUSING);
+    voxS(x, 27, z, COL.DARK);
+  }
+for (let x=HX0+1; x<=HX1-1; x++)
+  for (let z=HZ0+1; z<=HZ1-1; z++)
+    voxS(x, 28, z, COL.WATER);
+
+// ====== CONEXIONES DE AGUA HELADA (costado derecho, bridadas, con válvulas) ======
+function chwLine(y, color) {
+  for (let x=UX1+1; x<=96; x++) voxS(x, y, 40, color);
+  // Brida en el muro
+  for (let dy=-2; dy<=2; dy++)
+    for (let dz=-2; dz<=2; dz++)
+      if (Math.max(Math.abs(dy), Math.abs(dz)) === 2)
+        voxS(UX1+2, y+dy, 40+dz, COL.SKID);
+  // Brida de campo (extremo)
+  for (let dy=-2; dy<=2; dy++)
+    for (let dz=-2; dz<=2; dz++)
+      if (Math.max(Math.abs(dy), Math.abs(dz)) === 2)
+        voxS(96, y+dy, 40+dz, COL.SKID);
+  // Cuerpo de válvula
+  for (let x=86; x<=88; x++)
+    for (let dy=-1; dy<=1; dy++)
+      for (let dz=-1; dz<=1; dz++)
+        voxS(x, y+dy, 40+dz, COL.DARK);
+  // Vástago + volante
+  voxS(87, y+2, 40, COL.SKID); voxS(87, y+3, 40, COL.SKID);
+  voxS(86, y+4, 40, COL.SKID); voxS(88, y+4, 40, COL.SKID);
+  voxS(87, y+4, 39, COL.SKID); voxS(87, y+4, 41, COL.SKID);
+  voxS(87, y+4, 40, COL.DARK);
+}
+const CHW_SUP_Y=54, CHW_RET_Y=82;
+chwLine(CHW_SUP_Y, COL.PIPE_B);   // entrada azul (abajo → serpentín)
+chwLine(CHW_RET_Y, COL.PIPE_R);   // salida roja (serpentín → retorno)
+// Cabecera interna: suministro al pie del serpentín
+function pipeRun(a, b, color) {
+  const dx=Math.sign(b[0]-a[0]), dy=Math.sign(b[1]-a[1]), dz=Math.sign(b[2]-a[2]);
+  const len = Math.max(Math.abs(b[0]-a[0]), Math.abs(b[1]-a[1]), Math.abs(b[2]-a[2]));
+  for (let i=0;i<=len;i++) voxS(a[0]+dx*i, a[1]+dy*i, a[2]+dz*i, color);
+}
+pipeRun([UX1-1,CHW_SUP_Y,40],[68,CHW_SUP_Y,40], COL.PIPE_B);
+pipeRun([67,CHW_SUP_Y,39],[62,CHW_SUP_Y,34], COL.PIPE_B);
+pipeRun([62,CHW_SUP_Y,33],[62,COIL_Y0,31], COL.PIPE_B);
+// Retorno desde la parte alta del serpentín
+pipeRun([62,COIL_Y1,54],[62,CHW_RET_Y,52], COL.PIPE_R);
+pipeRun([62,CHW_RET_Y,51],[68,CHW_RET_Y,45], COL.PIPE_R);
+pipeRun([69,CHW_RET_Y,44],[UX1-1,CHW_RET_Y,40], COL.PIPE_R);
+
+// ====== FACADE (frontal removible por CORTE): puertas + HMI ======
+for (let y=BASE_Y+1; y<TOP_Y; y++)
+  for (let x=UX0; x<=UX1; x++)
+    voxF(x, y, UZ0, COL.CAB);
+// Junta central de puertas
+for (let y=BASE_Y+1; y<TOP_Y; y++) { voxF(59, y, UZ0, COL.CAB_D); voxF(60, y, UZ0, COL.CAB_D); }
+// Rejilla inferior decorativa en puertas
+for (let y=30; y<=40; y++)
+  for (let x=UX0+3; x<=UX1-3; x++)
+    if ((x+y)%2===0) voxF(x, y, UZ0, COL.GRILLE);
+// Manijas (sobresalen del frente)
+for (let y=62; y<=67; y++) { voxF(56, y, UZ0-1, COL.SKID); voxF(63, y, UZ0-1, COL.SKID); }
+// Panel HMI: bisel + display emisivo
+for (let x=51; x<=68; x++)
+  for (let y=71; y<=81; y++)
+    voxF(x, y, UZ0, COL.CAB_D);
+for (let x=53; x<=66; x++)
+  for (let y=73; y<=79; y++)
+    voxF(x, y, UZ0-1, COL.SCREEN);
+
+// ====== INSTANCED MESHES ======
+function decode(k) {
+  const z = (k % 1024) - 64;
+  const y = (Math.floor(k/1024) % 1024) - 64;
+  const x = Math.floor(k/1048576) - 64;
+  return [x,y,z];
+}
+function groupByColor(map) {
+  const data = {};
+  map.forEach((color, k) => {
+    const key = color.toString();
+    if (!data[key]) data[key] = { color, positions: [] };
+    data[key].positions.push(decode(k));
+  });
+  return data;
+}
+const voxDataS = groupByColor(S);
+const voxDataF = groupByColor(F);
+
+const cubeGeo = new THREE.BoxGeometry(1,1,1);
+function buildInstances(voxData, parent) {
+  for (const k in voxData) {
+    const { color, positions } = voxData[k];
+    const isScreen = (color === COL.SCREEN);
+    const isWater  = (color === COL.WATER);
+    const mat = new THREE.MeshStandardMaterial({
+      color,
+      roughness: isWater ? 0.25 : 0.5,
+      metalness: isWater ? 0.1 : 0.55,
+      emissive: isScreen ? 0x00d4aa : 0x000000,
+      emissiveIntensity: isScreen ? 0.85 : 0,
+    });
+    const mesh = new THREE.InstancedMesh(cubeGeo, mat, positions.length);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    const m = new THREE.Matrix4();
+    positions.forEach((p, i) => {
+      m.setPosition(p[0]+0.5, p[1]+0.5, p[2]+0.5);
+      mesh.setMatrixAt(i, m);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    parent.add(mesh);
+  }
+}
+buildInstances(voxDataS, scene);
+const facadeGroup = new THREE.Group();
+buildInstances(voxDataF, facadeGroup);
+scene.add(facadeGroup);
+
+// LEDs del HMI (viajan con el frontal)
+const ledFanMat  = new THREE.MeshStandardMaterial({ color:0xff2233, emissive:0xff2233, emissiveIntensity:1.4, roughness:0.25 });
+const ledAguaMat = new THREE.MeshStandardMaterial({ color:0xff2233, emissive:0xff2233, emissiveIntensity:1.4, roughness:0.25 });
+const ledFan = new THREE.Mesh(new THREE.BoxGeometry(1.2,1.2,0.8), ledFanMat);
+ledFan.position.set(55, 70, UZ0-0.4);
+const ledAgua = new THREE.Mesh(new THREE.BoxGeometry(1.2,1.2,0.8), ledAguaMat);
+ledAgua.position.set(64, 70, UZ0-0.4);
+facadeGroup.add(ledFan); facadeGroup.add(ledAgua);
+
+// ====== VENTILADORES EC (animados, con inercia) ======
+const fanGroups = [], fanBladeMats = [];
+FAN_CX.forEach(cx => {
+  const g = new THREE.Group();
+  g.position.set(cx+0.5, TOP_Y+1.6, FAN_CZ+0.5);
+  const bladeMat = new THREE.MeshStandardMaterial({
+    color:0xff2233, roughness:0.45, metalness:0.6,
+    emissive:0xff2233, emissiveIntensity:0.4
+  });
+  for (let i=0; i<7; i++) {
+    const a = (i/7)*Math.PI*2;
+    for (let rr=2; rr<=5; rr++) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.5,1.4), bladeMat);
+      b.position.set(Math.cos(a)*rr, 0, Math.sin(a)*rr);
+      b.rotation.y = -a;
+      b.castShadow = true;
+      g.add(b);
+    }
+  }
+  // Buje azul EC (apilado de cajas)
+  const hubMat = new THREE.MeshStandardMaterial({ color:COL.HUB, roughness:0.35, metalness:0.7 });
+  const hub1 = new THREE.Mesh(new THREE.BoxGeometry(3.4,1.4,3.4), hubMat); hub1.position.y = 0.2;
+  const hub2 = new THREE.Mesh(new THREE.BoxGeometry(2.4,1.0,2.4), hubMat); hub2.position.y = 1.2;
+  g.add(hub1); g.add(hub2);
+  scene.add(g);
+  fanGroups.push(g);
+  fanBladeMats.push(bladeMat);
+});
+
+// ====== LÁMINA DE AGUA DEL HUMIDIFICADOR ======
+const filmMat = new THREE.MeshStandardMaterial({
+  color:0x3fb4d8, transparent:true, opacity:0,
+  roughness:0.15, metalness:0.1, emissive:0x1e6f8f, emissiveIntensity:0.3,
+  side:THREE.DoubleSide, depthWrite:false
+});
+const film = new THREE.Mesh(new THREE.BoxGeometry(7.6, 14, 0.5), filmMat);
+film.position.set(50.5, 35.5, 52.5);
+scene.add(film);
+
+// ====== MÁQUINA DE ESTADOS ======
+const COLOR_ON  = new THREE.Color(0x00ff66);
+const COLOR_OFF = new THREE.Color(0xff2233);
+const state = { fan:false, agua:false, corte:true };
+let fanSpeed = 0;   // inercia de giro 0..1
+
+function setMat(m, on, hi, lo) {
+  m.color.copy(on ? COLOR_ON : COLOR_OFF);
+  m.emissive.copy(on ? COLOR_ON : COLOR_OFF);
+  m.emissiveIntensity = on ? (hi ?? 0.6) : (lo ?? 0.4);
+}
+function applyState() {
+  fanBladeMats.forEach(m => setMat(m, state.fan, 0.6, 0.4));
+  setMat(ledFanMat,  state.fan,  1.7, 1.2);
+  setMat(ledAguaMat, state.agua, 1.7, 1.2);
+  facadeGroup.visible = !state.corte;
+}
+applyState();
+
+// ====== UI ======
+function bind(id, key) {
+  const btn = document.getElementById(id);
+  const paint = () => {
+    btn.className = state[key] ? 'on' : 'off';
+    btn.textContent = state[key] ? 'ON' : 'OFF';
+  };
+  paint();
+  btn.onclick = () => { state[key] = !state[key]; paint(); applyState(); };
+}
+bind('bFan','fan');
+bind('bAgua','agua');
+bind('bCorte','corte');
+const bRot = document.getElementById('bRot');
+bRot.onclick = () => {
+  controls.autoRotate = !controls.autoRotate;
+  bRot.className = controls.autoRotate ? 'on' : 'off';
+  bRot.textContent = controls.autoRotate ? 'ON' : 'OFF';
+};
+
+// ====== TRAYECTORIAS DE AGUA ======
+function polyline(points) {
+  const pts = points.map(p => new THREE.Vector3(p[0], p[1], p[2]));
+  const segs = []; let total = 0;
+  for (let i=0; i<pts.length-1; i++) {
+    const l = pts[i].distanceTo(pts[i+1]);
+    segs.push({ a:pts[i], b:pts[i+1], l0:total, l });
+    total += l;
+  }
+  const v = new THREE.Vector3();
+  return {
+    at(t) {
+      const d = Math.min(t,1) * total;
+      for (const s of segs)
+        if (d <= s.l0 + s.l) return v.lerpVectors(s.a, s.b, s.l ? (d-s.l0)/s.l : 0);
+      return v.copy(pts[pts.length-1]);
+    }
+  };
+}
+const zc0 = coilZ(COIL_Y0), zcMid = coilZ(68), zc1 = coilZ(COIL_Y1);
+const supPath = polyline([
+  [97,CHW_SUP_Y+0.5,40.5],[80,CHW_SUP_Y+0.5,40.5],[69,CHW_SUP_Y+0.5,40.5],
+  [62.5,CHW_SUP_Y+0.5,34.5],[62.5,COIL_Y0+0.5,zc0+1.5],[60,68.5,zcMid+1.5]
+]);
+const retPath = polyline([
+  [60,68.5,zcMid+1.5],[62.5,COIL_Y1+0.5,zc1+1.5],[62.5,CHW_RET_Y+0.5,52.5],
+  [69,CHW_RET_Y+0.5,44.5],[80,CHW_RET_Y+0.5,40.5],[97,CHW_RET_Y+0.5,40.5]
+]);
+
+// ====== PARTÍCULAS ======
+function spawn(n, colorHex, size) {
+  const arr = [];
+  const geo = new THREE.BoxGeometry(size||0.6, size||0.6, size||0.6);
+  for (let i=0; i<n; i++) {
+    const p = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:colorHex, transparent:true, opacity:0 }));
+    p.userData = { t: Math.random(), seed: Math.random()*10 };
+    scene.add(p);
+    arr.push(p);
+  }
+  return arr;
+}
+// Aire caliente: del cuarto hacia los ventiladores superiores
+const hotP = spawn(36, 0xff5533, 0.7);
+hotP.forEach((p, i) => {
+  p.userData.f = i % 2;
+  p.userData.a = Math.random()*Math.PI*2;
+  p.userData.r = 9 + Math.random()*13;
+});
+// Aire frío: interior → plenum → sube por losetas perforadas
+const coldP = spawn(52, 0x44bbff, 0.7);
+coldP.forEach(p => {
+  p.userData.xi = 46 + Math.random()*27;
+  p.userData.xp = 27 + Math.random()*42;
+  p.userData.zp = 4 + Math.random()*16;
+});
+// Agua helada
+const supP = spawn(10, 0x66ccff, 0.55);
+const retP = spawn(10, 0xff6644, 0.55);
+
+function updateFlow(list, path, speed, active, dt, jit) {
+  const j = jit || 0.15;
+  for (const p of list) {
+    if (!active) { p.material.opacity = 0; continue; }
+    p.userData.t += dt * speed;
+    if (p.userData.t > 1) p.userData.t -= 1;
+    const tt = p.userData.t, s = p.userData.seed;
+    const pos = path.at(tt);
+    p.position.set(
+      pos.x + Math.sin(tt*9 + s)*j,
+      pos.y + Math.cos(tt*7 + s)*j,
+      pos.z + Math.sin(tt*5 + s)*j
+    );
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.85;
+  }
+}
+
+// ====== RESIZE ======
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ====== ANIMATE ======
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t  = clock.elapsedTime;
+
+  // Inercia de los ventiladores EC
+  const target = state.fan ? 1 : 0;
+  fanSpeed += (target - fanSpeed) * Math.min(1, dt * 0.9);
+  if (Math.abs(target - fanSpeed) < 0.003) fanSpeed = target;
+  fanGroups.forEach((g, i) => { g.rotation.y += dt * (11 + i*0.6) * fanSpeed; });
+
+  const airVis = fanSpeed > 0.03;
+
+  // Aire caliente (retorno): converge hacia las bocas de succión
+  hotP.forEach(p => {
+    if (!airVis) { p.material.opacity = 0; return; }
+    p.userData.t += dt * (0.16 * (0.3 + fanSpeed*0.7));
+    if (p.userData.t > 1) p.userData.t -= 1;
+    const tt = p.userData.t, s = p.userData.seed;
+    const cx = FAN_CX[p.userData.f] + 0.5;
+    const r = p.userData.r * (1 - tt*0.85);
+    p.position.set(
+      cx + Math.cos(p.userData.a + tt*1.5)*r,
+      124 - tt*19 + Math.sin(tt*6 + s)*0.4,
+      FAN_CZ + 0.5 + Math.sin(p.userData.a + tt*1.5)*r
+    );
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.8 * fanSpeed;
+  });
+
+  // Aire frío (impulsión): baja al plenum y sube por losetas perforadas
+  coldP.forEach(p => {
+    if (!airVis) { p.material.opacity = 0; return; }
+    p.userData.t += dt * (0.13 * (0.3 + fanSpeed*0.7));
+    if (p.userData.t > 1) p.userData.t -= 1;
+    const tt = p.userData.t, s = p.userData.seed;
+    const zi = 31 + (s % 1) * 24;
+    let x, y, z;
+    if (tt < 0.30) {
+      const u = tt / 0.30;
+      x = p.userData.xi; z = zi;
+      y = 48 - u * 23;
+    } else if (tt < 0.58) {
+      const u = (tt - 0.30) / 0.28;
+      y = 25 - u * 13;
+      x = p.userData.xi + (p.userData.xp - p.userData.xi) * u;
+      z = zi + (16 - zi) * u;
+    } else {
+      const u = (tt - 0.58) / 0.42;
+      x = p.userData.xp;
+      z = p.userData.zp;
+      y = 12 + u * 42;
+    }
+    p.position.set(
+      x + Math.sin(tt*8 + s)*0.3,
+      y,
+      z + Math.cos(tt*6 + s)*0.3
+    );
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.85 * fanSpeed;
+  });
+
+  // Agua helada
+  updateFlow(supP, supPath, 0.12, state.agua, dt);
+  updateFlow(retP, retPath, 0.12, state.agua, dt);
+
+  // Lámina de agua del humidificador
+  filmMat.opacity = state.agua ? 0.32 + Math.sin(t*5)*0.1 : 0;
+  film.position.y = 35.5 + (state.agua ? Math.sin(t*9)*0.12 : 0);
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
