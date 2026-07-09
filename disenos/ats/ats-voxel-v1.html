@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>TABLERO ATS · Transferencia Automática · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); z-index:5; }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#aebfd2; }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); z-index:5; color:#aebfd2; }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; letter-spacing:0.08em; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #coord { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#aebfd2; backdrop-filter: blur(6px); z-index:5; letter-spacing:0.06em; }
+  #coord span { color:#ffe14d; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:262px; font-size:11px; backdrop-filter: blur(6px); z-index:5; }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; gap:12px; }
+  #panel label { color:#aebfd2; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:64px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel button.amber { color:#06080d; border-color:#ffb300; background:#ffb300; box-shadow:0 0 12px #ffb30066; }
+  #panel button.alarm { color:#06080d; border-color:#ff2233; background:#ff2233; box-shadow:0 0 12px #ff223388; animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:0.55; } }
+</style>
+<script>
+// Inyección dinámica de importmap (evita el mangling de package@version por Cloudflare)
+(function(){
+  if (typeof document === 'undefined') return;
+  var AT = String.fromCharCode(64);
+  var base = 'https://unpkg.com/three' + AT + '0.160.0/';
+  var im = document.createElement('script');
+  im.type = 'importmap';
+  im.textContent = JSON.stringify({ imports: {
+    'three': base + 'build/three.module.js',
+    'three/addons/': base + 'examples/jsm/'
+  }});
+  document.head.appendChild(im);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>TABLERO ATS · TRANSFERENCIA AUTOMÁTICA</b><br>
+  <span>Voxel Art 3D · SCADA · 1 voxel = 0.025 m · corte del gabinete</span>
+</div>
+<div id="legend">
+  <div><i style="background:#3aa0ff"></i> RED (utility)</div>
+  <div><i style="background:#ffb300"></i> GENERADOR</div>
+  <div><i style="background:#ff7a30"></i> CARGA</div>
+</div>
+<div id="coord">DRAG: Rotar · WHEEL: Zoom · CLIC: Capturar voxel<br><span id="coordVal">VOX  —</span></div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>FUENTE ACTIVA</label><button id="bSrc" class="on">RED</button></div>
+  <div class="row"><label>SIMULAR CORTE DE RED</label><button id="bCut" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="off">OFF</button></div>
+</div>
+
+<script type="module" id="app">
+// ============================================================================
+// TABLERO ATS — Transferencia Automática Red / Generador · Voxel Art 3D (SCADA)
+//
+// SCALE: 1 voxel = 0.025 m  (micro-voxel, alta densidad)
+//   Gabinete de piso: 0.80 m ancho × 2.00 m alto × 0.60 m fondo
+//                   = 32 × 80 × 24 vox
+//
+// Corte del gabinete (puerta transparente) revela:
+//   - 2 juegos de CONTACTORES (RED izquierda / GENERADOR derecha)
+//   - mecanismo de TRANSFERENCIA central enclavado (interlock móvil)
+//   - CONTROLADOR con display de fuente activa + LEDs (RED/GEN/TRANSFIRIENDO)
+//   - barras de COBRE: 2 entradas de fuente + salida a CARGA
+//   - botones de prueba, cableado de control, mímico en la puerta
+//
+// three.js r0.160.0 vía importmap (unpkg) · voxeles estáticos en InstancedMesh
+// por color (BoxGeometry(1,1,1) compartida) · partes animadas en Groups aparte.
+// ============================================================================
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const HEADLESS = (typeof window === 'undefined') || !!globalThis.__HEADLESS__;
+
+// ====== PALETA ======
+const PAL = {
+  BASE:   { c:0x14171d, r:0.85, m:0.10 },
+  FLOOR:  { c:0x22262e, r:0.90, m:0.05 },
+  FLOOR_D:{ c:0x1c2028, r:0.90, m:0.05 },
+  CAB:    { c:0x3a4048, r:0.55, m:0.55 },   // gris del gabinete
+  CAB_D:  { c:0x2c313a, r:0.60, m:0.50 },
+  CAB_L:  { c:0x474f59, r:0.50, m:0.60 },
+  MET:    { c:0x9aa3ac, r:0.38, m:0.85 },
+  MET_D:  { c:0x6f7883, r:0.45, m:0.85 },
+  MET_L:  { c:0xbcc4cc, r:0.30, m:0.90 },
+  DOORT:  { c:0x9aa3ac, r:0.35, m:0.85, t:0.16 },
+  COPPER: { c:0xc4793c, r:0.35, m:1.00 },
+  COPPER_D:{ c:0x9c5c2b, r:0.42, m:0.95 },
+  BLK:    { c:0x0b0d11, r:0.70, m:0.30 },   // cuerpo de contactores
+  CHAR:   { c:0x1a1e25, r:0.62, m:0.45 },
+  CHAR_D: { c:0x12151b, r:0.70, m:0.40 },
+  FIN:    { c:0x3b434e, r:0.42, m:0.85 },
+  TEAL:   { c:0x00d4aa, r:0.50, m:0.20, e:0x00d4aa, ei:0.35 },
+  YEL:    { c:0xffc400, r:0.75, m:0.00 },
+  WHT:    { c:0xe8edf2, r:0.60, m:0.10 },
+  WHTP:   { c:0xcfd6dd, r:0.55, m:0.30 },
+  GRN_B:  { c:0x0f8a4f, r:0.50, m:0.10, e:0x0f8a4f, ei:0.30 },
+  RED_B:  { c:0xc22233, r:0.50, m:0.10, e:0xc22233, ei:0.30 },
+  AMBER:  { c:0xffb300, r:0.50, m:0.20, e:0xffb300, ei:0.45 },
+  BLUEB:  { c:0x3aa0ff, r:0.50, m:0.20, e:0x3aa0ff, ei:0.45 },
+  ORNG:   { c:0xff7a30, r:0.50, m:0.20, e:0xff7a30, ei:0.45 },
+  GRAYK:  { c:0x555e69, r:0.50, m:0.60 },
+  DISP:   { c:0x04060a, r:0.95, m:0.00 }
+};
+
+// ====== ACUMULADOR DE VOXELES (Map => 0 celdas duplicadas por construcción) ======
+const cells = new Map();
+let overwrites = 0;
+const K = (x, y, z) => x + ',' + y + ',' + z;
+function vox(x, y, z, c) {
+  const k = K(x, y, z);
+  if (cells.has(k)) overwrites++;
+  cells.set(k, c);
+}
+function fill(x0, x1, y0, y1, z0, z1, c) {
+  for (let x = x0; x <= x1; x++)
+    for (let y = y0; y <= y1; y++)
+      for (let z = z0; z <= z1; z++) vox(x, y, z, c);
+}
+function carve(x0, x1, y0, y1, z0, z1) {
+  for (let x = x0; x <= x1; x++)
+    for (let y = y0; y <= y1; y++)
+      for (let z = z0; z <= z1; z++) cells.delete(K(x, y, z));
+}
+function hash2(a, b) { return (((a + 31) * 73856093) ^ ((b + 71) * 19349663)) >>> 0; }
+
+// ====== GABINETE DE PISO (0.80 × 2.00 × 0.60 m => x0..31, y0..79, z0..23) ======
+const GX0 = 0, GX1 = 31, GY1 = 79, GZ0 = 0, GZ1 = 23;
+// plinto
+fill(GX0, GX1, 0, 3, GZ0, GZ1, 'BASE');
+// carcasa (gris) con dithering sutil
+for (let x = GX0; x <= GX1; x++) {
+  for (let y = 4; y <= GY1; y++) {
+    let c = 'CAB';
+    const h = hash2(x, y) % 100;
+    if (h < 12) c = 'CAB_D'; else if (h >= 90) c = 'CAB_L';
+    vox(x, y, GZ0, c);                 // fondo
+  }
+}
+fill(GX0, GX0, 4, GY1, GZ0, GZ1, 'CAB_D');   // lateral izq
+fill(GX1, GX1, 4, GY1, GZ0, GZ1, 'CAB_D');   // lateral der
+fill(GX0, GX1, GY1, GY1, GZ0, GZ1, 'CAB_L'); // techo
+// marco frontal (borde de puerta)
+fill(GX0, GX1, 4, GY1, GZ1, GZ1, 'CAB');
+carve(2, 29, 6, 77, GZ1, GZ1);               // vano de puerta
+fill(2, 29, 6, 77, GZ1, GZ1, 'DOORT');       // puerta transparente (corte)
+// placa de montaje interior
+fill(2, 29, 5, 78, 1, 1, 'CHAR_D');
+// manija de puerta (lado derecho)
+fill(28, 28, 38, 46, 24, 24, 'BLK');
+vox(28, 42, 25, 'MET_L');
+// bisagras (lado izquierdo)
+[16, 34, 52, 70].forEach(y => { vox(0, y, 24, 'MET_L'); vox(1, y, 24, 'MET_D'); });
+// louvers de ventilación en la puerta (marco)
+for (const y of [70, 72, 74]) fill(4, 27, y, y, GZ1, GZ1, 'CAB_D');
+for (const y of [10, 12]) fill(4, 27, y, y, GZ1, GZ1, 'CAB_D');
+// nameplate arriba en la puerta
+fill(4, 15, 74, 76, 24, 24, 'MET_L');
+fill(5, 14, 75, 75, 24, 24, 'CHAR_D');
+// etiqueta de seguridad amarilla con rayo (puerta)
+fill(21, 26, 8, 13, 24, 24, 'YEL');
+fill(21, 26, 13, 13, 24, 24, 'BLK');
+vox(24, 12, 24, 'BLK'); vox(23, 11, 24, 'BLK'); vox(24, 10, 24, 'BLK'); vox(23, 9, 24, 'BLK');
+
+// ====== CONTROLADOR (sección superior, y60..77) ======
+fill(3, 28, 60, 77, 2, 9, 'CHAR');
+// nameplate del controlador
+fill(4, 27, 74, 76, 9, 9, 'MET_L');
+// ventana del display (fuente activa)
+fill(8, 23, 67, 73, 9, 9, 'DISP');
+// biseles de LEDs (RED / GEN / TRANSFIRIENDO)
+fill(5, 7, 62, 64, 9, 9, 'BLK');
+fill(13, 15, 62, 64, 9, 9, 'BLK');
+fill(21, 23, 62, 64, 9, 9, 'BLK');
+// botones de prueba (PRUEBA verde / RESET rojo)
+fill(25, 27, 68, 70, 9, 9, 'GRN_B');
+fill(25, 27, 63, 65, 9, 9, 'RED_B');
+// etiquetas de LEDs (marcas)
+fill(5, 7, 65, 65, 9, 9, 'CHAR_D');
+fill(13, 15, 65, 65, 9, 9, 'CHAR_D');
+fill(21, 23, 65, 65, 9, 9, 'CHAR_D');
+
+// ====== CONTACTORES + MECANISMO DE TRANSFERENCIA (sección media, y33..55) ======
+// RED (izquierda)
+fill(4, 13, 34, 54, 2, 8, 'BLK');
+fill(6, 11, 37, 51, 8, 8, 'CHAR_D');       // frente ranurado (bobina)
+fill(5, 5, 34, 54, 2, 8, 'CHAR');          // costillas
+fill(12, 12, 34, 54, 2, 8, 'CHAR');
+// GEN (derecha)
+fill(18, 27, 34, 54, 2, 8, 'BLK');
+fill(20, 25, 37, 51, 8, 8, 'CHAR_D');
+fill(18, 18, 34, 54, 2, 8, 'CHAR');
+fill(25, 27, 34, 54, 2, 8, 'CHAR');
+// mecanismo de transferencia central (housing enclavado)
+fill(14, 17, 36, 52, 2, 7, 'MET_D');
+fill(15, 16, 38, 50, 7, 7, 'GRAYK');
+vox(15, 44, 7, 'YEL'); vox(16, 44, 7, 'YEL'); // marca de enclavamiento
+// lugs de línea (arriba) de cada contactor -> barra de entrada
+for (const bx of [6, 9, 12]) fill(bx, bx, 54, 55, 3, 5, 'COPPER');
+for (const bx of [19, 22, 25]) fill(bx, bx, 54, 55, 3, 5, 'COPPER');
+// lugs de carga (abajo) de cada contactor -> barra de salida
+for (const bx of [6, 9, 12]) fill(bx, bx, 32, 33, 3, 5, 'COPPER');
+for (const bx of [19, 22, 25]) fill(bx, bx, 32, 33, 3, 5, 'COPPER');
+
+// ====== BARRAS DE COBRE (2 entradas + salida a carga) ======
+// entrada RED (utility): 3 fases, izquierda
+for (const bx of [6, 9, 12]) fill(bx, bx, 55, 72, 2, 2, 'COPPER');
+fill(4, 14, 72, 74, 2, 2, 'COPPER_D');            // bloque de terminales RED
+// entrada GEN (generador): 3 fases, derecha
+for (const bx of [19, 22, 25]) fill(bx, bx, 55, 72, 2, 2, 'COPPER');
+fill(17, 27, 72, 74, 2, 2, 'COPPER_D');           // bloque de terminales GEN
+// salida a CARGA: enlaces desde lugs -> barra central -> terminal inferior
+for (const bx of [6, 9, 12]) fill(bx, 16, 32, 32, 2, 2, 'COPPER');   // enlace RED->centro
+for (const bx of [19, 22, 25]) fill(16, bx, 32, 32, 2, 2, 'COPPER'); // enlace GEN->centro
+for (const bx of [13, 16, 19]) fill(bx, bx, 14, 32, 2, 2, 'COPPER'); // barras de carga
+fill(11, 21, 9, 13, 3, 5, 'COPPER');              // bloque de terminales de CARGA
+// entradas de cable (glándulas) en el plinto
+fill(5, 8, 4, 6, 4, 6, 'BLK');    // RED
+fill(23, 26, 4, 6, 4, 6, 'BLK');  // GEN
+fill(13, 18, 4, 6, 4, 6, 'BLK');  // CARGA
+// bandas de identificación de fuente
+fill(4, 14, 71, 71, 2, 2, 'BLUEB');   // RED
+fill(17, 27, 71, 71, 2, 2, 'AMBER');  // GEN
+fill(11, 21, 8, 8, 3, 5, 'ORNG');     // CARGA
+
+// ====== CABLEADO DE CONTROL ======
+// del controlador a las bobinas de contactores
+fill(3, 3, 33, 60, 9, 9, 'BLUEB');
+fill(29, 29, 33, 60, 9, 9, 'AMBER');
+fill(3, 6, 33, 33, 9, 9, 'BLUEB');
+fill(27, 29, 33, 33, 9, 9, 'AMBER');
+// mazo de control lateral
+fill(2, 2, 12, 58, 6, 8, 'CHAR_D');
+fill(29, 29, 12, 58, 6, 8, 'CHAR_D');
+
+// ====== PISO (y = -1) con juntas y línea amarilla de seguridad ======
+for (let x = -7; x <= 39; x++) {
+  for (let z = -5; z <= 31; z++) {
+    let c = (hash2(x, z) % 100 < 18) ? 'FLOOR_D' : 'FLOOR';
+    if ((x + 40) % 20 === 0) c = 'FLOOR_D';
+    vox(x, -1, z, c);
+  }
+}
+for (let x = -4; x <= 36; x++) {
+  if (x % 6 < 4) { vox(x, -1, 29, 'YEL'); vox(x, -1, 30, 'YEL'); }
+}
+
+// ====== ESCENA / LUCES ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 130, 380);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(60, 150, 95);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left = -50; sc.right = 90; sc.top = 130; sc.bottom = -30; sc.near = 5; sc.far = 360;
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.5;
+sun.target.position.set(16, 40, 8);
+scene.add(sun, sun.target);
+const fillL = new THREE.DirectionalLight(0x88aaff, 0.4);
+fillL.position.set(-60, 55, 80);
+scene.add(fillL);
+const rimL = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rimL.position.set(30, 55, -100);
+scene.add(rimL);
+
+// ====== INSTANCED MESH POR COLOR (voxeles estáticos) ======
+const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+const byColor = new Map();
+for (const [k, c] of cells) {
+  if (!byColor.has(c)) byColor.set(c, []);
+  byColor.get(c).push(k);
+}
+const staticMeshes = [];
+for (const [cname, keys] of byColor) {
+  const def = PAL[cname];
+  const mat = new THREE.MeshStandardMaterial({
+    color: def.c, roughness: def.r, metalness: def.m, envMapIntensity: 0.5
+  });
+  if (def.e) { mat.emissive = new THREE.Color(def.e); mat.emissiveIntensity = def.ei; }
+  if (def.t) { mat.transparent = true; mat.opacity = def.t; mat.depthWrite = false; mat.side = THREE.DoubleSide; }
+  const im = new THREE.InstancedMesh(cubeGeo, mat, keys.length);
+  const M = new THREE.Matrix4();
+  keys.forEach((key, i) => {
+    const p = key.split(',');
+    M.setPosition(+p[0] + 0.5, +p[1] + 0.5, +p[2] + 0.5);
+    im.setMatrixAt(i, M);
+  });
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = !def.t;
+  im.receiveShadow = true;
+  if (def.t) im.renderOrder = 2;
+  im.name = 'vox_' + cname;
+  scene.add(im);
+  staticMeshes.push(im);
+}
+
+// ====== ESTADO ======
+// source: fuente solicitada ('red'|'gen'); cut: simular corte de red; rot: auto-rotate
+const state = { source: 'red', cut: false, rot: false };
+function effTarget() { return state.cut ? 'gen' : state.source; }
+
+// ====== PARTES DINÁMICAS (Groups separados del InstancedMesh) ======
+const dynGeo = new THREE.BoxGeometry(1, 1, 1);
+function emat(hex, base, i) {
+  return new THREE.MeshStandardMaterial({
+    color: base, emissive: hex, emissiveIntensity: i, roughness: 0.4, metalness: 0.1
+  });
+}
+function dynBox(mat, x, y, z, sx, sy, sz) {
+  const m = new THREE.Mesh(dynGeo, mat);
+  m.position.set(x, y, z);
+  m.scale.set(sx || 1, sy || 1, sz || 1);
+  m.castShadow = false;
+  return m;
+}
+
+// -- Displays 7 segmentos (dígitos 3×5)
+const SEG_CELLS = {
+  a: [[0, 4], [1, 4], [2, 4]], b: [[2, 3]], c: [[2, 1]],
+  d: [[0, 0], [1, 0], [2, 0]], e: [[0, 1]], f: [[0, 3]],
+  g: [[0, 2], [1, 2], [2, 2]]
+};
+const CHAR_SEGS = {
+  '0': 'abcdef', '1': 'bc', '2': 'abgde', '3': 'abgcd', '4': 'fgbc',
+  '5': 'afgcd', '6': 'afgedc', '7': 'abc', '8': 'abcdefg', '9': 'abfgcd',
+  'r': 'eg', 'E': 'afged', 'd': 'bcdeg', 'G': 'afedc', 'n': 'ceg',
+  '-': 'g', ' ': ''
+};
+function buildDigits(str, mat, ox, oy, oz) {
+  const g = new THREE.Group();
+  let cx = ox;
+  for (const ch of str) {
+    for (const s of (CHAR_SEGS[ch] || '')) {
+      for (const cell of SEG_CELLS[s]) {
+        g.add(dynBox(mat, cx + cell[0] + 0.5, oy + cell[1] + 0.5, oz, 0.92, 0.92, 0.5));
+      }
+    }
+    cx += 4;
+  }
+  return g;
+}
+
+// -- Display de fuente activa: "rEd" / "GEn" / "---" (mismo lugar)
+const dispMat = emat(0x00ff88, 0x06140c, 1.35);
+const digRed = buildDigits('rEd', dispMat, 10, 68, 9.55);
+const digGen = buildDigits('GEn', dispMat, 10, 68, 9.55);
+const digTrn = buildDigits('---', dispMat, 10, 68, 9.55);
+scene.add(digRed, digGen, digTrn);
+
+// -- LEDs piloto (RED verde · GEN ámbar · TRANSFIRIENDO rojo)
+const ledRedMat = emat(0x00ff66, 0x062a12, 1.6);   // RED (utility presente)
+const ledGenMat = emat(0xffb300, 0x2a1c02, 1.4);   // GENERADOR
+const ledTrnMat = emat(0xff2233, 0x2a0708, 0.15);  // TRANSFIRIENDO
+scene.add(dynBox(ledRedMat, 6, 63, 9.35, 0.85, 0.85, 0.75));
+scene.add(dynBox(ledGenMat, 14, 63, 9.35, 0.85, 0.85, 0.75));
+scene.add(dynBox(ledTrnMat, 22, 63, 9.35, 0.85, 0.85, 0.75));
+const ledRedLight = new THREE.PointLight(0x00ff66, 1.4, 14, 2); ledRedLight.position.set(6, 63, 13); scene.add(ledRedLight);
+const ledGenLight = new THREE.PointLight(0xffb300, 1.2, 14, 2); ledGenLight.position.set(14, 63, 13); scene.add(ledGenLight);
+const ledTrnLight = new THREE.PointLight(0xff2233, 0.0, 14, 2); ledTrnLight.position.set(22, 63, 13); scene.add(ledTrnLight);
+
+// -- Mecanismo de transferencia (interlock deslizante) + plungers de contactor
+const matSlide = new THREE.MeshStandardMaterial({ color: 0xbcc4cc, roughness: 0.3, metalness: 0.9 });
+const matPlung = new THREE.MeshStandardMaterial({ color: 0x2a2f37, roughness: 0.4, metalness: 0.7 });
+const slider = dynBox(matSlide, 15.5, 44.5, 8.2, 4.0, 2.2, 1.4);   // barra de enclavamiento
+scene.add(slider);
+const redPlunger = dynBox(matPlung, 8.5, 44.5, 8.4, 5.0, 3.0, 1.2);
+const genPlunger = dynBox(matPlung, 22.5, 44.5, 8.4, 5.0, 3.0, 1.2);
+scene.add(redPlunger, genPlunger);
+
+// -- Mímico en la puerta (single-line que sigue a la fuente activa)
+function polyLine(pts, mat, z, step) {
+  const g = new THREE.Group();
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const len = Math.hypot(dx, dy);
+    const n = Math.max(1, Math.round(len / step));
+    for (let j = 0; j <= n; j++) {
+      const t = j / n;
+      g.add(dynBox(mat, a[0] + dx * t, a[1] + dy * t, z, 0.7, 0.7, 0.6));
+    }
+  }
+  return g;
+}
+const mimRedMat = emat(0x3aa0ff, 0x061424, 0.15);
+const mimGenMat = emat(0xffb300, 0x241a02, 0.15);
+const mimLoadMat = emat(0xff7a30, 0x241002, 1.3);
+const MZ = 23.55;
+scene.add(polyLine([[6, 72], [6, 52], [16, 47]], mimRedMat, MZ, 1.0));
+scene.add(polyLine([[26, 72], [26, 52], [16, 47]], mimGenMat, MZ, 1.0));
+scene.add(polyLine([[16, 47], [16, 30]], mimLoadMat, MZ, 1.0));
+// nodos del mímico
+scene.add(dynBox(mimRedMat, 6, 73.5, MZ, 1.4, 1.4, 0.6));
+scene.add(dynBox(mimGenMat, 26, 73.5, MZ, 1.4, 1.4, 0.6));
+scene.add(dynBox(mimLoadMat, 16, 28.5, MZ, 1.6, 1.6, 0.6));
+
+// -- Partículas de flujo por barra (gateadas por la fuente activa)
+const fs = { red: true, gen: false, load: true };
+function makeFlow(pts, hex, speed) {
+  const v = pts.map(p => new THREE.Vector3(p[0], p[1], p[2]));
+  const segs = [];
+  let L = 0;
+  for (let i = 0; i < v.length - 1; i++) {
+    const l = v[i].distanceTo(v[i + 1]);
+    segs.push({ a: v[i], b: v[i + 1], l0: L, l: l });
+    L += l;
+  }
+  const mat = emat(hex, 0x05070a, 1.5);
+  const g = new THREE.Group();
+  const items = [];
+  const count = Math.max(3, Math.round(L / 6));
+  for (let i = 0; i < count; i++) {
+    const m = dynBox(mat, 0, 0, 0, 0.6, 0.6, 0.6);
+    g.add(m);
+    items.push({ m: m, t: i / count });
+  }
+  function at(t, out) {
+    const d = t * L;
+    for (let i = 0; i < segs.length; i++) {
+      const s = segs[i];
+      if (d <= s.l0 + s.l || i === segs.length - 1) {
+        const k = s.l ? Math.min(Math.max((d - s.l0) / s.l, 0), 1) : 0;
+        out.lerpVectors(s.a, s.b, k);
+        return;
+      }
+    }
+  }
+  return {
+    group: g,
+    update(dt, on) {
+      g.visible = on;
+      if (!on) return;
+      for (const it of items) {
+        it.t = (it.t + dt * speed / L) % 1;
+        at(it.t, it.m.position);
+      }
+    }
+  };
+}
+const flows = [
+  { f: makeFlow([[9, 73, 2.5], [9, 55, 2.5], [9, 33, 2.5], [16, 32, 2.5]], 0x3aa0ff, 10), gate: () => fs.red },
+  { f: makeFlow([[22, 73, 2.5], [22, 55, 2.5], [22, 33, 2.5], [16, 32, 2.5]], 0xffb300, 10), gate: () => fs.gen },
+  { f: makeFlow([[16, 31, 2.5], [16, 12, 2.5], [16, 4, 2.5]], 0xff7a30, 11), gate: () => fs.load }
+];
+flows.forEach(o => scene.add(o.f.group));
+
+// ====== TICK (node-safe, sin renderer) ======
+let tNow = 0;
+let pos = 0;   // 0 = RED conectada, 1 = GEN conectada
+function tick(dt) {
+  tNow += dt;
+  const target = (effTarget() === 'gen') ? 1 : 0;
+  pos += (target - pos) * Math.min(1, dt * 3.2);
+  const transferring = Math.abs(target - pos) > 0.04;
+  const utility = !state.cut;   // RED (utility) disponible
+
+  // fuentes de flujo
+  fs.red = (pos < 0.5) && utility;
+  fs.gen = (pos >= 0.5);
+  fs.load = true;
+
+  // mecanismo de transferencia
+  slider.position.x = 8.5 + pos * 14.0;            // barra de enclavamiento se desliza
+  redPlunger.position.z = 8.4 - (1 - pos) * 1.6;   // contactor RED cerrado cuando pos~0
+  genPlunger.position.z = 8.4 - pos * 1.6;         // contactor GEN cerrado cuando pos~1
+
+  // LEDs
+  ledRedMat.emissiveIntensity = utility ? 1.6 : 0.12;
+  ledRedLight.intensity = utility ? 1.4 : 0.0;
+  ledGenMat.emissiveIntensity = (target === 1) ? 1.5 : 0.14;
+  ledGenLight.intensity = (target === 1) ? 1.2 : 0.0;
+  const blink = 0.2 + 1.4 * Math.abs(Math.sin(tNow * 8));
+  ledTrnMat.emissiveIntensity = transferring ? blink : 0.15;
+  ledTrnLight.intensity = transferring ? blink : 0.0;
+
+  // display de fuente activa
+  digTrn.visible = transferring;
+  digRed.visible = !transferring && pos < 0.5;
+  digGen.visible = !transferring && pos >= 0.5;
+  dispMat.emissiveIntensity = transferring ? blink : 1.35;
+
+  // mímico
+  mimRedMat.emissiveIntensity = utility ? (0.2 + (1 - pos) * 1.4) : 0.1;
+  mimGenMat.emissiveIntensity = 0.2 + pos * 1.4;
+  mimLoadMat.emissiveIntensity = 1.3;
+
+  for (const o of flows) o.f.update(dt, o.gate());
+}
+
+// ====== STATS + EXPORT (harness headless) ======
+function computeStats() {
+  const colors = {};
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9, minZ = 1e9, maxZ = -1e9;
+  for (const [k, c] of cells) {
+    colors[c] = (colors[c] || 0) + 1;
+    const p = k.split(',');
+    const x = +p[0], y = +p[1], z = +p[2];
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+    if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+  }
+  return { total: cells.size, overwrites: overwrites, colors: colors,
+           bounds: { minX: minX, maxX: maxX, minY: minY, maxY: maxY, minZ: minZ, maxZ: maxZ } };
+}
+const stats = computeStats();
+globalThis.__VOX__ = { stats: stats, state: state, tick: tick, effTarget: effTarget, cells: cells };
+
+// ====== INIT (solo navegador) ======
+function init() {
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+  const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.5, 1200);
+  camera.position.set(70, 64, 78);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.target.set(15, 40, 9);
+  controls.autoRotate = false;
+  controls.autoRotateSpeed = 0.5;
+
+  // ---- UI ----
+  const bSrc = document.getElementById('bSrc');
+  const bCut = document.getElementById('bCut');
+  const bRot = document.getElementById('bRot');
+  function refreshUI() {
+    const gen = effTarget() === 'gen';
+    bSrc.textContent = gen ? 'GEN' : 'RED';
+    bSrc.className = gen ? 'amber' : 'on';
+    bCut.textContent = state.cut ? 'ON' : 'OFF';
+    bCut.className = state.cut ? 'alarm' : 'off';
+    bRot.textContent = state.rot ? 'ON' : 'OFF';
+    bRot.className = state.rot ? 'on' : 'off';
+  }
+  bSrc.addEventListener('click', () => {
+    if (state.cut) return;                 // sin red, la fuente queda forzada a GEN
+    state.source = (state.source === 'red') ? 'gen' : 'red';
+    refreshUI();
+  });
+  bCut.addEventListener('click', () => { state.cut = !state.cut; refreshUI(); });
+  bRot.addEventListener('click', () => { state.rot = !state.rot; refreshUI(); });
+  refreshUI();
+
+  // ---- Captura de coordenadas (raycaster con guard de drag) ----
+  const marker = new THREE.Group();
+  marker.add(new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.15, 1.15),
+    new THREE.MeshBasicMaterial({ color: 0xffe14d, wireframe: true })));
+  marker.add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3),
+    new THREE.MeshBasicMaterial({ color: 0xffe14d })));
+  marker.visible = false;
+  scene.add(marker);
+  const ray = new THREE.Raycaster();
+  const ptr = new THREE.Vector2();
+  let pd = null;
+  renderer.domElement.addEventListener('pointerdown', e => {
+    pd = { x: e.clientX, y: e.clientY, t: performance.now() };
+  });
+  renderer.domElement.addEventListener('pointerup', e => {
+    if (!pd) return;
+    const dx = e.clientX - pd.x, dy = e.clientY - pd.y;
+    const ok = (dx * dx + dy * dy < 36) && (performance.now() - pd.t < 350);
+    pd = null;
+    if (!ok) return;
+    ptr.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+    ray.setFromCamera(ptr, camera);
+    const hits = ray.intersectObjects(staticMeshes, false);
+    if (!hits.length) return;
+    const h = hits[0];
+    const p = h.point.clone().addScaledVector(h.face.normal, -0.5);
+    const vx = Math.floor(p.x), vy = Math.floor(p.y), vz = Math.floor(p.z);
+    marker.position.set(vx + 0.5, vy + 0.5, vz + 0.5);
+    marker.visible = true;
+    const txt = vx + ', ' + vy + ', ' + vz;
+    document.getElementById('coordVal').textContent = 'VOX  ' + txt;
+    if (navigator.clipboard) navigator.clipboard.writeText(txt).catch(() => {});
+  });
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  const clock = new THREE.Clock();
+  renderer.setAnimationLoop(() => {
+    const dt = Math.min(clock.getDelta(), 0.05);
+    tick(dt);
+    controls.autoRotate = state.rot;
+    controls.update();
+    renderer.render(scene, camera);
+  });
+}
+if (!HEADLESS) init();
+</script>
+</body>
+</html>

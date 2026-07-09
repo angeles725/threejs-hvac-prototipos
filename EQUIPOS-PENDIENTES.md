@@ -558,7 +558,7 @@ Panel CONTROL DE EQUIPO: COMPRESORES 1..N ON-OFF (escalonado, vibración + LEDs)
 (compresor en rojo parpadeante), AUTO-ROTATE.
 ```
 
-- [ ] **R2. Unidad condensadora de refrigeración** → `disenos/condensadora-refri/condensadora-refri-voxel-v1.html`
+- [x] **R2. Unidad condensadora de refrigeración** → ✅ propio (subagente): `disenos/condensadora-refri/condensadora-refri-voxel-v1.html` · pendiente comparar con claude.ai
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: una UNIDAD
@@ -574,7 +574,7 @@ Leyenda: Succión / Líquido / Aire de rechazo.
 Panel CONTROL DE EQUIPO: VENTILADORES ON-OFF (giro + inercia), COMPRESOR ON-OFF, CORTE ON-OFF, AUTO-ROTATE.
 ```
 
-- [ ] **R3. Evaporador / unit cooler de cámara** → `disenos/evaporador-camara/evaporador-camara-voxel-v1.html`
+- [x] **R3. Evaporador / unit cooler de cámara** → ✅ propio (subagente): `disenos/evaporador-camara/evaporador-camara-voxel-v1.html` · pendiente comparar con claude.ai
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un EVAPORADOR
@@ -613,7 +613,7 @@ Panel CONTROL DE EQUIPO: CORTE ON-OFF (muestra núcleo y bobinas), ENERGIZADO ON
 las bobinas), AUTO-ROTATE.
 ```
 
-- [ ] **E2. Tablero de transferencia automática (ATS)** → `disenos/ats/ats-voxel-v1.html`
+- [x] **E2. Tablero de transferencia automática (ATS)** → ✅ propio (subagente): `disenos/ats/ats-voxel-v1.html` · pendiente comparar con claude.ai
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un TABLERO DE
@@ -630,7 +630,7 @@ Panel CONTROL DE EQUIPO: FUENTE (RED / GENERADOR — conmuta el ATS, cambia LEDs
 SIMULAR CORTE DE RED (transfiere a generador), AUTO-ROTATE.
 ```
 
-- [ ] **E3. Switchgear / tablero principal** → `disenos/switchgear/switchgear-voxel-v1.html`
+- [x] **E3. Switchgear / tablero principal** → ✅ propio (subagente): `disenos/switchgear/switchgear-voxel-v1.html` · pendiente comparar con claude.ai
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un TABLERO GENERAL
