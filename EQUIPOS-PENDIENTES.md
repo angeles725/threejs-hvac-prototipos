@@ -2,8 +2,11 @@
 
 > Lista de trabajo. Cada equipo trae su **PROMPT listo para pegar en claude.ai** (pase 1: voxel
 > art). El pase 2 (realistic) se hace DESPUÉS con la plantilla del final, usando el voxel como
-> especificación dimensional. Soltar cada HTML en `voxel/` con el nombre indicado; Claude Code
-> lo baselinea, audita e integra. Marcar `[x]` al entregar.
+> especificación dimensional. Soltar cada HTML en **su carpeta de equipo dentro de `disenos/`** con
+> el nombre indicado (tras las reorg de 2026-07-09 ya **no existe** `voxel/`; los diseños viven en
+> `disenos/<equipo>/`, p. ej. `disenos/server-rack/`, `disenos/ups/`). Las rutas `voxel/…` de las
+> tablas de abajo son HISTÓRICAS: su ubicación real ahora es `disenos/<equipo>/<archivo>`.
+> Claude Code lo baselinea, audita e integra. Marcar `[x]` al entregar.
 
 ## ESTADO DEL INVENTARIO — 2026-07-05
 
@@ -348,6 +351,183 @@ Leyenda: Fachada / Balcones / Núcleo / Ductos VAV / Azotea.
 Panel CONTROL DE EQUIPO: CORTE FACHADA ON-OFF (oculta fachada sur y muestra cuartos + ductos),
 LUCES NOCHE ON-OFF (ventanas emisivas), AUTO-ROTATE.
 SIN letrero de hotel — no incluir ningún cartel de texto.
+```
+
+---
+
+## 🖥️ DATACENTER (referencia: Tridium c3ntro)
+
+> Objetivo: elevar `disenos/escenas/data_center_voxel_isometrico_3d.html` (hoy muy básico, sin
+> `<title>`) al nivel de la escena de referencia real `cliente/Tridium/datacenter-c3ntro` (copias
+> del renderer en `client-designs/tridium-datacenter/`). Estos son los equipos que le faltan a la
+> escena, identificados de una foto del datacenter objetivo.
+> Escala sugerida: gabinetes (racks, CRAC, in-row, PDU, UPS) a `// SCALE: 1 voxel = 0.025 m`;
+> piezas grandes de exterior/escena (dry cooler, contención) a `// SCALE: 1 voxel = 0.05 m`.
+> Reutilizables ya existentes: `chiller`, `torre-enfriamiento`, `tuberia-hidraulica`, `mcc-vfd`,
+> `generador`.
+>
+> **Parámetros MEDIDOS del renderer de referencia** (`client-designs/tridium-datacenter/`, unidades reales m):
+> — Rack: **0.6 ancho × 0.85 fondo × 2.0 alto m**, paso horizontal 0.62 m; **12 LEDs por rack**
+>   (6 filas × 2 columnas). Cuerpo `#2d2d3a`, puerta perforada `#222233`/`#1a1a28`, LEDs verde
+>   `#4caf50` · cyan `#00bcd4` · rojo `#f44336` · ámbar `#ff8f00`. **60 racks en 6 filas de 10**;
+>   zonas de carga: inferencia AI, entrenamiento GPU, orquestación/red, almacenamiento/backup.
+> — Sala principal ~9.4 × 10.6 × 3.0 m (~200 m²); pasillos ~1.12–1.17 m; margen perimetral 0.6 m.
+> — Piso técnico: altura **0.35 m**, baldosa **0.6 × 0.6 m** (perforadas), pedestales cada 0.6 m.
+> — CRAC del renderer: 0.75 × 0.85 × 0.4 m, **montados en las paredes laterales** (no en cabecera),
+>   ~14 unidades, cuerpo rojo `#e53935`. Bandejas de cable overhead grises `#607080` con haces de
+>   cable azul `#1565c0` / verde `#2e7d32`, cada 2.2 m.
+> — El renderer actual **NO tiene** PDU, dry cooler, tubería de agua roja/azul, ni contención física
+>   (solo franjas verdes en el piso) → esos prompts son mejoras genuinas hacia la foto objetivo.
+
+- [ ] **D1. Rack de servidores TI** → `disenos/server-rack/server-rack-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un GABINETE RACK
+de servidores de datacenter de 42U (estándar 19"), alta densidad de micro-voxeles, al nivel de un
+render técnico de fabricante. Es el equipo CENTRAL del datacenter.
+Partes obligatorias: gabinete metálico negro con marco de 42U; puerta frontal PERFORADA (malla de
+ventilación) con manija y bisagras — la puerta ABRE (animada, toggle) para ver el interior;
+poblado de equipos de TI apilados: varios SERVIDORES 1U y 2U (frentes con rejillas, botones,
+bahías de discos y filas de LEDs de estado verdes/ámbar que PARPADEAN), 1-2 SWITCHES de red con
+muchos puertos y LEDs de enlace, un PATCH PANEL con cables de red de colores saliendo, y algunos
+blanking panels; dos PDU verticales (regletas) en los rieles traseros con salidas y un LED;
+organizadores de cable horizontales; ventiladores internos girando (flujo frente→atrás). Ruedas y
+niveladores en la base.
+Dimensión real: 0.6 m ancho × 0.85 m fondo × 2.0 m alto (42U). Pon una tira de ~12 LEDs de estado
+(6 filas × 2 columnas) en la cara frontal que PARPADEEN (unos pocos cambian cada ~15 frames).
+Colores (paleta del datacenter de referencia): gabinete gris-azulado oscuro #2d2d3a, puerta
+perforada casi negra #1a1a28, servidores gris grafito con frentes negros; LEDs verde #4caf50 ·
+cyan #00bcd4 · rojo #f44336 (falla) · ámbar #ff8f00; cables de red azul #1565c0 / verde #2e7d32 /
+amarillo; cobre en las barras de PDU.
+Leyenda: Aire frío (frente) / Aire caliente (atrás) / Red / Energía.
+Panel CONTROL DE EQUIPO: PUERTA ABRIR-CERRAR, CARGA TI (LO/HI — más LEDs activos y ventiladores
+más rápidos), FALLA SIMULADA (LED rojo parpadeante en un servidor), AUTO-ROTATE.
+```
+
+- [ ] **D2. CRAC/CRAH de precisión** → `disenos/crac/crac-precision-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: una unidad de
+enfriamiento de precisión CRAC/CRAH de piso (computer room air handler) tipo DOWNFLOW de
+datacenter, alta densidad de micro-voxeles, seccionable tipo CORTE.
+Partes obligatorias: gabinete alto de piso; en la parte SUPERIOR dos o tres VENTILADORES EC de
+gran diámetro (GIRAN — animados) que aspiran el aire caliente del cuarto; interior en corte: banco
+de FILTROS plano arriba, SERPENTÍN de agua helada aletado (celosía teal), bandeja de condensados;
+sección de HUMIDIFICADOR con lámina de agua; conexiones de agua helada (entrada azul / salida roja)
+bridadas al costado con válvulas; panel de control HMI frontal con display y LEDs; el gabinete
+descarga aire frío hacia ABAJO — incluye un tramo de PISO TÉCNICO ELEVADO con losetas y un pedestal
+para mostrar el plenum inferior. Puertas frontales con manijas.
+Dimensión real: ~0.9 m ancho × 0.9 m fondo × 2.0 m alto (+ piso técnico ~0.6 m).
+Colores: gabinete negro/gris oscuro (estilo Liebert/Vertiv), ventiladores EC con buje azul,
+serpentín teal, agua helada AZUL, retorno ROJO, display emisivo.
+Leyenda: Aire caliente (retorno, arriba) / Aire frío (impulsión, abajo) / Agua helada / Retorno.
+Panel CONTROL DE EQUIPO: VENTILADORES ON-OFF (giro con inercia + partículas de aire), CORTE ON-OFF
+(oculta el panel frontal para ver serpentín y filtros), AGUA ON-OFF, AUTO-ROTATE.
+```
+
+- [ ] **D3. Enfriador in-row** → `disenos/in-row/in-row-cooler-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un ENFRIADOR
+IN-ROW (in-row cooler) de datacenter — gabinete ESTRECHO que se instala ENTRE dos racks en la fila
+para enfriar el pasillo caliente, alta densidad de micro-voxeles, seccionable.
+Partes obligatorias: gabinete negro estrecho (mismo alto que un rack); fila vertical de
+VENTILADORES (3-4, GIRAN — animados) que jalan aire caliente por la CARA TRASERA (pasillo caliente)
+y lo devuelven frío por la CARA FRONTAL (pasillo frío); SERPENTÍN de agua helada aletado visible en
+corte (celosía teal); conexiones de agua helada abajo (entrada azul / salida roja) con válvulas de
+balanceo; controlador con display y LEDs; puertas perforadas frontal y trasera. Muestra el flujo de
+aire cruzando el gabinete (partículas rojas entrando atrás, azules saliendo al frente).
+Dimensión real: ~0.3 m ancho × 1.1 m fondo × 2.0 m alto (es DELGADO — respeta la esbeltez).
+Colores: gabinete negro mate, ventiladores oscuros con buje azul, serpentín teal, agua AZUL/ROJA.
+Leyenda: Aire caliente (entrada) / Aire frío (salida) / Agua helada / Retorno.
+Panel CONTROL DE EQUIPO: VENTILADORES ON-OFF (velocidad variable), CORTE ON-OFF, AUTO-ROTATE.
+```
+
+- [ ] **D4. PDU / distribución de energía** → `disenos/pdu/pdu-datacenter-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: una PDU de
+datacenter (Power Distribution Unit) de piso con su panel de distribución, alta densidad de
+micro-voxeles, seccionable.
+Partes obligatorias: gabinete de piso; en corte, un TRANSFORMADOR de aislamiento en la base
+(núcleo con bobinas voxelizadas); INTERRUPTOR principal con palanca; dos PANELBOARDS con filas de
+INTERRUPTORES termomagnéticos (breakers) en columnas, cada uno con su palanca ON/OFF; un
+MEDIDOR/monitor de energía frontal con display (kW · V · A, con dígitos de 7 segmentos voxelizados);
+BARRAS DE COBRE de distribución (bus bars); mazos de cable de salida saliendo por la parte inferior
+hacia los racks; etiquetas de circuito; lámpara piloto.
+Dimensión real: ~0.9 m ancho × 0.9 m fondo × 2.0 m alto.
+Colores: gabinete gris claro o negro, breakers negros con palancas, barras de COBRE, display
+emisivo verde, cables de energía negros/rojos, etiquetas amarillas de seguridad.
+Leyenda: Alimentación de entrada / Salidas a racks / Barras / Control.
+Panel CONTROL DE EQUIPO: BREAKERS ON-OFF (grupo — cambia palancas y LEDs de circuito), CORTE ON-OFF
+(abre la puerta para ver breakers y barras), FALLA SIMULADA (breaker disparado + piloto rojo),
+AUTO-ROTATE.
+```
+
+- [ ] **D5. Dry cooler (banco de condensadores)** → `disenos/dry-cooler/dry-cooler-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un DRY COOLER
+(enfriador seco / banco de condensadores) de AZOTEA, alta densidad de micro-voxeles — es el módulo
+grande de ventiladores del render, que rechaza el calor del agua del datacenter al aire.
+Partes obligatorias: estructura larga tipo skid de acero; SERPENTÍN aletado en configuración de V
+invertida (dos bancos inclinados de aletas, celosía metálica densa); FILA de 8-12 VENTILADORES
+AXIALES grandes en la parte superior (GIRAN — animados, con rejillas de protección circulares
+voxelizadas); cabezales/manifolds de agua a los extremos con las bocas de ENTRADA (agua caliente,
+roja) y SALIDA (agua enfriada, azul) bridadas y tramos de tubería; patas/soportes; caja de control
+eléctrico lateral con display; placa de datos.
+Dimensión real: ~8 m largo × 2.3 m ancho × 2.2 m alto (grande — es exterior).
+Colores: estructura gris claro/blanco, aletas aluminio, ventiladores con aspas negras, tubería de
+agua ROJA (caliente, entrada) y AZUL (fría, salida).
+Leyenda: Agua caliente (entrada) / Agua enfriada (salida) / Aire de rechazo.
+Panel CONTROL DE EQUIPO: VENTILADORES ON-OFF (arranque escalonado por etapas con inercia),
+% CARGA TÉRMICA (25/50/75/100 — cuántos ventiladores activos), AUTO-ROTATE.
+```
+
+- [ ] **D6. Kit de contención de pasillo** → `disenos/contencion-pasillo/contencion-pasillo-voxel-v1.html`
+
+```
+Crea una ESCENA-KIT de VOXEL ART 3D en un solo archivo HTML standalone: un TRAMO DE PASILLO de
+datacenter con CONTENCIÓN DE PASILLO frío/caliente y su infraestructura aérea, alta densidad de
+micro-voxeles. Es el 'esqueleto' que organiza una fila de racks (los racks se colocan aparte).
+Partes obligatorias: PISO TÉCNICO ELEVADO con losetas cuadradas, algunas PERFORADAS (rejilla) y
+pedestales visibles en un corte lateral; dos filas cortas de siluetas de rack formando un pasillo;
+TECHO DE CONTENCIÓN sobre el pasillo (paneles, algunos translúcidos) con PUERTAS CORREDIZAS en los
+extremos; sobre los racks, TUBERÍA OVERHEAD de agua helada (dos tubos: suministro AZUL y retorno
+ROJO) con soportes tipo trapecio; BANDEJAS PORTACABLES (charolas) con mazos de cable de red; un
+BUSWAY eléctrico aéreo con cajas de derivación (tap-off); iluminación LED lineal en el techo del
+pasillo; señalización de pasillo frío/caliente.
+Dimensión real: pasillo ~1.15 m ancho, racks 0.6 × 0.85 × 2.0 m, piso técnico elevado 0.35 m con
+baldosa 0.6 × 0.6 m, techo de contención a ~2.4 m, tramo ~4 m largo.
+Colores: baldosas gris claro reflectivo #d8dce8 (perforadas más oscuras), contención blanca con
+paneles translúcidos azulados, tubería AZUL/ROJA, bandejas de cable grises #607080 con haces azul
+#1565c0 / verde #2e7d32, busway gris, LEDs emisivos.
+Leyenda: Agua helada (suministro/retorno) / Red / Energía (busway) / Aire frío (bajo piso).
+Panel CONTROL DE EQUIPO: PUERTAS CONTENCIÓN ABRIR-CERRAR, LUCES ON-OFF, FLUJO AGUA ON-OFF
+(partículas en la tubería overhead), AUTO-ROTATE.
+```
+
+- [ ] **D7. UPS + banco de baterías** → `disenos/ups/ups-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un UPS industrial
+trifásico (~40 kVA) con su gabinete de baterías, alta densidad de micro-voxeles, seccionable.
+Partes obligatorias: GABINETE UPS principal con puerta y panel HMI frontal (display LCD con un
+'mímico' de flujo de energía, fila de LEDs de estado ONLINE/BATERÍA/BYPASS/FALLA, un medidor de
+carga %); en corte: módulos RECTIFICADOR, INVERSOR y CARGADOR, bypass estático, barras de cobre;
+GABINETE DE BATERÍAS contiguo con filas de baterías VRLA visibles (bornes rojo + / negro −);
+rejillas de ventilación con 2-3 ventiladores girando; interruptores de entrada/salida/bypass;
+cableado codificado por color. Placa 'UPS 40 kVA · 3Ø 480V'.
+Dimensión real: gabinete UPS ~0.6 ancho × 0.85 fondo × 1.75 alto m; gabinete de baterías contiguo
+de tamaño similar.
+Colores: gabinetes negro mate (estilo datacenter), display emisivo, LEDs verde/ámbar/azul/rojo,
+baterías gris oscuro con bornes rojo/negro, barras de COBRE.
+Flujos: ámbar #ffb300 ENTRADA AC (red) · verde #0f8a4f SALIDA AC (carga) · rojo #c22233 DC batería
+· azul #3aa0ff control.
+Leyenda: Entrada AC / Salida AC / DC batería / Control.
+Panel CONTROL DE EQUIPO: MODO (ONLINE / EN BATERÍA / BYPASS — cambia el mímico y el LED activo),
+SIMULAR CORTE DE RED (transfiere a batería), FALLA SIMULADA (LED rojo parpadeante), CORTE ON-OFF
+(abre el gabinete para ver los módulos), AUTO-ROTATE.
 ```
 
 ---

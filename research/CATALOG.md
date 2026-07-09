@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **40 blocks**
+Total: **44 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -46,3 +46,7 @@ Total: **40 blocks**
 | 38 | [threejs-block38.md](threejs-block38.md) | High-quality deliverables and visual QA |
 | 39 | [threejs-block39.md](threejs-block39.md) | Data-viz craft for the HVAC dashboards |
 | 40 | [threejs-block40.md](threejs-block40.md) | THREE.LOD applied & measured: the hotel building far-shell (before/after) |
+| 41 | [threejs-block41.md](threejs-block41.md) | Voxel→Realistic parity gap + living-environment build (relief, animated sea, biomes) |
+| 42 | [threejs-block42.md](threejs-block42.md) | Per-unit DETAIL VIEW pattern (MX60-web + chihuahua/Niagara) → hotel port plan |
+| 43 | [threejs-block43.md](threejs-block43.md) | Casino BMS dashboard (React reference) + consolidated hotel detail-OVERLAY build plan |
+| 44 | [threejs-block44.md](threejs-block44.md) | Prototype module scoping gotcha: inner-scope interaction block + `window.__` exposure (hover-bug post-mortem) |
