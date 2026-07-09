@@ -281,16 +281,6 @@ function coilBank(bank, sign) {
     const fr = new THREE.Mesh(new THREE.BoxGeometry(0.06, slant + 0.06, 0.16), M.finFrame);
     fr.position.set(cx + ex, cy, cz); fr.rotation.x = ang; fr.castShadow = true; root.add(fr);
   });
-  // TAPA/REJILLA de protección sobre la cara inclinada exterior del banco
-  const outSign = Math.sign(cz - WID / 2) || -1;                 // z hacia afuera del plenum
-  const grille = new THREE.Mesh(new THREE.PlaneGeometry(lenX, slant + 0.04), M.grille);
-  grille.position.set(cx, cy + 0.02, cz + outSign * 0.085);
-  grille.rotation.x = ang;                                        // plano paralelo a la losa (misma pendiente)
-  grille.receiveShadow = true; root.add(grille);
-  // marco perimetral de la rejilla (pletina metálica)
-  [-lenX / 2, lenX / 2].forEach(ex =>
-    root.add(box(0.03, slant + 0.06, 0.05, M.finFrame, cx + ex, cy + 0.02, cz + outSign * 0.085).rotateX(ang)));
-
   // U-bends de cobre insinuados en los cabezales -> aquí acero pintado, en ambos extremos
   [-lenX / 2 - 0.05, lenX / 2 + 0.05].forEach(ex => {
     for (let t = 0.12; t < slant - 0.05; t += 0.16) {
@@ -310,6 +300,26 @@ root.add(box(LEN - 0.1, 0.08, (BANK[1].zT - BANK[0].zT) + 0.12, M.shellGrey, LEN
 // muros extremos (chapa) cerrando el plenum
 [0.06, LEN - 0.06].forEach(ex =>
   root.add(box(0.06, RIDGE_Y - COIL_Y0 + 0.1, WID, M.shellWhite, ex, (COIL_Y0 + RIDGE_Y) / 2 + 0.05, WID / 2)));
+
+// ============================================================
+// TAPAS / REJILLAS DE PROTECCIÓN — paneles VERTICALES en los dos
+// costados largos (Z-min / Z-max), por donde entra el aire al serpentín.
+// (Réplica de la CELOSÍA LATERAL del voxel: caras laterales largas.)
+// ============================================================
+(function sideGuardGrilles() {
+  const gLen = LEN - 0.16;
+  const gY0 = COIL_Y0 - 0.02, gY1 = RIDGE_Y + 0.02;
+  const gH = gY1 - gY0, gCy = (gY0 + gY1) / 2;
+  [0.05, WID - 0.05].forEach(gz => {
+    // panel de rejilla (plano vertical XY, sin inclinación)
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(gLen, gH), M.grille);
+    panel.position.set(LEN / 2, gCy, gz);   // normal +Z, vertical
+    panel.receiveShadow = true; root.add(panel);
+    // marco perimetral (pletina metálica): postes verticales + rieles horizontales
+    [-gLen / 2, gLen / 2].forEach(ex => root.add(box(0.03, gH + 0.05, 0.04, M.finFrame, LEN / 2 + ex, gCy, gz)));
+    [gY0, gY1].forEach(ey => root.add(box(gLen, 0.03, 0.04, M.finFrame, LEN / 2, ey, gz)));
+  });
+})();
 
 // ============================================================
 // TUBERÍA DE PROCESO — rojo (caliente/entrada) · azul (frío/salida)
@@ -559,7 +569,7 @@ function tick(dt) {
 
 // Gancho para arnés headless
 window.__dc = { state, fans, fanAngle, setMaster, setLoad, tick, LOAD_MAP, HEADLESS,
-  counts: { fans: fanPos.length, blades: NBLADE, legs: LEG_X.length * 2, coilGrilles: 2 } };
+  counts: { fans: fanPos.length, blades: NBLADE, legs: LEG_X.length * 2, sideGrilles: 2 } };
 
 // ============================================================
 // RENDER (solo con WebGL)
