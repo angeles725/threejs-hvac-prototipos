@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RACK 42U · Gabinete de Servidores · 0.6×0.85×2.0 m · Realistic PBR · 1 unidad = 1 m</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#aebfd2; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#aebfd2; backdrop-filter:blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; color:#aebfd2; }
+  #legend i { width:12px; height:10px; display:inline-block; border-radius:2px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter:blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; gap:12px; }
+  #panel label { color:#aebfd2; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:72px; transition:all 0.2s; }
+  #panel button.off { color:#aebfd2; border-color:#55606e; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel button.alarm { color:#06080d; border-color:#ff2233; background:#ff2233; box-shadow:0 0 12px #ff223388; animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:0.55; } }
+</style>
+<script>
+// Inyeccion dinamica de importmap: String.fromCharCode(64) evita el mangling de '@' (package@version) por Cloudflare.
+(function(){
+  var AT = String.fromCharCode(64);
+  var tag = document.createElement('script');
+  tag.type = 'importmap';
+  tag.textContent = JSON.stringify({ imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }});
+  document.head.appendChild(tag);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>RACK DE SERVIDORES 42U</b><br>
+  <span>Gabinete 19&Prime; · 0.60 × 0.85 × 2.00 m · Datacenter · Realistic PBR · 1 unidad = 1 m</span>
+</div>
+<div id="legend">
+  <div><i style="background:#4caf50"></i> Estado OK</div>
+  <div><i style="background:#00bcd4"></i> Actividad / red</div>
+  <div><i style="background:#ff8f00"></i> Advertencia</div>
+  <div><i style="background:#f44336"></i> Falla</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>PUERTA</label><button id="bDoor" class="off">CERRADA</button></div>
+  <div class="row"><label>CARGA TI</label><button id="bLoad" class="off">LO</button></div>
+  <div class="row"><label>FALLA SIMULADA</label><button id="bFault" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="off">OFF</button></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+// SCALE: 1 unidad = 1 m. Spec dimensional/composicion: server-rack/rack-42u-voxel-v1.html.
+// RACK 42U de piso: 0.60 (x) x 0.85 (z) x 2.00 (y) m. Gabinete 19".
+//   - Gabinete: postes + laterales + techo/base + ruedas + niveladores + 4 rieles 19" (biselado).
+//   - Puerta frontal PERFORADA (CanvasTexture de malla) como Group ocultable, bisagra izquierda.
+//   - Stack 42U: 20 servidores (1U/2U con frente CanvasTexture: bahias + rejilla perforada + tira LED),
+//     2 switches, 1 patch panel, 2 organizadores de cable, 8 blanking panels. Chasis repetido -> InstancedMesh.
+//   - PDU vertical x2 (cuerpo + salidas de cobre metalness 1).
+//   - Ventiladores internos (Cylinder hub + aspas) en cada 2U, giran segun carga.
+//   - LEDs auto-iluminados (MeshBasic) verde/cyan/ambar que parpadean; uno de servidor en ALARMA roja.
+// PBR: metal pintado -> metalness 0, rough 0.5-0.6 (sin metalness intermedio en color solido).
+//   Cobre -> metalness 1, rough 0.35. Displays/LEDs -> MeshBasicMaterial. PMREM+RoomEnvironment.
+// ANIMACION: door lerp + fans + parpadeo LED (mutacion de color MeshBasic) + pulso de FALLA. Sombras
+//   horneadas (autoUpdate=false, needsUpdate una vez; se re-hornea solo mientras la puerta se mueve).
+
+// ====== HEADLESS GUARD ======
+function webglOK(){
+  try { const c = document.createElement('canvas');
+    return !!(window.WebGLRenderingContext && (c.getContext('webgl') || c.getContext('experimental-webgl'))); }
+  catch(e){ return false; }
+}
+const HEADLESS = !webglOK();
+
+// ====== SCENE ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 6, 26);
+
+const camera = new THREE.PerspectiveCamera(46, window.innerWidth/window.innerHeight, 0.02, 200);
+camera.position.set(1.35, 1.35, 1.95);
+
+let renderer = null, pmrem = null, controls = null;
+if (!HEADLESS){
+  renderer = new THREE.WebGLRenderer({ antialias:true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;         // sombras horneadas
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+
+  pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.autoRotate = false;                    // OFF por defecto
+  controls.autoRotateSpeed = 0.6;
+  controls.minDistance = 0.9;
+  controls.maxDistance = 8;
+  controls.maxPolarAngle = Math.PI * 0.495;
+  controls.target.set(0.0, 0.98, 0.05);
+  controls.addEventListener('change', () => {     // ground clamp (regla de la casa)
+    if (controls.target.y < 0) controls.target.y = 0;
+    if (camera.position.y < 0.15) camera.position.y = 0.15;
+  });
+}
+
+// ====== RIG DE LUCES ======
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.6, 3.6, 2.4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -1.4; sun.shadow.camera.right = 1.4;
+sun.shadow.camera.top = 2.4; sun.shadow.camera.bottom = -0.4;
+sun.shadow.camera.near = 0.8; sun.shadow.camera.far = 12;
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.015;
+sun.target.position.set(0, 1.0, 0);
+scene.add(sun); scene.add(sun.target);
+
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4); fill.position.set(-2.2, 2.0, -1.6); scene.add(fill);
+const rim  = new THREE.DirectionalLight(0x00d4aa, 0.2); rim.position.set(0.6, 1.2, 2.6);   scene.add(rim);
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+// ====== PISO ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  new THREE.MeshStandardMaterial({ color:0x0a0d12, roughness:0.95, metalness:0 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(30, 60, 0x123f35, 0x0c1d1a);
+grid.position.y = 0.002;
+grid.material.transparent = true; grid.material.opacity = 0.32;
+scene.add(grid);
+
+// ====== TEXTURAS PROCEDURALES (CanvasTexture) ======
+function canvasTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d'); draw(ctx, w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+// Frente de servidor: bahias de disco (izq) + rejilla perforada (centro) + marca + sockets LED (der).
+function serverFrontTex(is2U){
+  const w = 512, h = is2U ? 128 : 64;
+  return canvasTex(w, h, (g) => {
+    g.fillStyle = '#16161e'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#0f0f16'; g.fillRect(3, 3, w - 6, h - 6);
+    // bahias de disco
+    const by = h * 0.18, bh = h * 0.64, bw = 20, gap = 6;
+    for (let i = 0; i < 6; i++){
+      const x = 14 + i * (bw + gap);
+      g.fillStyle = '#24242f'; g.fillRect(x, by, bw, bh);
+      g.fillStyle = '#3a3a46'; g.fillRect(x + 2, by + 4, bw - 4, 3);
+      g.fillStyle = '#0c0c12'; g.fillRect(x + bw - 7, by + bh - 9, 4, 4);
+    }
+    // rejilla perforada central
+    const gx0 = 180, gx1 = 356, gy0 = h * 0.13, gy1 = h * 0.87;
+    g.fillStyle = '#0a0a10'; g.fillRect(gx0, gy0, gx1 - gx0, gy1 - gy0);
+    g.fillStyle = '#20202c';
+    for (let yy = gy0 + 5; yy < gy1 - 2; yy += 6)
+      for (let xx = gx0 + 5; xx < gx1 - 2; xx += 6){ g.beginPath(); g.arc(xx, yy, 1.7, 0, 6.283); g.fill(); }
+    // marca + rejas + sockets LED (apagados; los LED reales van en 3D)
+    g.fillStyle = '#3d3d4d'; g.font = 'bold ' + ((h * 0.17) | 0) + 'px monospace'; g.textAlign = 'left';
+    g.fillText('NODE', 376, h * 0.40);
+    g.fillStyle = '#20202c';
+    for (let i = 0; i < 4; i++) g.fillRect(376, h * 0.52 + i * 6, 100, 3);
+    g.fillStyle = '#07070c';
+    for (let i = 0; i < 3; i++){ g.beginPath(); g.arc(452 + i * 16, h * 0.30, 4, 0, 6.283); g.fill(); }
+    // boton de encendido
+    g.fillStyle = '#0a0a12'; g.beginPath(); g.arc(w - 20, h * 0.30, 5, 0, 6.283); g.fill();
+  });
+}
+// Frente de switch: fila de puertos RJ45 + uplinks
+function switchFrontTex(){
+  return canvasTex(512, 64, (g, w, h) => {
+    g.fillStyle = '#14141c'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#0a0a12';
+    for (let i = 0; i < 24; i++){ const x = 20 + i * 17; g.fillRect(x, 22, 13, 20); }
+    g.fillStyle = '#30303e'; g.fillRect(444, 22, 22, 20); g.fillRect(470, 22, 22, 20);
+    g.fillStyle = '#3d3d4d'; g.font = 'bold 16px monospace'; g.fillText('SW', 6, 16);
+  });
+}
+// Frente de patch panel: puertos numerados
+function patchFrontTex(){
+  return canvasTex(512, 64, (g, w, h) => {
+    g.fillStyle = '#20202c'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#0a0a12';
+    for (let i = 0; i < 24; i++){ const x = 18 + i * 18; g.fillRect(x, 24, 13, 18); }
+    g.fillStyle = '#55606e'; g.font = '9px monospace';
+    for (let i = 0; i < 24; i += 6) g.fillText((i + 1) + '', 18 + i * 18, 18);
+  });
+}
+// Puerta perforada: malla de perforacion (dark) + marco solido
+function doorTex(){
+  return canvasTex(512, 1024, (g, w, h) => {
+    g.fillStyle = '#1a1a28'; g.fillRect(0, 0, w, h);              // metal
+    g.fillStyle = '#0e0e16';                                      // agujeros
+    for (let yy = 60; yy < h - 60; yy += 12)
+      for (let xx = 44; xx < w - 44; xx += 12){
+        const off = (Math.floor(yy / 12) % 2) * 6;
+        g.beginPath(); g.arc(xx + off, yy, 3.4, 0, 6.283); g.fill();
+      }
+    g.strokeStyle = '#101018'; g.lineWidth = 36; g.strokeRect(18, 18, w - 36, h - 36);  // marco
+    g.strokeStyle = '#2b2b3a'; g.lineWidth = 3;  g.strokeRect(40, 40, w - 80, h - 80);
+  });
+}
+// Rugosidad sutil de pintura (roughnessMap multiplica el escalar -> queda en banda 0.5-0.6)
+const paintRough = canvasTex(256, 256, (g) => {
+  g.fillStyle = '#8f8f8f'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2400; i++){ const v = 120 + (Math.random() * 60 | 0);
+    g.fillStyle = 'rgba(' + v + ',' + v + ',' + v + ',0.15)';
+    g.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 3, 1 + Math.random() * 3); }
+});
+paintRough.colorSpace = THREE.LinearSRGBColorSpace;
+paintRough.wrapS = paintRough.wrapT = THREE.RepeatWrapping; paintRough.repeat.set(2, 4);
+
+// ====== PALETA PBR ======
+const M = {
+  FRAME:   new THREE.MeshStandardMaterial({ color:0x2d2d3a, roughness:0.55, metalness:0, roughnessMap:paintRough }),
+  FRAME_D: new THREE.MeshStandardMaterial({ color:0x232330, roughness:0.6,  metalness:0 }),
+  PANEL:   new THREE.MeshStandardMaterial({ color:0x26262f, roughness:0.55, metalness:0, roughnessMap:paintRough }),
+  RAIL:    new THREE.MeshStandardMaterial({ color:0x1f1f2a, roughness:0.5,  metalness:0 }),
+  CHASSIS: new THREE.MeshStandardMaterial({ color:0x3a3a46, roughness:0.55, metalness:0 }),
+  CHASSIS_D:new THREE.MeshStandardMaterial({ color:0x2a2a33, roughness:0.6, metalness:0 }),
+  BLANK:   new THREE.MeshStandardMaterial({ color:0x2a2a36, roughness:0.55, metalness:0, roughnessMap:paintRough }),
+  ORG:     new THREE.MeshStandardMaterial({ color:0x262633, roughness:0.6,  metalness:0 }),
+  PDU:     new THREE.MeshStandardMaterial({ color:0x1c1c26, roughness:0.6,  metalness:0 }),
+  COPPER:  new THREE.MeshStandardMaterial({ color:0xb87333, roughness:0.35, metalness:1 }),
+  CASTER:  new THREE.MeshStandardMaterial({ color:0x101014, roughness:0.5,  metalness:0 }),
+  LEVELER: new THREE.MeshStandardMaterial({ color:0x9aa0a8, roughness:0.35, metalness:1 }),
+  HANDLE:  new THREE.MeshStandardMaterial({ color:0x9aa0a8, roughness:0.35, metalness:1 }),
+  HINGE:   new THREE.MeshStandardMaterial({ color:0x7d858e, roughness:0.4,  metalness:1 }),
+  SCREW:   new THREE.MeshStandardMaterial({ color:0x8b929a, roughness:0.4,  metalness:1 }),
+  FAN_HUB: new THREE.MeshStandardMaterial({ color:0x30323e, roughness:0.45, metalness:0 }),
+  FAN_BLADE:new THREE.MeshStandardMaterial({ color:0x14151c, roughness:0.5, metalness:0 })
+};
+const front1Mat = new THREE.MeshStandardMaterial({ map:serverFrontTex(false), roughness:0.6, metalness:0 });
+const front2Mat = new THREE.MeshStandardMaterial({ map:serverFrontTex(true),  roughness:0.6, metalness:0 });
+const swMat   = new THREE.MeshStandardMaterial({ map:switchFrontTex(), roughness:0.6, metalness:0 });
+const ppMat   = new THREE.MeshStandardMaterial({ map:patchFrontTex(),  roughness:0.6, metalness:0 });
+
+// LEDs auto-iluminados (MeshBasic). "on"/"off" muta el color (bright vs dim).
+const LEDC = { GREEN:0x4caf50, CYAN:0x00bcd4, AMBER:0xff8f00, RED:0xf44336 };
+const LEDD = { GREEN:0x0f2c15, CYAN:0x073238, AMBER:0x3a2400, RED:0x360d0a };
+const ledGeo = new THREE.CircleGeometry(0.006, 12);
+
+// ====== DIMENSIONES (metros) ======
+const HW = 0.30, HD = 0.425, RH = 2.0;   // media anchura, media prof, altura
+const FRONT = HD;                          // cara frontal en z=+0.425 (hacia el observador)
+const U = 0.04445, BASE_Y = 0.11;          // 1U y base del stack
+const RAIL_X = 0.232;                       // rieles 19"
+const SRV_W = 0.462, SRV_D = 0.62;          // frente 19" y profundidad de servidor
+const FRONT_FACE = FRONT - 0.02;            // cara del frente del equipo (tras la puerta)
+const PANEL_Z = FRONT_FACE + 0.004;         // plano del frente texturizado
+const LED_Z = PANEL_Z + 0.003;              // LEDs sobre el frente
+
+const rackGroup = new THREE.Group();
+scene.add(rackGroup);
+
+function mesh(geo, mat, x, y, z, parent){
+  const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true; (parent || rackGroup).add(m); return m;
+}
+function rbox(w, h, d, mat, x, y, z, parent){
+  return mesh(new RoundedBoxGeometry(w, h, d, 2, Math.min(0.006, Math.min(w, h, d) * 0.3)), mat, x, y, z, parent);
+}
+function box(w, h, d, mat, x, y, z, parent){ return mesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent); }
+
+// ====== GABINETE ======
+{
+  const zc = 0;                                        // centro en z
+  // base + techo
+  rbox(2*HW, 0.09, 2*HD, M.FRAME_D, 0, 0.06, zc);
+  rbox(2*HW + 0.02, 0.05, 2*HD + 0.02, M.FRAME, 0, RH - 0.025, zc);
+  // postes de esquina
+  for (const sx of [-HW + 0.015, HW - 0.015])
+    for (const sz of [-HD + 0.015, HD - 0.015])
+      box(0.03, RH - 0.14, 0.03, M.FRAME, sx, 0.11 + (RH - 0.14)/2, sz);
+  // paneles laterales + techo/fondo cerrados
+  box(0.012, RH - 0.16, 2*HD - 0.06, M.PANEL, -HW + 0.006, 0.11 + (RH - 0.16)/2, zc);
+  box(0.012, RH - 0.16, 2*HD - 0.06, M.PANEL,  HW - 0.006, 0.11 + (RH - 0.16)/2, zc);
+  box(2*HW - 0.03, RH - 0.16, 0.012, M.PANEL, 0, 0.11 + (RH - 0.16)/2, -HD + 0.006);  // fondo
+  box(2*HW - 0.04, 0.03, 2*HD - 0.06, M.FRAME_D, 0, RH - 0.09, zc);                    // placa techo interna
+  // rieles 19" (frontales + traseros, biselados)
+  for (const rx of [-RAIL_X, RAIL_X])
+    for (const rz of [FRONT_FACE - 0.005, -HD + 0.06])
+      rbox(0.018, RH - 0.22, 0.02, M.RAIL, rx, 0.13 + (RH - 0.22)/2, rz);
+  // ruedas (4)
+  for (const sx of [-HW + 0.06, HW - 0.06])
+    for (const sz of [-HD + 0.09, HD - 0.09]){
+      const w = mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.028, 18), M.CASTER, sx, 0.03, sz);
+      w.rotation.z = Math.PI/2;
+    }
+  // niveladores (4)
+  for (const sx of [-HW + 0.03, HW - 0.03])
+    for (const sz of [-HD + 0.04, HD - 0.04])
+      mesh(new THREE.CylinderGeometry(0.012, 0.016, 0.05, 12), M.LEVELER, sx, 0.025, sz);
+  // fascia frontal superior (bisel de marca)
+  box(2*HW - 0.05, 0.06, 0.014, M.FRAME_D, 0, RH - 0.12, FRONT - 0.005);
+}
+
+// ====== STACK 42U ======
+// [type, uHeight]  bottom -> top.  s2=2U servidor, s1=1U servidor, sw/pp/org/bl=1U.
+const STACK = [
+  ['s2',2],['s2',2],['s1',1],['s1',1],['bl',1],['s2',2],['s1',1],['org',1],['pp',1],
+  ['sw',1],['sw',1],['org',1],['bl',1],['s2',2],['s1',1],['s1',1],['bl',1],['s2',2],
+  ['s1',1],['s1',1],['bl',1],['s2',2],['s1',1],['bl',1],['s2',2],['s1',1],['s1',1],
+  ['bl',1],['s2',2],['s1',1],['bl',1],['s2',2],['bl',1]
+];
+const FAULT_SRV = 11;                 // indice del servidor designado a ALARMA roja
+
+const srv1Mats = [], srv2Mats = [];   // matrices de chasis para InstancedMesh
+const srvLeds = [], swLeds = [], fanGroups = [];
+let faultLed = null;
+const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(1,1,1), _p = new THREE.Vector3();
+function pushMat(arr, x, y, z){ arr.push(_m4.clone().compose(_p.set(x,y,z), _q, _s)); }
+
+function addLed(arr, x, y, z, base){
+  const mat = new THREE.MeshBasicMaterial({ color: LEDC[base] });
+  const m = new THREE.Mesh(ledGeo, mat); m.position.set(x, y, z); rackGroup.add(m);
+  arr.push({ mesh:m, on:false, base });
+}
+function makeFan(x, y, z){
+  const g = new THREE.Group(); g.position.set(x, y, z);
+  const ring = mesh(new THREE.TorusGeometry(0.019, 0.003, 8, 20), M.FAN_HUB, 0, 0, 0, g);
+  const hub  = mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.012, 12), M.FAN_HUB, 0, 0, 0, g);
+  hub.rotation.x = Math.PI/2;
+  for (let b = 0; b < 6; b++){
+    const bl = mesh(new THREE.BoxGeometry(0.016, 0.006, 0.003), M.FAN_BLADE, 0, 0, 0, g);
+    bl.rotation.z = b * Math.PI / 3; bl.position.set(Math.cos(b*Math.PI/3)*0.011, Math.sin(b*Math.PI/3)*0.011, 0);
+  }
+  ring.castShadow = false;
+  rackGroup.add(g); fanGroups.push(g); return g;
+}
+
+let cumU = 0, srvIdx = 0;
+const srv1Geo = new RoundedBoxGeometry(SRV_W, U * 0.92, SRV_D, 2, 0.004);
+const srv2Geo = new RoundedBoxGeometry(SRV_W, U * 2 * 0.94, SRV_D, 2, 0.005);
+for (const [type, uh] of STACK){
+  const y0 = BASE_Y + cumU * U, yc = y0 + uh * U / 2;
+  const chZ = FRONT_FACE - SRV_D/2;                    // centro del chasis en z
+  if (type === 's1' || type === 's2'){
+    const is2 = type === 's2';
+    pushMat(is2 ? srv2Mats : srv1Mats, 0, yc, chZ);
+    // frente texturizado
+    mesh(new THREE.PlaneGeometry(SRV_W, uh * U * 0.9), is2 ? front2Mat : front1Mat, 0, yc, PANEL_Z);
+    // LEDs de estado (3) a la derecha del frente
+    const isFault = srvIdx === FAULT_SRV;
+    addLed(srvLeds, 0.14, yc + (is2 ? 0.018 : 0), LED_Z, 'GREEN');
+    addLed(srvLeds, 0.165, yc, LED_Z, 'CYAN');
+    addLed(srvLeds, 0.19, yc - (is2 ? 0.018 : 0), LED_Z, isFault ? 'AMBER' : 'AMBER');
+    if (isFault){
+      const mat = new THREE.MeshBasicMaterial({ color: LEDD.RED });
+      const m = new THREE.Mesh(new THREE.CircleGeometry(0.009, 14), mat);
+      m.position.set(0.19, yc + (is2 ? -0.024 : 0.014), LED_Z); rackGroup.add(m);
+      faultLed = { mesh:m };
+    }
+    // ventiladores traseros en cada 2U
+    if (is2){ makeFan(-0.11, yc, -HD + 0.10); makeFan(0.11, yc, -HD + 0.10); }
+    srvIdx++;
+  } else if (type === 'sw'){
+    box(SRV_W, uh * U * 0.9, 0.28, M.CHASSIS_D, 0, yc, FRONT_FACE - 0.14);
+    mesh(new THREE.PlaneGeometry(SRV_W, uh * U * 0.9), swMat, 0, yc, PANEL_Z);
+    for (let i = 0; i < 8; i++) addLed(swLeds, -0.17 + i * 0.045, yc + 0.012, LED_Z, 'GREEN');
+  } else if (type === 'pp'){
+    box(SRV_W, uh * U * 0.9, 0.05, M.CHASSIS_D, 0, yc, FRONT_FACE - 0.025);
+    mesh(new THREE.PlaneGeometry(SRV_W, uh * U * 0.9), ppMat, 0, yc, PANEL_Z);
+  } else if (type === 'org'){
+    box(SRV_W, uh * U * 0.9, 0.04, M.ORG, 0, yc, FRONT_FACE - 0.02);
+    for (let i = 0; i < 9; i++) box(0.02, U * 0.7, 0.03, M.ORG, -0.18 + i * 0.045, yc, PANEL_Z + 0.012);
+  } else { // bl
+    box(SRV_W, uh * U * 0.9, 0.016, M.BLANK, 0, yc, PANEL_Z - 0.004);
+    for (const sx of [-SRV_W/2 + 0.02, SRV_W/2 - 0.02])
+      mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.01, 8), M.SCREW, sx, yc, PANEL_Z).rotation.x = Math.PI/2;
+  }
+  cumU += uh;
+}
+// InstancedMesh de chasis repetidos
+function buildIM(geo, mats){
+  if (!mats.length) return;
+  const im = new THREE.InstancedMesh(geo, M.CHASSIS, mats.length);
+  mats.forEach((m, i) => im.setMatrixAt(i, m));
+  im.instanceMatrix.needsUpdate = true; im.castShadow = true; im.receiveShadow = true;
+  rackGroup.add(im);
+}
+buildIM(srv1Geo, srv1Mats);
+buildIM(srv2Geo, srv2Mats);
+
+// ====== PDU VERTICALES (2) + salidas de cobre ======
+const pduLeds = [];
+for (const px of [-HW + 0.025, HW - 0.025]){
+  const pz = -HD + 0.10;
+  box(0.03, RH - 0.4, 0.05, M.PDU, px, RH/2 - 0.05, pz);
+  for (let y = 0.25; y < RH - 0.25; y += 0.09)
+    mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.02, 10), M.COPPER, px, y, pz + 0.03).rotation.x = Math.PI/2;
+  const mat = new THREE.MeshBasicMaterial({ color: LEDC.GREEN });
+  const m = new THREE.Mesh(ledGeo, mat); m.position.set(px, RH - 0.32, pz + 0.03); rackGroup.add(m);
+  pduLeds.push(m);
+}
+
+// ====== FASCIA: tira de LEDs de estado ======
+const stripLeds = [];
+for (let i = 0; i < 6; i++)
+  addLed(stripLeds, -0.06 + i * 0.024, RH - 0.12, FRONT + 0.003, ['GREEN','CYAN','GREEN','AMBER','GREEN','CYAN'][i]);
+
+// ====== PUERTA PERFORADA (Group ocultable, bisagra izquierda) ======
+const doorGroup = new THREE.Group();
+doorGroup.position.set(-HW, 1.05, FRONT + 0.002);      // pivote en borde izquierdo
+{
+  const dH = RH - 0.16, dW = 2*HW - 0.01;
+  const dm = new THREE.MeshStandardMaterial({ map:doorTex(), roughness:0.55, metalness:0 });
+  const panel = mesh(new THREE.PlaneGeometry(dW, dH), dm, dW/2, 0, 0, doorGroup);
+  panel.receiveShadow = true;
+  // marco perimetral solido
+  box(dW, 0.02, 0.02, M.FRAME, dW/2,  dH/2, -0.008, doorGroup);
+  box(dW, 0.02, 0.02, M.FRAME, dW/2, -dH/2, -0.008, doorGroup);
+  box(0.02, dH, 0.02, M.FRAME, 0.008,     0, -0.008, doorGroup);
+  box(0.02, dH, 0.02, M.FRAME, dW - 0.008, 0, -0.008, doorGroup);
+  // manija (lado libre, derecho)
+  box(0.018, 0.13, 0.03, M.HANDLE, dW - 0.03, 0, 0.02, doorGroup);
+  // bisagras (lado del pivote)
+  for (const hy of [-dH/2 + 0.15, 0, dH/2 - 0.15])
+    mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.05, 10), M.HINGE, 0.006, hy, -0.006, doorGroup);
+}
+rackGroup.add(doorGroup);
+
+// ====== ESTADO / UI ======
+const state = { door:false, load:'LO', fault:false, rot:false };
+let doorCur = 0, frame = 0;
+
+const B = { door:document.getElementById('bDoor'), load:document.getElementById('bLoad'),
+            fault:document.getElementById('bFault'), rot:document.getElementById('bRot') };
+function refreshUI(){
+  B.door.textContent = state.door ? 'ABIERTA' : 'CERRADA'; B.door.className = state.door ? 'on' : 'off';
+  B.load.textContent = state.load; B.load.className = state.load === 'HI' ? 'on' : 'off';
+  B.fault.textContent = state.fault ? 'ON' : 'OFF'; B.fault.className = state.fault ? 'alarm' : 'off';
+  B.rot.textContent = state.rot ? 'ON' : 'OFF'; B.rot.className = state.rot ? 'on' : 'off';
+}
+B.door.onclick  = () => { state.door = !state.door; refreshUI(); };
+B.load.onclick  = () => { state.load = state.load === 'LO' ? 'HI' : 'LO'; refreshUI(); };
+B.fault.onclick = () => { state.fault = !state.fault; refreshUI(); };
+B.rot.onclick   = () => { state.rot = !state.rot; refreshUI(); };
+refreshUI();
+
+function setLed(L, on){
+  L.on = on;
+  L.mesh.material.color.setHex(on ? LEDC[L.base] : LEDD[L.base]);
+}
+// arranque: todos apagados salvo PDU (energizado)
+srvLeds.forEach(L => setLed(L, false));
+swLeds.forEach(L => setLed(L, false));
+stripLeds.forEach((L, i) => setLed(L, i % 2 === 0));
+
+// horneado inicial de sombras
+if (!HEADLESS) renderer.shadowMap.needsUpdate = true;
+
+// ====== LOOP ======
+const clock = new THREE.Clock();
+function tick(dt){
+  frame++;
+  // puerta: bisagra izquierda, abre ~108deg; auto-oculta al abrir del todo
+  const target = state.door ? 1.9 : 0;
+  const prev = doorCur;
+  doorCur += (target - doorCur) * Math.min(1, dt * 3.4);
+  doorGroup.rotation.y = doorCur;
+  doorGroup.visible = doorCur < 1.78;
+  if (!HEADLESS && Math.abs(doorCur - prev) > 0.0008) renderer.shadowMap.needsUpdate = true;
+
+  // ventiladores: velocidad segun carga
+  const fanSpeed = state.load === 'HI' ? 16 : 6.5;
+  for (const g of fanGroups) g.rotation.z += dt * fanSpeed;
+
+  // parpadeo de LEDs de servidor / tira
+  const pOn = state.load === 'HI' ? 0.85 : 0.42;
+  if (frame % 14 === 0){
+    for (let i = 0; i < 5; i++) setLed(srvLeds[(Math.random() * srvLeds.length) | 0], Math.random() < pOn);
+    for (let i = 0; i < 3; i++) setLed(stripLeds[(Math.random() * stripLeds.length) | 0], Math.random() < 0.7);
+  }
+  // LEDs de switch: parpadeo rapido de enlace
+  if (frame % 6 === 0)
+    for (let i = 0; i < 5; i++) setLed(swLeds[(Math.random() * swLeds.length) | 0], Math.random() < 0.65);
+
+  // FALLA SIMULADA: LED rojo pulsante
+  if (faultLed){
+    if (state.fault){
+      const b = 0.5 + 0.5 * Math.abs(Math.sin(performance.now() * 0.008));
+      faultLed.mesh.material.color.setRGB(0.2 + 0.75 * b, 0.05 * b, 0.03 * b);
+      faultLed.mesh.visible = true;
+    } else { faultLed.mesh.material.color.setHex(LEDD.RED); }
+  }
+
+  if (controls){ controls.autoRotate = state.rot; controls.update(); }
+}
+function animate(){
+  requestAnimationFrame(animate);
+  tick(Math.min(clock.getDelta(), 0.05));
+  renderer.render(scene, camera);
+}
+if (!HEADLESS) animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  if (renderer) renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Hook de pruebas / integracion
+window.__APP = {
+  state, tick, refreshUI, doorGroup, fanGroups, srvLeds, swLeds, stripLeds, pduLeds, faultLed,
+  get doorCur(){ return doorCur; },
+  get headless(){ return HEADLESS; },
+  stats: {
+    servers: srvIdx, fans: fanGroups.length, srvChassis1U: srv1Mats.length, srvChassis2U: srv2Mats.length,
+    ledsSrv: srvLeds.length, ledsSw: swLeds.length, ledsStrip: stripLeds.length,
+    drawCalls: () => renderer ? renderer.info.render.calls : 0,
+    triangles: () => renderer ? renderer.info.render.triangles : 0
+  }
+};
+</script>
+</body>
+</html>

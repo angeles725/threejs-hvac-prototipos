@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDU DATACENTER · 225 kVA · Realistic PBR · 1 unidad = 1 m</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#aebfd2; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#aebfd2; backdrop-filter:blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; color:#aebfd2; }
+  #legend i { width:12px; height:10px; display:inline-block; border-radius:2px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter:blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; gap:12px; }
+  #panel label { color:#aebfd2; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:60px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel button.alarm { color:#06080d; border-color:#ff2233; background:#ff2233; box-shadow:0 0 12px #ff223388; animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:0.55; } }
+</style>
+<script>
+// Inyeccion dinamica de importmap: String.fromCharCode(64) evita el mangling de '@' (package@version) por Cloudflare.
+(function(){
+  var AT = String.fromCharCode(64);
+  var tag = document.createElement('script');
+  tag.type = 'importmap';
+  tag.textContent = JSON.stringify({ imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }});
+  document.head.appendChild(tag);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>PDU DE DATACENTER · 225 kVA</b><br>
+  <span>Unidad de Distribucion de Energia · Realistic PBR · 1 unidad = 1 m</span><br>
+  <span>0.9 x 0.9 x 2.0 m · Display: kW · V · A</span>
+</div>
+<div id="legend">
+  <div><i style="background:#c22a2a"></i> Alimentacion de entrada</div>
+  <div><i style="background:#1b1e24;border:1px solid #556"></i> Salidas a racks</div>
+  <div><i style="background:#c4712e"></i> Barras / bobinados (cobre)</div>
+  <div><i style="background:#00ff66"></i> Control / monitor</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>BREAKERS</label><button id="bBrk" class="on">ON</button></div>
+  <div class="row"><label>CORTE (PUERTA)</label><button id="bCorte" class="off">OFF</button></div>
+  <div class="row"><label>FALLA SIMULADA</label><button id="bFalla" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="off">OFF</button></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+// SCALE: 1 unidad = 1 m. Spec dimensional/composicion: pdu/pdu-datacenter-voxel-v1.html.
+// PDU de datacenter ~0.9 (x) x 0.9 (z) x 2.0 (y) m. Geometria PARAMETRICA con biseles
+// (RoundedBoxGeometry para gabinete/breakers/puerta, CylinderGeometry para bobinados/bujes/
+//  cables, TubeGeometry con codos para conduit). NADA de cubos voxel.
+// COMPOSICION (abajo -> arriba): plinto, transformador de aislamiento (nucleo E-I de acero +
+//  3 bobinados de cobre + bujes), interruptor principal (negro con banda roja + palanca),
+//  2 panelboards con 4 columnas x 9 breakers termomagneticos + barras de cobre, medidor/display
+//  kW·V·A (MeshBasicMaterial + CanvasTexture). Alimentacion de entrada en conducto rojo por arriba,
+//  mazos de salida a racks por el zoclo. Puerta ocultable (CORTE) para ver breakers y barras.
+// PBR: pintado -> metalness 0 (rough 0.5-0.6); cobre/acero desnudo -> metalness 1 (rough 0.35);
+//  nunca metalness intermedio sobre color solido. Display emisivo via MeshBasic (toneMapped false).
+// ANIMACION: easing de puerta + palancas, parpadeo de FALLA, refresco throttled del display.
+
+// ====== HEADLESS GUARD (node/smoke): construye la escena pero omite GL si no hay WebGL ======
+let renderer = null, HEADLESS = false;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias:true });
+} catch (e) {
+  HEADLESS = true;
+  console.warn('[PDU] HEADLESS: sin contexto WebGL, se omite render (', e && e.message, ')');
+}
+
+// ====== SCENE ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 5, 26);
+
+const camera = new THREE.PerspectiveCamera(46, window.innerWidth/window.innerHeight, 0.02, 200);
+camera.position.set(1.85, 1.45, 2.05);
+
+if (renderer) {
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;            // sombras horneadas: un solo needsUpdate tras construir
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+}
+
+let controls = null;
+if (renderer) {
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.autoRotate = false;                       // default OFF
+  controls.autoRotateSpeed = 0.6;
+  controls.minDistance = 1.1;
+  controls.maxDistance = 12;
+  controls.maxPolarAngle = Math.PI * 0.495;
+  controls.target.set(0, 1.0, 0);
+  controls.addEventListener('change', () => {        // ground clamp (regla de la casa)
+    if (controls.target.y < 0) controls.target.y = 0;
+    if (camera.position.y < 0.1) camera.position.y = 0.1;
+  });
+}
+
+// ====== RIG DE LUCES ======
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.6, 3.6, 2.4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -1.6; sun.shadow.camera.right = 1.6;
+sun.shadow.camera.top = 2.4; sun.shadow.camera.bottom = -0.4;
+sun.shadow.camera.near = 0.8; sun.shadow.camera.far = 12;
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.02;
+sun.target.position.set(0, 1.0, 0);
+scene.add(sun); scene.add(sun.target);
+
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4); fill.position.set(-2.6, 2.2, -1.6); scene.add(fill);
+const rim  = new THREE.DirectionalLight(0x00d4aa, 0.22); rim.position.set(0.6, 1.4, 2.6); scene.add(rim);
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+// ====== PISO ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  new THREE.MeshStandardMaterial({ color:0x0a0d12, roughness:0.95, metalness:0 })
+);
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+const grid = new THREE.GridHelper(30, 60, 0x123f35, 0x0c1d1a);
+grid.position.y = 0.002; grid.material.transparent = true; grid.material.opacity = 0.32; scene.add(grid);
+
+// ====== TEXTURAS PROCEDURALES ======
+function canvasTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d'); draw(ctx, w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t._ctx = ctx; return t;
+}
+function dataTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
+}
+// Rugosidad sutil de pintura (roughnessMap MULTIPLICA el escalar; escalar 1.0 * mapa ~0.55).
+const paintRough = dataTex(256, 256, (g) => {
+  g.fillStyle = '#8c8c8c'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2600; i++){
+    const v = 120 + Math.floor(Math.random() * 60);
+    g.fillStyle = `rgba(${v},${v},${v},0.16)`;
+    g.fillRect(Math.random()*256, Math.random()*256, 1 + Math.random()*3, 1 + Math.random()*3);
+  }
+});
+paintRough.wrapS = paintRough.wrapT = THREE.RepeatWrapping; paintRough.repeat.set(2, 4);
+
+// Etiqueta arc-flash amarilla
+const arcFlashTex = canvasTex(256, 320, (g, w, h) => {
+  g.fillStyle = '#f4c500'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#141414'; g.lineWidth = 8; g.strokeRect(6, 6, w-12, h-12);
+  g.fillStyle = '#141414'; g.fillRect(6, 6, w-12, 66);
+  g.fillStyle = '#f4c500'; g.font = 'bold 40px monospace'; g.textAlign = 'center';
+  g.fillText('WARNING', w/2, 52);
+  g.fillStyle = '#141414';
+  g.beginPath(); g.moveTo(w/2, 92); g.lineTo(w/2-44, 168); g.lineTo(w/2+44, 168); g.closePath(); g.fill();
+  g.fillStyle = '#f4c500'; g.font = 'bold 54px monospace'; g.fillText('!', w/2, 162);
+  g.fillStyle = '#141414'; g.font = 'bold 22px monospace';
+  g.fillText('ARC FLASH &', w/2, 210); g.fillText('SHOCK HAZARD', w/2, 236);
+  g.font = '16px monospace'; g.fillText('225 kVA · 480 V', w/2, 276);
+});
+// Placa de datos metalica
+const plateTex = canvasTex(512, 256, (g, w, h) => {
+  const grad = g.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, '#d8dade'); grad.addColorStop(0.5, '#b8bcc2'); grad.addColorStop(1, '#c8ccd2');
+  g.fillStyle = grad; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#3a3f46'; g.lineWidth = 6; g.strokeRect(10, 10, w-20, h-20);
+  g.fillStyle = '#22262c'; g.textAlign = 'center';
+  g.font = 'bold 30px monospace'; g.fillText('PDU-1 · 225 kVA', w/2, 54);
+  g.font = '20px monospace'; g.fillText('POWER DISTRIBUTION UNIT', w/2, 86);
+  g.textAlign = 'left'; g.font = '19px monospace';
+  ['TENSION   480Y/277 V · 3F', 'CORRIENTE 270 A · 60 Hz', 'K-FACTOR  13 · NEMA 1']
+    .forEach((r, i) => g.fillText(r, 40, 128 + i*30));
+  for (const [bx, by] of [[26,26],[w-26,26],[26,h-26],[w-26,h-26]]){
+    g.beginPath(); g.arc(bx, by, 7, 0, Math.PI*2); g.fillStyle = '#787c82'; g.fill();
+  }
+});
+
+// ====== PALETA PBR (metalness 0 = pintado · metalness 1 = metal desnudo) ======
+const M = {
+  BASE:  new THREE.MeshStandardMaterial({ color:0x111419, roughness:0.85, metalness:0.1 }),
+  CAB:   new THREE.MeshStandardMaterial({ color:0x8b9299, roughness:0.6, metalness:0, roughnessMap:paintRough }),
+  CAB_D: new THREE.MeshStandardMaterial({ color:0x5c626b, roughness:0.6, metalness:0 }),
+  DOOR:  new THREE.MeshStandardMaterial({ color:0x929aa1, roughness:0.55, metalness:0, roughnessMap:paintRough }),
+  PANEL: new THREE.MeshStandardMaterial({ color:0x394049, roughness:0.6, metalness:0 }),
+  BLK:   new THREE.MeshStandardMaterial({ color:0x15181d, roughness:0.5, metalness:0 }),   // breakers pintados
+  LEVER: new THREE.MeshStandardMaterial({ color:0xe6e8ec, roughness:0.45, metalness:0 }),  // palanca (plastico)
+  CU:    new THREE.MeshStandardMaterial({ color:0xbe6a2c, roughness:0.35, metalness:1 }),  // cobre desnudo
+  CU_D:  new THREE.MeshStandardMaterial({ color:0x8f4e1d, roughness:0.4,  metalness:1 }),  // cobre oxidado (banda)
+  STEEL: new THREE.MeshStandardMaterial({ color:0x9aa0a8, roughness:0.35, metalness:1 }),  // acero desnudo claro
+  STEEL_D:new THREE.MeshStandardMaterial({ color:0x656b73, roughness:0.42, metalness:1 }),
+  RED:   new THREE.MeshStandardMaterial({ color:0xb01f22, roughness:0.45, metalness:0 }),  // banda/conduit alimentacion
+  YEL:   new THREE.MeshStandardMaterial({ color:0xd8b41c, roughness:0.6,  metalness:0 }),
+  DISPBODY: new THREE.MeshStandardMaterial({ color:0x0d1014, roughness:0.5, metalness:0 }),
+  CABLE_K: new THREE.MeshStandardMaterial({ color:0x1b1e24, roughness:0.7, metalness:0 }), // mazos de salida
+  CABLE_R: new THREE.MeshStandardMaterial({ color:0x7c2020, roughness:0.7, metalness:0 })
+};
+
+// ====== HELPERS DE GEOMETRIA ======
+const staticG = new THREE.Group(); scene.add(staticG);
+function mesh(geo, mat, x=0, y=0, z=0, parent=staticG){
+  const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
+}
+function box(w, h, d, mat, x, y, z, parent=staticG){ return mesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent); }
+// Caja biselada (chaflan). radius se auto-clampa a la mitad de la dimension menor.
+function rbox(w, h, d, mat, x, y, z, r=0.008, parent=staticG){
+  const rr = Math.min(r, Math.min(w, h, d) * 0.49);
+  return mesh(new RoundedBoxGeometry(w, h, d, 3, rr), mat, x, y, z, parent);
+}
+function cylY(r, len, mat, x, y, z, seg=20, parent=staticG){ return mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent); }
+function cylZ(r, len, mat, x, y, z, seg=20, parent=staticG){ const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent); m.rotation.x = Math.PI/2; return m; }
+
+// Conduit/cable con codos suavizados (TubeGeometry sobre CurvePath con bezier en cada vertice)
+function makePipe(points, r, mat, bend=0.05, seg=10, parent=staticG){
+  const path = new THREE.CurvePath();
+  const P = points.map(p => new THREE.Vector3(...p));
+  let prev = P[0];
+  for (let i = 1; i < P.length - 1; i++){
+    const a = P[i], b = P[i+1];
+    const dIn = a.clone().sub(prev).normalize(), dOut = b.clone().sub(a).normalize();
+    const tIn = a.clone().sub(dIn.clone().multiplyScalar(bend));
+    const tOut = a.clone().add(dOut.clone().multiplyScalar(bend));
+    path.add(new THREE.LineCurve3(prev, tIn));
+    path.add(new THREE.QuadraticBezierCurve3(tIn, a, tOut));
+    prev = tOut;
+  }
+  path.add(new THREE.LineCurve3(prev, P[P.length - 1]));
+  const len = path.getLength();
+  const g = new THREE.TubeGeometry(path, Math.max(12, Math.round(len * 26)), r, seg, false);
+  return mesh(g, mat, 0, 0, 0, parent);
+}
+
+// ====== INSTANCIAS (una draw call por coleccion) ======
+const Q0 = new THREE.Quaternion(), S1 = new THREE.Vector3(1, 1, 1);
+function tMat(x, y, z, q, s){ return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q || Q0, s || S1); }
+function makeIM(geo, mat, mats, cast=true, parent=staticG){
+  const im = new THREE.InstancedMesh(geo, mat, mats.length);
+  mats.forEach((m, i) => im.setMatrixAt(i, m));
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = cast; im.receiveShadow = true; parent.add(im); return im;
+}
+const louverMats = [], boltMats = [];
+const BOLT_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2, 0, 0));
+
+// ==================================================================
+// COTAS (metros) — gabinete 0.9 (x) x 0.9 (z) x 2.0 (y)
+// ==================================================================
+const W = 0.9, D = 0.9, H = 2.0;
+const X0 = -W/2, X1 = W/2, ZB = -D/2, ZF = D/2;     // ZF = cara frontal (puerta)
+const IN_Z = ZF - 0.06;                              // plano de montaje interior (breakers)
+const BUS_Z = ZF - 0.14;                             // plano de barras de cobre
+
+// ==================================================================
+// GABINETE (enclosure de acero pintado) — sin cara frontal (la cubre la puerta)
+// ==================================================================
+{
+  box(W + 0.02, 0.1, D + 0.02, M.BASE, 0, 0.05, 0);                    // plinto / zoclo
+  // paredes: trasera + laterales + techo (cascaron pintado)
+  box(W, H - 0.1, 0.03, M.CAB, 0, 0.1 + (H - 0.1)/2, ZB + 0.015);     // trasera
+  box(0.03, H - 0.1, D, M.CAB, X0 + 0.015, 0.1 + (H - 0.1)/2, 0);     // lateral izq
+  box(0.03, H - 0.1, D, M.CAB, X1 - 0.015, 0.1 + (H - 0.1)/2, 0);     // lateral der
+  box(W + 0.04, 0.05, D + 0.04, M.CAB_D, 0, H + 0.005, 0);            // techo / hat
+  // marco frontal (jamba) alrededor del hueco de puerta
+  const jw = 0.03;
+  box(jw, H - 0.14, 0.05, M.CAB_D, X0 + jw/2, 0.14 + (H - 0.14)/2, ZF - 0.02);
+  box(jw, H - 0.14, 0.05, M.CAB_D, X1 - jw/2, 0.14 + (H - 0.14)/2, ZF - 0.02);
+  box(W, 0.03, 0.05, M.CAB_D, 0, 0.135, ZF - 0.02);                  // umbral inferior
+  // placa de datos (arriba-izquierda del techo frontal)
+  const np = mesh(new THREE.PlaneGeometry(0.22, 0.11),
+    new THREE.MeshStandardMaterial({ map:plateTex, roughness:0.4, metalness:0 }),
+    -0.18, H - 0.11, ZF + 0.002);
+  np.castShadow = false;
+}
+
+// ==================================================================
+// TRANSFORMADOR DE AISLAMIENTO (base): nucleo E-I de acero + 3 bobinados de cobre + bujes
+// ==================================================================
+const TX = { y0: 0.16, h: 0.5, cz: 0.0 };
+{
+  const cy = TX.y0 + TX.h/2;
+  // rieles de montaje
+  box(0.62, 0.03, 0.4, M.STEEL_D, 0, TX.y0 - 0.005, TX.cz);
+  // nucleo laminado (yugos + piernas) — acero desnudo
+  box(0.56, 0.06, 0.36, M.STEEL, 0, TX.y0 + 0.03, TX.cz);            // yugo inferior
+  box(0.56, 0.06, 0.36, M.STEEL, 0, TX.y0 + TX.h - 0.03, TX.cz);    // yugo superior
+  const legX = [-0.19, 0, 0.19];
+  for (const lx of legX) box(0.08, TX.h - 0.06, 0.34, M.STEEL, lx, cy, TX.cz);   // piernas
+  // 3 bobinados de cobre (cilindros) alrededor de las piernas, con banda oxidada
+  for (const lx of legX){
+    cylY(0.11, TX.h - 0.14, M.CU, lx, cy, TX.cz, 24);
+    cylY(0.113, 0.03, M.CU_D, lx, cy + 0.09, TX.cz, 24);
+    cylY(0.113, 0.03, M.CU_D, lx, cy - 0.09, TX.cz, 24);
+    // buje/terminal de cobre en la tapa
+    cylY(0.02, 0.08, M.CU, lx, TX.y0 + TX.h + 0.03, TX.cz + 0.1, 14);
+  }
+  // barra colectora de cobre del transformador al interruptor principal (riser)
+  box(0.03, 0.34, 0.03, M.CU, 0.1, TX.y0 + TX.h + 0.18, ZF - 0.16);
+}
+
+// ==================================================================
+// INTERRUPTOR PRINCIPAL (negro con banda roja + palanca) — sobre el transformador
+// ==================================================================
+const MB = { cx: 0, cy: 0.86, w: 0.34, h: 0.2, d: 0.13 };
+{
+  const zf = ZF - 0.055;
+  rbox(MB.w, MB.h, MB.d, M.BLK, MB.cx, MB.cy, zf - MB.d/2 + 0.02, 0.01);   // cuerpo
+  box(MB.w, 0.03, 0.005, M.RED, MB.cx, MB.cy + MB.h/2 - 0.02, zf + 0.004); // banda roja
+  box(0.11, 0.045, 0.005, M.YEL, MB.cx - MB.w/2 + 0.09, MB.cy - MB.h/2 + 0.035, zf + 0.004); // etiqueta
+  // base del operador rotativo
+  cylZ(0.05, 0.03, M.STEEL_D, MB.cx, MB.cy, zf + 0.01, 20);
+}
+// Palanca del principal (reactiva) — pivota sobre su base
+const mainLever = new THREE.Mesh(new RoundedBoxGeometry(0.05, 0.17, 0.035, 3, 0.01), M.RED);
+mainLever.geometry.translate(0, 0.07, 0);                 // pivote en la base
+mainLever.position.set(MB.cx, MB.cy, ZF - 0.02);
+mainLever.castShadow = true; staticG.add(mainLever);
+
+// ==================================================================
+// PANELBOARDS: 4 columnas x 9 breakers termomagneticos + barras de cobre
+// ==================================================================
+const BRK = { y0: 1.06, dy: 0.076, rows: 9, colX: [-0.30, -0.12, 0.12, 0.30], bz: ZF - 0.075 };
+const TRIP = { col: 0, row: 4 };                          // breaker que dispara en FALLA
+const brkBodyMats = [];
+const levers = [], leds = [];
+
+// backpans + barras de cobre por panelboard
+for (const px of [-0.21, 0.21]){
+  box(0.38, 0.78, 0.02, M.PANEL, px, 1.36, ZF - 0.13);    // backpan
+  for (const bx of [px - 0.02, px + 0.06]) box(0.022, 0.72, 0.022, M.CU, bx, 1.36, BUS_Z);  // barras verticales
+}
+box(0.66, 0.03, 0.03, M.CU, 0, BRK.y0 - 0.06, BUS_Z);     // barra alimentadora horizontal (feeder)
+
+// Fabricas de material de LED / palanca reactivos
+function ledOnMat(){ return new THREE.MeshStandardMaterial({ color:0x0c3a1c, emissive:0x00ff66, emissiveIntensity:1.5, roughness:0.35, metalness:0 }); }
+function ledOffMat(){ return new THREE.MeshStandardMaterial({ color:0x3a0c0e, emissive:0xff2233, emissiveIntensity:0.5, roughness:0.35, metalness:0 }); }
+
+const brkGeo = new RoundedBoxGeometry(0.075, 0.06, 0.055, 2, 0.006);
+const leverGeo = new RoundedBoxGeometry(0.02, 0.03, 0.028, 2, 0.005);
+const ledGeo = new THREE.CylinderGeometry(0.006, 0.006, 0.008, 12);
+for (let c = 0; c < 4; c++){
+  for (let r = 0; r < BRK.rows; r++){
+    const x = BRK.colX[c], y = BRK.y0 + r * BRK.dy, tripped = (c === TRIP.col && r === TRIP.row);
+    brkBodyMats.push(tMat(x, y, BRK.bz - 0.0275));         // cuerpo (instanciado)
+    // palanca reactiva (pivota en su base -> tilt on/off)
+    const lv = new THREE.Mesh(leverGeo, M.LEVER);
+    lv.geometry = leverGeo; lv.position.set(x, y, BRK.bz + 0.01);
+    lv.castShadow = true; lv.userData = { trip: tripped };
+    staticG.add(lv); levers.push(lv);
+    // LED de estado (emisivo) al costado
+    const led = new THREE.Mesh(ledGeo, ledOnMat());
+    led.rotation.x = Math.PI/2; led.position.set(x + 0.028, y, BRK.bz + 0.006);
+    led.userData = { trip: tripped }; led.castShadow = false;
+    staticG.add(led); leds.push(led);
+  }
+}
+makeIM(brkGeo, M.BLK, brkBodyMats, true);                 // 36 cuerpos de breaker en una draw call
+
+// ==================================================================
+// MEDIDOR / DISPLAY kW · V · A (MeshBasicMaterial + CanvasTexture, toneMapped false)
+// ==================================================================
+const meter = { y: H - 0.16, z: ZF + 0.004 };
+box(0.5, 0.14, 0.02, M.DISPBODY, 0.06, meter.y, meter.z);  // bisel del medidor
+const dispTex = canvasTex(512, 160, (g) => { g.fillStyle = '#04120b'; g.fillRect(0, 0, 512, 160); });
+const dispMat = new THREE.MeshBasicMaterial({ map: dispTex, toneMapped: false });
+const dispPlane = mesh(new THREE.PlaneGeometry(0.46, 0.11), dispMat, 0.06, meter.y, meter.z + 0.012);
+dispPlane.castShadow = false;
+function drawDisplay(kw, v, a, live){
+  const g = dispTex._ctx, w = 512, h = 160;
+  g.fillStyle = '#04120b'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#0c3a2c'; g.lineWidth = 3; g.strokeRect(5, 5, w-10, h-10);
+  const cells = [
+    { x: 92,  val: kw, unit: 'kW', col: live ? '#16ff9e' : '#3a5a4c' },
+    { x: 256, val: v,  unit: 'V',  col: live ? '#3ad0ff' : '#33525f' },
+    { x: 420, val: a,  unit: 'A',  col: live ? '#16ff9e' : '#3a5a4c' }
+  ];
+  for (const c of cells){
+    g.textAlign = 'center';
+    g.font = '700 62px "JetBrains Mono", ui-monospace, monospace';
+    g.fillStyle = 'rgba(120,180,150,0.06)'; g.fillText('888', c.x, 92);   // ghost 7-seg
+    g.fillStyle = c.col; g.fillText(String(c.val), c.x, 92);
+    g.font = '600 22px "JetBrains Mono", ui-monospace, monospace';
+    g.fillStyle = live ? '#5f9a86' : '#3a5a4c'; g.fillText(c.unit, c.x, 128);
+  }
+  g.textAlign = 'left'; g.font = '600 18px "JetBrains Mono", ui-monospace, monospace';
+  g.fillStyle = '#5f9a86'; g.fillText('PDU-1', 18, 32);
+  g.textAlign = 'right'; g.fillStyle = live ? '#16ff9e' : '#ff5a4a';
+  g.fillText(live ? 'EN LINEA' : 'SIN CARGA', w - 18, 32);
+  dispTex.needsUpdate = true;
+}
+// Lampara piloto sobre el medidor
+const pilotMat = ledOnMat();
+const pilot = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.016, 16), pilotMat, 0.31, meter.y, meter.z + 0.006);
+pilot.rotation.x = Math.PI/2; pilot.castShadow = false;
+const pilotLight = new THREE.PointLight(0x00ff66, 0.5, 0.8); pilotLight.position.set(0.31, meter.y, meter.z + 0.08); scene.add(pilotLight);
+
+// ==================================================================
+// PUERTA OCULTABLE (CORTE) — bisagra izquierda, abre para ver breakers + barras
+// ==================================================================
+const DOOR_Y0 = 0.15, DOOR_Y1 = H - 0.24, DOOR_H = DOOR_Y1 - DOOR_Y0, DOOR_W = W - 0.06;
+const doorGroup = new THREE.Group();
+doorGroup.position.set(X0 + 0.03, 0, ZF - 0.01);          // bisagra en el jamb izquierdo
+scene.add(doorGroup);
+{
+  const cx = DOOR_W/2, cy = (DOOR_Y0 + DOOR_Y1)/2;
+  rbox(DOOR_W, DOOR_H, 0.025, M.DOOR, cx, cy, 0.012, 0.01, doorGroup);        // panel
+  const fr = box(DOOR_W + 0.01, DOOR_H + 0.01, 0.01, M.CAB_D, cx, cy, 0.0, doorGroup); fr.castShadow = false;
+  // louvers de ventilacion (2 bandas x 6, instanciados en la puerta)
+  for (const by of [DOOR_Y0 + 0.28, DOOR_Y0 + 0.44])
+    for (let i = 0; i < 6; i++)
+      louverMats.push(tMat(cx, by + i * 0.028, 0.026, Q0, new THREE.Vector3(DOOR_W * 0.6, 1, 1)));
+  // manija de leva (barra vertical + escudo)
+  box(0.035, 0.03, 0.02, M.STEEL_D, DOOR_W - 0.06, cy + 0.02, 0.03, doorGroup);
+  box(0.024, 0.16, 0.03, M.STEEL, DOOR_W - 0.06, cy - 0.06, 0.04, doorGroup);
+  // bisagras (lado bisagra)
+  for (const hy of [DOOR_Y0 + 0.15, cy, DOOR_Y1 - 0.15]) box(0.02, 0.07, 0.03, M.STEEL, 0.02, hy, 0.016, doorGroup);
+  // etiqueta arc-flash
+  const lbl = mesh(new THREE.PlaneGeometry(0.11, 0.14),
+    new THREE.MeshStandardMaterial({ map:arcFlashTex, roughness:0.55, metalness:0 }),
+    cx - 0.02, DOOR_Y0 + 0.85, 0.026, doorGroup);
+  lbl.castShadow = false;
+}
+
+// ==================================================================
+// ALIMENTACION DE ENTRADA (conducto rojo por arriba, hacia el interruptor principal)
+// ==================================================================
+makePipe([[-0.1, H + 0.06, ZB + 0.06], [-0.1, H - 0.05, ZB + 0.06], [-0.1, 1.02, ZB + 0.12]], 0.026, M.RED, 0.06, 12);
+for (const by of [1.9, 1.55, 1.2]) cylY(0.03, 0.02, M.CU_D, -0.1, by, ZB + 0.06, 12);   // bandas identificadoras
+
+// ==================================================================
+// MAZOS DE SALIDA A RACKS (por el zoclo, abanico en el piso)
+// ==================================================================
+{
+  const outs = [
+    { x: -0.28, mat: M.CABLE_K, tz: 0.9 }, { x: -0.14, mat: M.CABLE_R, tz: 1.1 },
+    { x: 0.14,  mat: M.CABLE_K, tz: 1.1 }, { x: 0.28,  mat: M.CABLE_R, tz: 0.9 }
+  ];
+  for (const o of outs)
+    makePipe([[o.x, 1.02, ZF - 0.16], [o.x, 0.14, ZF - 0.04], [o.x, 0.05, ZF + 0.05], [o.x * 1.6, 0.03, o.tz]], 0.02, o.mat, 0.05, 10);
+}
+
+// ==================================================================
+// CONSTRUCCION DE INSTANCIAS restantes
+// ==================================================================
+makeIM(new THREE.BoxGeometry(1, 0.012, 0.008),
+  new THREE.MeshStandardMaterial({ color:0x23282f, roughness:0.6, metalness:0.3 }), louverMats, false);
+
+// ==================================================================
+// ESTADO / CONTROL DE EQUIPO
+// ==================================================================
+const state = { breakers: true, corte: false, falla: false, rot: false };
+let doorAngle = 0, dispAcc = 1, dispTimer = 0;
+
+function refreshLeds(){
+  for (const led of leds){
+    if (state.falla && led.userData.trip){ led.material = ledOffMat(); led.material.emissiveIntensity = 1.8; }
+    else led.material = state.breakers ? ledOnMat() : ledOffMat();
+  }
+}
+function applyState(){
+  refreshLeds();
+  if (!state.falla){
+    pilotMat.emissive.setHex(0x00ff66); pilotMat.emissiveIntensity = 1.5;
+    pilotLight.color.setHex(0x00ff66); pilotLight.intensity = 0.5;
+  }
+  dispAcc = 1;                                             // fuerza refresco inmediato del display
+  if (renderer) renderer.shadowMap.needsUpdate = true;    // rehornea sombras al mover la puerta
+}
+
+// ====== UI ======
+const BSPEC = [['bBrk','breakers'], ['bCorte','corte'], ['bFalla','falla'], ['bRot','rot']];
+function refreshUI(){
+  for (const [id, key] of BSPEC){
+    const b = document.getElementById(id); if (!b) continue;
+    b.textContent = key === 'falla' && state[key] ? 'FALLA' : (state[key] ? 'ON' : 'OFF');
+    b.className = state[key] ? (key === 'falla' ? 'alarm' : 'on') : 'off';
+  }
+}
+for (const [id, key] of BSPEC){
+  const b = document.getElementById(id); if (!b) continue;
+  b.addEventListener('click', () => { state[key] = !state[key]; refreshUI(); if (key !== 'rot') applyState(); });
+}
+// API programatica (usada tambien por el smoke headless)
+function setBreakers(v){ state.breakers = v; refreshUI(); applyState(); }
+function setCorte(v){ state.corte = v; refreshUI(); applyState(); }
+function setFalla(v){ state.falla = v; refreshUI(); applyState(); }
+function setRotate(v){ state.rot = v; refreshUI(); if (controls) controls.autoRotate = v; }
+refreshUI(); applyState();
+if (renderer) renderer.shadowMap.needsUpdate = true;      // horneado inicial
+
+// ====== LOOP ======
+const clock = new THREE.Clock();
+function update(dt){
+  // puerta abatible (CORTE)
+  const target = state.corte ? -2.0 : 0;
+  const na = doorAngle + (target - doorAngle) * Math.min(1, dt * 4);
+  if (Math.abs(na - doorAngle) > 1e-4 && renderer) renderer.shadowMap.needsUpdate = true;  // sombras al animar
+  doorAngle = na; doorGroup.rotation.y = doorAngle;
+
+  // palancas de breakers (tilt sobre eje X: on arriba / off abajo / tripped medio)
+  for (const lv of levers){
+    const tripped = state.falla && lv.userData.trip;
+    const tr = tripped ? 0 : (state.breakers ? 0.5 : -0.5);
+    lv.rotation.x += (tr - lv.rotation.x) * Math.min(1, dt * 8);
+  }
+  const tm = state.breakers ? -0.5 : 0.5;
+  mainLever.rotation.z += (tm - mainLever.rotation.z) * Math.min(1, dt * 8);
+
+  // parpadeo de FALLA (piloto + LED disparado)
+  if (state.falla){
+    const t = clock.elapsedTime, blink = Math.abs(Math.sin(t * 7.5));
+    pilotMat.emissive.setHex(0xff2233); pilotMat.emissiveIntensity = 0.3 + 1.9 * blink;
+    pilotLight.color.setHex(0xff2233); pilotLight.intensity = 0.15 + 0.8 * blink;
+    for (const led of leds) if (led.userData.trip) led.material.emissiveIntensity = 0.3 + 2.0 * blink;
+  }
+
+  // display kW · V · A (refresco throttled)
+  dispTimer += dt;
+  if (dispAcc >= 1 || dispTimer >= 0.4){
+    dispTimer = 0; dispAcc = 0;
+    if (state.breakers){
+      const kw = Math.round(42 + Math.random() * 6);
+      const a  = Math.round((state.falla ? 44 : 51) + Math.random() * 6);
+      drawDisplay(kw, 480, a, true);
+    } else drawDisplay(0, 480, 0, false);
+  }
+  if (controls) controls.update();
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  update(Math.min(0.05, clock.getDelta()));
+  renderer.render(scene, camera);
+}
+if (renderer) animate(); else drawDisplay(45, 480, 53, true);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  if (renderer) renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ====== DIAGNOSTICO / HOOKS DE PRUEBA (harness headless) ======
+let triCount = 0, meshCount = 0, drawCount = 0;
+scene.traverse((o) => {
+  if (o.isMesh || o.isInstancedMesh){
+    meshCount++; drawCount++;
+    const g = o.geometry, n = o.isInstancedMesh ? o.count : 1;
+    const idx = g.index ? g.index.count : (g.attributes.position ? g.attributes.position.count : 0);
+    triCount += (idx / 3) * n;
+  }
+});
+console.log('[PDU] HEADLESS:', HEADLESS, '| meshes/draws:', drawCount, '| tris ~', Math.round(triCount),
+  '| breakers:', levers.length);
+window.__PDU__ = {
+  HEADLESS, state,
+  counts: { meshes: meshCount, draws: drawCount, tris: Math.round(triCount), breakers: levers.length },
+  doorGroup, levers, leds, mainLever, pilot,
+  api: { setBreakers, setCorte, setFalla, setRotate, tick: update }
+};
+</script>
+</body>
+</html>
