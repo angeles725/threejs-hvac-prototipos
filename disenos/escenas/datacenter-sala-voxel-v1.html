@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sala Datacenter · Escena Voxel · v1</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); max-width:340px; }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#aebfd2; }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#aebfd2; backdrop-filter: blur(6px); }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:230px; font-size:11px; backdrop-filter: blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#aebfd2; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 12px; border:1px solid; background:transparent; cursor:pointer; min-width:70px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #stat { color:#aebfd2; margin-top:8px; font-size:10px; }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>SALA DATACENTER · ESCENA VOXEL</b><br>
+  <span>5 filas × 10 racks · contención · CRAC downflow · in-row · UPS/PDU · dry cooler exterior · Voxel Art</span>
+</div>
+<div id="legend">
+  <div><i style="background:#2f5f96"></i> Agua helada · suministro</div>
+  <div><i style="background:#8a3226"></i> Agua helada · retorno</div>
+  <div><i style="background:#e9eaee"></i> Contención de pasillo</div>
+  <div><i style="background:#8a8a92"></i> Busway eléctrico</div>
+  <div><i style="background:#00d4aa"></i> Equipo de precisión</div>
+  <div><i style="background:#c4712e"></i> Barras de cobre</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE ESCENA</div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="off">OFF</button></div>
+  <div class="row"><label>SOMBRAS</label><button id="bShadow" class="on">ON</button></div>
+  <div id="stat">voxeles: — · instancias: —</div>
+</div>
+
+<!-- Importmap dinámico (unpkg three@0.160.0). El '@' se compone con
+     String.fromCharCode(64) por convención del pipeline de publicación. -->
+<script>
+(function(){
+  var AT = String.fromCharCode(64);
+  var base = 'https://unpkg.com/three' + AT + '0.160.0/';
+  var s = document.createElement('script');
+  s.type = 'importmap';
+  s.textContent = JSON.stringify({ imports: {
+    'three': base + 'build/three.module.js',
+    'three/addons/': base + 'examples/jsm/'
+  }});
+  document.head.appendChild(s);
+})();
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// HEADLESS: true en node (sin window) o cuando el harness fija window.__HEADLESS__.
+// Bajo HEADLESS se construye el grafo de escena (para conteo) pero se omite
+// renderer / PMREM / OrbitControls / DOM / animate.
+const HEADLESS = (typeof window === 'undefined') || !!(typeof window !== 'undefined' && window.__HEADLESS__);
+
+/* ======================================================================
+   FACTORIES — cada equipo es un THREE.Group en UNIDADES-VOXEL. Todo es
+   local a la función (mapa de voxeles + paleta + InstancedMesh por color),
+   sin globales window.__ colisionantes. El mundo común se arma en METROS
+   escalando cada grupo por su tamaño de voxel nativo.
+   ====================================================================== */
+
+/* ---- BASE: sala (piso técnico + 5×10 racks silueta + contención + CHW).
+   Escala nativa 0.05 m/voxel. Adaptado de contencion-pasillo/datacenter-pasillo-voxel.html ---- */
+function makeRoom(THREE, skip) {
+  const group = new THREE.Group();
+  const voxMap = new Map();
+  // Offset 128 (no 64): FZ0 llega a -68, por debajo de -64 → el empaquetado con +64
+  // se corrompía (voxeles espurios). Con +128 admite coords ≥ -128 sin colisión de campos.
+  const vkey = (x, y, z) => ((x + 128) * 1048576) + ((y + 128) * 1024) + (z + 128);
+  const vox = (x, y, z, color) => voxMap.set(vkey(x, y, z), color);
+
+  const COL = {
+    TILE: 0xd8dce8, TILE_P: 0x9aa2b8, SEAM: 0x3a3f4c, PED: 0x707680,
+    RACK: 0x232730, RACK_F: 0x3a4050, GRILLE: 0x14161c,
+    CONT: 0xe9eaee, CONT_G: 0xaecbe8,
+    PIPE_B: 0x2f5f96, PIPE_R: 0x8a3226, TRAY: 0x607080,
+    CAB_B: 0x1565c0, CAB_G: 0x2e7d32, BUS: 0x8a8a92, BUS_D: 0x55555c,
+    ROD: 0x4a4a52, DARK: 0x2a2a2e,
+  };
+
+  const FLOOR_Y = 6, FLOOR_TOP = 7;
+  const RACK_W = 12, RACK_D = 17, RACK_H = 40;
+  const ROOF_Y = 55;
+  const NROWS = 5, NRACKS = 10;
+  const ROW_Z0 = [0, 56, 112, 168, 224];             // paso 56 vox → pasillo 39 vox ≈ 2 m
+  const X0 = 4;
+  const XMAX = X0 + NRACKS * RACK_W;                 // 124
+  const ROW_FRONT = ROW_Z0.map((z0, i) => (i % 2 === 0) ? z0 + RACK_D - 1 : z0);
+  const COLD_AISLES = [[16, 56], [128, 168]];        // pasillos fríos contenidos (~2 m)
+  const FX0 = -18, FX1 = XMAX + 23;                  // piso ensanchado en X → perímetro ≥1 m
+  const FZ0 = -68, FZ1 = 302;                        // piso ensanchado en Z → yardas front/back
+
+  // piso técnico: pedestales retícula 0.6 m
+  for (let x = FX0; x <= FX1; x += 12)
+    for (let z = FZ0; z <= FZ1; z += 12) {
+      for (let y = 1; y <= 4; y++) vox(x, y, z, COL.PED);
+      for (let dx = 0; dx <= 1; dx++)
+        for (let dz = 0; dz <= 1; dz++) { vox(x + dx, 0, z + dz, COL.DARK); vox(x + dx, 5, z + dz, COL.PED); }
+    }
+  const inCold = (z) => COLD_AISLES.some(([a, b]) => z > a && z < b);
+  for (let x = FX0; x <= FX1; x++)
+    for (let z = FZ0; z <= FZ1; z++) {
+      const seam = (((x - FX0) % 12) === 0) || (((z - FZ0) % 12) === 0);
+      if (seam) { vox(x, FLOOR_Y, z, COL.SEAM); continue; }
+      const perf = inCold(z) && x >= X0 && x < XMAX;
+      if (perf) { if ((x + z) % 2 !== 0) vox(x, FLOOR_Y, z, COL.TILE_P); }
+      else vox(x, FLOOR_Y, z, COL.TILE);
+    }
+
+  // siluetas de rack (buildRack del pasillo)
+  function buildRack(x0, z0, frontZ) {
+    const x1 = x0 + RACK_W - 1, z1 = z0 + RACK_D - 1;
+    const y0 = FLOOR_TOP, y1 = FLOOR_TOP + RACK_H - 1;
+    for (let x = x0; x <= x1; x++)
+      for (let y = y0; y <= y1; y++)
+        for (let z = z0; z <= z1; z++) {
+          const surf = (x === x0 || x === x1 || y === y0 || y === y1 || z === z0 || z === z1);
+          if (!surf) continue;
+          if (z === frontZ) {
+            const per = (x === x0 || x === x1 || y === y0 || y === y1);
+            if (per) vox(x, y, z, COL.RACK_F);
+            else vox(x, y, z, ((x + y) % 2 === 0) ? COL.GRILLE : COL.RACK);
+          } else if (y === y1) { vox(x, y, z, COL.RACK_F); }
+          else {
+            const edge = (x === x0 || x === x1) && (z === z0 || z === z1);
+            vox(x, y, z, edge ? COL.RACK_F : COL.RACK);
+          }
+        }
+  }
+  for (let r = 0; r < NROWS; r++)
+    for (let j = 0; j < NRACKS; j++) {
+      if (skip && skip.has(r + ',' + j)) continue;    // hueco para racks hero / in-row
+      buildRack(X0 + j * RACK_W, ROW_Z0[r], ROW_FRONT[r]);
+    }
+
+  // contención sobre pasillos fríos (baffles + techo)
+  for (const [za, zb] of COLD_AISLES) {
+    for (let x = X0 - 2; x <= XMAX - 1; x++)
+      for (let y = 47; y <= 54; y++)
+        for (const z of [za, zb])
+          vox(x, y, z, ((((x - (X0 - 2)) % 12) === 0) || x === XMAX - 1) ? COL.CONT : COL.CONT_G);
+    for (let x = X0 - 2; x <= XMAX - 1; x++)
+      for (let z = za; z <= zb; z++) {
+        const rib = ((((x - (X0 - 2)) % 12) === 0)) || x === XMAX - 1 || z === za || z === zb;
+        const m = Math.floor((x - (X0 - 2)) / 12);
+        vox(x, ROOF_Y, z, rib ? COL.CONT : (m % 2 === 1 ? COL.CONT_G : COL.CONT));
+      }
+    for (const dx of [X0 - 2, XMAX - 1]) {
+      for (let y = FLOOR_TOP; y <= 54; y++) { vox(dx, y, za, COL.CONT); vox(dx, y, zb, COL.CONT); }
+      for (let z = za + 1; z <= zb - 1; z++) vox(dx, 54, z, COL.CONT);
+    }
+  }
+
+  // tubería CHW overhead sobre cada pasillo frío (azul supply / rojo return)
+  for (const [za, zb] of COLD_AISLES) {
+    const zc = Math.round((za + zb) / 2);
+    for (let x = FX0 + 2; x <= XMAX; x++)
+      for (let y = 57; y <= 58; y++) {
+        for (const dz of [-2, -1]) vox(x, y, zc + dz, COL.PIPE_B);
+        for (const dz of [1, 2]) vox(x, y, zc + dz, COL.PIPE_R);
+      }
+    for (const sx of [X0, X0 + 20, X0 + 40, X0 + 60, X0 + 80, X0 + 100]) {
+      for (let z = zc - 4; z <= zc + 4; z++) vox(sx, 56, z, COL.ROD);
+      for (const sz of [zc - 4, zc + 4]) for (let y = 57; y <= 60; y++) vox(sx, y, sz, COL.ROD);
+    }
+  }
+
+  // busway eléctrico aéreo sobre pasillos calientes
+  for (const zc of [-4, 90, 202]) {
+    for (let x = FX0 + 2; x <= XMAX; x++)
+      for (let y = 60; y <= 62; y++)
+        for (let z = zc; z <= zc + 3; z++)
+          vox(x, y, z, (((x + 2) % 20) === 0) ? COL.BUS_D : COL.BUS);
+  }
+
+  // InstancedMesh por color
+  const cube = new THREE.BoxGeometry(1, 1, 1);
+  const TRANS = new Set([COL.CONT_G]);
+  const byColor = new Map();
+  for (const [k, color] of voxMap) {
+    const x = Math.floor(k / 1048576) - 128;
+    const rem = k % 1048576;
+    const y = Math.floor(rem / 1024) - 128;
+    const z = (rem % 1024) - 128;
+    if (!byColor.has(color)) byColor.set(color, []);
+    byColor.get(color).push([x, y, z]);
+  }
+  const m = new THREE.Matrix4();
+  for (const [color, positions] of byColor) {
+    const isTrans = TRANS.has(color);
+    const isTile = (color === COL.TILE);
+    const mat = new THREE.MeshStandardMaterial({
+      color,
+      roughness: isTrans ? 0.35 : (isTile ? 0.28 : 0.55),
+      metalness: isTrans ? 0.1 : (isTile ? 0.35 : 0.45),
+      transparent: isTrans, opacity: isTrans ? 0.22 : 1.0,
+      depthWrite: !isTrans, side: isTrans ? THREE.DoubleSide : THREE.FrontSide,
+    });
+    const mesh = new THREE.InstancedMesh(cube, mat, positions.length);
+    mesh.castShadow = !isTrans; mesh.receiveShadow = true;
+    positions.forEach((p, i) => { m.setPosition(p[0] + 0.5, p[1] + 0.5, p[2] + 0.5); mesh.setMatrixAt(i, m); });
+    mesh.instanceMatrix.needsUpdate = true;
+    group.add(mesh);
+  }
+  group.userData.voxelCount = voxMap.size;
+  return group;
+}
+
+/* ---- RACK 42U detallado (hero). Escala nativa 0.02 m/voxel. FRONTE -z ---- */
+function makeRack(THREE) {
+  const group = new THREE.Group();
+  const cube = new THREE.BoxGeometry(1, 1, 1);
+  const C = {
+    FRAME:0x2d2d3a, FRAME_D:0x232330, DOOR:0x1a1a28, RAIL:0x1f1f2a, GRAF:0x3a3a46,
+    FRONT:0x16161e, BAY:0x24242f, GRILLE:0x0e0e16, BLANK:0x2a2a36, ORG:0x262633,
+    PDU:0x1c1c26, COPPER:0xb87333, PORT:0x0a0a12, DARKIN:0x08080e, HANDLE:0x8a8a98,
+    HINGE:0x3c3c48, WHEEL:0x101014, LEVELER:0x50505c, BEZEL:0x0f0f18, BRAND:0x3d3d4d,
+    PP:0x20202c, SW:0x14141c, UPLINK:0x30303e, PWR:0x00d4aa,
+    CBL_B:0x1565c0, CBL_G:0x2e7d32, CBL_Y:0xf9a825, CBL_K:0x0d0d12
+  };
+  const LED = { GREEN:0x4caf50, CYAN:0x00bcd4, RED:0xf44336, AMBER:0xff8f00 };
+  function newWorld(){ return { cells:new Map(), colors:{}, dupSkipped:0, count:0 }; }
+  function vox(w, x, y, z, c){
+    x = Math.round(x); y = Math.round(y); z = Math.round(z);
+    const k = x + ',' + y + ',' + z;
+    if (w.cells.has(k)) { w.dupSkipped++; return; }
+    w.cells.set(k, c); (w.colors[c] = w.colors[c] || []).push([x, y, z]); w.count++;
+  }
+  function box(w, x0, x1, y0, y1, z0, z1, c){
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) vox(w, x, y, z, c);
+  }
+  function fillBox(w, x0, x1, y0, y1, z0, z1, c){
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++){
+      const k = x + ',' + y + ',' + z;
+      if (w.cells.has(k)) continue;
+      w.cells.set(k, c); (w.colors[c] = w.colors[c] || []).push([x, y, z]); w.count++;
+    }
+  }
+  function genRack(w){
+    box(w,3,5,0,3,3,6,C.WHEEL); box(w,24,26,0,3,3,6,C.WHEEL); box(w,3,5,0,3,35,38,C.WHEEL); box(w,24,26,0,3,35,38,C.WHEEL);
+    box(w,1,2,0,3,1,2,C.LEVELER); box(w,27,28,0,3,1,2,C.LEVELER); box(w,1,2,0,3,39,40,C.LEVELER); box(w,27,28,0,3,39,40,C.LEVELER);
+    box(w,0,29,4,5,0,41,C.FRAME_D); box(w,0,29,96,97,0,41,C.FRAME); box(w,2,27,98,98,2,39,C.FRAME_D);
+    box(w,0,1,6,95,0,1,C.FRAME); box(w,28,29,6,95,0,1,C.FRAME); box(w,0,1,6,95,40,41,C.FRAME); box(w,28,29,6,95,40,41,C.FRAME);
+    box(w,0,0,6,95,2,39,C.FRAME); box(w,29,29,6,95,2,39,C.FRAME);
+    box(w,3,3,6,89,2,2,C.RAIL); box(w,26,26,6,89,2,2,C.RAIL); box(w,3,3,6,89,35,35,C.RAIL); box(w,26,26,6,89,35,35,C.RAIL);
+    box(w,11,18,91,94,0,0,C.BEZEL); box(w,20,25,92,93,0,0,C.BRAND); fillBox(w,2,27,90,95,0,1,C.FRAME);
+  }
+  function genDoor(w){
+    box(w,0,25,6,7,0,0,C.DOOR); box(w,0,25,88,89,0,0,C.DOOR); box(w,0,1,8,87,0,0,C.DOOR); box(w,24,25,8,87,0,0,C.DOOR);
+    for (let x = 2; x <= 23; x++) for (let y = 8; y <= 87; y++) if ((x + y) % 2 === 0) vox(w, x, y, 0, C.DOOR);
+    box(w,23,23,44,50,-1,-1,C.HANDLE); vox(w,23,44,0,C.HANDLE); vox(w,23,50,0,C.HANDLE);
+    box(w,0,0,12,14,-1,-1,C.HINGE); box(w,0,0,46,48,-1,-1,C.HINGE); box(w,0,0,82,84,-1,-1,C.HINGE);
+  }
+  const STACK = [
+    ['s2',6],['s2',10],['s1',14],['s1',16],['bl',18],['s2',20],['s1',24],
+    ['org',26],['pp',28],['sw',30],['sw',32],['org',34],['bl',36],
+    ['s2',38],['s1',42],['s1',44],['bl',46],['s2',48],['s1',52],['s1',54],
+    ['bl',56],['s2',58],['s1',62],['bl',64],['s2',66],['s1',70],['s1',72],
+    ['bl',74],['s2',76],['s1',80],['bl',82],['s2',84],['bl',88]
+  ];
+  const FAULT_Y = 48;
+  function genServer(w, meta, y0, h, srvIdx){
+    const yT = y0 + h - 1;
+    for (let x = 5; x <= 14; x++) if (x % 2 === 1) vox(w, x, y0, 3, C.BAY);
+    if (h === 4) for (let x = 5; x <= 14; x++) if (x % 2 === 1) vox(w, x, y0+1, 3, C.BAY);
+    const gy0 = (h === 4) ? y0 + 2 : y0;
+    for (let x = 16; x <= 19; x++) for (let y = gy0; y <= yT; y++) if ((x + y) % 2 === 0) vox(w, x, y, 3, C.GRILLE);
+    vox(w, 24, yT, 3, C.PWR);
+    fillBox(w, 4, 25, y0, yT, 3, 3, C.FRONT);
+    box(w,4,4,y0,yT,4,32,C.GRAF); box(w,25,25,y0,yT,4,32,C.GRAF);
+    if (h === 2){ box(w,4,25,y0,yT,33,33,C.GRILLE); }
+    else {
+      box(w,5,24,y0,yT,32,32,C.DARKIN); box(w,4,6,y0,yT,33,33,C.GRILLE); box(w,23,25,y0,yT,33,33,C.GRILLE);
+      meta.fans.push({ x:10, y:y0+2, z:33.7 }); meta.fans.push({ x:20, y:y0+2, z:33.7 });
+    }
+    const ly = yT + 0.5; const bases = ['GREEN','GREEN','CYAN','AMBER'];
+    for (let i = 0; i < 4; i++) meta.leds.push({ x:20.5+i, y:ly, z:2.68, base:bases[i], kind:'srv', srv:srvIdx });
+    if (y0 === FAULT_Y) meta.faultLed = { x:24.5, y:y0+0.5, z:2.62 };
+  }
+  function genBlank(w, y0){
+    vox(w,5,y0,3,C.FRAME_D); vox(w,24,y0,3,C.FRAME_D); vox(w,5,y0+1,3,C.FRAME_D); vox(w,24,y0+1,3,C.FRAME_D);
+    fillBox(w,4,25,y0,y0+1,3,3,C.BLANK);
+  }
+  function genOrganizer(w, y0){
+    box(w,4,25,y0,y0,3,4,C.ORG); for (let x = 4; x <= 25; x++) if (x % 2 === 0) vox(w, x, y0+1, 3, C.ORG);
+  }
+  function genPatchPanel(w, meta, y0){
+    for (let x = 5; x <= 22; x++) vox(w, x, y0, 3, C.PORT);
+    fillBox(w,4,25,y0,y0+1,3,3,C.PP);
+    const cols = [C.CBL_B,C.CBL_G,C.CBL_Y,C.CBL_B,C.CBL_G,C.CBL_Y,C.CBL_B,C.CBL_G];
+    const down = [5,7,9,11], up = [14,16,18,20];
+    down.forEach((x,i)=>{ vox(w,x,y0-1,2,cols[i]); vox(w,x,y0-2,2,cols[i]); });
+    up.forEach((x,i)=>{ vox(w,x,y0+2,2,cols[i+4]); vox(w,x,y0+3,2,cols[i+4]); });
+  }
+  function genSwitch(w, meta, y0){
+    for (let x = 5; x <= 20; x++) vox(w, x, y0, 3, C.PORT);
+    vox(w,22,y0,3,C.UPLINK); vox(w,23,y0,3,C.UPLINK);
+    fillBox(w,4,25,y0,y0+1,3,3,C.SW);
+    for (let x = 5; x <= 19; x += 2) meta.leds.push({ x:x+0.5, y:y0+1.5, z:2.68, base:'GREEN', kind:'sw', srv:-1 });
+  }
+  function genUnits(w, meta){
+    let srvIdx = 0;
+    for (const [type, y0] of STACK){
+      if (type === 's1') genServer(w, meta, y0, 2, srvIdx++);
+      else if (type === 's2') genServer(w, meta, y0, 4, srvIdx++);
+      else if (type === 'bl') genBlank(w, y0);
+      else if (type === 'org') genOrganizer(w, y0);
+      else if (type === 'pp') genPatchPanel(w, meta, y0);
+      else if (type === 'sw') genSwitch(w, meta, y0);
+    }
+    meta.serverCount = srvIdx;
+  }
+  function genPDUs(w, meta){
+    for (const px of [2, 27]){
+      for (let y = 10; y <= 86; y += 4) vox(w, px, y, 38, C.COPPER);
+      fillBox(w, px, px, 8, 88, 37, 38, C.PDU);
+      meta.pduLeds.push({ x:px+0.5, y:89.0, z:38.8 });
+    }
+    for (const cy of [8, 40, 68]){
+      vox(w,25,cy,34,C.CBL_K); vox(w,25,cy,35,C.CBL_K); vox(w,26,cy,36,C.CBL_K); vox(w,26,cy,37,C.CBL_K);
+    }
+  }
+  function genStatusStrip(meta){
+    const bases = ['GREEN','CYAN','GREEN','AMBER','GREEN','CYAN'];
+    for (let r = 0; r < 6; r++) for (let c = 0; c < 2; c++)
+      meta.strip.push({ x: c === 0 ? 13.6 : 16.4, y: 91.5 + r * 0.6, z: -0.22, base: bases[r] });
+  }
+  const staticWorld = newWorld(); const doorWorld = newWorld();
+  const meta = { leds:[], strip:[], fans:[], pduLeds:[], faultLed:null, serverCount:0 };
+  genRack(staticWorld); genUnits(staticWorld, meta); genPDUs(staticWorld, meta); genDoor(doorWorld); genStatusStrip(meta);
+  const dummy = new THREE.Object3D();
+  function matFor(hex){
+    const metallic = (hex === C.COPPER || hex === C.HANDLE || hex === C.LEVELER);
+    return new THREE.MeshStandardMaterial({ color: hex, roughness: metallic ? 0.35 : 0.62, metalness: metallic ? 0.85 : 0.25 });
+  }
+  function buildWorld(w, parent){
+    for (const key of Object.keys(w.colors)){
+      const cells = w.colors[key];
+      const im = new THREE.InstancedMesh(cube, matFor(Number(key)), cells.length);
+      for (let i = 0; i < cells.length; i++){
+        dummy.position.set(cells[i][0] + 0.5, cells[i][1] + 0.5, cells[i][2] + 0.5);
+        dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix);
+      }
+      im.instanceMatrix.needsUpdate = true; im.castShadow = true; im.receiveShadow = true; parent.add(im);
+    }
+  }
+  buildWorld(staticWorld, group);
+  const doorGroup = new THREE.Group(); doorGroup.position.set(2, 0, 0); buildWorld(doorWorld, doorGroup); group.add(doorGroup);
+  const ledGeo = new THREE.BoxGeometry(0.55, 0.55, 0.32);
+  const faultGeo = new THREE.BoxGeometry(0.75, 0.75, 0.34);
+  function makeLed(spec, sizeGeo){
+    const hex = LED[spec.base] !== undefined ? LED[spec.base] : LED.GREEN;
+    const mm = new THREE.Mesh(sizeGeo, new THREE.MeshStandardMaterial({ color: hex, emissive: hex, emissiveIntensity: 0.15, roughness: 0.4, metalness: 0.1 }));
+    mm.position.set(spec.x, spec.y, spec.z); group.add(mm); return mm;
+  }
+  meta.leds.filter(l => l.kind === 'srv').forEach(l => makeLed(l, ledGeo));
+  meta.leds.filter(l => l.kind === 'sw').forEach(l => makeLed(l, ledGeo));
+  meta.strip.forEach(l => makeLed(l, ledGeo));
+  meta.pduLeds.forEach(p => { const mm = makeLed({ ...p, base:'GREEN' }, ledGeo); mm.material.emissiveIntensity = 2.0; });
+  if (meta.faultLed){ const fm = makeLed({ ...meta.faultLed, base:'RED' }, faultGeo); fm.visible = false; }
+  return group;
+}
+
+/* ---- CRAC downflow. Escala nativa 0.025 m/voxel. FRONTE -z. Base voxel y=25 ---- */
+function makeCrac(THREE) {
+  const group = new THREE.Group();
+  const voxMap = new Map();
+  const vkey = (x, y, z) => ((x + 64) * 1048576 + (y + 64) * 1024 + (z + 64));
+  const vox = (x, y, z, c) => voxMap.set(vkey(x, y, z), c);
+  const COL = {
+    CAB:0x232329, CAB_D:0x17171b, SKID:0xa8a8ac, DARK:0x2a2a2e, FRAME:0x3a3a3e,
+    GRILLE:0x1a1a1e, HOUSING:0x6a6a72, MOTOR:0x55555c, TEAL:0x2f8a86, TEAL_H:0x3fbfae,
+    COPPER:0xb87333, PIPE_B:0x2f5f96, PIPE_R:0x8a3226, WATER:0x1e6f8f, PANEL:0xd8d4c8,
+    HUB:0x2f5f96, SCREEN:0x0e3844,
+  };
+  const UX0 = 42, UX1 = 77, UZ0 = 26, UZ1 = 61;
+  const BASE_Y = 25, TOP_Y = 104;
+  const FAN_CX = [51, 68], FAN_CZ = 43, FAN_R = 7;
+  for (let x = UX0; x <= UX1; x++) for (let z = UZ0; z <= UZ1; z++)
+    if (!(x >= 45 && x <= 74 && z >= 29 && z <= 58)) vox(x, BASE_Y, z, COL.CAB_D);
+  for (let y = BASE_Y + 1; y < TOP_Y; y++) for (let z = UZ0; z <= UZ1; z++) { vox(UX0, y, z, COL.CAB); vox(UX1, y, z, COL.CAB); }
+  for (let y = BASE_Y + 1; y < TOP_Y; y++) for (let x = UX0; x <= UX1; x++) vox(x, y, UZ1, COL.CAB);
+  for (const y of [46, 68, 90]) {
+    for (let z = UZ0; z <= UZ1; z++) { vox(UX0, y, z, COL.CAB_D); vox(UX1, y, z, COL.CAB_D); }
+    for (let x = UX0; x <= UX1; x++) vox(x, y, UZ1, COL.CAB_D);
+  }
+  for (let y = BASE_Y; y <= TOP_Y; y++) { vox(UX0,y,UZ0,COL.FRAME); vox(UX1,y,UZ0,COL.FRAME); vox(UX0,y,UZ1,COL.FRAME); vox(UX1,y,UZ1,COL.FRAME); }
+  for (let x = UX0; x <= UX1; x++) for (let z = UZ0; z <= UZ1; z++) {
+    let open = false;
+    for (const cx of FAN_CX) { const dx = x - cx, dz = z - FAN_CZ; if (dx*dx + dz*dz <= (FAN_R-1)*(FAN_R-1)) { open = true; break; } }
+    if (!open) vox(x, TOP_Y, z, COL.CAB);
+  }
+  FAN_CX.forEach(cx => {
+    for (let x = cx - FAN_R; x <= cx + FAN_R; x++) for (let z = FAN_CZ - FAN_R; z <= FAN_CZ + FAN_R; z++) {
+      const dx = x - cx, dz = z - FAN_CZ, d2 = dx*dx + dz*dz;
+      if (d2 <= FAN_R*FAN_R && d2 >= (FAN_R-1)*(FAN_R-1)) { vox(x, TOP_Y+1, z, COL.HOUSING); vox(x, TOP_Y+2, z, COL.HOUSING); }
+    }
+    for (let x = cx - FAN_R + 1; x <= cx + FAN_R - 1; x++) vox(x, TOP_Y+3, FAN_CZ, COL.FRAME);
+    for (let z = FAN_CZ - FAN_R + 1; z <= FAN_CZ + FAN_R - 1; z++) vox(cx, TOP_Y+3, z, COL.FRAME);
+  });
+  for (let x = UX0 + 2; x <= UX1 - 2; x++) for (let z = UZ0 + 2; z <= UZ1 - 2; z++) {
+    vox(x, 95, z, (x % 2 === 0) ? COL.PANEL : COL.FRAME); vox(x, 96, z, (x % 2 === 0) ? COL.FRAME : COL.PANEL);
+  }
+  for (let x = UX0 + 1; x <= UX1 - 1; x++) { vox(x,95,UZ0+1,COL.FRAME); vox(x,96,UZ0+1,COL.FRAME); vox(x,95,UZ1-1,COL.FRAME); vox(x,96,UZ1-1,COL.FRAME); }
+  for (let z = UZ0 + 1; z <= UZ1 - 1; z++) { vox(UX0+1,95,z,COL.FRAME); vox(UX0+1,96,z,COL.FRAME); vox(UX1-1,95,z,COL.FRAME); vox(UX1-1,96,z,COL.FRAME); }
+  const COIL_Y0 = 52, COIL_Y1 = 84;
+  const coilZ = (y) => 28 + Math.round((y - COIL_Y0) * 26 / (COIL_Y1 - COIL_Y0));
+  for (let y = COIL_Y0; y <= COIL_Y1; y++) {
+    const zc = coilZ(y);
+    for (let x = UX0 + 3; x <= UX1 - 3; x++) for (let dz = 0; dz < 3; dz++) {
+      const celosia = ((x + y) % 2 === 0); vox(x, y, zc + dz, celosia ? COL.TEAL : COL.TEAL_H);
+    }
+    vox(UX0 + 2, y, zc + 1, COL.FRAME); vox(UX1 - 2, y, zc + 1, COL.FRAME);
+  }
+  for (let x = UX0 + 3; x <= UX1 - 3; x++) { vox(x, COIL_Y0-1, coilZ(COIL_Y0)+1, COL.COPPER); vox(x, COIL_Y1+1, coilZ(COIL_Y1)+1, COL.COPPER); }
+  for (let x = UX0 + 2; x <= UX1 - 2; x++) for (let z = UZ0 + 1; z <= UZ1 - 2; z++) vox(x, 49, z, COL.SKID);
+  for (let x = UX0 + 2; x <= UX1 - 2; x++) { vox(x,50,UZ0+1,COL.SKID); vox(x,50,UZ1-2,COL.SKID); }
+  for (let z = UZ0 + 1; z <= UZ1 - 2; z++) { vox(UX0+2,50,z,COL.SKID); vox(UX1-2,50,z,COL.SKID); }
+  for (let y = 12; y <= 48; y++) vox(75, y, 30, COL.COPPER);
+  vox(75, 12, 31, COL.COPPER); vox(75, 12, 32, COL.COPPER);
+  const HX0 = 46, HX1 = 54, HZ0 = 44, HZ1 = 54;
+  for (let y = 27; y <= 42; y++) {
+    vox(HX0,y,HZ0,COL.FRAME); vox(HX1,y,HZ0,COL.FRAME); vox(HX0,y,HZ1,COL.FRAME); vox(HX1,y,HZ1,COL.FRAME);
+    for (let x = HX0; x <= HX1; x++) vox(x, y, HZ1, COL.MOTOR);
+  }
+  for (let x = HX0; x <= HX1; x++) { vox(x,42,HZ0,COL.FRAME); vox(x,27,HZ0,COL.FRAME); }
+  for (let x = HX0; x <= HX1; x++) for (let z = HZ0; z <= HZ1; z++) { vox(x,43,z,COL.HOUSING); vox(x,27,z,COL.DARK); }
+  for (let x = HX0 + 1; x <= HX1 - 1; x++) for (let z = HZ0 + 1; z <= HZ1 - 1; z++) vox(x, 28, z, COL.WATER);
+  function chwLine(y, color) {
+    for (let x = UX1 + 1; x <= 96; x++) vox(x, y, 40, color);
+    for (let dy = -2; dy <= 2; dy++) for (let dz = -2; dz <= 2; dz++) if (Math.max(Math.abs(dy), Math.abs(dz)) === 2) vox(UX1+2, y+dy, 40+dz, COL.SKID);
+    for (let dy = -2; dy <= 2; dy++) for (let dz = -2; dz <= 2; dz++) if (Math.max(Math.abs(dy), Math.abs(dz)) === 2) vox(96, y+dy, 40+dz, COL.SKID);
+    for (let x = 86; x <= 88; x++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) vox(x, y+dy, 40+dz, COL.DARK);
+    vox(87,y+2,40,COL.SKID); vox(87,y+3,40,COL.SKID); vox(86,y+4,40,COL.SKID); vox(88,y+4,40,COL.SKID);
+    vox(87,y+4,39,COL.SKID); vox(87,y+4,41,COL.SKID); vox(87,y+4,40,COL.DARK);
+  }
+  const CHW_SUP_Y = 54, CHW_RET_Y = 82;
+  chwLine(CHW_SUP_Y, COL.PIPE_B); chwLine(CHW_RET_Y, COL.PIPE_R);
+  function pipeRun(a, b, color) {
+    const dx = Math.sign(b[0]-a[0]), dy = Math.sign(b[1]-a[1]), dz = Math.sign(b[2]-a[2]);
+    const len = Math.max(Math.abs(b[0]-a[0]), Math.abs(b[1]-a[1]), Math.abs(b[2]-a[2]));
+    for (let i = 0; i <= len; i++) vox(a[0]+dx*i, a[1]+dy*i, a[2]+dz*i, color);
+  }
+  pipeRun([UX1-1,CHW_SUP_Y,40],[68,CHW_SUP_Y,40],COL.PIPE_B);
+  pipeRun([67,CHW_SUP_Y,39],[62,CHW_SUP_Y,34],COL.PIPE_B);
+  pipeRun([62,CHW_SUP_Y,33],[62,COIL_Y0,31],COL.PIPE_B);
+  pipeRun([62,COIL_Y1,54],[62,CHW_RET_Y,52],COL.PIPE_R);
+  pipeRun([62,CHW_RET_Y,51],[68,CHW_RET_Y,45],COL.PIPE_R);
+  pipeRun([69,CHW_RET_Y,44],[UX1-1,CHW_RET_Y,40],COL.PIPE_R);
+  for (let y = BASE_Y + 1; y < TOP_Y; y++) for (let x = UX0; x <= UX1; x++) vox(x, y, UZ0, COL.CAB);
+  for (let y = BASE_Y + 1; y < TOP_Y; y++) { vox(59,y,UZ0,COL.CAB_D); vox(60,y,UZ0,COL.CAB_D); }
+  for (let y = 30; y <= 40; y++) for (let x = UX0 + 3; x <= UX1 - 3; x++) if ((x + y) % 2 === 0) vox(x, y, UZ0, COL.GRILLE);
+  for (let y = 62; y <= 67; y++) { vox(56,y,UZ0-1,COL.SKID); vox(63,y,UZ0-1,COL.SKID); }
+  for (let x = 51; x <= 68; x++) for (let y = 71; y <= 81; y++) vox(x, y, UZ0, COL.CAB_D);
+  for (let x = 53; x <= 66; x++) for (let y = 73; y <= 79; y++) vox(x, y, UZ0-1, COL.SCREEN);
+  const cube = new THREE.BoxGeometry(1, 1, 1);
+  function decode(k) { const z = (k % 1024) - 64; const y = (Math.floor(k / 1024) % 1024) - 64; const x = Math.floor(k / 1048576) - 64; return [x, y, z]; }
+  const byColor = {};
+  voxMap.forEach((color, k) => { const key = color.toString(); if (!byColor[key]) byColor[key] = { color, positions: [] }; byColor[key].positions.push(decode(k)); });
+  const m = new THREE.Matrix4();
+  for (const k in byColor) {
+    const { color, positions } = byColor[k];
+    const isScreen = (color === COL.SCREEN); const isWater = (color === COL.WATER);
+    const mat = new THREE.MeshStandardMaterial({
+      color, roughness: isWater ? 0.25 : 0.5, metalness: isWater ? 0.1 : 0.55,
+      emissive: isScreen ? 0x00d4aa : 0x000000, emissiveIntensity: isScreen ? 0.85 : 0,
+    });
+    const mesh = new THREE.InstancedMesh(cube, mat, positions.length);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    positions.forEach((p, i) => { m.setPosition(p[0]+0.5, p[1]+0.5, p[2]+0.5); mesh.setMatrixAt(i, m); });
+    mesh.instanceMatrix.needsUpdate = true; group.add(mesh);
+  }
+  const ledFanMat = new THREE.MeshStandardMaterial({ color: 0xff2233, emissive: 0xff2233, emissiveIntensity: 1.4, roughness: 0.25 });
+  const ledAguaMat = new THREE.MeshStandardMaterial({ color: 0xff2233, emissive: 0xff2233, emissiveIntensity: 1.4, roughness: 0.25 });
+  const ledFan = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 0.8), ledFanMat); ledFan.position.set(55, 70, UZ0 - 0.4);
+  const ledAgua = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 0.8), ledAguaMat); ledAgua.position.set(64, 70, UZ0 - 0.4);
+  group.add(ledFan); group.add(ledAgua);
+  FAN_CX.forEach(cx => {
+    const g = new THREE.Group(); g.position.set(cx + 0.5, TOP_Y + 1.6, FAN_CZ + 0.5);
+    const bladeMat = new THREE.MeshStandardMaterial({ color: 0xff2233, roughness: 0.45, metalness: 0.6, emissive: 0xff2233, emissiveIntensity: 0.4 });
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      for (let rr = 2; rr <= 5; rr++) {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 1.4), bladeMat);
+        b.position.set(Math.cos(a) * rr, 0, Math.sin(a) * rr); b.rotation.y = -a; b.castShadow = true; g.add(b);
+      }
+    }
+    const hubMat = new THREE.MeshStandardMaterial({ color: COL.HUB, roughness: 0.35, metalness: 0.7 });
+    const hub1 = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.4, 3.4), hubMat); hub1.position.y = 0.2;
+    const hub2 = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.0, 2.4), hubMat); hub2.position.y = 1.2;
+    g.add(hub1); g.add(hub2); group.add(g);
+  });
+  return group;
+}
+
+/* ---- IN-ROW cooler. Escala nativa 0.025 m/voxel. FRONTE -z ---- */
+function makeInrow(THREE) {
+  const group = new THREE.Group();
+  const voxMap = new Map();
+  const vkey = (x, y, z) => ((x + 64) * 1048576 + (y + 64) * 1024 + (z + 64));
+  function vox(x, y, z, color) { voxMap.set(vkey(x, y, z), [x, y, z, color]); }
+  const COL = {
+    CAB:0x17171c, CAB_D:0x0e0e12, PERF:0x26262c, FRAME:0x3a3a3e, SKID:0x2e2e34,
+    HOUSING:0x3c3c46, HOUSING_D:0x2a2a32, COIL:0x1f6f66, COIL_H:0x2fa89a, COPPER:0xb87333,
+    PIPE_B:0x2f5f96, PIPE_R:0x8a3226, VALVE:0x8a8a92, DARK:0x1a1a1e,
+  };
+  const NX = 12, NY = 80, NZ = 44;
+  const FAN_Y = [12, 28, 44, 60];
+  const FAN_R2_IN = 22;
+  const BULK_Z = 10;
+  const COIL_Z0 = 24, COIL_Z1 = 29;
+  for (let x = 0; x < NX; x++) for (let z = 0; z < NZ; z++) { vox(x, 0, z, COL.SKID); vox(x, 1, z, COL.CAB_D); }
+  for (let z = 0; z < NZ; z++) for (let y = 2; y < 78; y++) vox(0, y, z, COL.CAB);
+  for (let z = 0; z < NZ; z++) for (let y = 2; y < 78; y++) vox(11, y, z, COL.CAB);
+  for (let x = 0; x < NX; x++) for (let z = 0; z < NZ; z++) { vox(x, 78, z, COL.CAB); if (x === 0 || x === NX-1 || z === 0 || z === NZ-1) vox(x, 79, z, COL.CAB_D); }
+  for (let x = 1; x < NX - 1; x++) for (let z = 1; z < NZ - 1; z++) vox(x, 77, z, COL.CAB_D);
+  for (let x = 1; x < NX - 1; x++) for (let z = 1; z < NZ - 1; z++) vox(x, 2, z, COL.CAB_D);
+  for (let x = 1; x < NX - 1; x++) for (let y = 2; y < 78; y++) { const hole = (x % 2 === 1 && y % 2 === 1); if (!hole) vox(x, y, 0, COL.PERF); }
+  for (let y = 2; y < 78; y++) { vox(1, y, 0, COL.FRAME); vox(10, y, 0, COL.FRAME); }
+  for (let x = 1; x < NX - 1; x++) for (let y = 2; y < 78; y++) { const hole = (x % 2 === 1 && y % 2 === 1); if (!hole) vox(x, y, NZ-1, COL.PERF); }
+  for (let y = 2; y < 78; y++) { vox(1, y, NZ-1, COL.FRAME); vox(10, y, NZ-1, COL.FRAME); }
+  for (let x = 1; x < NX - 1; x++) for (let y = 3; y < 77; y++) {
+    let open = false;
+    for (const cy of FAN_Y) { const dx = x - 5.5, dy = y - cy; if (dx*dx + dy*dy <= FAN_R2_IN) { open = true; break; } }
+    if (!open) vox(x, y, BULK_Z, COL.CAB_D);
+  }
+  for (const cy of FAN_Y) for (let x = 1; x < NX - 1; x++) for (let y = cy - 6; y <= cy + 6; y++) {
+    const dx = x - 5.5, dy = y - cy, d2 = dx*dx + dy*dy;
+    if (d2 >= 15 && d2 <= FAN_R2_IN) { vox(x, y, 8, COL.HOUSING); vox(x, y, 9, COL.HOUSING); vox(x, y, 11, COL.HOUSING_D); }
+  }
+  for (let x = 1; x < NX - 1; x++) for (let z = COIL_Z0 - 1; z <= COIL_Z1 + 1; z++) vox(x, 3, z, COL.SKID);
+  for (let x = 1; x < NX - 1; x++) for (let y = 4; y <= 72; y++) for (let z = COIL_Z0; z <= COIL_Z1; z++) { const c = ((x + y) % 2 === 0) ? COL.COIL : COL.COIL_H; vox(x, y, z, c); }
+  for (let y = 6; y <= 70; y += 6) for (let z = COIL_Z0 + 1; z <= COIL_Z1 - 1; z++) { vox(10, y, z, COL.COPPER); vox(10, y + 1, z, COL.COPPER); }
+  for (let x = 1; x < NX - 1; x++) for (let z = COIL_Z0 - 1; z <= COIL_Z1 + 1; z++) vox(x, 73, z, COL.FRAME);
+  for (let x = 2; x <= 9; x++) { vox(x, 4, COIL_Z1 + 2, COL.PIPE_B); vox(x, 4, COIL_Z1 + 1, COL.PIPE_B); }
+  for (let x = 2; x <= 9; x++) { vox(x, 4, COIL_Z0 - 2, COL.PIPE_R); vox(x, 4, COIL_Z0 - 1, COL.PIPE_R); }
+  function pipeRun(a, b, color) {
+    const dx = Math.sign(b[0]-a[0]), dy = Math.sign(b[1]-a[1]), dz = Math.sign(b[2]-a[2]);
+    const len = Math.max(Math.abs(b[0]-a[0]), Math.abs(b[1]-a[1]), Math.abs(b[2]-a[2]));
+    for (let i = 0; i <= len; i++) vox(a[0]+dx*i, a[1]+dy*i, a[2]+dz*i, color);
+  }
+  pipeRun([3,2,47],[3,2,32],COL.PIPE_B); vox(3, 3, 31, COL.PIPE_B);
+  vox(2,2,39,COL.VALVE); vox(4,2,39,COL.VALVE); vox(3,3,39,COL.VALVE); vox(3,4,39,COL.VALVE);
+  vox(2,5,39,COL.DARK); vox(4,5,39,COL.DARK); vox(3,5,38,COL.DARK); vox(3,5,40,COL.DARK);
+  for (let y = 1; y <= 3; y++) vox(3, y, 47, COL.FRAME); vox(2,2,47,COL.FRAME); vox(4,2,47,COL.FRAME);
+  vox(3,0,45,COL.FRAME); vox(3,1,45,COL.FRAME);
+  vox(8, 3, 22, COL.PIPE_R); pipeRun([8,2,22],[8,2,47],COL.PIPE_R);
+  vox(7,2,41,COL.VALVE); vox(9,2,41,COL.VALVE); vox(8,3,41,COL.VALVE); vox(8,4,41,COL.VALVE);
+  vox(7,5,41,COL.DARK); vox(9,5,41,COL.DARK); vox(8,5,40,COL.DARK); vox(8,5,42,COL.DARK);
+  for (let y = 1; y <= 3; y++) vox(8, y, 47, COL.FRAME); vox(7,2,47,COL.FRAME); vox(9,2,47,COL.FRAME);
+  vox(8,0,45,COL.FRAME); vox(8,1,45,COL.FRAME);
+  for (let x = 2; x <= 9; x++) for (let y = 63; y <= 75; y++) { vox(x, y, 0, COL.CAB_D); vox(x, y, 1, COL.CAB_D); }
+  for (let x = 2; x <= 9; x++) { vox(x,67,0,COL.FRAME); vox(x,73,0,COL.FRAME); }
+  for (let y = 67; y <= 73; y++) { vox(2,y,0,COL.FRAME); vox(9,y,0,COL.FRAME); }
+  const cube = new THREE.BoxGeometry(1, 1, 1);
+  const byColor = {};
+  for (const [, v] of voxMap) { const k = v[3].toString(); if (!byColor[k]) byColor[k] = { color: v[3], positions: [] }; byColor[k].positions.push(v); }
+  for (const k in byColor) {
+    const { color, positions } = byColor[k];
+    const isCoil = (color === COL.COIL || color === COL.COIL_H);
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: isCoil ? 0.45 : 0.55, metalness: isCoil ? 0.35 : 0.5 });
+    const mesh = new THREE.InstancedMesh(cube, mat, positions.length);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    const m = new THREE.Matrix4();
+    positions.forEach((p, i) => { m.setPosition(p[0]+0.5, p[1]+0.5, p[2]+0.5); mesh.setMatrixAt(i, m); });
+    mesh.instanceMatrix.needsUpdate = true; group.add(mesh);
+  }
+  const screenMat = new THREE.MeshStandardMaterial({ color: 0x0e3844, emissive: 0x00d4aa, emissiveIntensity: 0.35, roughness: 0.3, metalness: 0.2 });
+  const screenMesh = new THREE.Mesh(new THREE.BoxGeometry(6, 5, 0.4), screenMat); screenMesh.position.set(6.0, 70.5, 0.15); group.add(screenMesh);
+  function makeLed(x, y) {
+    const mat = new THREE.MeshStandardMaterial({ color: 0xff2233, emissive: 0xff2233, emissiveIntensity: 1.3, roughness: 0.25, metalness: 0.3 });
+    const led = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.6), mat); led.position.set(x, y, 0.1); group.add(led);
+  }
+  makeLed(3.5, 65); makeLed(6.0, 65); makeLed(8.5, 65);
+  return group;
+}
+
+/* ---- PDU datacenter. Escala nativa 0.025 m/voxel. FRONTE +z ---- */
+function makePdu(THREE) {
+  const group = new THREE.Group();
+  const PAL = { CAB:0xc9ced6, CABD:0x8b93a0, BLK:0x15181d, STEEL:0x59616e, CU:0xc4712e, CUD:0x8f4e1d, RED:0xc22a2a, YEL:0xffd23f, PANEL:0x394049, CBK:0x1b1e24, CRD:0xa32222 };
+  const NX = 36, NY = 80, NZ = 36;
+  const LEGS = [[6,11],[15,20],[24,29]];
+  const CABLE_L = [8,9,10,11], CABLE_R = [24,25,26,27];
+  function newVM(){ return { map:new Map(), dupSkipped:0 }; }
+  function vox(vm,x,y,z,c){ const k = x+','+y+','+z; if (vm.map.has(k)) { vm.dupSkipped++; return false; } vm.map.set(k,{x,y,z,c}); return true; }
+  function inLeg(x){ return LEGS.some(([lo,hi]) => x>=lo && x<=hi); }
+  function cableGapX(x){ return (x>=8 && x<=11) || (x>=24 && x<=27); }
+  function breakerLayout(){
+    const out = []; const cols = [[3,7],[11,15],[20,24],[28,32]]; const ledXs = [7.7, 10.3, 24.7, 27.3];
+    for (let ci=0; ci<4; ci++) for (let r=0; r<9; r++) { const y = 42 + r*3; const [lo,hi] = cols[ci]; out.push({ ci, r, lo, hi, cx:(lo+hi)/2 + 0.5, y, ledx: ledXs[ci] }); }
+    return out;
+  }
+  function buildStaticVox(){
+    const vm = newVM();
+    for (let x=0; x<NX; x++) for (let y=0; y<NY; y++) for (let z=0; z<NZ; z++) {
+      const bnd = (x===0 || x===NX-1 || z===0 || y===NY-1); if (!bnd) continue;
+      let c = PAL.CAB;
+      if (y <= 3) c = PAL.BLK;
+      else if ((x===0||x===NX-1) && y>=8 && y<=20 && z>=6 && z<=30 && (y+z)%2===0) c = PAL.CABD;
+      else if (z===0 && y>=8 && y<=20 && x>=6 && x<=30 && (y+x)%2===0) c = PAL.CABD;
+      else if (y===NY-1 && (x===0||x===NX-1||z===0||z===NZ-1)) c = PAL.CABD;
+      vox(vm,x,y,z,c);
+    }
+    for (let x=1; x<NX-1; x++) {
+      for (let y=0; y<=4; y++) { if (y>=1 && y<=3 && cableGapX(x)) continue; vox(vm,x,y,NZ-1, y<=3 ? PAL.BLK : PAL.CAB); }
+      for (let y=69; y<=78; y++) { let c = PAL.CAB; if (x>=2 && x<=33 && y<=76) c = PAL.BLK; vox(vm,x,y,NZ-1,c); }
+    }
+    for (let x=5; x<=30; x++) for (let z=14; z<=22; z++) { vox(vm,x,4,z,PAL.BLK); vox(vm,x,5,z,PAL.BLK); }
+    for (let x=5; x<=30; x++) for (let y=6; y<=23; y++) for (let z=14; z<=22; z++) { const isCore = (y<=7 || y>=22 || inLeg(x)); if (isCore) vox(vm,x,y,z,PAL.STEEL); }
+    for (const [lo,hi] of LEGS) {
+      for (let y=9; y<=20; y++) {
+        const c = (y%3===0) ? PAL.CUD : PAL.CU;
+        for (let x=lo-1; x<=hi+1; x++) { vox(vm,x,y,12,c); vox(vm,x,y,13,c); vox(vm,x,y,23,c); vox(vm,x,y,24,c); }
+        for (let z=14; z<=22; z++) { vox(vm,lo-1,y,z,c); vox(vm,hi+1,y,z,c); }
+      }
+      for (let y=24; y<=25; y++) for (let z=17; z<=18; z++) { vox(vm,lo+2,y,z,PAL.CU); vox(vm,lo+3,y,z,PAL.CU); }
+    }
+    for (const xx of [17,18]) { for (let z=19; z<=29; z++) vox(vm,xx,25,z,PAL.CU); for (let y=25; y<=27; y++) vox(vm,xx,y,30,PAL.CU); }
+    for (const xx of [17,18]) {
+      for (let y=24; y<=78; y++) { const c = (y>=70 && y<=72) || (y>=40 && y<=42) ? PAL.RED : PAL.CABD; vox(vm,xx,y,-2,c); }
+      for (let y=77; y<=78; y++) vox(vm,xx,y,-1,PAL.CABD);
+      for (let y=28; y<=77; y++) vox(vm,xx,y,1,PAL.RED);
+      for (let z=2; z<=30; z++) vox(vm,xx,28,z,PAL.RED);
+    }
+    for (let x=13; x<=22; x++) for (let y=29; y<=38; y++) for (let z=31; z<=33; z++) {
+      let c = PAL.BLK; if (z===33) { if (y===29) c = PAL.RED; else if (y===37 && x>=14 && x<=17) c = PAL.YEL; } vox(vm,x,y,z,c);
+    }
+    for (const [lo,hi] of [[2,16],[19,33]]) for (let x=lo; x<=hi; x++) for (let y=40; y<=68; y++) vox(vm,x,y,31,PAL.PANEL);
+    for (const bx of [8,9,10,25,26,27]) for (let y=40; y<=67; y++) vox(vm,bx,y,32, (y%6===0) ? PAL.CUD : PAL.CU);
+    for (let x=8; x<=27; x++) vox(vm,x,39,31,PAL.CU);
+    for (const b of breakerLayout()) {
+      for (let x=b.lo; x<=b.hi; x++) for (let y=b.y; y<=b.y+1; y++) for (let z=32; z<=33; z++) vox(vm,x,y,z,PAL.BLK);
+      if (b.ci===0) vox(vm, 2, b.y, 32, PAL.YEL); if (b.ci===3) vox(vm, 33, b.y, 32, PAL.YEL);
+    }
+    const runCable = (x, right) => {
+      const c = (x%2===0) ? PAL.CBK : PAL.CRD;
+      for (let y=3; y<=39; y++) vox(vm,x,y,33,c);
+      for (let z=33; z<=36; z++) vox(vm,x,2,z,c); vox(vm,x,1,37,c);
+      if (!right) { for (let z=38; z<=48; z++) vox(vm,x,0,z,c); }
+      else { const i = 27-x; for (let z=38; z<=40+i; z++) vox(vm,x,0,z,c); for (let xx=x+1; xx<=46; xx++) vox(vm,xx,0,40+i,c); }
+    };
+    for (const x of CABLE_L) runCable(x,false); for (const x of CABLE_R) runCable(x,true);
+    return { cells:[...vm.map.values()], dupSkipped: vm.dupSkipped };
+  }
+  function buildDoorVox(){
+    const vm = newVM();
+    for (let x=1; x<=34; x++) for (let y=5; y<=68; y++) {
+      let c = PAL.CAB;
+      if (y>=33 && y<=36 && x>=14 && x<=21) c = ((x+y)%2===0) ? PAL.YEL : PAL.BLK;
+      else if (y>=10 && y<=22 && x>=4 && x<=31 && y%2===0) c = PAL.CABD;
+      else if (y===60 && x>=4 && x<=31) c = PAL.CABD;
+      else if (y===5 || y===68 || x===1 || x===34) c = PAL.CABD;
+      vox(vm,x,y,0,c);
+    }
+    for (let y=35; y<=39; y++) vox(vm,32,y,1,PAL.BLK); vox(vm,31,35,1,PAL.BLK); vox(vm,31,39,1,PAL.BLK);
+    return { cells:[...vm.map.values()], dupSkipped: vm.dupSkipped };
+  }
+  const FONT = {
+    '0':["111","101","101","101","111"], '1':["010","110","010","010","111"], '2':["111","001","111","100","111"], '3':["111","001","111","001","111"],
+    '4':["101","101","111","001","001"], '5':["111","100","111","001","111"], '6':["111","100","111","101","111"], '7':["111","001","001","010","010"],
+    '8':["111","101","111","101","111"], '9':["111","101","111","001","111"]
+  };
+  const DIGIT_SLOTS = [3,7, 13,17,21, 27,31]; const DOT_X = [11,25];
+  const cube = new THREE.BoxGeometry(1,1,1);
+  function matFor(hex){ const isCu = (hex===PAL.CU || hex===PAL.CUD); return new THREE.MeshStandardMaterial({ color: hex, metalness: isCu ? 0.85 : (hex===PAL.STEEL ? 0.6 : 0.12), roughness: isCu ? 0.35 : (hex===PAL.CAB ? 0.55 : 0.6) }); }
+  function buildInstanced(cells){
+    const byColor = new Map();
+    for (const c of cells) { if(!byColor.has(c.c)) byColor.set(c.c,[]); byColor.get(c.c).push(c); }
+    const m4 = new THREE.Matrix4();
+    for (const [hex,list] of byColor) {
+      const im = new THREE.InstancedMesh(cube, matFor(hex), list.length);
+      list.forEach((c,i)=>{ m4.makeTranslation(c.x+0.5, c.y+0.5, c.z+0.5); im.setMatrixAt(i,m4); });
+      im.instanceMatrix.needsUpdate = true; im.castShadow = true; im.receiveShadow = true; group.add(im);
+    }
+  }
+  const staticData = buildStaticVox(); buildInstanced(staticData.cells);
+  const doorData = buildDoorVox();
+  const doorGroup = new THREE.Group(); doorGroup.position.set(1,0,35);
+  {
+    const byColor = new Map();
+    for (const c of doorData.cells) { if(!byColor.has(c.c)) byColor.set(c.c,[]); byColor.get(c.c).push(c); }
+    const m4 = new THREE.Matrix4();
+    for (const [hex,list] of byColor) {
+      const im = new THREE.InstancedMesh(cube, matFor(hex), list.length);
+      list.forEach((c,i)=>{ m4.makeTranslation(c.x+0.5-1, c.y+0.5, c.z+0.5); im.setMatrixAt(i,m4); });
+      im.instanceMatrix.needsUpdate = true; im.castShadow = true; im.receiveShadow = true; doorGroup.add(im);
+    }
+  }
+  group.add(doorGroup);
+  const matLever = new THREE.MeshStandardMaterial({ color:0xe8eaee, roughness:0.4, metalness:0.2 });
+  const matLedOn = new THREE.MeshStandardMaterial({ color:0x00331a, emissive:0x00ff66, emissiveIntensity:1.4 });
+  const matDigit = new THREE.MeshStandardMaterial({ color:0x00331a, emissive:0x00ff66, emissiveIntensity:1.3 });
+  const layout = breakerLayout();
+  for (const b of layout) {
+    const lv = new THREE.Mesh(cube, matLever); lv.scale.set(1.1, 1.5, 0.9); lv.position.set(b.cx, b.y+1 + 0.85, 34.35); lv.castShadow = true; group.add(lv);
+    const led = new THREE.Mesh(cube, matLedOn); led.scale.set(0.55,0.55,0.55); led.position.set(b.ledx, b.y+1, 34.3); group.add(led);
+  }
+  const mainLever = new THREE.Mesh(cube, matLever); mainLever.scale.set(1.8, 3.4, 1.1); mainLever.position.set(18, 36 + 2.2, 34.6); mainLever.castShadow = true; group.add(mainLever);
+  const pilot = new THREE.Mesh(cube, matLedOn.clone()); pilot.scale.set(1.2,1.2,0.8); pilot.position.set(31.5, 78, 35.5); group.add(pilot);
+  const digitPools = DIGIT_SLOTS.map(sx => {
+    const grid = [];
+    for (let c=0; c<3; c++) { grid[c]=[];
+      for (let r=0; r<5; r++) { const dc = new THREE.Mesh(cube, matDigit); dc.scale.set(0.72,0.72,0.5); dc.position.set(sx+c+0.5, 70+(4-r)+0.5, 35.75); group.add(dc); grid[c][r] = dc; }
+    }
+    return grid;
+  });
+  for (const dx of DOT_X) { const dot = new THREE.Mesh(cube, matDigit); dot.scale.set(0.6,0.6,0.5); dot.position.set(dx+0.5, 70.7, 35.75); group.add(dot); }
+  const str7 = '4548053';
+  for (let i=0; i<7; i++) { const bm = FONT[str7[i]] || FONT['0']; for (let c=0; c<3; c++) for (let r=0; r<5; r++) digitPools[i][c][r].visible = (bm[r][c] === '1'); }
+  return group;
+}
+
+/* ---- UPS 40kVA. Escala nativa 0.025 m/voxel. FRONTE -z ---- */
+function makeUps(THREE) {
+  const group = new THREE.Group();
+  const COL = {
+    CAB:0x17191e, CAB_D:0x0f1013, FRAME:0x2e3038, STEEL:0x8a8d94, GRILLE:0x0a0b0e, COPPER:0xb87333,
+    MOD:0x23262c, ACC_A:0xffb300, ACC_G:0x0f8a4f, ACC_R:0xc22233, ACC_B:0x3aa0ff, BAT:0x35373d,
+    BAT_D:0x24262b, TERM_R:0xd42a2a, TERM_K:0x111114, SHELF:0x3a3d44,
+  };
+  const voxMap = new Map();
+  const vkey = (x, y, z) => ((x + 64) * 1048576) + ((y + 64) * 1024) + (z + 64);
+  function vox(x, y, z, c) { voxMap.set(vkey(x, y, z), [x, y, z, c]); }
+  const UX0 = 0, UX1 = 23, BX0 = 24, BX1 = 47, D = 34, H = 70;
+  for (let x = UX0; x <= BX1; x++) for (let z = 0; z < D; z++) { vox(x, 0, z, COL.FRAME); vox(x, 1, z, COL.CAB_D); }
+  function sideWall(wx, passthrough) {
+    for (let y = 2; y < H; y++) for (let z = 0; z < D; z++) { if (passthrough && y >= 50 && y <= 54 && z >= 13 && z <= 19) continue; vox(wx, y, z, COL.CAB); }
+  }
+  sideWall(UX0, false); sideWall(UX1, true); sideWall(BX0, true); sideWall(BX1, false);
+  const REAR_FANS = [[12, 50], [12, 32]];
+  for (let x = UX0; x <= UX1; x++) for (let y = 2; y < H; y++) {
+    let hole = false;
+    for (const [cx, cy] of REAR_FANS) { const dx = x - cx, dy = y - cy; if (dx*dx + dy*dy <= 25) { hole = true; break; } }
+    if (hole) { if (y % 3 === 0) vox(x, y, D - 1, COL.GRILLE); continue; }
+    vox(x, y, D - 1, COL.CAB);
+  }
+  REAR_FANS.forEach(([cx, cy]) => {
+    for (let x = cx - 6; x <= cx + 6; x++) for (let y = cy - 6; y <= cy + 6; y++) { const dx = x - cx, dy = y - cy, d2 = dx*dx + dy*dy; if (d2 > 25 && d2 <= 36) vox(x, y, D - 1, COL.FRAME); }
+  });
+  for (let x = BX0; x <= BX1; x++) for (let y = 2; y < H; y++) { const vent = (x >= BX0 + 4 && x <= BX1 - 4 && y >= 8 && y <= 62 && (x + y) % 2 === 0 && (y % 15) < 6); vox(x, y, D - 1, vent ? COL.GRILLE : COL.CAB); }
+  for (let x = UX0; x <= UX1; x++) for (let z = 0; z < D; z++) { const dx = x - 12, dz = z - 16; if (dx*dx + dz*dz <= 25) { if (z % 3 === 0) vox(x, H, z, COL.GRILLE); continue; } vox(x, H, z, COL.CAB); }
+  for (let x = 6; x <= 18; x++) for (let z = 10; z <= 22; z++) { const dx = x - 12, dz = z - 16, d2 = dx*dx + dz*dz; if (d2 > 25 && d2 <= 36) { vox(x, H, z, COL.FRAME); vox(x, H + 1, z, COL.FRAME); } }
+  for (let x = BX0; x <= BX1; x++) for (let z = 0; z < D; z++) vox(x, H, z, COL.CAB);
+  for (let x = UX0 + 1; x < UX1; x++) for (let y = 2; y < H; y++) { let c = COL.CAB; if (x === UX0 + 1 || x === UX1 - 1 || y === 2 || y === H - 1) c = COL.CAB_D; else if (y >= 4 && y <= 14 && (x + y) % 2 === 0) c = COL.GRILLE; vox(x, y, 0, c); }
+  for (let y = 32; y <= 38; y++) vox(UX1 - 2, y, -1, COL.STEEL);
+  for (let x = BX0 + 1; x < BX1; x++) for (let y = 2; y < H; y++) { let c = COL.CAB; if (x === BX0 + 1 || x === BX1 - 1 || y === 2 || y === H - 1) c = COL.CAB_D; else if (y >= 6 && y <= 62 && (x + y) % 2 === 0 && (y % 14) < 6) c = COL.GRILLE; vox(x, y, 0, c); }
+  for (let y = 32; y <= 38; y++) vox(BX0 + 2, y, -1, COL.STEEL);
+  function pipeRun(a, b, color) {
+    const dx = Math.sign(b[0]-a[0]), dy = Math.sign(b[1]-a[1]), dz = Math.sign(b[2]-a[2]);
+    const len = Math.max(Math.abs(b[0]-a[0]), Math.abs(b[1]-a[1]), Math.abs(b[2]-a[2]));
+    for (let i = 0; i <= len; i++) vox(a[0]+dx*i, a[1]+dy*i, a[2]+dz*i, color);
+  }
+  function buildModule(y0, y1, accent) {
+    for (let x = 2; x <= 21; x++) for (let y = y0; y <= y1; y++) for (let z = 4; z <= 26; z++) { const shell = (x === 2 || x === 21 || y === y0 || y === y1 || z === 4 || z === 26); if (shell) vox(x, y, z, COL.MOD); }
+    for (let x = 3; x <= 20; x++) vox(x, y0 + 1, 3, accent);
+    for (let x = 4; x <= 19; x++) for (let y = y0 + 3; y <= y1 - 2; y++) if ((x + y) % 2 === 0) vox(x, y, 3, COL.GRILLE);
+    vox(19, y1 - 1, 3, accent);
+  }
+  buildModule(14, 25, COL.ACC_A); buildModule(29, 40, COL.ACC_G); buildModule(44, 52, COL.ACC_R); buildModule(56, 63, COL.ACC_B);
+  for (const bx of [6, 12, 18]) { for (let y = 6; y <= 66; y++) vox(bx, y, 29, COL.COPPER); for (const my of [20, 35, 48, 60]) pipeRun([bx, my, 27], [bx, my, 28], COL.COPPER); }
+  for (let x = 6; x <= 18; x++) vox(x, 66, 29, COL.COPPER);
+  function buildBreaker(cx, accent) {
+    for (let x = cx; x <= cx + 4; x++) for (let y = 4; y <= 11; y++) for (let z = 5; z <= 9; z++) { const shell = (x === cx || x === cx + 4 || y === 4 || y === 11 || z === 5 || z === 9); if (shell) vox(x, y, z, COL.MOD); }
+    for (let x = cx + 1; x <= cx + 3; x++) vox(x, 11, 4, accent);
+  }
+  buildBreaker(2, COL.ACC_A); buildBreaker(9, COL.ACC_B); buildBreaker(16, COL.ACC_G);
+  pipeRun([1,12,7],[1,19,7],COL.ACC_A); pipeRun([1,19,7],[2,19,6],COL.ACC_A);
+  pipeRun([22,12,7],[22,34,7],COL.ACC_G); pipeRun([21,34,7],[22,34,7],COL.ACC_G);
+  pipeRun([20,48,16],[22,48,16],COL.ACC_R); pipeRun([22,48,16],[22,52,16],COL.ACC_R); pipeRun([22,52,16],[25,52,16],COL.ACC_R);
+  pipeRun([11,42,2],[11,16,2],COL.ACC_B); pipeRun([11,16,2],[11,16,3],COL.ACC_B);
+  function buildBattery(x0, y0, z0) {
+    for (let x = x0; x < x0 + 6; x++) for (let y = y0; y < y0 + 8; y++) for (let z = z0; z < z0 + 10; z++) { const shell = (x === x0 || x === x0 + 5 || y === y0 || y === y0 + 7 || z === z0 || z === z0 + 9); if (!shell) continue; vox(x, y, z, (y === y0 + 7) ? COL.BAT_D : COL.BAT); }
+    vox(x0 + 1, y0 + 8, z0 + 1, COL.TERM_R); vox(x0 + 4, y0 + 8, z0 + 1, COL.TERM_K);
+  }
+  const SHELF_Y = [5, 20, 35, 50]; const BAT_X = [BX0 + 2, BX0 + 9, BX0 + 16];
+  SHELF_Y.forEach(sy => {
+    for (let x = BX0 + 1; x < BX1; x++) for (let z = 2; z < D - 2; z++) vox(x, sy, z, COL.SHELF);
+    for (let r = 0; r < 2; r++) { const z0 = 4 + r * 13; BAT_X.forEach(bx => buildBattery(bx, sy + 1, z0)); }
+    pipeRun([BX0 + 7, sy + 9, 5], [BX0 + 8, sy + 9, 5], COL.ACC_R); pipeRun([BX0 + 14, sy + 9, 5],[BX0 + 15, sy + 9, 5], COL.ACC_R);
+  });
+  pipeRun([25,52,16],[30,52,12],COL.ACC_R); pipeRun([46,8,4],[46,58,4],COL.ACC_R); pipeRun([46,8,6],[46,58,6],COL.TERM_K);
+  const cube = new THREE.BoxGeometry(1, 1, 1);
+  const EMISSIVE = { [COL.ACC_A]:0.5, [COL.ACC_G]:0.5, [COL.ACC_R]:0.5, [COL.ACC_B]:0.5, [COL.TERM_R]:0.6, [COL.COPPER]:0.08 };
+  const byColor = {};
+  for (const v of voxMap.values()) { const c = v[3]; if (!byColor[c]) byColor[c] = []; byColor[c].push(v); }
+  const m4 = new THREE.Matrix4();
+  for (const c in byColor) {
+    const color = Number(c); const emis = EMISSIVE[color] || 0;
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.35, emissive: emis ? color : 0x000000, emissiveIntensity: emis });
+    const arr = byColor[c]; const mesh = new THREE.InstancedMesh(cube, mat, arr.length);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    arr.forEach((p, i) => { m4.setPosition(p[0]+0.5, p[1]+0.5, p[2]+0.5); mesh.setMatrixAt(i, m4); });
+    mesh.instanceMatrix.needsUpdate = true; group.add(mesh);
+  }
+  return group;
+}
+
+/* ---- DRY COOLER exterior. Escala nativa 0.05 m/voxel. Largo=eje X, fans arriba +y ---- */
+function makeDryCooler(THREE) {
+  const group = new THREE.Group();
+  const COL = {
+    STEEL:{c:0xdfe3e8}, STEEL_D:{c:0xaab2ba}, WHITE:{c:0xf2f4f7}, FRAME:{c:0x59626b}, ALU:{c:0xc4cdd4}, ALU_D:{c:0x939ea8},
+    BLACK:{c:0x16191d}, GUARD:{c:0x2a3138}, RED:{c:0xd42a2a}, RED_D:{c:0x8f1c1c}, BLUE:{c:0x2a6bd4}, BLUE_D:{c:0x1c4a8f},
+    TEAL:{c:0x00d4aa, emissive:0x00d4aa, ei:0.9}, LOUVER:{c:0x93a0aa, transparent:true, opacity:0.32}
+  };
+  const L = 160, W = 46, H = 44;
+  const FAN_XC = [16, 48, 80, 112, 144]; const FAN_ZC = [12, 34]; const FAN_R_HOLE = 9; const LEG_X = [3, 33, 63, 93, 123, 153];
+  const voxMap = new Map();
+  const vkey = (x, y, z) => x + ',' + y + ',' + z;
+  function vox(x, y, z, ck) { x = Math.round(x); y = Math.round(y); z = Math.round(z); const k = vkey(x, y, z); if (voxMap.has(k)) return; voxMap.set(k, ck); }
+  function box(x0, x1, y0, y1, z0, z1, ck) { for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) vox(x, y, z, ck); }
+  for (const lx of LEG_X) { for (const [z0, z1] of [[1, 5], [40, 44]]) { box(lx, lx + 3, 0, 4, z0, z1, 'FRAME'); box(lx - 1, lx + 4, 0, 0, z0 - 1, z1 + 1, 'STEEL_D'); } }
+  box(0, L - 1, 5, 7, 0, 3, 'STEEL_D'); box(0, L - 1, 5, 7, W - 4, W - 1, 'STEEL_D');
+  for (const lx of LEG_X) box(lx, lx + 3, 5, 7, 0, W - 1, 'FRAME');
+  box(0, 1, 8, 34, 0, W - 1, 'STEEL'); box(L - 2, L - 1, 8, 34, 0, W - 1, 'STEEL');
+  for (let x = 3; x <= L - 4; x++) {
+    for (let s = 0; s <= 25; s++) {
+      const y = 8 + s; const zA = 3 + Math.round(s * 17 / 25); const zB = (W - 4) - Math.round(s * 17 / 25);
+      if (x % 14 === 5) { vox(x, y, zA, 'ALU_D'); vox(x, y, zA + 1, 'ALU_D'); vox(x, y, zB, 'ALU_D'); vox(x, y, zB - 1, 'ALU_D'); }
+      else { if ((x + s) % 2 === 0) { vox(x, y, zA, 'ALU'); vox(x, y, zB, 'ALU'); } else { vox(x, y, zA + 1, 'ALU'); vox(x, y, zB - 1, 'ALU'); } }
+    }
+  }
+  box(2, L - 3, 34, 34, 20, 26, 'STEEL_D');
+  box(2, L - 3, 33, 33, 20, 21, 'RED'); box(2, L - 3, 33, 33, 25, 26, 'RED'); box(2, L - 3, 9, 9, 4, 5, 'BLUE'); box(2, L - 3, 9, 9, 40, 41, 'BLUE');
+  for (const [hx0, hx1] of [[-3, -1], [L, L + 2]]) { box(hx0, hx1, 8, 33, 9, 11, 'RED'); box(hx0, hx1, 8, 33, 35, 37, 'BLUE'); box(hx0, hx1, 34, 34, 9, 11, 'RED_D'); box(hx0, hx1, 34, 34, 35, 37, 'BLUE_D'); }
+  box(-7, -4, 29, 31, 9, 11, 'RED'); box(-8, -8, 27, 33, 7, 13, 'RED_D'); box(-7, -4, 10, 12, 35, 37, 'BLUE'); box(-8, -8, 8, 14, 33, 39, 'BLUE_D');
+  for (const z of [2, W - 3]) { for (let x = 2; x <= L - 3; x++) { for (let y = 9; y <= 34; y++) { if (x % 19 === 2) { vox(x, y, z, 'STEEL_D'); continue; } if (y % 3 === 0) vox(x, y, z, 'LOUVER'); else if ((x + y) % 2 === 0) vox(x, y, z, 'LOUVER'); } } }
+  for (let x = 0; x <= L - 1; x++) { for (let z = 0; z <= W - 1; z++) { let inHole = false; for (const cx of FAN_XC) { for (const cz of FAN_ZC) { const d = Math.hypot(x + 0.5 - cx, z + 0.5 - cz); if (d < FAN_R_HOLE + 0.6) { inHole = true; break; } } if (inHole) break; } if (!inHole) vox(x, 35, z, 'STEEL'); } }
+  box(0, L - 1, 36, 36, 0, 1, 'STEEL_D'); box(0, L - 1, 36, 36, W - 2, W - 1, 'STEEL_D'); box(0, 1, 36, 36, 0, W - 1, 'STEEL_D'); box(L - 2, L - 1, 36, 36, 0, W - 1, 'STEEL_D');
+  for (const cx of FAN_XC) {
+    for (const cz of FAN_ZC) {
+      for (let y = 36; y <= 40; y++) for (let dx = -12; dx <= 12; dx++) for (let dz = -12; dz <= 12; dz++) { const d = Math.hypot(dx, dz); if (d >= 9.5 && d <= 11.2) vox(cx + dx, y, cz + dz, y === 40 ? 'STEEL_D' : 'STEEL'); }
+      for (const r of [3, 6, 9]) for (let dx = -10; dx <= 10; dx++) for (let dz = -10; dz <= 10; dz++) { if (Math.abs(Math.hypot(dx, dz) - r) < 0.55) vox(cx + dx, 41, cz + dz, 'GUARD'); }
+      for (let a = 0; a < 8; a++) { const ang = a * Math.PI / 4; for (let t = 0; t <= 9.6; t += 0.8) vox(cx + Math.cos(ang) * t, 41, cz + Math.sin(ang) * t, 'GUARD'); }
+    }
+  }
+  box(118, 134, 9, 25, W, W + 5, 'STEEL_D'); box(118, 134, 25, 25, W, W + 5, 'FRAME'); box(118, 118, 9, 25, W, W + 5, 'FRAME'); box(134, 134, 9, 25, W, W + 5, 'FRAME');
+  box(121, 131, 18, 22, W + 6, W + 6, 'TEAL'); box(120, 132, 17, 23, W + 6, W + 6, 'BLACK'); box(126, 127, 0, 8, W + 1, W + 2, 'FRAME');
+  for (const ly of [18, 20, 22]) box(L, L, ly, ly, 17, 29, 'FRAME'); box(L, L, 16, 24, 15, 31, 'WHITE'); box(L, L, 15, 25, 14, 32, 'FRAME');
+  const cube = new THREE.BoxGeometry(1, 1, 1); const dummy = new THREE.Object3D();
+  const byColor = new Map();
+  for (const [k, ck] of voxMap) { const [x, y, z] = k.split(',').map(Number); let arr = byColor.get(ck); if (!arr) { arr = []; byColor.set(ck, arr); } arr.push({ x, y, z }); }
+  for (const [ck, cells] of byColor) {
+    const p = COL[ck];
+    const mat = new THREE.MeshStandardMaterial({ color: p.c, roughness: p.transparent ? 0.6 : 0.55, metalness: 0.25, transparent: !!p.transparent, opacity: p.opacity !== undefined ? p.opacity : 1 });
+    if (p.emissive) { mat.emissive = new THREE.Color(p.emissive); mat.emissiveIntensity = p.ei || 0.8; }
+    if (p.transparent) { mat.depthWrite = false; mat.side = THREE.DoubleSide; }
+    const im = new THREE.InstancedMesh(cube, mat, cells.length);
+    cells.forEach((v, i) => { dummy.position.set(v.x + 0.5, v.y + 0.5, v.z + 0.5); dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix); });
+    im.instanceMatrix.needsUpdate = true;
+    if (!p.transparent) { im.castShadow = true; im.receiveShadow = true; }
+    group.add(im);
+  }
+  const bladeMat = new THREE.MeshStandardMaterial({ color: 0x16191d, roughness: 0.4, metalness: 0.55 });
+  const hubMat = new THREE.MeshStandardMaterial({ color: 0x2a3138, roughness: 0.35, metalness: 0.6 });
+  for (const cx of FAN_XC) {
+    for (const cz of FAN_ZC) {
+      const g = new THREE.Group(); g.position.set(cx, 38.6, cz);
+      const hub = new THREE.Mesh(new THREE.BoxGeometry(3, 2.6, 3), hubMat); hub.castShadow = true; g.add(hub);
+      for (let b = 0; b < 7; b++) {
+        const bg = new THREE.Group(); bg.rotation.y = b * Math.PI * 2 / 7;
+        for (let r = 2.2; r <= 8; r += 1.15) { const blade = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.5, 2.3), bladeMat); blade.position.set(r, 0, 0); blade.rotation.x = 0.55; blade.castShadow = true; bg.add(blade); }
+        g.add(bg);
+      }
+      group.add(g);
+    }
+  }
+  const ledMat = new THREE.MeshStandardMaterial({ color: 0xff2233, emissive: 0xff2233, emissiveIntensity: 1.2 });
+  const led1 = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 1), ledMat); led1.position.set(123.5, 14.5, W + 6.4); group.add(led1);
+  const led2 = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 1), ledMat); led2.position.set(128.5, 14.5, W + 6.4); group.add(led2);
+  return group;
+}
+
+/* ======================================================================
+   ESCENA MAESTRA (metros). Luces / sombras / tonemapping unificados.
+   ====================================================================== */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 42, 180);
+
+// ---- luces (rig del catálogo) ----
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(11, 20, 13);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+{ const sc = sun.shadow.camera; sc.left = -18; sc.right = 18; sc.top = 18; sc.bottom = -18; sc.near = 0.5; sc.far = 90; }
+sun.shadow.bias = -0.0004;
+sun.target.position.set(3.2, 0, 6);
+scene.add(sun); scene.add(sun.target);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4); fill.position.set(-8, 7, -6); scene.add(fill);
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2); rim.position.set(4, 4, -12); scene.add(rim);
+
+// ---- suelo (grado exterior) + grid ----
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), new THREE.MeshStandardMaterial({ color: 0x0a0e16, roughness: 0.92, metalness: 0.05 }));
+ground.rotation.x = -Math.PI / 2; ground.position.set(3, 0, 6); ground.receiveShadow = true; scene.add(ground);
+const grid = new THREE.GridHelper(90, 90, 0x00d4aa, 0x142028);
+grid.material.opacity = 0.1; grid.material.transparent = true; grid.position.set(3, 0.01, 6); scene.add(grid);
+
+// ---- helper de colocación: escala, centra en XZ, apoya base en piso, rota sobre su eje ----
+function placeOnFloor(obj, opts) {
+  const { x = 0, z = 0, y = 0, rotY = 0, scale = 1, restVoxelY = null } = opts || {};
+  obj.scale.setScalar(scale);
+  const box = new THREE.Box3().setFromObject(obj);
+  const c = new THREE.Vector3(); box.getCenter(c);
+  const restY = (restVoxelY != null) ? restVoxelY * scale : box.min.y;
+  obj.position.x = -c.x; obj.position.z = -c.z; obj.position.y = -restY;
+  const pivot = new THREE.Group();
+  pivot.add(obj); pivot.rotation.y = rotY; pivot.position.set(x, y, z);
+  return pivot;
+}
+
+const FLOOR_H = 0.35;   // altura del piso técnico elevado (m)
+const V = { rack: 0.02, crac: 0.025, inrow: 0.025, pdu: 0.025, ups: 0.025, dry: 0.05 };
+
+// ---- BASE: sala. Se omiten racks silueta donde van los hero y los in-row ----
+const HERO_SLOTS = ['0,0', '0,1', '0,2'];       // 3 racks detallados en fila 0
+const INROW_SLOTS = ['2,4', '2,6'];             // 2 in-row intercalados en fila 2
+const room = makeRoom(THREE, new Set([...HERO_SLOTS, ...INROW_SLOTS]));
+room.scale.setScalar(0.05);
+scene.add(room);
+
+// ---- equipos alrededor (metros) ----
+// CRAC downflow en los extremos de la sala (encaran las filas)
+scene.add(placeOnFloor(makeCrac(THREE), { x: 1.0, z: -1.7, y: FLOOR_H, rotY: Math.PI, scale: V.crac, restVoxelY: 25 }));
+scene.add(placeOnFloor(makeCrac(THREE), { x: 3.2, z: 13.6, y: FLOOR_H, rotY: 0,       scale: V.crac, restVoxelY: 25 }));
+// In-row coolers intercalados en la fila 2 (soplan al pasillo frío +z)
+scene.add(placeOnFloor(makeInrow(THREE), { x: 2.88, z: 6.0, y: FLOOR_H, rotY: Math.PI, scale: V.inrow }));
+scene.add(placeOnFloor(makeInrow(THREE), { x: 4.08, z: 6.0, y: FLOOR_H, rotY: Math.PI, scale: V.inrow }));
+// UPS + PDU al frente de la sala, contra el muro lateral
+scene.add(placeOnFloor(makeUps(THREE), { x: 5.8, z: -1.7, y: FLOOR_H, rotY: Math.PI, scale: V.ups }));
+scene.add(placeOnFloor(makePdu(THREE), { x: 3.4, z: -1.7, y: FLOOR_H, rotY: 0,       scale: V.pdu }));
+// Dry cooler EXTERIOR (largo a lo largo de z, fuera del muro +x)
+scene.add(placeOnFloor(makeDryCooler(THREE), { x: 9.4, z: 6.0, y: 0, rotY: Math.PI / 2, scale: V.dry }));
+// Hero racks detallados en la primera fila
+const HERO_X = [0.475, 1.075, 1.675];
+HERO_X.forEach(hx => scene.add(placeOnFloor(makeRack(THREE), { x: hx, z: 0.4, y: FLOOR_H, rotY: Math.PI, scale: V.rack })));
+
+// ---- TENDIDO CHW REAL sala -> dry cooler exterior (tubería voxel, codos 90°) ----
+// El dry cooler está en placeOnFloor(scale 0.05, centrado por Box3, rotY π/2, en (9.4,0,6)).
+// Sus bocas bridadas nativas: RED_D (entrada agua caliente) centro voxel (-8,30,10),
+// BLUE_D (salida agua enfriada) centro voxel (-8,11,36). Transformadas por la cadena
+// obj.position=(-3.875,0,-1.325) + escala 0.05, luego rotY π/2 y +(9.4,0,6):
+//   boca ROJA (caliente/entrada)  -> mundo (8.60, 1.53, 10.25)
+//   boca AZUL (enfriada/salida)   -> mundo (9.90, 0.58, 10.25)
+// La sala entrega su CHW overhead del pasillo frío 2 (zc=148) en el muro +x (x≈6.2, y≈2.87):
+//   azul suministro  z≈7.33   ·   rojo retorno  z≈7.48
+const PIPE_B = 0x2f5f96, PIPE_R = 0x8a3226, PIPE_ROD = 0x4a4a52;
+const pipeCube = new THREE.BoxGeometry(0.16, 0.16, 0.16);
+function voxelRun(waypoints, hex, step = 0.13) {
+  const pts = [];
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const a = waypoints[i], b = waypoints[i + 1];
+    const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
+    const len = Math.hypot(dx, dy, dz);
+    const n = Math.max(1, Math.round(len / step));
+    for (let k = (i === 0 ? 0 : 1); k <= n; k++) { const t = k / n; pts.push([a[0] + dx * t, a[1] + dy * t, a[2] + dz * t]); }
+  }
+  const mat = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.5, metalness: 0.45 });
+  const im = new THREE.InstancedMesh(pipeCube, mat, pts.length);
+  im.castShadow = true; im.receiveShadow = true;
+  const m = new THREE.Matrix4();
+  pts.forEach((p, i) => { m.setPosition(p[0], p[1], p[2]); im.setMatrixAt(i, m); });
+  im.instanceMatrix.needsUpdate = true; scene.add(im);
+  return im;
+}
+// Suministro (azul): boca AZUL del dry cooler -> muro de la sala, par paralelo bajo
+voxelRun([
+  [6.20, 2.87, 7.33], [6.70, 2.87, 7.33], [6.70, 1.05, 7.33],
+  [6.70, 1.05, 10.25], [9.90, 1.05, 10.25], [9.90, 0.58, 10.25]
+], PIPE_B);
+// Retorno (rojo): muro de la sala -> boca ROJA (entrada de agua caliente)
+voxelRun([
+  [6.20, 2.87, 7.48], [6.70, 2.87, 7.48], [6.70, 1.45, 7.48],
+  [6.70, 1.45, 10.25], [8.60, 1.45, 10.25], [8.60, 1.53, 10.25]
+], PIPE_R);
+// Soportes verticales bajo el tramo horizontal exterior
+[[6.70, 8.6], [6.70, 9.9], [8.70, 10.25]].forEach(([sx, sz]) =>
+  voxelRun([[sx, 0, sz], [sx, 1.45, sz]], PIPE_ROD, 0.16));
+
+// ---- estadísticas de escena (voxeles / instancias) ----
+let voxTotal = 0, meshTotal = 0;
+scene.traverse(o => { if (o.isInstancedMesh) { voxTotal += o.count; meshTotal++; } });
+const STATS = { voxTotal, meshTotal, roomVoxels: room.userData.voxelCount };
+if (typeof window !== 'undefined') window.__SCENE_STATS__ = STATS;
+
+/* ======================================================================
+   RENDER / INTERACCIÓN (solo navegador)
+   ====================================================================== */
+if (!HEADLESS) {
+  const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 400);
+  camera.position.set(18, 14, 23);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.target.set(3.5, 1.5, 6);
+  controls.autoRotate = false;
+  controls.autoRotateSpeed = 0.4;
+  controls.maxPolarAngle = Math.PI * 0.495;
+
+  const statEl = document.getElementById('stat');
+  if (statEl) statEl.textContent = 'voxeles: ' + voxTotal.toLocaleString() + ' · instancias: ' + meshTotal;
+
+  const bRot = document.getElementById('bRot');
+  bRot.onclick = () => { controls.autoRotate = !controls.autoRotate; bRot.className = controls.autoRotate ? 'on' : 'off'; bRot.textContent = controls.autoRotate ? 'ON' : 'OFF'; };
+  const bShadow = document.getElementById('bShadow');
+  bShadow.onclick = () => { renderer.shadowMap.enabled = !renderer.shadowMap.enabled; scene.traverse(o => { if (o.isInstancedMesh) o.material.needsUpdate = true; }); bShadow.className = renderer.shadowMap.enabled ? 'on' : 'off'; bShadow.textContent = renderer.shadowMap.enabled ? 'ON' : 'OFF'; };
+
+  addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+  function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
+  animate();
+}
+</script>
+</body>
+</html>

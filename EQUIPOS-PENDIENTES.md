@@ -535,6 +535,201 @@ SIMULAR CORTE DE RED (transfiere a batería), FALLA SIMULADA (LED rojo parpadean
 
 ---
 
+## 🧊 REFRIGERACIÓN COMERCIAL / INDUSTRIAL
+
+> Cierra el dominio del cuarto frío (Safran): la cámara ya existe como escena, faltan sus equipos.
+> Escala sugerida: `// SCALE: 1 voxel = 0.025 m`.
+
+- [ ] **R1. Central de refrigeración (rack de compresores)** → `disenos/central-refrigeracion/central-refrigeracion-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: una CENTRAL DE
+REFRIGERACIÓN (rack de compresores) de supermercado/cámara fría, alta densidad de micro-voxeles.
+Partes obligatorias: bastidor/skid de acero con 3-5 COMPRESORES en línea sobre aisladores, cada
+uno con cabezal y caja de bornes (el conjunto vibra sutil al operar); colector de SUCCIÓN común
+(tubo grande) y colector de DESCARGA con ramales a cada compresor; separador de aceite y RECIBIDOR
+de líquido (tanques); filtros deshidratadores y visores de líquido; válvulas de servicio; manómetros
+de alta/baja; tablero de control con display y LEDs por compresor; tubería de refrigerante codificada.
+Dimensión real: ~3.0 m largo × 1.0 m ancho × 2.0 m alto.
+Colores: bastidor gris oscuro, compresores negro/gris con cabezas de aluminio, succión AZUL (baja
+presión), descarga ROJA/naranja (alta), recibidor de líquido rojo, aceite ámbar, cobre en tubería fina.
+Leyenda: Succión (baja) / Descarga (alta) / Líquido / Aceite.
+Panel CONTROL DE EQUIPO: COMPRESORES 1..N ON-OFF (escalonado, vibración + LEDs), FALLA SIMULADA
+(compresor en rojo parpadeante), AUTO-ROTATE.
+```
+
+- [ ] **R2. Unidad condensadora de refrigeración** → `disenos/condensadora-refri/condensadora-refri-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: una UNIDAD
+CONDENSADORA de refrigeración de exterior/azotea, alta densidad de micro-voxeles.
+Partes obligatorias: gabinete con SERPENTÍN condensador aletado en las caras (celosía densa); 1-2
+VENTILADORES axiales arriba (GIRAN — animados) con rejilla de protección; compresor(es) en la base
+visibles en CORTE; recibidor de líquido; conexiones de refrigerante (succión gruesa AISLADA + línea
+de líquido fina); tablero eléctrico lateral con desconectador; patas/base con anclas.
+Dimensión real: ~1.2 m × 1.0 m × 1.2 m.
+Colores: gabinete gris claro, aletas aluminio, ventiladores oscuros con buje, succión aislada negra,
+línea de líquido cobre.
+Leyenda: Succión / Líquido / Aire de rechazo.
+Panel CONTROL DE EQUIPO: VENTILADORES ON-OFF (giro + inercia), COMPRESOR ON-OFF, CORTE ON-OFF, AUTO-ROTATE.
+```
+
+- [ ] **R3. Evaporador / unit cooler de cámara** → `disenos/evaporador-camara/evaporador-camara-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un EVAPORADOR
+(unit cooler) montado en el techo DENTRO de una cámara fría, alta densidad de micro-voxeles.
+Partes obligatorias: carcasa alargada higiénica con SERPENTÍN aletado frontal (celosía teal con
+ESCARCHA sugerida en blanco); 2-3 VENTILADORES axiales en el frente que empujan aire (GIRAN —
+animados); charola de condensados con RESISTENCIAS de deshielo (líneas naranjas emisivas al
+descongelar); línea de succión y de líquido con VÁLVULA DE EXPANSIÓN; soportes de techo; drenaje.
+Dimensión real: ~1.5 m largo × 0.6 m fondo × 0.7 m alto.
+Colores: carcasa blanca/gris claro, serpentín teal con escarcha blanca, ventiladores oscuros, línea
+de líquido cobre, resistencias de deshielo naranja emisivo al activar.
+Leyenda: Aire frío (impulsión) / Succión / Líquido / Deshielo.
+Panel CONTROL DE EQUIPO: VENTILADORES ON-OFF, DESHIELO ON-OFF (resistencias naranjas + detiene
+ventiladores), AUTO-ROTATE.
+```
+
+## ⚡ ELÉCTRICO / RESPALDO DE ENERGÍA
+
+> Completa la cadena que ya empezaste con generador + UPS + MCC-VFD.
+> Escala sugerida: `// SCALE: 1 voxel = 0.025 m`.
+
+- [ ] **E1. Transformador (seco / pad-mounted)** → `disenos/transformador/transformador-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un TRANSFORMADOR
+de distribución tipo SECO ventilado, alta densidad de micro-voxeles, seccionable.
+Partes obligatorias: gabinete metálico ventilado (rejillas); en CORTE el NÚCLEO con 3 columnas y
+BOBINAS voxelizadas de cobre (devanados primario/secundario); BUJES/aisladores de alta tensión
+(primario) y baja tensión (secundario) en la tapa; barras de conexión; placa de datos; base con
+ruedas y anclas; etiquetas de peligro.
+Dimensión real: ~1.5 m × 1.2 m × 1.8 m.
+Colores: gabinete gris, bobinas de cobre/marrón sobre núcleo gris acero, aisladores crema/marrón,
+barras de cobre, etiquetas de peligro amarillas.
+Leyenda: Alta tensión (primario) / Baja tensión (secundario).
+Panel CONTROL DE EQUIPO: CORTE ON-OFF (muestra núcleo y bobinas), ENERGIZADO ON-OFF (glow sutil en
+las bobinas), AUTO-ROTATE.
+```
+
+- [ ] **E2. Tablero de transferencia automática (ATS)** → `disenos/ats/ats-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un TABLERO DE
+TRANSFERENCIA AUTOMÁTICA (ATS) que conmuta entre red y generador, alta densidad de micro-voxeles.
+Partes obligatorias: gabinete de piso con puerta; en CORTE dos juegos de CONTACTORES/interruptores
+(uno RED, uno GENERADOR) con el mecanismo de transferencia central enclavado; controlador con
+DISPLAY (fuente activa) y LEDs (RED / GENERADOR / TRANSFIRIENDO); barras de cobre de las 2 fuentes
+de entrada y de la salida a carga; botones de prueba; cableado.
+Dimensión real: ~0.8 m × 0.6 m × 2.0 m.
+Colores: gabinete gris/negro, contactores negros, barras de cobre, LED RED verde, LED GENERADOR
+ámbar, display emisivo.
+Leyenda: Red (utility) / Generador / Carga.
+Panel CONTROL DE EQUIPO: FUENTE (RED / GENERADOR — conmuta el ATS, cambia LEDs y el mímico),
+SIMULAR CORTE DE RED (transfiere a generador), AUTO-ROTATE.
+```
+
+- [ ] **E3. Switchgear / tablero principal** → `disenos/switchgear/switchgear-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un TABLERO GENERAL
+de distribución (switchgear) de baja tensión, alta densidad de micro-voxeles, seccionable.
+Partes obligatorias: fila de SECCIONES/columnas de gabinete metálico; INTERRUPTOR PRINCIPAL grande
+tipo bastidor (extraíble) con palanca y display de medición; secciones de DERIVACIÓN con interruptores
+de caja moldeada en columnas (palancas ON/OFF); BARRAS de cobre horizontales (bus) recorriendo arriba
+(visibles en corte); relés/medidores de protección en las puertas; cableado inferior; etiquetas.
+Dimensión real: ~3.0 m largo × 0.8 m fondo × 2.2 m alto.
+Colores: gabinete gris claro, interruptores negros, barras de cobre, medidores con display emisivo,
+etiquetas de seguridad amarillas.
+Leyenda: Alimentación / Barras / Derivaciones.
+Panel CONTROL DE EQUIPO: INTERRUPTORES ON-OFF (grupo), CORTE ON-OFF (ver barras internas), FALLA
+SIMULADA (disparo + piloto rojo), AUTO-ROTATE.
+```
+
+## 🌀 HVAC — COMPLEMENTOS
+
+> Escala sugerida: `// SCALE: 1 voxel = 0.025 m`.
+
+- [ ] **H1. Recuperador de energía (ERV / rueda entálpica)** → `disenos/recuperador-energia/recuperador-energia-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un RECUPERADOR DE
+ENERGÍA (ERV/HRV) de RUEDA ENTÁLPICA, alta densidad de micro-voxeles, seccionable.
+Partes obligatorias: gabinete tipo caja con CUATRO conexiones de ducto en las caras (aire exterior,
+suministro, retorno, expulsión); RUEDA entálpica giratoria grande al centro (matriz tipo panal,
+GIRA lentamente — animada) con su motor y banda; banco de FILTROS en las entradas; compuertas;
+2 secciones de VENTILADOR (giran); charola. CORTE que muestra la rueda y el cruce de los 2 flujos.
+Dimensión real: ~1.8 m × 1.4 m × 1.6 m.
+Colores: gabinete gris claro, rueda con matriz panal dorado/bronce, filtros crema; flujos: aire
+exterior VERDE, suministro AZUL, retorno NARANJA, expulsión gris.
+Leyenda: Aire exterior / Suministro / Retorno / Expulsión.
+Panel CONTROL DE EQUIPO: RUEDA ON-OFF (gira/detiene), VENTILADORES ON-OFF, CORTE ON-OFF, AUTO-ROTATE.
+```
+
+- [ ] **H2. Bomba de calor (aire-agua)** → `disenos/bomba-calor/bomba-calor-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: una BOMBA DE CALOR
+aire-agua reversible de exterior, alta densidad de micro-voxeles, seccionable.
+Partes obligatorias: gabinete con SERPENTÍN aletado en las caras; VENTILADOR(es) axial arriba
+(GIRAN — animados); COMPRESOR scroll en la base (corte); VÁLVULA DE 4 VÍAS de inversión frío/calor
+con su tubería; INTERCAMBIADOR de placas del lado agua con conexiones de entrada/salida; recibidor;
+tablero eléctrico lateral; patas.
+Dimensión real: ~1.3 m × 0.6 m × 1.4 m.
+Colores: gabinete gris claro, aletas aluminio, ventilador oscuro; refrigerante succión AZUL /
+descarga ROJA; agua AZUL (frío) o ROJA (calor) según el modo.
+Leyenda: Refrigerante / Agua / Aire · modo FRÍO/CALOR.
+Panel CONTROL DE EQUIPO: MODO FRÍO/CALOR (invierte la válvula de 4 vías + colores del agua),
+COMPRESOR ON-OFF, VENTILADOR ON-OFF, AUTO-ROTATE.
+```
+
+## 🚒 CONTRA INCENDIO
+
+> Escala sugerida: `// SCALE: 1 voxel = 0.025 m`.
+
+- [ ] **F1. Sistema de bomba contra incendio** → `disenos/bomba-incendio/bomba-incendio-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un SISTEMA DE BOMBA
+CONTRA INCENDIO sobre skid, con bomba principal y jockey, alta densidad de micro-voxeles.
+Partes obligatorias: SKID rojo con BOMBA PRINCIPAL horizontal de gran caudal accionada por motor
+eléctrico con guarda-acoplamiento (el acoplamiento GIRA — animado); BOMBA JOCKEY pequeña al lado;
+cabezal de DESCARGA con válvulas, check y manómetros; TABLERO DE CONTROL contra incendio rojo con
+display y luces piloto; tubería roja gruesa de succión y descarga con bridas; válvula de alivio;
+sensor de presión; base con anclas.
+Dimensión real: ~2.5 m largo × 1.2 m ancho × 1.5 m alto.
+Colores: TODO rojo bombero (skid, tubería, tableros), motor gris oscuro, manómetros con carátula
+de color, cobre en detalles.
+Leyenda: Succión / Descarga (a red de rociadores) / Jockey.
+Panel CONTROL DE EQUIPO: BOMBA PRINCIPAL ON-OFF (arranque + vibración + giro), JOCKEY ON-OFF,
+ALARMA (luz roja + parpadeo), AUTO-ROTATE.
+```
+
+## 🖥️ DATACENTER — FUTURO (enfriamiento líquido / IA)
+
+> Escala sugerida: `// SCALE: 1 voxel = 0.025 m`.
+
+- [ ] **C1. CDU (Coolant Distribution Unit) — enfriamiento líquido** → `disenos/cdu-liquid/cdu-liquid-voxel-v1.html`
+
+```
+Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: una CDU (Coolant
+Distribution Unit) de enfriamiento líquido para datacenter de IA, formato rack, micro-voxeles.
+Partes obligatorias: gabinete tipo rack; INTERCAMBIADOR de placas líquido-líquido (corte); DOS
+circuitos — PRIMARIO (agua helada de la instalación) y SECUNDARIO (líquido técnico a los racks);
+2 BOMBAS de circulación redundantes (impulsor que GIRA — animado); tanque de expansión; filtros;
+MANIFOLD de distribución con múltiples conexiones rápidas (quick-connect) hacia los racks; sensores
+de flujo/presión/fuga; tablero con DISPLAY (mímico de los 2 circuitos + caudales).
+Dimensión real: ~0.6 m ancho × 1.2 m fondo × 2.0 m alto (formato rack).
+Colores: gabinete negro datacenter; primario AZUL/ROJO (agua helada supply/return); secundario
+CIAN/MORADO (líquido técnico); acero/cobre en las placas; display emisivo.
+Leyenda: Primario (agua helada) / Secundario (a racks) / Bombas.
+Panel CONTROL DE EQUIPO: BOMBAS P1/P2 ON-OFF (redundancia), MODO (normal / redundante), FUGA
+SIMULADA (alarma roja), AUTO-ROTATE.
+```
+
+---
+
 ## PASE 2 — REALISTIC (usar DESPUÉS, cuando el voxel esté aprobado)
 
 Plantilla — sustituir `<EQUIPO>` y adjuntar/referenciar el archivo voxel aprobado:
