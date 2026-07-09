@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ENFRIADOR IN-ROW · 0.30 × 1.10 × 2.00 m · Realistic</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.80); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#aebfd2; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.80); padding:8px 12px; border:1px solid #00d4aa44; color:#aebfd2; backdrop-filter:blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.80); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; color:#aebfd2; }
+  #legend i { width:12px; height:10px; display:inline-block; border-radius:2px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.86); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter:blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#aebfd2; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:60px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel input[type=range] { -webkit-appearance:none; width:104px; height:3px; background:#1c3a44; outline:none; }
+  #panel input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:11px; height:11px; background:#00d4aa; cursor:pointer; border:1px solid #06080d; }
+  #panel .spd { color:#00d4aa; min-width:38px; text-align:right; }
+</style>
+<script>
+// Inyeccion dinamica de importmap: String.fromCharCode(64) evita el mangling de '@' (package@version) por Cloudflare Pages.
+(function(){
+  if (typeof document === 'undefined') return;
+  var AT = String.fromCharCode(64);
+  var tag = document.createElement('script');
+  tag.type = 'importmap';
+  tag.textContent = JSON.stringify({ imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }});
+  document.head.appendChild(tag);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>ENFRIADOR IN-ROW · DATACENTER</b><br>
+  <span>0.30 × 1.10 × 2.00 m · Realistic PBR · 1 unidad = 1 m</span>
+</div>
+<div id="legend">
+  <div><i style="background:#ff5533"></i> Aire caliente (pasillo trasero)</div>
+  <div><i style="background:#44bbff"></i> Aire frio (pasillo frontal)</div>
+  <div><i style="background:#66ccff"></i> Agua helada (suministro)</div>
+  <div><i style="background:#ff6644"></i> Retorno</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>VENTILADORES</label><button id="bFan" class="off">OFF</button></div>
+  <div class="row"><label>VELOCIDAD</label><span style="display:flex;align-items:center;gap:8px;"><input type="range" id="sSpd" min="30" max="100" value="70"><span class="spd" id="tSpd">70%</span></span></div>
+  <div class="row"><label>CORTE</label><button id="bCorte" class="on">ON</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="off">OFF</button></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 unidad = 1 m. Spec dimensional/composicion: in-row/inrow-cooler-voxel.html.
+// Gabinete ESBELTO y ALTO: 0.30 (X, ancho) x 1.10 (Z, fondo) x 2.00 (Y, alto). De pie sobre el piso.
+// Tren de aire: PASILLO CALIENTE (-Z, atras) -> puerta perf. -> SERPENTIN AGUA HELADA ->
+// COLUMNA VERTICAL DE VENTILADORES AXIALES -> puerta perf. frontal -> PASILLO FRIO (+Z).
+// HEADLESS: true en node (sin window). Se arma el grafo (para conteo) y se omiten
+// renderer / PMREM / OrbitControls / camara / DOM / animate. CanvasTextures solo si hay `document`.
+const HEADLESS = (typeof window === 'undefined') || !!(typeof window !== 'undefined' && window.__HEADLESS__);
+const HAS_DOC  = (typeof document !== 'undefined');
+
+// ====== SCENE ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 6, 32);
+
+// ====== TEXTURAS PROCEDURALES (CanvasTexture; null bajo headless) ======
+function canvasTex(w, h, draw, srgb){
+  if (!HAS_DOC) return null;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+// Chapa negra mate martelinada (gabinete de datacenter)
+const skinTex = canvasTex(512, 512, (g, w, h) => {
+  g.fillStyle = '#17171c'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 2600; i++){
+    const v = 14 + Math.floor(Math.random() * 22);
+    g.fillStyle = `rgba(${v},${v},${v+3},0.30)`;
+    g.fillRect(Math.random()*w, Math.random()*h, 1 + Math.random()*3, 1 + Math.random()*3);
+  }
+  g.strokeStyle = 'rgba(6,6,8,0.55)'; g.lineWidth = 2;
+  for (let y = 0; y <= h; y += 128){ g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+}, true);
+if (skinTex){ skinTex.wrapS = skinTex.wrapT = THREE.RepeatWrapping; }
+
+// Aletas del serpentin: rayas verticales finas (alu) sobre teal
+const finTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#1f7a70'; g.fillRect(0, 0, w, h);
+  for (let x = 0; x < w; x += 2){
+    g.strokeStyle = (x % 8 === 0) ? 'rgba(180,220,214,0.55)' : 'rgba(120,180,172,0.35)';
+    g.lineWidth = 1; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke();
+  }
+  g.strokeStyle = 'rgba(10,40,36,0.45)'; g.lineWidth = 2;
+  for (let y = 0; y <= h; y += 40){ g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+}, true);
+if (finTex){ finTex.wrapS = finTex.wrapT = THREE.RepeatWrapping; finTex.repeat.set(3, 5); }
+
+// Puerta perforada: alphaMap (blanco = chapa, negro = agujero)
+const perfAlpha = canvasTex(256, 512, (g, w, h) => {
+  g.fillStyle = '#dcdcdc'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#000';
+  const s = 12;
+  for (let y = s; y < h; y += s)
+    for (let x = s; x < w; x += s){
+      const ox = ((Math.floor(y/s)) % 2) ? s/2 : 0;
+      g.beginPath(); g.arc(x + ox, y, s*0.30, 0, Math.PI*2); g.fill();
+    }
+});
+if (perfAlpha){ perfAlpha.wrapS = perfAlpha.wrapT = THREE.RepeatWrapping; perfAlpha.repeat.set(3, 12); }
+
+// ====== PALETA PBR (metalness 0 = pintado/plastico · metalness 1 = metal desnudo; nunca intermedio) ======
+// Leccion documentada (torre/bomba/AHU/FCU): gris medio + metalness 1 lee NEGRO en este entorno.
+const M = {
+  SKIN:    new THREE.MeshStandardMaterial({ color:0x17171c, map:skinTex, roughness:0.5, metalness:0 }),   // gabinete negro mate
+  SKIN_D:  new THREE.MeshStandardMaterial({ color:0x0e0e12, roughness:0.6, metalness:0 }),                // interiores/mamparas
+  PERF:    new THREE.MeshStandardMaterial({ color:0x1b1b20, alphaMap:perfAlpha, transparent:true, alphaTest:0.35, roughness:0.5, metalness:0, side:THREE.DoubleSide }),
+  FRAME:   new THREE.MeshStandardMaterial({ color:0x34343a, roughness:0.45, metalness:1 }),               // marcos/estructura metal
+  SKID:    new THREE.MeshStandardMaterial({ color:0x26262c, roughness:0.6, metalness:0 }),
+  HOUSING: new THREE.MeshStandardMaterial({ color:0x3a3a42, roughness:0.5, metalness:0.0, side:THREE.DoubleSide }), // venturi (plastico)
+  FIN:     new THREE.MeshStandardMaterial({ color:0x9fb2ae, map:finTex, roughness:0.35, metalness:1 }),   // aletas aluminio
+  COIL_T:  new THREE.MeshStandardMaterial({ color:0x2f8f86, roughness:0.5, metalness:0 }),                // marco teal serpentin
+  COPPER:  new THREE.MeshStandardMaterial({ color:0xb87333, roughness:0.35, metalness:1 }),
+  PIPE_B:  new THREE.MeshStandardMaterial({ color:0xcdd2d8, roughness:0.5, metalness:0 }),                // tuberia aislada (banda azul aparte)
+  BAND_B:  new THREE.MeshStandardMaterial({ color:0x2f5f96, roughness:0.5, metalness:0 }),                // suministro (azul)
+  BAND_R:  new THREE.MeshStandardMaterial({ color:0x8a3226, roughness:0.5, metalness:0 }),                // retorno (rojo)
+  VALVE:   new THREE.MeshStandardMaterial({ color:0x44464e, roughness:0.4, metalness:1 }),
+  FLANGE:  new THREE.MeshStandardMaterial({ color:0x8a949c, roughness:0.35, metalness:1 }),
+  BOLT:    new THREE.MeshStandardMaterial({ color:0x2c2c30, roughness:0.4, metalness:1 }),
+  BLADE:   new THREE.MeshStandardMaterial({ color:0x2b2f36, roughness:0.45, metalness:0.0 }),             // aspas (plastico oscuro)
+  HUB:     new THREE.MeshStandardMaterial({ color:0x54555c, roughness:0.45, metalness:1 }),
+  CTRL:    new THREE.MeshStandardMaterial({ color:0x141418, roughness:0.5, metalness:0 }),
+  BEZEL:   new THREE.MeshStandardMaterial({ color:0x2a2a30, roughness:0.5, metalness:0 })
+};
+// aspa "clave" oscura para que el giro LEA + material animado (emisivo modulado)
+const bladeMat = new THREE.MeshStandardMaterial({ color:0x3a3f47, roughness:0.4, metalness:0.0, emissive:0x101216, emissiveIntensity:0.0 });
+
+// ====== HELPERS DE GEOMETRIA PARAMETRICA ======
+const staticG = new THREE.Group();      // todo lo estatico (sombras horneadas)
+scene.add(staticG);
+const accessGroup = new THREE.Group();  // piel removible (toggle CORTE): puerta frontal + costado +X
+staticG.add(accessGroup);
+
+function mesh(geo, mat, x=0, y=0, z=0, parent=staticG){
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+function box(w, h, d, mat, x, y, z, parent=staticG){ return mesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent); }
+function cylX(r, len, mat, x, y, z, seg=16, parent=staticG){ const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent); m.rotation.z = Math.PI/2; return m; }
+function cylY(r, len, mat, x, y, z, seg=16, parent=staticG){ return mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent); }
+function cylZ(r, len, mat, x, y, z, seg=16, parent=staticG){ const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent); m.rotation.x = Math.PI/2; return m; }
+// Tuberia con codos suavizados: polilinea -> CurvePath con filetes bezier
+function makePipe(points, r, mat, bend=0.04, parent=staticG, seg=10){
+  const path = new THREE.CurvePath();
+  const P = points.map(p => new THREE.Vector3(...p));
+  let prev = P[0];
+  for (let i = 1; i < P.length - 1; i++){
+    const a = P[i], b = P[i+1];
+    const dIn = a.clone().sub(prev).normalize();
+    const dOut = b.clone().sub(a).normalize();
+    const tIn = a.clone().sub(dIn.clone().multiplyScalar(bend));
+    const tOut = a.clone().add(dOut.clone().multiplyScalar(bend));
+    path.add(new THREE.LineCurve3(prev, tIn));
+    path.add(new THREE.QuadraticBezierCurve3(tIn, a, tOut));
+    prev = tOut;
+  }
+  path.add(new THREE.LineCurve3(prev, P[P.length - 1]));
+  const len = path.getLength();
+  const g = new THREE.TubeGeometry(path, Math.max(16, Math.round(len * 16)), r, seg);
+  return mesh(g, mat, 0, 0, 0, parent);
+}
+// InstancedMesh util (1 draw call)
+const _bs = new THREE.Vector3(1, 1, 1);
+const _q0 = new THREE.Quaternion();
+function tMat(x, y, z, q=_q0, s=_bs){ return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q, s); }
+function makeIM(geo, mat, mats, parent=staticG, cast=true){
+  const im = new THREE.InstancedMesh(geo, mat, mats.length);
+  mats.forEach((m, i) => im.setMatrixAt(i, m));
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = cast; im.receiveShadow = true;
+  parent.add(im);
+  return im;
+}
+// Esparragos globales de brida (1 draw)
+const boltMatrices = [];
+const AXQ = {
+  x: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI/2)),
+  y: new THREE.Quaternion(),
+  z: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2, 0, 0))
+};
+function boltRing(cx, cy, cz, axis, radius, n){
+  for (let i = 0; i < n; i++){
+    const a = i / n * Math.PI * 2 + Math.PI / n;
+    const u = Math.cos(a) * radius, v = Math.sin(a) * radius;
+    let px = cx, py = cy, pz = cz;
+    if (axis === 'x'){ py += u; pz += v; } else if (axis === 'y'){ px += u; pz += v; } else { px += u; py += v; }
+    boltMatrices.push(new THREE.Matrix4().compose(new THREE.Vector3(px, py, pz), AXQ[axis], _bs));
+  }
+}
+function flangeX(R, thick, x, y, z, nBolts, boltR){
+  cylX(R, thick, M.FLANGE, x, y, z, 18);
+  if (nBolts) boltRing(x + (thick/2 + 0.006), y, z, 'x', boltR, nBolts);
+}
+
+// ==================================================================
+// COTAS GLOBALES (metros) — gabinete ESBELTO Y ALTO
+// ==================================================================
+const HX = 0.15, HZ = 0.55;                 // medio ancho (X) / medio fondo (Z)
+const YSK = 0.07;                           // alto del skid
+const YB = YSK, YT = 2.00;                  // cuerpo de YB a YT
+const CY = (YB + YT) / 2;                   // centro vertical
+const PT = 0.012;                           // espesor de chapa
+const ZB = -HZ, ZF = HZ;                    // trasera (pasillo caliente) / frente (pasillo frio)
+// Ventiladores (columna vertical, eje Z)
+const FR = 0.125;                           // radio de rodete
+const FANZ = 0.24;                          // hacia el frente (detras de la puerta frontal)
+const FAN_Y = [0.46, 0.92, 1.38, 1.84];     // centros de los 4 ventiladores axiales
+// Serpentin (losa vertical hacia la trasera)
+const COILZ = -0.16, COIL_ZD = 0.22;        // centro y fondo (Z)
+const COIL_Y0 = 0.30, COIL_Y1 = 1.88, COIL_YC = (COIL_Y0 + COIL_Y1) / 2;
+const COIL_H = COIL_Y1 - COIL_Y0;
+
+// ==================================================================
+// SKID / BASE
+// ==================================================================
+{
+  box(HX*2, YSK, HZ*2, M.SKID, 0, YSK/2, 0);
+  const feetMats = [];
+  for (const fx of [-HX + 0.03, HX - 0.03])
+    for (const fz of [ZB + 0.05, ZF - 0.05]) feetMats.push(tMat(fx, 0.015, fz));
+  makeIM(new THREE.BoxGeometry(0.04, 0.03, 0.04), M.FRAME, feetMats);
+  // piso interior
+  box(HX*2 - 2*PT, PT, HZ*2 - 2*PT, M.SKIN_D, 0, YB + PT/2, 0);
+}
+
+// ==================================================================
+// GABINETE FIJO — techo, costado -X (con placa), trasera perforada, marco
+// ==================================================================
+{
+  // techo
+  box(HX*2, PT, HZ*2, M.SKIN, 0, YT, 0);
+  // labios del techo
+  box(HX*2 + 0.02, 0.02, 0.02, M.SKIN_D, 0, YT + 0.01, ZB + 0.01);
+  box(HX*2 + 0.02, 0.02, 0.02, M.SKIN_D, 0, YT + 0.01, ZF - 0.01);
+  // costado izquierdo (-X) fijo
+  box(PT, YT - YB, HZ*2, M.SKIN, -HX, CY, 0);
+  // trasera: marco + puerta perforada (pasillo caliente, -Z)
+  box(0.03, YT - YB, PT, M.FRAME, -HX + 0.015, CY, ZB);
+  box(0.03, YT - YB, PT, M.FRAME,  HX - 0.015, CY, ZB);
+  box(HX*2, 0.03, PT, M.FRAME, 0, YB + 0.015, ZB);
+  box(HX*2, 0.03, PT, M.FRAME, 0, YT - 0.015, ZB);
+  const backDoor = mesh(new THREE.PlaneGeometry(HX*2 - 0.05, YT - YB - 0.05), M.PERF, 0, CY, ZB + 0.004);
+  backDoor.castShadow = false;
+}
+
+// ==================================================================
+// MARCO ESTRUCTURAL INTERNO (postes de esquina + largueros) — instanciado
+// ==================================================================
+{
+  const postMats = [];
+  for (const px of [-HX + 0.02, HX - 0.02])
+    for (const pz of [ZB + 0.02, ZF - 0.02]) postMats.push(tMat(px, CY, pz));
+  makeIM(new THREE.BoxGeometry(0.018, YT - YB - 0.02, 0.018), M.FRAME, postMats);
+  const railMats = [];
+  for (const yy of [YB + 0.02, CY, YT - 0.02])
+    for (const zz of [ZB + 0.02, ZF - 0.02]) railMats.push(tMat(0, yy, zz));
+  makeIM(new THREE.BoxGeometry(HX*2 - 0.04, 0.016, 0.016), M.FRAME, railMats);
+}
+
+// ==================================================================
+// SERPENTIN DE AGUA HELADA (losa aletada teal/alu + tubos/U-bends/cabezales cobre) + CHW
+// ==================================================================
+{
+  const cw = HX*2 - 0.05;                    // ancho util del serpentin (X)
+  // Nucleo teal (marco/casing) con textura de aletas
+  box(cw, COIL_H, COIL_ZD, M.COIL_T, 0, COIL_YC, COILZ);
+  // Aletas de aluminio: laminas verticales delgadas apiladas en X (instanciadas, 1 draw)
+  const finMats = [];
+  const nF = 26, fx0 = -cw/2 + 0.01, fStep = (cw - 0.02) / (nF - 1);
+  for (let i = 0; i < nF; i++) finMats.push(tMat(fx0 + i * fStep, COIL_YC, COILZ));
+  makeIM(new THREE.BoxGeometry(0.004, COIL_H - 0.02, COIL_ZD + 0.006), M.FIN, finMats);
+  // marco perimetral del serpentin
+  box(0.014, COIL_H + 0.02, COIL_ZD + 0.03, M.FRAME, -cw/2 - 0.007, COIL_YC, COILZ);
+  box(0.014, COIL_H + 0.02, COIL_ZD + 0.03, M.FRAME,  cw/2 + 0.007, COIL_YC, COILZ);
+  box(cw + 0.03, 0.014, COIL_ZD + 0.03, M.FRAME, 0, COIL_Y0 - 0.01, COILZ);
+  box(cw + 0.03, 0.014, COIL_ZD + 0.03, M.FRAME, 0, COIL_Y1 + 0.01, COILZ);
+  // Tubos de cobre horizontales (eje X) — filas en Y x 2 en Z (instanciados)
+  const tubeMats = [], rows = 8;
+  const ty0 = COIL_Y0 + 0.05, tStep = (COIL_H - 0.10) / (rows - 1);
+  const tzc = [COILZ - 0.05, COILZ + 0.05];
+  for (let r = 0; r < rows; r++)
+    for (const tz of tzc)
+      tubeMats.push(new THREE.Matrix4().compose(new THREE.Vector3(0, ty0 + r * tStep, tz), AXQ.x, _bs));
+  makeIM(new THREE.CylinderGeometry(0.008, 0.008, cw + 0.02, 8), M.COPPER, tubeMats);
+  // U-bends de cobre visibles en la cara del corte (lado +X), conectan filas contiguas
+  const ubMats = [];
+  const qub = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2, 0, 0));
+  for (let r = 0; r < rows - 1; r += 2)
+    ubMats.push(new THREE.Matrix4().compose(new THREE.Vector3(cw/2 + 0.02, ty0 + (r + 0.5) * tStep, COILZ), qub, _bs));
+  makeIM(new THREE.TorusGeometry(0.05, 0.008, 6, 12, Math.PI), M.COPPER, ubMats);
+  // Cabezales verticales de cobre (suministro/retorno) lado -X
+  cylY(0.013, COIL_H + 0.04, M.COPPER, -cw/2 - 0.03, COIL_YC, COILZ - 0.05, 12);
+  cylY(0.013, COIL_H + 0.04, M.COPPER, -cw/2 - 0.03, COIL_YC, COILZ + 0.05, 12);
+  // Charola de condensados bajo el serpentin
+  box(cw + 0.04, 0.012, COIL_ZD + 0.06, M.SKID, 0, COIL_Y0 - 0.03, COILZ);
+}
+
+// ==================================================================
+// CONEXIONES DE AGUA HELADA (abajo, salen por el costado -X) — bridas flush, bandas, valvulas
+// ==================================================================
+{
+  const wallX = -HX;
+  // SUMINISTRO (azul): baja del cabezal -> sale por -X (abajo)
+  makePipe([[-HX + 0.10 + 0.03, COIL_Y0 - 0.03, COILZ - 0.05],
+            [-HX + 0.06, COIL_Y0 - 0.03, COILZ - 0.05],
+            [-HX + 0.06, 0.30, COILZ - 0.05],
+            [wallX + 0.02, 0.30, COILZ - 0.05],
+            [wallX - 0.10, 0.30, COILZ - 0.05]], 0.017, M.PIPE_B);
+  flangeX(0.036, 0.012, wallX, 0.30, COILZ - 0.05, 4, 0.025);
+  const sBand = cylX(0.020, 0.02, M.BAND_B, wallX - 0.045, 0.30, COILZ - 0.05, 12); sBand.castShadow = false;
+  cylX(0.025, 0.03, M.VALVE, wallX - 0.075, 0.30, COILZ - 0.05, 12);
+  const svw = mesh(new THREE.TorusGeometry(0.026, 0.006, 6, 14), M.VALVE, wallX - 0.075, 0.335, COILZ - 0.05); svw.castShadow = false;
+  cylY(0.005, 0.035, M.VALVE, wallX - 0.075, 0.32, COILZ - 0.05, 8);
+  // RETORNO (rojo): baja del cabezal -> sale por -X (abajo, mas al frente)
+  makePipe([[-HX + 0.10 + 0.03, COIL_Y0 - 0.03, COILZ + 0.05],
+            [-HX + 0.06, COIL_Y0 - 0.03, COILZ + 0.05],
+            [-HX + 0.06, 0.20, COILZ + 0.05],
+            [wallX + 0.02, 0.20, COILZ + 0.05],
+            [wallX - 0.10, 0.20, COILZ + 0.05]], 0.017, M.PIPE_B);
+  flangeX(0.036, 0.012, wallX, 0.20, COILZ + 0.05, 4, 0.025);
+  const rBand = cylX(0.020, 0.02, M.BAND_R, wallX - 0.045, 0.20, COILZ + 0.05, 12); rBand.castShadow = false;
+  cylX(0.025, 0.03, M.VALVE, wallX - 0.075, 0.20, COILZ + 0.05, 12);
+  const rvw = mesh(new THREE.TorusGeometry(0.026, 0.006, 6, 14), M.VALVE, wallX - 0.075, 0.235, COILZ + 0.05); rvw.castShadow = false;
+  cylY(0.005, 0.035, M.VALVE, wallX - 0.075, 0.22, COILZ + 0.05, 8);
+}
+
+// ==================================================================
+// COLUMNA DE VENTILADORES AXIALES (venturi fijo + rodete animado con aspas ExtrudeGeometry)
+// ==================================================================
+const fans = [];
+{
+  // aspa: shape 2D (x = radial) extruida
+  const bladeShape = new THREE.Shape();
+  bladeShape.moveTo(0.030, -0.026);
+  bladeShape.quadraticCurveTo(0.075, -0.050, FR - 0.006, -0.016);
+  bladeShape.quadraticCurveTo(FR + 0.006, 0, FR - 0.006, 0.020);
+  bladeShape.quadraticCurveTo(0.075, 0.052, 0.030, 0.028);
+  bladeShape.closePath();
+  const bladeGeo = new THREE.ExtrudeGeometry(bladeShape, { depth: 0.005, bevelEnabled: false });
+  const hubGeo = new THREE.CylinderGeometry(0.028, 0.028, 0.055, 16);
+  const noseGeo = new THREE.ConeGeometry(0.026, 0.03, 16);
+  const nB = 7, pitch = 0.55;
+
+  FAN_Y.forEach(cy => {
+    const fanG = new THREE.Group();
+    fanG.position.set(0, cy, FANZ);
+    scene.add(fanG);
+    // venturi (anillo, eje Z)
+    const vent = new THREE.Mesh(new THREE.CylinderGeometry(FR + 0.016, FR + 0.016, 0.06, 30, 1, true), M.HOUSING);
+    vent.rotation.x = Math.PI/2; vent.receiveShadow = true; fanG.add(vent);
+    // aro frontal (torus ya en plano XY = eje Z)
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(FR + 0.016, 0.007, 8, 30), M.FRAME);
+    rim.position.z = 0.03; fanG.add(rim);
+    // arana (3 brazos que sostienen el buje)
+    for (let s = 0; s < 3; s++){
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(FR*2 - 0.02, 0.01, 0.01), M.FRAME);
+      arm.rotation.z = s / 3 * Math.PI * 2; fanG.add(arm);
+    }
+    // ---- RODETE (grupo giratorio, eje Z) ----
+    const rotor = new THREE.Group();
+    fanG.add(rotor);
+    const hub = new THREE.Mesh(hubGeo, M.HUB); hub.rotation.x = Math.PI/2; rotor.add(hub);
+    const nose = new THREE.Mesh(noseGeo, M.HUB); nose.rotation.x = Math.PI/2; nose.position.z = 0.04; rotor.add(nose);
+    for (let i = 0; i < nB; i++){
+      const holder = new THREE.Group();
+      holder.rotation.z = i / nB * Math.PI * 2;
+      const blade = new THREE.Mesh(bladeGeo, i === 0 ? M.BLADE : bladeMat);
+      blade.rotation.x = pitch;         // angulo de ataque sobre el eje radial
+      holder.add(blade);
+      rotor.add(holder);
+    }
+    rotor.traverse(o => { o.castShadow = false; });   // animado: fuera del horneado
+    fans.push(rotor);
+    // mampara de montaje del ventilador (aro que sella contra el gabinete)
+    const bulk = new THREE.Mesh(new THREE.RingGeometry(FR + 0.016, HX + 0.002, 24), M.SKIN_D);
+    bulk.position.set(0, cy, FANZ); bulk.castShadow = false; staticG.add(bulk);
+  });
+}
+
+// ==================================================================
+// CONTROLADOR (frente-arriba) + DISPLAY (CanvasTexture) + LEDs
+// ==================================================================
+let ctrlDisp = null, ledRun = null, ledCom = null;
+{
+  const cz = ZF - PT;                         // en la cara frontal
+  const cyTop = 1.72;
+  box(0.20, 0.28, 0.05, M.CTRL, 0, cyTop, cz - 0.02);         // caja del controlador
+  box(0.17, 0.24, 0.01, M.BEZEL, 0, cyTop, cz + 0.004);        // bisel
+  // display (canvas -> MeshBasicMaterial)
+  const dispTex = canvasTex(256, 256, (g, w, h) => drawDisplay(g, w, h, false, 0.7), true);
+  ctrlDisp = dispTex;
+  const dmat = new THREE.MeshBasicMaterial(dispTex ? { map: dispTex, toneMapped: false } : { color: 0x0e3844 });
+  const disp = mesh(new THREE.PlaneGeometry(0.15, 0.11), dmat, 0, cyTop + 0.04, cz + 0.012);
+  disp.castShadow = false;
+  // LEDs de estado
+  const runMat = new THREE.MeshStandardMaterial({ color:0xff2233, emissive:0xff2233, emissiveIntensity:1.3, roughness:0.3, metalness:0 });
+  const comMat = new THREE.MeshStandardMaterial({ color:0x00d4aa, emissive:0x00d4aa, emissiveIntensity:1.0, roughness:0.3, metalness:0 });
+  const lr = mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.01, 12), runMat, -0.04, cyTop - 0.08, cz + 0.012); lr.rotation.x = Math.PI/2; lr.castShadow = false;
+  const lc = mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.01, 12), comMat, 0.04, cyTop - 0.08, cz + 0.012); lc.rotation.x = Math.PI/2; lc.castShadow = false;
+  ledRun = runMat; ledCom = comMat;
+}
+
+// ==================================================================
+// PIEL REMOVIBLE (accessGroup, toggle CORTE): puerta frontal perforada + costado +X
+// ==================================================================
+{
+  // marco frontal (fijo? -> lo dejamos en la piel para que el corte abra la cara)
+  const fdW = HX*2 - 0.05, fdH = YT - YB - 0.05;
+  box(0.03, YT - YB, PT, M.FRAME, -HX + 0.015, CY, ZF, accessGroup);
+  box(0.03, YT - YB, PT, M.FRAME,  HX - 0.015, CY, ZF, accessGroup);
+  box(HX*2, 0.03, PT, M.FRAME, 0, YB + 0.015, ZF, accessGroup);
+  box(HX*2, 0.03, PT, M.FRAME, 0, YT - 0.015, ZF, accessGroup);
+  const frontDoor = mesh(new THREE.PlaneGeometry(fdW, fdH), M.PERF, 0, CY, ZF - 0.004, accessGroup);
+  frontDoor.castShadow = false;
+  // manija
+  box(0.04, 0.10, 0.02, M.FRAME, HX - 0.05, CY, ZF + 0.01, accessGroup);
+  // costado derecho (+X) removible para el cutaway lateral
+  box(PT, YT - YB, HZ*2, M.SKIN, HX, CY, 0, accessGroup);
+}
+
+// ==================================================================
+// INSTANCIADOS GLOBALES (esparragos de bridas)
+// ==================================================================
+{
+  const boltGeo = new THREE.CylinderGeometry(0.005, 0.005, 0.012, 6);
+  if (boltMatrices.length) makeIM(boltGeo, M.BOLT, boltMatrices, staticG, false);
+}
+
+// ====== PISO / GRID ======
+{
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60),
+    new THREE.MeshStandardMaterial({ color:0x0a0d12, roughness:0.95, metalness:0 }));
+  ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+  const grid = new THREE.GridHelper(40, 80, 0x123f35, 0x0c1d1a);
+  grid.position.y = 0.002; grid.material.transparent = true; grid.material.opacity = 0.35; scene.add(grid);
+}
+
+// ====== DISPLAY DEL CONTROLADOR (canvas) ======
+function drawDisplay(g, w, h, on, spd){
+  g.fillStyle = '#0b0f14'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = on ? '#00d4aa88' : '#00d4aa44'; g.lineWidth = 6; g.strokeRect(8, 8, w - 16, h - 16);
+  g.textAlign = 'center';
+  g.fillStyle = '#8fb0c4'; g.font = '600 26px "JetBrains Mono", monospace';
+  g.fillText('IN-ROW', w/2, 52);
+  g.fillStyle = on ? '#7fe8ff' : '#54626c'; g.font = '700 62px "JetBrains Mono", monospace';
+  g.fillText(on ? '22.5°' : '--.-°', w/2, 128);
+  g.fillStyle = '#5f7a86'; g.font = '600 24px "JetBrains Mono", monospace';
+  g.fillText('RET 34.0°', w/2, 168);
+  g.fillStyle = on ? '#00ff66' : '#ff4455'; g.font = '700 30px "JetBrains Mono", monospace';
+  g.fillText(on ? ('FAN ' + Math.round(spd*100) + '%') : 'STANDBY', w/2, 214);
+}
+function refreshDisplay(on, spd){
+  if (!ctrlDisp || !ctrlDisp.image) return;
+  const c = ctrlDisp.image; const g = c.getContext('2d');
+  drawDisplay(g, c.width, c.height, on, spd);
+  ctrlDisp.needsUpdate = true;
+}
+
+// ====== ESTADO / CONTROL ======
+const COLOR_ON = 0x00ff66, COLOR_OFF = 0xff2233;
+const state = { fans: false, corte: true, speed: 0.7, rot: false };
+
+function applyState(){
+  const on = state.fans;
+  if (ledRun){
+    ledRun.color.setHex(on ? COLOR_ON : COLOR_OFF);
+    ledRun.emissive.setHex(on ? COLOR_ON : COLOR_OFF);
+    ledRun.emissiveIntensity = on ? 1.7 : 1.2;
+  }
+  bladeMat.emissiveIntensity = on ? 0.10 + state.speed * 0.10 : 0.0;
+  accessGroup.visible = !state.corte;
+  refreshDisplay(on, state.speed);
+}
+applyState();     // fija visibilidad de la piel (corte=true -> interior visible) antes del horneado
+
+// ====== STATS (para smoke headless) ======
+let instCount = 0, meshTotal = 0;
+scene.traverse(o => { if (o.isInstancedMesh){ instCount += o.count; meshTotal++; } else if (o.isMesh) meshTotal++; });
+if (typeof window !== 'undefined') window.__SCENE_STATS__ = { instCount, meshTotal, fans: fans.length };
+
+// ====== RENDER / INTERACCION (solo navegador) ======
+if (!HEADLESS){
+  const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.05, 200);
+  camera.position.set(1.5, 1.5, 2.0);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;               // escena estatica -> horneado bajo demanda
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envRT = pmrem.fromScene(new RoomEnvironment(), 0.04);
+  scene.environment = envRT.texture;
+  pmrem.dispose();
+
+  // ---- RIG DE LUCES ----
+  const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+  sun.position.set(2.4, 4.4, 2.6);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -1.6; sun.shadow.camera.right = 1.6;
+  sun.shadow.camera.top = 2.4; sun.shadow.camera.bottom = -0.2;
+  sun.shadow.camera.near = 1.2; sun.shadow.camera.far = 12;
+  sun.shadow.bias = -0.0004;
+  sun.target.position.set(0, 1.0, 0);
+  scene.add(sun); scene.add(sun.target);
+  const fill = new THREE.DirectionalLight(0x88aaff, 0.4); fill.position.set(-3.0, 2.4, -2.2); scene.add(fill);
+  const rim  = new THREE.DirectionalLight(0x00d4aa, 0.25); rim.position.set(-2.0, 1.6, 3.0); scene.add(rim);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+  renderer.shadowMap.needsUpdate = true;               // horneado unico tras construir la escena
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.autoRotate = false;                         // arranca OFF
+  controls.autoRotateSpeed = 0.55;
+  controls.minDistance = 0.8;
+  controls.maxDistance = 8;
+  controls.maxPolarAngle = Math.PI * 0.495;
+  controls.target.set(0, 1.0, 0);
+  controls.addEventListener('change', () => {
+    if (controls.target.y < 0) controls.target.y = 0;
+    if (camera.position.y < 0.2) camera.position.y = 0.2;
+  });
+
+  // ---- UI ----
+  if (HAS_DOC){
+    const bFan = document.getElementById('bFan');
+    bFan.addEventListener('click', () => {
+      state.fans = !state.fans;
+      bFan.className = state.fans ? 'on' : 'off';
+      bFan.textContent = state.fans ? 'ON' : 'OFF';
+      applyState();
+    });
+    const bCorte = document.getElementById('bCorte');
+    bCorte.addEventListener('click', () => {
+      state.corte = !state.corte;
+      bCorte.className = state.corte ? 'on' : 'off';
+      bCorte.textContent = state.corte ? 'ON' : 'OFF';
+      applyState();
+    });
+    const bRot = document.getElementById('bRot');
+    bRot.addEventListener('click', () => {
+      state.rot = !state.rot;
+      bRot.className = state.rot ? 'on' : 'off';
+      bRot.textContent = state.rot ? 'ON' : 'OFF';
+    });
+    const sSpd = document.getElementById('sSpd');
+    const tSpd = document.getElementById('tSpd');
+    sSpd.addEventListener('input', () => {
+      state.speed = sSpd.value / 100;
+      tSpd.textContent = sSpd.value + '%';
+      if (state.fans) refreshDisplay(true, state.speed);
+    });
+  }
+
+  // ---- LOOP ----
+  let fanSpd = 0;                                      // velocidad angular actual (inercia)
+  const clock = new THREE.Clock();
+  function animate(){
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.05);
+    const t = clock.elapsedTime;
+
+    // inercia asimetrica: arranque rapido, coast-down lento
+    const target = state.fans ? (7 + state.speed * 22) : 0;
+    const kk = target > fanSpd ? 1.6 : 0.5;
+    fanSpd += (target - fanSpd) * Math.min(1, dt * kk);
+    if (Math.abs(fanSpd - target) < 0.01) fanSpd = target;
+    for (let i = 0; i < fans.length; i++)
+      fans[i].rotation.z += dt * (fanSpd + i * 0.4);
+
+    // LED COM parpadea siempre (comunicacion BMS viva)
+    if (ledCom) ledCom.emissiveIntensity = (Math.sin(t * 5) > 0) ? 1.3 : 0.35;
+
+    controls.autoRotate = state.rot;
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+}
+</script>
+</body>
+</html>

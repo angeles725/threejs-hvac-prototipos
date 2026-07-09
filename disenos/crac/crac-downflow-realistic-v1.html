@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CRAC / CRAH DOWNFLOW · 0.9 × 0.9 × 2.0 m · Realistic</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#aebfd2; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#aebfd2; backdrop-filter:blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; color:#cfe0da; }
+  #legend i { width:12px; height:10px; display:inline-block; border-radius:2px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter:blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#aebfd2; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:78px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #fallback { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; color:#aebfd2; font-size:13px; letter-spacing:0.1em; text-align:center; padding:24px; }
+</style>
+<script>
+// Inyeccion dinamica de importmap: String.fromCharCode(64) evita el mangling de '@' (package@version) por Cloudflare.
+(function(){
+  var AT = String.fromCharCode(64);
+  var tag = document.createElement('script');
+  tag.type = 'importmap';
+  tag.textContent = JSON.stringify({ imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }});
+  document.head.appendChild(tag);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>CRAC / CRAH DOWNFLOW · SALA DE CÓMPUTO</b><br>
+  <span>0.9 × 0.9 × 2.0 m · Enfriamiento de precisión · Piso técnico · Realistic PBR</span>
+</div>
+<div id="legend">
+  <div><i style="background:#ff5533"></i> Aire caliente (retorno · arriba)</div>
+  <div><i style="background:#44bbff"></i> Aire frío (impulsión · plenum)</div>
+  <div><i style="background:#66ccff"></i> Agua helada (suministro)</div>
+  <div><i style="background:#ff6644"></i> Agua helada (retorno)</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>VENTILADORES EC</label><button id="bFan" class="off">OFF</button></div>
+  <div class="row"><label>AGUA HELADA</label><button id="bAgua" class="off">OFF</button></div>
+  <div class="row"><label>CORTE FRONTAL</label><button id="bCorte" class="on">ON</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 unidad = 1 m. Spec dimensional/composicion: crac-downflow-voxel.html (1 voxel = 0.025 m).
+// Gabinete 0.9 (X) x 0.9 (Z) x 2.0 (Y). Downflow: retorno arriba -> filtros -> serpentin ->
+// impulsion abajo al plenum del piso tecnico -> sube por losetas perforadas al frente.
+// Tren vertical (arriba->abajo): VENTILADORES EC | FILTROS | SERPENTIN AGUA HELADA | CHAROLA | PLENUM.
+// Frente en -Z (puertas + HMI). Conexiones CHW al costado +X.
+
+// ====== HEADLESS GUARD ======
+// Sin contexto WebGL (SSR / render headless) no se instancia el renderer: mensaje y salida limpia.
+const _hasWebGL = (() => {
+  try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); }
+  catch (e) { return false; }
+})();
+if (!_hasWebGL) {
+  const d = document.createElement('div');
+  d.id = 'fallback';
+  d.textContent = 'WebGL no disponible en este entorno · escena CRAC no renderizada.';
+  document.body.appendChild(d);
+  throw new Error('HEADLESS: sin contexto WebGL');
+}
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 7, 34);
+
+const camera = new THREE.PerspectiveCamera(42, window.innerWidth/window.innerHeight, 0.1, 120);
+camera.position.set(2.35, 2.25, 2.55);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;          // sombras horneadas: un solo horneado tras construir
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.autoRotate = false;                     // ARRANCA OFF
+controls.autoRotateSpeed = 0.6;
+controls.minDistance = 1.6;
+controls.maxDistance = 12;
+controls.maxPolarAngle = Math.PI * 0.5;
+controls.target.set(0, 1.25, 0);
+controls.addEventListener('change', () => {
+  if (controls.target.y < 0) controls.target.y = 0;
+  if (camera.position.y < 0.15) camera.position.y = 0.15;
+});
+
+// ====== RIG DE LUCES ======
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.4, 6.0, 2.6);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -3.0; sun.shadow.camera.right = 3.0;
+sun.shadow.camera.top = 3.4; sun.shadow.camera.bottom = -3.0;
+sun.shadow.camera.near = 1.2; sun.shadow.camera.far = 20;
+sun.shadow.bias = -0.0004;
+scene.add(sun);
+
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-3.6, 2.8, -2.4);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.22);
+rim.position.set(-2.2, 1.9, 3.6);
+scene.add(rim);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+// Luz interior teal para leer los internos en el CORTE
+const inLight = new THREE.PointLight(0x00d4aa, 0.5, 3.2);
+inLight.position.set(0, 1.5, -0.1);
+scene.add(inLight);
+
+// ====== PISO (losa de concreto bajo el piso tecnico) ======
+const slab = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  new THREE.MeshStandardMaterial({ color:0x090c11, roughness:0.96, metalness:0 })
+);
+slab.rotation.x = -Math.PI/2;
+slab.receiveShadow = true;
+scene.add(slab);
+
+const grid = new THREE.GridHelper(36, 36, 0x123f35, 0x0c1d1a);
+grid.position.y = 0.004;
+grid.material.transparent = true;
+grid.material.opacity = 0.3;
+scene.add(grid);
+
+// ====== TEXTURAS PROCEDURALES (CanvasTexture) ======
+function canvasTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+function dataTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 4;
+  return t;
+}
+
+// Gabinete Vertiv: negro/gris muy oscuro con micro-grano y juntas de panel
+const cabTex = canvasTex(512, 512, (g, w, h) => {
+  g.fillStyle = '#26272b'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 2400; i++){
+    g.fillStyle = Math.random() < 0.5 ? 'rgba(18,18,22,0.20)' : 'rgba(46,47,53,0.18)';
+    g.fillRect(Math.random()*w, Math.random()*h, 1 + Math.random()*3, 1 + Math.random()*3);
+  }
+  g.strokeStyle = 'rgba(12,12,16,0.85)'; g.lineWidth = 3;
+  for (let x = 0; x <= w; x += 170){ g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+  for (let y = 0; y <= h; y += 170){ g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+});
+cabTex.wrapS = cabTex.wrapT = THREE.RepeatWrapping;
+
+const cabRough = dataTex(256, 256, (g) => {
+  g.fillStyle = '#808080'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2200; i++){
+    const v = 110 + Math.floor(Math.random()*60);
+    g.fillStyle = `rgba(${v},${v},${v},0.16)`;
+    g.fillRect(Math.random()*256, Math.random()*256, 1 + Math.random()*3, 1 + Math.random()*3);
+  }
+});
+cabRough.wrapS = cabRough.wrapT = THREE.RepeatWrapping;
+cabRough.repeat.set(2, 3);
+
+// Aletas del serpentin: peine teal fino (para dar textura de aletas al slab)
+const finTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#2f8f86'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = 'rgba(20,60,58,0.7)'; g.lineWidth = 1;
+  for (let x = 0; x < w; x += 3){ g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+  g.strokeStyle = 'rgba(90,190,175,0.35)';
+  for (let x = 1.5; x < w; x += 3){ g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+});
+finTex.wrapS = finTex.wrapT = THREE.RepeatWrapping;
+
+// Media plisada de filtro (crema fibrosa)
+const filterTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#e8e0c6'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 3000; i++){
+    g.fillStyle = Math.random() < 0.5 ? 'rgba(206,198,172,0.25)' : 'rgba(240,234,214,0.2)';
+    g.fillRect(Math.random()*w, Math.random()*h, 1 + Math.random()*2, 1 + Math.random()*2);
+  }
+});
+filterTex.wrapS = filterTex.wrapT = THREE.RepeatWrapping;
+
+// Loseta de piso tecnico (gris con juntas)
+const tileTex = canvasTex(128, 128, (g, w, h) => {
+  g.fillStyle = '#74747c'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 900; i++){
+    const v = 100 + Math.floor(Math.random()*40);
+    g.fillStyle = `rgba(${v},${v},${v+6},0.18)`;
+    g.fillRect(Math.random()*w, Math.random()*h, 1 + Math.random()*2, 1 + Math.random()*2);
+  }
+  g.strokeStyle = 'rgba(40,40,48,0.9)'; g.lineWidth = 5;
+  g.strokeRect(0, 0, w, h);
+});
+tileTex.colorSpace = THREE.SRGBColorSpace;
+
+// Loseta perforada (patron de agujeros)
+const perfTex = canvasTex(128, 128, (g, w, h) => {
+  g.fillStyle = '#5a5a62'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#0a0d12';
+  for (let x = 12; x < w - 6; x += 16)
+    for (let y = 12; y < h - 6; y += 16){ g.beginPath(); g.arc(x, y, 5, 0, Math.PI*2); g.fill(); }
+  g.strokeStyle = 'rgba(40,40,48,0.9)'; g.lineWidth = 5;
+  g.strokeRect(0, 0, w, h);
+});
+perfTex.colorSpace = THREE.SRGBColorSpace;
+
+// ====== HMI (CanvasTexture + MeshBasicMaterial, unlit/emisivo) ======
+const hmiCanvas = document.createElement('canvas');
+hmiCanvas.width = 512; hmiCanvas.height = 384;
+const hmiCtx = hmiCanvas.getContext('2d');
+const hmiTex = new THREE.CanvasTexture(hmiCanvas);
+hmiTex.colorSpace = THREE.SRGBColorSpace;
+function drawHMI(state){
+  const g = hmiCtx, W = 512, H = 384;
+  g.fillStyle = '#04120f'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = '#0c2a26'; g.lineWidth = 2;
+  for (let x = 0; x < W; x += 32){ g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
+  for (let y = 0; y < H; y += 32){ g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+  // header
+  g.fillStyle = '#00d4aa'; g.font = 'bold 30px monospace'; g.textAlign = 'left';
+  g.fillText('CRAC-01', 22, 44);
+  g.font = '17px monospace'; g.fillStyle = '#7fd9c8';
+  g.fillText('PRECISION COOLING', 22, 70);
+  g.strokeStyle = '#00d4aa55'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(22, 84); g.lineTo(W - 22, 84); g.stroke();
+  // status pill
+  const run = state.fan;
+  g.fillStyle = run ? '#00ff66' : '#ff4455';
+  g.beginPath(); g.arc(W - 44, 40, 12, 0, Math.PI*2); g.fill();
+  g.font = 'bold 18px monospace'; g.textAlign = 'right';
+  g.fillStyle = run ? '#00ff66' : '#ff4455';
+  g.fillText(run ? 'RUN' : 'STBY', W - 64, 46);
+  // readouts
+  g.textAlign = 'left';
+  const rows = [
+    ['RETORNO',   '28.4 C', '#ff8866'],
+    ['IMPULSION', run ? '18.2 C' : '24.0 C', '#66bbff'],
+    ['SETPOINT',  '22.0 C', '#e8e0c6'],
+    ['HR',        '46 %',   '#7fd9c8'],
+    ['AGUA CHW',  state.agua ? '7 / 12 C' : 'CERRADA', state.agua ? '#66ccff' : '#ff6644'],
+    ['VENTIL.',   run ? '78 %' : '0 %', run ? '#00ff66' : '#ff4455'],
+  ];
+  g.font = '22px monospace';
+  rows.forEach((r, i) => {
+    const y = 128 + i * 40;
+    g.fillStyle = '#7fd9c8'; g.fillText(r[0], 26, y);
+    g.fillStyle = r[2]; g.textAlign = 'right'; g.fillText(r[1], W - 30, y); g.textAlign = 'left';
+  });
+  hmiTex.needsUpdate = true;
+}
+
+// ====== PALETA PBR (metalness 0 = pintado · metalness 1 = metal desnudo · nunca intermedio) ======
+const M = {
+  CAB:     new THREE.MeshStandardMaterial({ map:cabTex, roughness:1.0, metalness:0, roughnessMap:cabRough }),
+  CAB_P:   new THREE.MeshStandardMaterial({ color:0x26272b, roughness:0.52, metalness:0 }),
+  CAB_D:   new THREE.MeshStandardMaterial({ color:0x141418, roughness:0.6,  metalness:0 }),
+  DOOR:    new THREE.MeshStandardMaterial({ color:0x2a2b30, roughness:0.5,  metalness:0 }),
+  FRAME:   new THREE.MeshStandardMaterial({ color:0x33353b, roughness:0.55, metalness:0 }),
+  DARK:    new THREE.MeshStandardMaterial({ color:0x1a1a1e, roughness:0.6,  metalness:0 }),
+  SKID:    new THREE.MeshStandardMaterial({ color:0x50555e, roughness:0.5,  metalness:1 }),
+  CREAM:   new THREE.MeshStandardMaterial({ map:filterTex, roughness:0.9,  metalness:0 }),
+  COIL_T:  new THREE.MeshStandardMaterial({ map:finTex, color:0x3fbfae, roughness:0.42, metalness:0.1 }),
+  COIL_T2: new THREE.MeshStandardMaterial({ color:0x2f8f86, roughness:0.45, metalness:0.1 }),
+  ALU:     new THREE.MeshStandardMaterial({ color:0xc7ccd2, roughness:0.35, metalness:1 }),  // aletas/tapas aluminio desnudo
+  COPPER:  new THREE.MeshStandardMaterial({ color:0xb87333, roughness:0.35, metalness:1 }),
+  PAN:     new THREE.MeshStandardMaterial({ color:0x9aa2ab, roughness:0.4,  metalness:0.35 }),
+  PIPE:    new THREE.MeshStandardMaterial({ color:0xd6d8e0, roughness:0.45, metalness:0 }),
+  BAND_B:  new THREE.MeshStandardMaterial({ color:0x2f5f96, roughness:0.5,  metalness:0 }),  // banda agua suministro
+  BAND_R:  new THREE.MeshStandardMaterial({ color:0x8a3226, roughness:0.5,  metalness:0 }),  // banda agua retorno
+  VALVE:   new THREE.MeshStandardMaterial({ color:0x8a3226, roughness:0.5,  metalness:0 }),
+  FLANGE:  new THREE.MeshStandardMaterial({ color:0x8a949c, roughness:0.35, metalness:1 }),
+  BOLT:    new THREE.MeshStandardMaterial({ color:0x33363c, roughness:0.4,  metalness:1 }),
+  FAN_BLU: new THREE.MeshStandardMaterial({ color:0x1c3f88, roughness:0.5,  metalness:0 }),  // aro/hub EC azul
+  FAN_BLU2:new THREE.MeshStandardMaterial({ color:0x2c4d78, roughness:0.55, metalness:0 }),  // interior recesado
+  BLADE:   new THREE.MeshStandardMaterial({ color:0x9aa0aa, roughness:0.42, metalness:0.3, side:THREE.DoubleSide }),
+  BLADE_K: new THREE.MeshStandardMaterial({ color:0x2a2e35, roughness:0.42, metalness:0.3, side:THREE.DoubleSide }),
+  HUB:     new THREE.MeshStandardMaterial({ color:0x1c3f88, roughness:0.45, metalness:0.4 }),
+  GUARD:   new THREE.MeshStandardMaterial({ color:0x40444c, roughness:0.45, metalness:1 }),
+  HANDLE:  new THREE.MeshStandardMaterial({ color:0xc7ccd2, roughness:0.35, metalness:1 }),
+  HINGE:   new THREE.MeshStandardMaterial({ color:0x6a6d73, roughness:0.45, metalness:1 }),
+  TILE:    new THREE.MeshStandardMaterial({ map:tileTex, roughness:0.7,  metalness:0.1 }),
+  TILE_P:  new THREE.MeshStandardMaterial({ map:perfTex, roughness:0.7,  metalness:0.1 }),
+  PED:     new THREE.MeshStandardMaterial({ color:0x44474e, roughness:0.5,  metalness:0.6 }),
+  BEZEL:   new THREE.MeshStandardMaterial({ color:0x0c0e12, roughness:0.4,  metalness:0.2 }),
+  SCREEN:  new THREE.MeshBasicMaterial({ map:hmiTex }),   // unlit HMI
+};
+
+// ====== HELPERS DE GEOMETRIA PARAMETRICA ======
+const staticG = new THREE.Group();       // estatico (sombras horneadas)
+scene.add(staticG);
+const frontGroup = new THREE.Group();    // puertas frontales removibles (toggle CORTE)
+staticG.add(frontGroup);
+
+function mesh(geo, mat, x=0, y=0, z=0, parent=staticG){
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+function box(w, h, d, mat, x, y, z, parent=staticG){ return mesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent); }
+function cylX(r, len, mat, x, y, z, seg=16, parent=staticG){ const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent); m.rotation.z = Math.PI/2; return m; }
+function cylY(r, len, mat, x, y, z, seg=16, parent=staticG){ return mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent); }
+function cylZ(r, len, mat, x, y, z, seg=16, parent=staticG){ const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent); m.rotation.x = Math.PI/2; return m; }
+// Caja con canto biselado (perfil achaflanado extruido) — sustituto de RoundedBox
+function bevelBox(w, h, d, mat, x, y, z, bevel=0.015, parent=staticG){
+  const s = new THREE.Shape();
+  const hw = w/2 - bevel, hh = h/2 - bevel;
+  s.moveTo(-hw, -h/2); s.lineTo(hw, -h/2);
+  s.lineTo(w/2, -hh);  s.lineTo(w/2, hh);
+  s.lineTo(hw, h/2);   s.lineTo(-hw, h/2);
+  s.lineTo(-w/2, hh);  s.lineTo(-w/2, -hh);
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: d - bevel*2, bevelEnabled:true, bevelThickness:bevel, bevelSize:bevel, bevelSegments:1 });
+  g.translate(0, 0, -(d - bevel*2)/2);
+  return mesh(g, mat, x, y, z, parent);
+}
+// Tuberia con codos suavizados: polilinea -> CurvePath con filetes bezier
+function makePipe(points, r, mat, bend=0.08, parent=staticG, seg=12){
+  const path = new THREE.CurvePath();
+  const P = points.map(p => new THREE.Vector3(...p));
+  let prev = P[0];
+  for (let i = 1; i < P.length - 1; i++){
+    const a = P[i], b = P[i+1];
+    const dIn = a.clone().sub(prev).normalize();
+    const dOut = b.clone().sub(a).normalize();
+    const tIn = a.clone().sub(dIn.clone().multiplyScalar(bend));
+    const tOut = a.clone().add(dOut.clone().multiplyScalar(bend));
+    path.add(new THREE.LineCurve3(prev, tIn));
+    path.add(new THREE.QuadraticBezierCurve3(tIn, a, tOut));
+    prev = tOut;
+  }
+  path.add(new THREE.LineCurve3(prev, P[P.length - 1]));
+  const len = path.getLength();
+  const g = new THREE.TubeGeometry(path, Math.max(20, Math.round(len * 20)), r, seg);
+  return mesh(g, mat, 0, 0, 0, parent);
+}
+// Pernos instanciados globales
+const boltMatrices = [];
+const _bm = new THREE.Matrix4(), _bs = new THREE.Vector3(1,1,1);
+const AXQ = {
+  x: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI/2)),
+  y: new THREE.Quaternion(),
+  z: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2, 0, 0))
+};
+function boltRing(cx, cy, cz, axis, radius, n){
+  for (let i = 0; i < n; i++){
+    const a = i / n * Math.PI * 2 + Math.PI / n;
+    const u = Math.cos(a) * radius, v = Math.sin(a) * radius;
+    let px = cx, py = cy, pz = cz;
+    if (axis === 'x'){ py += u; pz += v; }
+    else if (axis === 'y'){ px += u; pz += v; }
+    else { px += u; py += v; }
+    _bm.compose(new THREE.Vector3(px, py, pz), AXQ[axis], _bs);
+    boltMatrices.push(_bm.clone());
+  }
+}
+function flangeY(R, thick, x, y, z, nBolts, boltR, boltSide=1){
+  cylY(R, thick, M.FLANGE, x, y, z, 18);
+  if (nBolts) boltRing(x, y + boltSide * (thick/2 + 0.01), z, 'y', boltR, nBolts);
+}
+function flangeX(R, thick, x, y, z, nBolts, boltR, boltSide=1){
+  cylX(R, thick, M.FLANGE, x, y, z, 18);
+  if (nBolts) boltRing(x + boltSide * (thick/2 + 0.01), y, z, 'x', boltR, nBolts);
+}
+function makeIM(geo, mat, mats, parent=staticG, cast=true){
+  const im = new THREE.InstancedMesh(geo, mat, mats.length);
+  mats.forEach((m, i) => im.setMatrixAt(i, m));
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = cast; im.receiveShadow = true;
+  parent.add(im);
+  return im;
+}
+const _q0 = new THREE.Quaternion();
+function tMat(x, y, z, q=_q0, s=_bs){ return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q, s); }
+
+// ==================================================================
+// COTAS GLOBALES (metros)
+// ==================================================================
+const HX = 0.45, HZ = 0.45;                 // medio ancho / medio fondo del gabinete
+const FLOOR_Y = 0.6;                        // cara superior del piso tecnico = base del gabinete
+const TOP_Y = 2.6;                          // tope del gabinete
+const CY = (FLOOR_Y + TOP_Y) / 2;           // centro vertical del cuerpo
+const BH = TOP_Y - FLOOR_Y;                 // altura del cuerpo (2.0)
+const PT = 0.04;                            // espesor de panel
+const FRONT_Z = -HZ, BACK_Z = HZ;           // frente (-Z, puertas) / trasera (+Z)
+const FAN_CX = [-0.21, 0.21], FAN_CZ = 0.0, FAN_R = 0.195;
+
+// ==================================================================
+// PISO TECNICO ELEVADO (losetas + pedestales + largueros + abertura de descarga)
+// ==================================================================
+{
+  const N = 3;                              // -N..N losetas (0.6 m) => 7x7 = 4.2 m
+  const tileGeo = new THREE.BoxGeometry(0.58, 0.04, 0.58);
+  const tMats = [], pMats = [];
+  for (let i = -N; i <= N; i++)
+    for (let j = -N; j <= N; j++){
+      const x = i * 0.6, z = j * 0.6;
+      if (i === 0 && j === 0) continue;                          // abertura de descarga bajo el gabinete
+      // losetas perforadas: fila frontal (-Z) delante del equipo
+      const perf = (j <= -1 && j >= -2 && Math.abs(i) <= 1);
+      (perf ? pMats : tMats).push(tMat(x, FLOOR_Y - 0.02, z));
+    }
+  makeIM(tileGeo, M.TILE, tMats);
+  makeIM(tileGeo, M.TILE_P, pMats);
+  // pedestales en esquinas de loseta
+  const pedGeo = new THREE.BoxGeometry(0.05, FLOOR_Y - 0.06, 0.05);
+  const pedMats = [];
+  for (let i = -N; i <= N + 1; i++)
+    for (let j = -N; j <= N + 1; j++){
+      const x = i * 0.6 - 0.3, z = j * 0.6 - 0.3;
+      if (Math.abs(x) < 0.3 && Math.abs(z) < 0.3) continue;      // libre bajo la abertura
+      pedMats.push(tMat(x, (FLOOR_Y - 0.06)/2 + 0.02, z));
+    }
+  makeIM(pedGeo, M.PED, pedMats);
+  // largueros (stringers) bajo las juntas
+  const strMats = [];
+  for (let i = -N; i <= N + 1; i++) strMats.push(new THREE.Matrix4().compose(new THREE.Vector3(i*0.6 - 0.3, FLOOR_Y - 0.05, 0), _q0, new THREE.Vector3(0.03, 0.04, (2*N+1)*0.6)));
+  for (let j = -N; j <= N + 1; j++) strMats.push(new THREE.Matrix4().compose(new THREE.Vector3(0, FLOOR_Y - 0.05, j*0.6 - 0.3), _q0, new THREE.Vector3((2*N+2)*0.6, 0.04, 0.03)));
+  makeIM(new THREE.BoxGeometry(1, 1, 1), M.FRAME, strMats, staticG, false);
+  // collar de la abertura de descarga
+  box(0.94, 0.05, 0.06, M.SKID, 0, FLOOR_Y - 0.03, -0.44);
+  box(0.94, 0.05, 0.06, M.SKID, 0, FLOOR_Y - 0.03,  0.44);
+  box(0.06, 0.05, 0.94, M.SKID, -0.44, FLOOR_Y - 0.03, 0);
+  box(0.06, 0.05, 0.94, M.SKID,  0.44, FLOOR_Y - 0.03, 0);
+}
+
+// ==================================================================
+// MARCO ESTRUCTURAL (postes esquineros + largueros perimetrales)
+// ==================================================================
+{
+  const postGeo = new THREE.BoxGeometry(0.05, BH, 0.05);
+  const postMats = [];
+  for (const sx of [-HX, HX]) for (const sz of [-HZ, HZ]) postMats.push(tMat(sx, CY, sz));
+  makeIM(postGeo, M.FRAME, postMats);
+  const railMats = [];
+  for (const yy of [FLOOR_Y + 0.02, TOP_Y - 0.02]){
+    railMats.push(new THREE.Matrix4().compose(new THREE.Vector3(0, yy, -HZ), _q0, new THREE.Vector3(0.9, 0.05, 0.05)));
+    railMats.push(new THREE.Matrix4().compose(new THREE.Vector3(0, yy,  HZ), _q0, new THREE.Vector3(0.9, 0.05, 0.05)));
+    railMats.push(new THREE.Matrix4().compose(new THREE.Vector3(-HX, yy, 0), _q0, new THREE.Vector3(0.05, 0.05, 0.9)));
+    railMats.push(new THREE.Matrix4().compose(new THREE.Vector3( HX, yy, 0), _q0, new THREE.Vector3(0.05, 0.05, 0.9)));
+  }
+  makeIM(new THREE.BoxGeometry(1, 1, 1), M.FRAME, railMats, staticG, false);
+}
+
+// ==================================================================
+// PANELES EXTERIORES (izq / der / trasera) + BASE + TOPE con bocas de ventilador
+// ==================================================================
+{
+  // paredes (frente -Z queda como puertas removibles)
+  box(PT, BH, 0.9, M.CAB, -HX, CY, 0);      // izquierda
+  box(PT, BH, 0.9, M.CAB,  HX, CY, 0);      // derecha
+  box(0.9, BH, PT, M.CAB, 0, CY, BACK_Z);   // trasera
+  // base (con abertura de descarga)
+  box(0.9, 0.05, 0.2, M.CAB_D, 0, FLOOR_Y + 0.02, -0.35);
+  box(0.9, 0.05, 0.2, M.CAB_D, 0, FLOOR_Y + 0.02,  0.35);
+  box(0.2, 0.05, 0.5, M.CAB_D, -0.35, FLOOR_Y + 0.02, 0);
+  box(0.2, 0.05, 0.5, M.CAB_D,  0.35, FLOOR_Y + 0.02, 0);
+
+  // TOPE (deck de ventiladores) con dos bocas circulares via ExtrudeGeometry
+  const deck = new THREE.Shape();
+  deck.moveTo(-HX, -HZ); deck.lineTo(HX, -HZ); deck.lineTo(HX, HZ); deck.lineTo(-HX, HZ); deck.closePath();
+  FAN_CX.forEach(cx => {
+    const hole = new THREE.Path();
+    hole.absarc(cx, FAN_CZ, FAN_R, 0, Math.PI*2, true);
+    deck.holes.push(hole);
+  });
+  const deckGeo = new THREE.ExtrudeGeometry(deck, { depth: 0.05, bevelEnabled:false });
+  deckGeo.rotateX(-Math.PI/2);              // plano en X-Z, espesor +Y
+  const deckMesh = new THREE.Mesh(deckGeo, M.CAB_P);
+  deckMesh.position.y = TOP_Y - 0.05;
+  deckMesh.castShadow = true; deckMesh.receiveShadow = true;
+  staticG.add(deckMesh);
+  // ceja perimetral del tope
+  box(0.92, 0.04, 0.06, M.FRAME, 0, TOP_Y + 0.02, -HZ + 0.03);
+  box(0.92, 0.04, 0.06, M.FRAME, 0, TOP_Y + 0.02,  HZ - 0.03);
+}
+
+// ==================================================================
+// VENTILADORES EC (azules, recesados, aspas animadas)
+// ==================================================================
+// Aspa aerodinamica (scimitar con twist) — geometria compartida (adaptada del dry-cooler)
+function makeAeroBlade(){
+  const s = new THREE.Shape();
+  s.moveTo(0.5, -0.30);
+  s.quadraticCurveTo(1.6, -0.75, 3.1, -0.55);
+  s.quadraticCurveTo(3.9, -0.35, 4.15, 0.05);
+  s.quadraticCurveTo(4.25, 0.38, 3.85, 0.58);
+  s.quadraticCurveTo(2.8, 0.88, 1.4, 0.55);
+  s.quadraticCurveTo(0.8, 0.35, 0.5, 0.20);
+  s.closePath();
+  const geo = new THREE.ExtrudeGeometry(s, { depth:0.2, bevelEnabled:true, bevelSegments:2, bevelSize:0.04, bevelThickness:0.04, steps:1 });
+  geo.translate(0, 0, -0.1);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++){
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const tp = Math.max(0, Math.min(1, (x - 0.5) / 3.7));
+    const tw = 0.72 - tp * 0.5;
+    pos.setXYZ(i, x, y*Math.cos(tw) - z*Math.sin(tw), y*Math.sin(tw) + z*Math.cos(tw));
+  }
+  pos.needsUpdate = true; geo.computeVertexNormals();
+  geo.scale(0.045, 0.045, 0.045);           // punta ~0.18 m dentro de la boca 0.195
+  return geo;
+}
+const bladeGeo = makeAeroBlade();
+const NB = 7;                               // aspas por rodete EC
+const fanWheels = [];                       // grupos giratorios
+const FAN_PY = TOP_Y - 0.11;                // plano de aspas (recesado bajo el deck)
+FAN_CX.forEach(cx => {
+  // venturi azul recesado (Lathe) que baja hacia el interior
+  const prof = [];
+  for (let i = 0; i <= 8; i++){ const t = i/8; prof.push(new THREE.Vector2(FAN_R + Math.pow(t, 1.6)*0.05, -t*0.18)); }
+  const cowl = new THREE.Mesh(new THREE.LatheGeometry(prof, 28), M.FAN_BLU);
+  cowl.position.set(cx, TOP_Y - 0.03, FAN_CZ); cowl.castShadow = true; cowl.receiveShadow = true;
+  staticG.add(cowl);
+  // anillo recesado interior azul (pared del cilindro)
+  const ring = new THREE.Mesh(new THREE.CylinderGeometry(FAN_R + 0.01, FAN_R + 0.01, 0.2, 28, 1, true), M.FAN_BLU2);
+  ring.position.set(cx, TOP_Y - 0.12, FAN_CZ); ring.material.side = THREE.DoubleSide; staticG.add(ring);
+  // rodete giratorio
+  const wheel = new THREE.Group();
+  wheel.position.set(cx, FAN_PY, FAN_CZ);
+  const hub = mesh(new THREE.CylinderGeometry(0.06, 0.075, 0.09, 16), M.HUB, 0, 0, 0, wheel); hub.castShadow = false;
+  mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.06, 12), M.HUB, 0, 0.06, 0, wheel).castShadow = false;
+  const bMats = [];
+  for (let i = 0; i < NB; i++) bMats.push(new THREE.Matrix4().compose(new THREE.Vector3(0,0,0), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, i/NB*Math.PI*2, 0)), _bs));
+  const bIM = new THREE.InstancedMesh(bladeGeo, M.BLADE, NB);
+  bMats.forEach((m, i) => bIM.setMatrixAt(i, m)); bIM.instanceMatrix.needsUpdate = true;
+  bIM.castShadow = false; wheel.add(bIM);
+  // una aspa marcada oscura para que el giro LEA
+  const keyB = new THREE.Mesh(bladeGeo, M.BLADE_K); keyB.castShadow = false; wheel.add(keyB);
+  staticG.add(wheel);
+  fanWheels.push(wheel);
+  // rejilla de proteccion sobre la boca (aros + radios)
+  const gy = TOP_Y + 0.035;
+  const rimT = mesh(new THREE.TorusGeometry(FAN_R + 0.02, 0.014, 8, 30), M.GUARD, cx, gy, FAN_CZ); rimT.rotation.x = Math.PI/2; rimT.castShadow = false;
+  for (const r of [0.07, 0.13, FAN_R - 0.01]){
+    const rg = mesh(new THREE.TorusGeometry(r, 0.008, 6, 26), M.GUARD, cx, gy, FAN_CZ); rg.rotation.x = Math.PI/2; rg.castShadow = false;
+  }
+  const spokeMats = [];
+  for (let i = 0; i < 6; i++){
+    const a = i/6*Math.PI*2;
+    spokeMats.push(new THREE.Matrix4().compose(new THREE.Vector3(cx, gy, FAN_CZ), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, a, 0)), new THREE.Vector3(FAN_R*2, 1, 1)));
+  }
+  makeIM(new THREE.BoxGeometry(1, 0.008, 0.008), M.GUARD, spokeMats, staticG, false);
+});
+
+// ==================================================================
+// BANCO DE FILTROS (plisado crema, arriba, bajo los ventiladores)
+// ==================================================================
+{
+  const fy = 2.28;
+  box(0.78, 0.05, 0.78, M.FRAME, 0, fy + 0.06, 0);     // marco superior
+  // media plisada: laminas en V alternadas (instanciadas, 1 draw)
+  const pleatMats = [];
+  const qA = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.5, 0, 0));
+  const qB = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.5, 0, 0));
+  const nP = 12, pz0 = -0.32, pStep = 0.64 / (nP - 1);
+  for (let i = 0; i < nP; i++)
+    pleatMats.push(new THREE.Matrix4().compose(new THREE.Vector3(0, fy, pz0 + i*pStep), (i % 2 ? qA : qB), _bs));
+  makeIM(new THREE.BoxGeometry(0.7, 0.02, 0.1), M.CREAM, pleatMats);
+  // marco perimetral del rack
+  box(0.74, 0.04, 0.05, M.FRAME, 0, fy, -0.36);
+  box(0.74, 0.04, 0.05, M.FRAME, 0, fy,  0.36);
+}
+
+// ==================================================================
+// SERPENTIN DE AGUA HELADA (inclinado, aletas teal + cabezales cobre) + CHAROLA + CHW
+// ==================================================================
+let coilHeaderSup, coilHeaderRet;
+{
+  const coilG = new THREE.Group();
+  coilG.position.set(0, 1.5, 0.02);
+  coilG.rotation.x = -0.26;                 // inclinado: frente bajo, fondo alto
+  staticG.add(coilG);
+
+  const cw = 0.66, ch = 1.1, cd = 0.5;      // ancho X, alto (local Y), fondo Z
+  // ALETAS: laminas delgadas apiladas en X (instanciadas, 1 draw) — con textura de peine
+  const nF = 40, fx0 = -cw/2 + 0.02, fStep = (cw - 0.04) / (nF - 1);
+  const finMats = [];
+  for (let i = 0; i < nF; i++) finMats.push(tMat(fx0 + i*fStep, 0, 0));
+  makeIM(new THREE.BoxGeometry(0.006, ch, cd), M.COIL_T, finMats, coilG);
+  // slab teal de fondo para cerrar visualmente entre aletas
+  box(cw - 0.02, ch - 0.02, cd - 0.02, M.COIL_T2, 0, 0, 0, coilG);
+  // TUBOS de cobre horizontales (a lo largo de X) en filas Y x columnas Z
+  const tubeMats = [];
+  const qtx = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI/2));
+  const rows = 7, cols = [-0.13, 0.0, 0.13], ty0 = -ch/2 + 0.09, tStep = (ch - 0.18)/(rows - 1);
+  for (let r = 0; r < rows; r++)
+    for (const cz of cols)
+      tubeMats.push(new THREE.Matrix4().compose(new THREE.Vector3(0, ty0 + r*tStep, cz), qtx, _bs));
+  makeIM(new THREE.CylinderGeometry(0.012, 0.012, cw + 0.02, 8), M.COPPER, tubeMats, coilG);
+  // retornos en U (toros) en el costado +X
+  const ubMats = [];
+  const qub = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2, 0, 0));
+  for (let r = 0; r < rows - 1; r++) ubMats.push(new THREE.Matrix4().compose(new THREE.Vector3(cw/2 + 0.005, ty0 + (r + 0.5)*tStep, 0), qub, _bs));
+  makeIM(new THREE.TorusGeometry(0.065, 0.011, 6, 12, Math.PI), M.COPPER, ubMats, coilG);
+  // tapas de aluminio desnudo en los extremos del bloque (aletas aluminio metalness 1)
+  box(0.01, ch, cd, M.ALU, -cw/2, 0, 0, coilG);
+  box(0.01, ch, cd, M.ALU,  cw/2, 0, 0, coilG);
+  // cabezales de cobre verticales (suministro/retorno) en la cara -X
+  coilHeaderSup = cylY(0.028, ch - 0.1, M.COPPER, -cw/2 - 0.02, -0.1, -0.16, 12, coilG);
+  coilHeaderRet = cylY(0.028, ch - 0.1, M.COPPER, -cw/2 - 0.02,  0.1,  0.16, 12, coilG);
+
+  // CHAROLA DE CONDENSADOS bajo el serpentin (horizontal, capta el goteo)
+  box(0.72, 0.03, 0.7, M.PAN, 0, 0.9, 0);
+  box(0.72, 0.06, 0.03, M.PAN, 0, 0.93, -0.35);
+  box(0.72, 0.06, 0.03, M.PAN, 0, 0.93,  0.35);
+  box(0.03, 0.06, 0.7, M.PAN, -0.36, 0.93, 0);
+  box(0.03, 0.06, 0.7, M.PAN,  0.36, 0.93, 0);
+  // dren de la charola al plenum
+  makePipe([[0.28, 0.9, 0.28], [0.28, 0.72, 0.28], [0.28, 0.72, 0.42], [0.28, 0.62, 0.42]], 0.016, M.PIPE);
+}
+
+// ==================================================================
+// CONEXIONES DE AGUA HELADA (costado +X, bridadas, con valvula) + trayectos internos
+// ==================================================================
+const CHW_SUP_Y = 1.05, CHW_RET_Y = 1.9;
+{
+  const xw = HX;                            // pared derecha
+  // suministro (abajo, banda azul) — de campo hacia el gabinete
+  makePipe([[xw + 0.5, CHW_SUP_Y, 0.12], [xw + 0.06, CHW_SUP_Y, 0.12], [xw - 0.02, CHW_SUP_Y, 0.12], [-0.34, CHW_SUP_Y, -0.16], [-0.34, 1.35, -0.16]], 0.03, M.PIPE);
+  flangeX(0.055, 0.025, xw + 0.5, CHW_SUP_Y, 0.12, 6, 0.04, 1);
+  flangeX(0.055, 0.025, xw + 0.04, CHW_SUP_Y, 0.12, 6, 0.04, -1);
+  const sb = cylX(0.038, 0.06, M.BAND_B, xw + 0.28, CHW_SUP_Y, 0.12, 12); sb.castShadow = false;
+  // retorno (arriba, banda roja) + valvula con volante
+  makePipe([[xw + 0.5, CHW_RET_Y, -0.12], [xw + 0.06, CHW_RET_Y, -0.12], [xw - 0.02, CHW_RET_Y, -0.12], [-0.34, CHW_RET_Y, 0.16], [-0.34, 1.7, 0.16]], 0.03, M.PIPE);
+  flangeX(0.055, 0.025, xw + 0.5, CHW_RET_Y, -0.12, 6, 0.04, 1);
+  flangeX(0.055, 0.025, xw + 0.04, CHW_RET_Y, -0.12, 6, 0.04, -1);
+  const rb = cylX(0.038, 0.06, M.BAND_R, xw + 0.34, CHW_RET_Y, -0.12, 12); rb.castShadow = false;
+  // valvula de balanceo con volante en el retorno
+  cylX(0.05, 0.06, M.VALVE, xw + 0.2, CHW_RET_Y, -0.12, 12);
+  const hw = mesh(new THREE.TorusGeometry(0.06, 0.01, 6, 18), M.VALVE, xw + 0.2, CHW_RET_Y + 0.08, -0.12); hw.rotation.z = Math.PI/2; hw.castShadow = false;
+  cylY(0.008, 0.09, M.SKID, xw + 0.2, CHW_RET_Y + 0.05, -0.12, 8);
+}
+
+// ==================================================================
+// PUERTAS FRONTALES REMOVIBLES (frontGroup, toggle CORTE) + HMI
+// ==================================================================
+const hingeMats = [], handleMats = [];
+let hmiScreen;
+{
+  const dY0 = FLOOR_Y + 0.06, dY1 = TOP_Y - 0.06, dH = dY1 - dY0, dCy = (dY0 + dY1)/2;
+  // dos hojas (doble puerta) con junta central
+  for (const side of [-1, 1]){
+    const cx = side * 0.225;
+    box(0.44, dH, PT, M.DOOR, cx, dCy, FRONT_Z, frontGroup);
+    // rejilla inferior decorativa
+    const gm = mesh(new THREE.BoxGeometry(0.36, 0.28, 0.015), M.CAB_D, cx, dY0 + 0.28, FRONT_Z - 0.02, frontGroup); gm.castShadow = false;
+    const louMats = [];
+    for (let i = 0; i < 9; i++) louMats.push(new THREE.Matrix4().compose(new THREE.Vector3(cx, dY0 + 0.16 + i*0.028, FRONT_Z - 0.028), new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.5, 0, 0)), new THREE.Vector3(0.34, 0.018, 0.02)));
+    makeIM(new THREE.BoxGeometry(1, 1, 1), M.FRAME, louMats, frontGroup, false);
+  }
+  // junta / poste central
+  box(0.03, dH, 0.05, M.CAB_D, 0, dCy, FRONT_Z - 0.01, frontGroup);
+  // manijas verticales
+  handleMats.push(tMat(-0.06, 1.35, FRONT_Z - 0.05));
+  handleMats.push(tMat( 0.06, 1.35, FRONT_Z - 0.05));
+  makeIM(new THREE.BoxGeometry(0.025, 0.2, 0.04), M.HANDLE, handleMats, frontGroup, false);
+  // bisagras
+  for (const side of [-1, 1]) for (const yy of [dCy + 0.6, dCy - 0.6]) hingeMats.push(tMat(side * 0.44, yy, FRONT_Z - 0.02));
+  makeIM(new THREE.BoxGeometry(0.04, 0.08, 0.05), M.HINGE, hingeMats, frontGroup, false);
+
+  // === HMI: bisel + display (CanvasTexture, unlit) — sobre la hoja derecha ===
+  bevelBox(0.3, 0.24, 0.03, M.BEZEL, 0.2, 1.72, FRONT_Z - 0.03, 0.012, frontGroup);
+  hmiScreen = mesh(new THREE.PlaneGeometry(0.25, 0.19), M.SCREEN, 0.2, 1.72, FRONT_Z - 0.052, frontGroup);
+  hmiScreen.castShadow = false;
+  // botonera bajo el display
+  const btnMats = [];
+  for (let i = 0; i < 4; i++) btnMats.push(tMat(0.13 + i*0.045, 1.58, FRONT_Z - 0.05));
+  makeIM(new THREE.CylinderGeometry(0.012, 0.012, 0.012, 10).rotateX(Math.PI/2), M.FRAME, btnMats, frontGroup, false);
+  // placa de datos pequena en la hoja izquierda
+  const npMat = new THREE.MeshStandardMaterial({ color:0xb8bcc2, roughness:0.4, metalness:1 });
+  const np = mesh(new THREE.BoxGeometry(0.2, 0.1, 0.006), npMat, -0.22, 1.72, FRONT_Z - 0.045, frontGroup); np.castShadow = false;
+}
+
+// ==================================================================
+// INSTANCIADOS GLOBALES (esparragos)
+// ==================================================================
+{
+  const boltGeo = new THREE.CylinderGeometry(0.009, 0.009, 0.02, 6);
+  const boltIM = new THREE.InstancedMesh(boltGeo, M.BOLT, boltMatrices.length);
+  boltMatrices.forEach((m, i) => boltIM.setMatrixAt(i, m));
+  boltIM.castShadow = false; boltIM.receiveShadow = true;
+  staticG.add(boltIM);
+}
+
+// ==================================================================
+// PARTICULAS (aire retorno/impulsion + agua CHW) — MeshBasic, ligeras
+// ==================================================================
+function spawn(n, hex, size){
+  const arr = [], geo = new THREE.BoxGeometry(size, size, size);
+  for (let i = 0; i < n; i++){
+    const p = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:hex, transparent:true, opacity:0 }));
+    p.userData = { t: Math.random(), s: Math.random()*10, f: i % 2, a: Math.random()*Math.PI*2, r: 0.08 + Math.random()*0.5 };
+    scene.add(p); arr.push(p);
+  }
+  return arr;
+}
+const hotP  = spawn(26, 0xff5533, 0.02);   // retorno caliente -> convergen a las bocas
+const coldP = spawn(30, 0x44bbff, 0.02);   // impulsion fria -> plenum -> sube por perforadas
+const supP  = spawn(12, 0x66ccff, 0.016);  // agua suministro
+const retP  = spawn(12, 0xff6644, 0.016);  // agua retorno
+
+// trayectos de agua (polilinea) reutilizando puntos de CHW
+function polyline(points){
+  const pts = points.map(p => new THREE.Vector3(...p));
+  const segs = []; let total = 0;
+  for (let i = 0; i < pts.length - 1; i++){ const l = pts[i].distanceTo(pts[i+1]); segs.push({ a:pts[i], b:pts[i+1], l0:total, l }); total += l; }
+  const v = new THREE.Vector3();
+  return { at(t){ const d = Math.min(t,1)*total; for (const s of segs) if (d <= s.l0 + s.l) return v.lerpVectors(s.a, s.b, s.l ? (d - s.l0)/s.l : 0); return v.copy(pts[pts.length-1]); } };
+}
+const supPath = polyline([[HX + 0.5, CHW_SUP_Y, 0.12], [HX - 0.02, CHW_SUP_Y, 0.12], [-0.34, CHW_SUP_Y, -0.16], [-0.34, 1.4, -0.16]]);
+const retPath = polyline([[-0.34, 1.7, 0.16], [-0.34, CHW_RET_Y, 0.16], [HX - 0.02, CHW_RET_Y, -0.12], [HX + 0.5, CHW_RET_Y, -0.12]]);
+
+// ====== ESTADO / CONTROL DE EQUIPO ======
+const state = { fan:false, agua:false, corte:true, rot:false };
+
+function applyState(){
+  frontGroup.visible = !state.corte;
+  drawHMI(state);
+}
+function bindToggle(id, key, onTxt, offTxt, after){
+  const btn = document.getElementById(id);
+  const paint = () => { btn.className = state[key] ? 'on' : 'off'; btn.textContent = state[key] ? onTxt : offTxt; };
+  paint();
+  btn.addEventListener('click', () => { state[key] = !state[key]; paint(); applyState(); if (after) after(); });
+}
+bindToggle('bFan', 'fan', 'ON', 'OFF');
+bindToggle('bAgua', 'agua', 'ON', 'OFF');
+bindToggle('bCorte', 'corte', 'ON', 'OFF');
+const bRot = document.getElementById('bRot');
+const paintRot = () => { bRot.className = state.rot ? 'on' : 'off'; bRot.textContent = state.rot ? 'ON' : 'OFF'; };
+state.rot = false; paintRot();
+bRot.addEventListener('click', () => { state.rot = !state.rot; controls.autoRotate = state.rot; paintRot(); });
+applyState();
+renderer.shadowMap.needsUpdate = true;      // horneado unico tras construir la escena
+
+// ====== LOOP DE ANIMACION ======
+let fanRpm = 0;
+const clock = new THREE.Clock();
+function updateFlow(list, path, speed, active, dt){
+  for (const p of list){
+    if (!active){ p.material.opacity = 0; continue; }
+    p.userData.t += dt * speed; if (p.userData.t > 1) p.userData.t -= 1;
+    const tt = p.userData.t, s = p.userData.s, pos = path.at(tt);
+    p.position.set(pos.x + Math.sin(tt*9 + s)*0.006, pos.y + Math.cos(tt*7 + s)*0.006, pos.z + Math.sin(tt*5 + s)*0.006);
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.85;
+  }
+}
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  // Rodetes EC: arranque rapido, coast-down lento (inercia asimetrica)
+  const target = state.fan ? 1 : 0;
+  const kk = state.fan ? 1.5 : 0.4;
+  fanRpm += (target - fanRpm) * Math.min(1, dt * kk);
+  if (Math.abs(fanRpm - target) < 0.002) fanRpm = target;
+  fanWheels.forEach((w, i) => { w.rotation.y += dt * (13 + i*0.7) * fanRpm; });
+  const airVis = fanRpm > 0.03;
+
+  // Aire caliente (retorno): converge a las bocas superiores
+  hotP.forEach(p => {
+    if (!airVis){ p.material.opacity = 0; return; }
+    p.userData.t += dt * (0.2 * (0.3 + fanRpm*0.7)); if (p.userData.t > 1) p.userData.t -= 1;
+    const tt = p.userData.t, cx = FAN_CX[p.userData.f], r = p.userData.r * (1 - tt*0.8);
+    p.position.set(cx + Math.cos(p.userData.a + tt*1.4)*r, 3.0 - tt*0.42 + Math.sin(tt*6)*0.02, FAN_CZ + Math.sin(p.userData.a + tt*1.4)*r);
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.75 * fanRpm;
+  });
+  // Aire frio (impulsion): baja al plenum y sube por losetas perforadas del frente
+  coldP.forEach(p => {
+    if (!airVis){ p.material.opacity = 0; return; }
+    p.userData.t += dt * (0.16 * (0.3 + fanRpm*0.7)); if (p.userData.t > 1) p.userData.t -= 1;
+    const tt = p.userData.t, s = p.userData.s;
+    const xi = -0.35 + (s % 1) * 0.7;
+    let x, y, z;
+    if (tt < 0.35){ const u = tt/0.35; x = xi; z = -0.2 + (s % 0.4); y = 0.9 - u*0.75; }
+    else if (tt < 0.6){ const u = (tt - 0.35)/0.25; y = 0.15; x = xi; z = (-0.2 + (s % 0.4)) + (-0.9 - (-0.2 + (s % 0.4)))*u; }
+    else { const u = (tt - 0.6)/0.4; x = xi*0.6; z = -0.9; y = 0.1 + u*0.5; }
+    p.position.set(x + Math.sin(tt*8 + s)*0.01, y, z + Math.cos(tt*6 + s)*0.01);
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.8 * fanRpm;
+  });
+  // Agua helada
+  updateFlow(supP, supPath, 0.16, state.agua, dt);
+  updateFlow(retP, retPath, 0.16, state.agua, dt);
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
