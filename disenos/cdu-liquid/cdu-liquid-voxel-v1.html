@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>CDU · Enfriamiento Líquido IA · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); z-index:5; }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#aebfd2; }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); z-index:5; color:#aebfd2; }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; letter-spacing:0.08em; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #coord { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#aebfd2; backdrop-filter: blur(6px); z-index:5; letter-spacing:0.06em; }
+  #coord span { color:#ffe14d; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter: blur(6px); z-index:5; }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; gap:12px; }
+  #panel label { color:#aebfd2; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:54px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel button.alarm { color:#06080d; border-color:#ff2233; background:#ff2233; box-shadow:0 0 12px #ff223388; animation:blink 1s infinite; }
+  #panel button.mode { color:#06080d; border-color:#3aa0ff; background:#3aa0ff; box-shadow:0 0 12px #3aa0ff66; }
+  @keyframes blink { 50% { opacity:0.55; } }
+</style>
+<script>
+// Inyección dinámica de importmap (evita el mangling de package@version por Cloudflare)
+(function(){
+  if (typeof document === 'undefined') return;
+  var AT = String.fromCharCode(64);
+  var base = 'https://unpkg.com/three' + AT + '0.160.0/';
+  var im = document.createElement('script');
+  im.type = 'importmap';
+  im.textContent = JSON.stringify({ imports: {
+    'three': base + 'build/three.module.js',
+    'three/addons/': base + 'examples/jsm/'
+  }});
+  document.head.appendChild(im);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>CDU · ENFRIAMIENTO LÍQUIDO · IA</b><br>
+  <span>Coolant Distribution Unit · rack 0.6×1.2×2.0 m · 1 voxel = 0.025 m</span>
+</div>
+<div id="legend">
+  <div><i style="background:#2e8bff"></i> PRIMARIO · agua helada (supply)</div>
+  <div><i style="background:#d23c3c"></i> PRIMARIO · retorno</div>
+  <div><i style="background:#18d0e0"></i> SECUNDARIO · a racks (supply)</div>
+  <div><i style="background:#9a54e0"></i> SECUNDARIO · retorno</div>
+  <div><i style="background:#c4793c"></i> INTERCAMBIADOR (placas)</div>
+  <div><i style="background:#bcc4cc"></i> BOMBAS P1 / P2</div>
+</div>
+<div id="coord">DRAG: Rotar · WHEEL: Zoom · CLIC: Capturar voxel<br><span id="coordVal">VOX  —</span></div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>BOMBA P1</label><button id="bP1" class="on">ON</button></div>
+  <div class="row"><label>BOMBA P2 (redundante)</label><button id="bP2" class="off">OFF</button></div>
+  <div class="row"><label>MODO</label><button id="bMode" class="off">NORMAL</button></div>
+  <div class="row"><label>FUGA SIMULADA</label><button id="bLeak" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="off">OFF</button></div>
+</div>
+
+<script type="module" id="app">
+// ============================================================================
+// CDU — Coolant Distribution Unit (enfriamiento líquido para datacenter de IA)
+// Voxel Art 3D · estilo SCADA dark · formato rack
+//
+// SCALE: 1 voxel = 0.025 m  (micro-voxel, alta densidad)
+//   Gabinete: 0.60 m ancho × 1.20 m fondo × 2.00 m alto = 24 × 48 × 80 vox
+//   X = ancho (0..23) · Y = alto (0..79) · Z = fondo (0..47, frente en Z=47)
+//
+// Dos circuitos líquido-líquido acoplados por un INTERCAMBIADOR de placas:
+//   PRIMARIO   = agua helada de la instalación (azul supply / rojo retorno)
+//   SECUNDARIO = líquido técnico a los racks   (cian supply / morado retorno)
+//   2 BOMBAS redundantes (impulsor animado) · tanque de expansión · filtros
+//   MANIFOLD con quick-connects hacia los racks · sensores flujo/presión/fuga
+//   Tablero HMI con mímico emisivo de ambos circuitos + caudales.
+//
+// three.js r0.160.0 vía importmap (unpkg) · voxeles estáticos en InstancedMesh
+// por color (BoxGeometry(1,1,1) compartida) · partes animadas en Groups aparte.
+// ============================================================================
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const HEADLESS = (typeof window === 'undefined') || !!globalThis.__HEADLESS__;
+
+// ====== PALETA ======
+const PAL = {
+  // gabinete negro datacenter
+  CAB:    { c:0x16191e, r:0.55, m:0.28 },
+  CAB_D:  { c:0x0f1216, r:0.60, m:0.25 },
+  CAB_L:  { c:0x232830, r:0.50, m:0.32 },
+  CAB_J:  { c:0x0a0c0f, r:0.65, m:0.22 },
+  BASE:   { c:0x090b0e, r:0.80, m:0.20 },
+  // pisos
+  FLOOR:  { c:0x1c2028, r:0.90, m:0.05 },
+  FLOOR_D:{ c:0x15181e, r:0.90, m:0.05 },
+  // metales / estructura
+  MET:    { c:0x9aa3ac, r:0.38, m:0.85 },
+  MET_D:  { c:0x6f7883, r:0.45, m:0.85 },
+  MET_L:  { c:0xbcc4cc, r:0.30, m:0.90 },
+  GRAYK:  { c:0x555e69, r:0.50, m:0.60 },
+  CHAR:   { c:0x262b33, r:0.60, m:0.60 },
+  CHAR_D: { c:0x1a1e25, r:0.70, m:0.50 },
+  FIN:    { c:0x3b434e, r:0.42, m:0.85 },
+  // intercambiador de placas
+  STEEL:  { c:0xb0b8c0, r:0.30, m:0.95 },
+  STEEL_D:{ c:0x848d96, r:0.40, m:0.90 },
+  COPPER: { c:0xc4793c, r:0.35, m:1.00 },
+  COPPER_D:{c:0x9a5f2e, r:0.42, m:0.95 },
+  // circuito primario (agua helada)
+  PBLU:   { c:0x2e8bff, r:0.40, m:0.35, e:0x2e8bff, ei:0.14 },
+  PBLU_D: { c:0x1f5fbf, r:0.45, m:0.35 },
+  PRED:   { c:0xd23c3c, r:0.45, m:0.35, e:0xd23c3c, ei:0.14 },
+  PRED_D: { c:0xa22a2a, r:0.48, m:0.35 },
+  INS:    { c:0x2b2f36, r:0.85, m:0.05 },   // aislamiento (foam) en tubería fría
+  // circuito secundario (líquido técnico a racks)
+  SCYN:   { c:0x18d0e0, r:0.38, m:0.35, e:0x18d0e0, ei:0.16 },
+  SCYN_D: { c:0x0f96a2, r:0.45, m:0.35 },
+  SPUR:   { c:0x9a54e0, r:0.42, m:0.35, e:0x9a54e0, ei:0.16 },
+  SPUR_D: { c:0x6f3aa8, r:0.48, m:0.35 },
+  // tanque de expansión
+  TANK:   { c:0x3a5a8c, r:0.35, m:0.80 },
+  TANK_D: { c:0x2b466e, r:0.42, m:0.78 },
+  // display / vidrio
+  DISP:   { c:0x04060a, r:0.95, m:0.00 },
+  GLASS:  { c:0x9fd0e0, r:0.12, m:0.20, t:0.16 },
+  // acentos
+  TEAL:   { c:0x00d4aa, r:0.50, m:0.20, e:0x00d4aa, ei:0.35 },
+  YEL:    { c:0xffc400, r:0.75, m:0.00 },
+  BLK:    { c:0x0b0d11, r:0.80, m:0.20 },
+  WHT:    { c:0xe8edf2, r:0.60, m:0.10 },
+  WHTP:   { c:0xcfd6dd, r:0.55, m:0.30 },
+  GRN_B:  { c:0x0f8a4f, r:0.50, m:0.10, e:0x0f8a4f, ei:0.35 },
+  RED_B:  { c:0xc22233, r:0.50, m:0.10, e:0xc22233, ei:0.35 },
+  AMBER:  { c:0xffb300, r:0.50, m:0.20, e:0xffb300, ei:0.55 },
+  ORNG:   { c:0xff7a30, r:0.50, m:0.20, e:0xff7a30, ei:0.45 }
+};
+
+// ====== ACUMULADOR DE VOXELES (Map => 0 celdas duplicadas por construcción) ======
+const cells = new Map();
+let overwrites = 0;
+const K = (x, y, z) => x + ',' + y + ',' + z;
+function vox(x, y, z, c) {
+  const k = K(x, y, z);
+  if (cells.has(k)) overwrites++;
+  cells.set(k, c);
+}
+function fill(x0, x1, y0, y1, z0, z1, c) {
+  for (let x = x0; x <= x1; x++)
+    for (let y = y0; y <= y1; y++)
+      for (let z = z0; z <= z1; z++) vox(x, y, z, c);
+}
+function carve(x0, x1, y0, y1, z0, z1) {
+  for (let x = x0; x <= x1; x++)
+    for (let y = y0; y <= y1; y++)
+      for (let z = z0; z <= z1; z++) cells.delete(K(x, y, z));
+}
+function hash2(a, b) { return (((a + 31) * 73856093) ^ ((b + 71) * 19349663)) >>> 0; }
+// disco voxelizado en el plano XY, extruido z0..z1
+function disc(cx, cy, r, z0, z1, c) {
+  const x0 = Math.floor(cx - r) - 1, x1 = Math.ceil(cx + r) + 1;
+  const y0 = Math.floor(cy - r) - 1, y1 = Math.ceil(cy + r) + 1;
+  for (let x = x0; x <= x1; x++)
+    for (let y = y0; y <= y1; y++)
+      if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy) <= r)
+        for (let z = z0; z <= z1; z++) vox(x, y, z, c);
+}
+// pipe recto 2×2 en un eje
+function pipeY(x, z, y0, y1, c) { fill(x, x + 1, Math.min(y0, y1), Math.max(y0, y1), z, z + 1, c); }
+function pipeZ(x, y, z0, z1, c) { fill(x, x + 1, y, y, Math.min(z0, z1), Math.max(z0, z1), c); }
+function pipeX(y, z, x0, x1, c) { fill(Math.min(x0, x1), Math.max(x0, x1), y, y, z, z + 1, c); }
+
+// ====== PISO datacenter (raised floor) con juntas de baldosa ======
+for (let x = -14; x <= 38; x++) {
+  for (let z = -14; z <= 62; z++) {
+    let c = (hash2(x, z) % 100 < 16) ? 'FLOOR_D' : 'FLOOR';
+    if ((x + 200) % 24 === 0 || (z + 200) % 24 === 0) c = 'FLOOR_D';
+    vox(x, -1, z, c);
+  }
+}
+// línea de pasillo (hot-aisle) amarilla frente al equipo
+for (let x = -6; x <= 30; x++) if (x % 6 < 4) { vox(x, -1, 56, 'YEL'); vox(x, -1, 57, 'YEL'); }
+
+// ====== GABINETE RACK (0..23 × 0..79 × 0..47) ======
+const CX0 = 0, CX1 = 23, CY1 = 79, CZ0 = 0, CZ1 = 47;
+// plinto / base
+fill(CX0, CX1, 0, 3, CZ0, CZ1, 'BASE');
+// pies niveladores
+[[1,1],[22,1],[1,46],[22,46]].forEach(p => { vox(p[0], -1, p[1], 'MET_D'); });
+// pared trasera (con dithering)
+for (let x = CX0; x <= CX1; x++)
+  for (let y = 4; y <= CY1; y++) {
+    let c = 'CAB';
+    const h = hash2(x, y) % 100;
+    if (h < 14) c = 'CAB_D'; else if (h >= 90) c = 'CAB_L';
+    if (y === 41) c = 'CAB_J';
+    vox(x, y, CZ0, c);
+  }
+// perforaciones de ventilación trasera (rejilla honeycomb simple)
+for (let x = 3; x <= 20; x += 3) for (let y = 60; y <= 74; y += 3) cells.delete(K(x, y, CZ0));
+// laterales
+for (let y = 4; y <= CY1; y++) for (let z = CZ0; z <= CZ1; z++) {
+  const cc = (hash2(y, z) % 100 < 12) ? 'CAB_D' : 'CAB';
+  vox(CX0, y, z, cc); vox(CX1, y, z, cc);
+}
+// techo con anillos de izaje
+fill(CX0, CX1, CY1, CY1, CZ0, CZ1, 'MET_D');
+[[3,3],[20,3],[3,44],[20,44]].forEach(p => vox(p[0], CY1 + 1, p[1], 'MET_L'));
+// franja de marca teal (frente superior)
+fill(2, 21, 77, 77, CZ1, CZ1, 'TEAL');
+
+// ---- MARCO FRONTAL (Z=47) ----
+fill(CX0, CX1, 4, 4, CZ1, CZ1, 'MET_D');     // riel inferior
+fill(CX0, CX1, 78, 78, CZ1, CZ1, 'MET_D');   // riel superior
+fill(CX0, CX0, 4, 78, CZ1, CZ1, 'MET_D');    // poste izq
+fill(CX1, CX1, 4, 78, CZ1, CZ1, 'MET_D');    // poste der
+fill(CX0, CX1, 59, 59, CZ1, CZ1, 'MET_D');   // travesaño (display / medio)
+fill(CX0, CX1, 25, 25, CZ1, CZ1, 'MET_D');   // travesaño (medio / bombas)
+fill(13, 13, 25, 59, CZ1, CZ1, 'MET_D');     // mullion vertical medio
+
+// ---- VENTANA DE VIDRIO (izq. medio) muestra intercambiador + tanque ----
+fill(1, 12, 26, 58, CZ1, CZ1, 'GLASS');
+// ---- PANEL FRONTAL derecho (manifold) ----
+fill(14, 22, 26, 58, CZ1, CZ1, 'CAB_L');
+// ---- ABERTURA INFERIOR (cut-away) bombas + filtros: sólo frame, sin panel ----
+// (Y 5..24 queda abierto; se ven las bombas)
+
+// ============================================================================
+// INTERIOR
+// ============================================================================
+
+// ====== INTERCAMBIADOR DE PLACAS líquido-líquido (corte) ======
+// pila de placas alternas acero/cobre a lo largo de X, con placas de extremo
+const HXX0 = 3, HXX1 = 12, HXY0 = 28, HXY1 = 50, HXZ0 = 6, HXZ1 = 22;
+fill(HXX0 - 1, HXX0 - 1, HXY0, HXY1, HXZ0, HXZ1, 'MET_L');     // placa de extremo izq
+fill(HXX1 + 1, HXX1 + 1, HXY0, HXY1, HXZ0, HXZ1, 'MET_L');     // placa de extremo der
+for (let x = HXX0; x <= HXX1; x++) {
+  const c = (x % 2 === 0) ? 'STEEL' : 'COPPER';
+  fill(x, x, HXY0, HXY1, HXZ0, HXZ1, c);
+}
+// tirantes de compresión (barras superiores/inferiores)
+fill(HXX0 - 1, HXX1 + 1, HXY1 + 1, HXY1 + 1, HXZ0 + 2, HXZ0 + 3, 'MET_D');
+fill(HXX0 - 1, HXX1 + 1, HXY0 - 1, HXY0 - 1, HXZ0 + 2, HXZ0 + 3, 'MET_D');
+// puertos: primario (azul/rojo) cara izq, secundario (cian/morado) cara der
+disc(HXZ1 - 3, HXY1 - 2, 1.6, HXX0 - 2, HXX0 - 2, 'PBLU');   // primario in (arriba)
+disc(HXZ0 + 3, HXY0 + 2, 1.6, HXX0 - 2, HXX0 - 2, 'PRED');   // primario out (abajo)
+disc(HXZ1 - 3, HXY0 + 2, 1.6, HXX1 + 2, HXX1 + 2, 'SCYN');   // secundario out (a bombas)
+disc(HXZ0 + 3, HXY1 - 2, 1.6, HXX1 + 2, HXX1 + 2, 'SPUR');   // secundario in (retorno)
+
+// ====== TANQUE DE EXPANSIÓN (cilindro vertical, corner der-atrás) ======
+const TKX = 18, TKZ = 33;
+disc(TKX, TKZ, 4, 30, 30, 'TANK_D');       // tapa inferior
+for (let y = 31; y <= 46; y++) disc(TKX, TKZ, 4, y, y, 'TANK');
+disc(TKX, TKZ, 4, 47, 47, 'TANK_D');       // tapa superior
+disc(TKX, TKZ, 1.5, 48, 49, 'MET_D');      // cuello / válvula
+vox(TKX, 50, TKZ, 'MET_L');
+// mirilla de nivel + manómetro
+fill(TKX + 3, TKX + 3, 34, 44, TKZ, TKZ, 'GLASS');
+disc(TKX - 3, TKZ + 3, 1.4, 42, 42, 'WHT'); // manómetro (cara)
+vox(TKX - 3, 42, TKZ + 3, 'BLK');
+// tubería de conexión del tanque a la línea secundaria
+pipeY(TKX - 1, TKZ - 5, 24, 30, 'SCYN_D');
+
+// ====== BOMBAS DE CIRCULACIÓN REDUNDANTES P1 / P2 (impulsor animado) ======
+// housing/voluta estáticos aquí; el impulsor va en un Group aparte (dinámico)
+const PUMPS = [
+  { id: 1, cx: 6,  baseY: 5, volZ: 30, opZ: 34 },
+  { id: 2, cx: 17, baseY: 5, volZ: 30, opZ: 34 }
+];
+function buildPump(p) {
+  const cx = p.cx, by = p.baseY;
+  // bancada
+  fill(cx - 3, cx + 3, by, by + 1, p.volZ - 6, p.volZ + 4, 'MET_D');
+  // motor (cuerpo cilíndrico atrás) con aletas de enfriamiento
+  for (let z = p.volZ - 12; z <= p.volZ - 3; z++) {
+    const c = (z % 2 === 0) ? 'CHAR' : 'CHAR_D';
+    disc(cx, by + 7, 3.0, z, z, c);
+  }
+  disc(cx, by + 7, 3.4, p.volZ - 12, p.volZ - 12, 'CHAR_D'); // tapa trasera
+  // caja de bornes del motor
+  fill(cx + 2, cx + 4, by + 9, by + 12, p.volZ - 8, p.volZ - 5, 'CHAR_D');
+  // voluta (carcasa espiral) al frente
+  disc(cx, by + 7, 4.2, p.volZ - 2, p.volZ + 2, 'MET');
+  disc(cx, by + 7, 4.2, p.opZ, p.opZ, 'MET_D');        // brida frontal
+  disc(cx, by + 7, 2.4, p.opZ, p.opZ + 1, 'CHAR_D');   // apertura (se ve el impulsor)
+  carve(cx - 2, cx + 2, by + 5, by + 9, p.opZ, p.opZ + 1);
+  // succión (abajo, entra líquido secundario retorno) y descarga (arriba a manifold)
+  pipeY(cx - 1, p.volZ + 1, by - 1, by + 4, 'SPUR_D');   // succión
+  pipeY(cx - 1, p.volZ + 1, by + 12, 26, 'SCYN_D');      // descarga hacia manifold
+  disc(cx, by + 13, 2.2, p.volZ + 1, p.volZ + 1, 'MET_L'); // brida descarga
+  // placa de datos + piloto (biseles; LED va dinámico)
+  fill(cx - 1, cx + 1, by + 3, by + 4, p.opZ + 1, p.opZ + 1, 'WHTP');
+  vox(cx, by + 10, p.opZ, 'BLK');
+}
+PUMPS.forEach(buildPump);
+
+// ====== FILTROS (2 canister inline, delante de las bombas) ======
+function buildFilter(cx, cz) {
+  disc(cx, cz, 2.2, 6, 6, 'MET_D');
+  for (let y = 7; y <= 17; y++) disc(cx, cz, 2.2, y, y, (y % 2 ? 'MET' : 'MET_D'));
+  disc(cx, cz, 2.2, 18, 18, 'MET_D');
+  disc(cx, cz, 1.2, 19, 20, 'GRAYK');     // cabezal
+  fill(cx, cx, 8, 16, cz + 2, cz + 2, 'GLASS'); // mirilla
+  pipeY(cx - 1, cz - 3, 4, 7, 'SCYN_D');
+}
+buildFilter(6, 42); buildFilter(17, 42);
+
+// ====== MANIFOLD DE DISTRIBUCIÓN + QUICK-CONNECTS (frente der.) ======
+// dos headers verticales: supply (cian) y return (morado)
+const MSX = 15, MRX = 20, MFZ = 46;
+pipeY(MSX, MFZ, 28, 56, 'SCYN');   // header supply
+pipeY(MRX, MFZ, 28, 56, 'SPUR');   // header return
+// alimentación de los headers desde bombas / HX
+pipeX(27, MFZ - 1, MSX, 8, 'SCYN_D');
+pipeX(29, MFZ - 1, MRX, HXX1 + 2, 'SPUR_D');
+// quick-connects (protruyen a Z 48..50) — pares supply/return hacia los racks
+const QCY = [31, 37, 43, 49, 55];
+function quickConnect(x, y, c) {
+  fill(x, x + 1, y, y + 1, 47, 49, c);          // cuerpo
+  fill(x - 1, x + 2, y - 1, y + 2, 49, 49, 'MET_L'); // anillo de acople
+  cells.delete(K(x, y, 49)); cells.delete(K(x + 1, y, 49));
+  cells.delete(K(x, y + 1, 49)); cells.delete(K(x + 1, y + 1, 49));
+  vox(x, y, 50, 'GRAYK');                        // palanca de leva
+}
+for (const y of QCY) {
+  quickConnect(MSX, y, 'SCYN');
+  quickConnect(MRX, y, 'SPUR');
+}
+// mangueras "a racks": haces cortos que salen hacia +Z y a un lado
+for (const y of QCY) {
+  fill(MSX, MSX + 1, y, y, 51, 54, 'SCYN_D');
+  fill(MRX, MRX + 1, y, y, 51, 54, 'SPUR_D');
+}
+fill(MSX, MRX + 1, 30, 30, 54, 54, 'CHAR_D'); // bandeja/organizador de mangueras
+
+// ====== TABLERO HMI (display) frente superior Y 60..77 ======
+fill(1, 22, 60, 78, CZ1, CZ1, 'CAB_L');       // panel
+fill(3, 20, 63, 76, CZ1, CZ1, 'DISP');        // pantalla (mímico va dinámico)
+// bisel
+fill(2, 21, 62, 62, CZ1, CZ1, 'CAB_D');
+fill(2, 21, 77, 77, CZ1, CZ1, 'CAB_D');
+// biseles de lámparas piloto (LED dinámicos): P1, P2, FUGA
+vox(3, 61, CZ1, 'BLK'); vox(6, 61, CZ1, 'BLK'); vox(19, 61, CZ1, 'BLK');
+// teclas físicas bajo la pantalla
+fill(4, 5, 60, 61, CZ1 + 1, CZ1 + 1, 'GRN_B');
+fill(8, 9, 60, 61, CZ1 + 1, CZ1 + 1, 'RED_B');
+fill(12, 13, 60, 61, CZ1 + 1, CZ1 + 1, 'AMBER');
+
+// ====== TUBERÍA PRIMARIA (agua helada de la instalación) ======
+// entra por la base trasera, aislada (INS), sube al HX y retorna
+fill(2, 3, 1, 1, 2, 5, 'INS');                       // acometida supply (piso)
+pipeY(2, 3, 1, 27, 'INS'); pipeY(2, 3, 1, 27, 'INS');
+fill(2, 3, 5, 27, 3, 4, 'INS');                      // vaina aislante columna supply
+pipeY(2, 3, 5, 27, 'PBLU');                          // núcleo azul visible arriba
+pipeX(27, 3, 3, HXX0 - 2, 'PBLU_D');                 // a puerto primario in
+fill(6, 7, 1, 1, 2, 5, 'INS');                       // acometida return (piso)
+pipeY(6, 3, 5, 29, 'PRED');
+pipeX(29, 3, 6, HXX0 - 2, 'PRED_D');                 // desde puerto primario out
+// bridas ANSI a la instalación (piso)
+disc(2.5, 3.5, 1.6, 0, 0, 'MET_D'); disc(6.5, 3.5, 1.6, 0, 0, 'MET_D');
+vox(1, 2, 3, 'PBLU'); vox(7, 2, 3, 'PRED');
+
+// ====== TUBERÍA SECUNDARIA (líquido técnico) — HX <-> bombas <-> manifold ======
+pipeY(13, 20, 30, HXY0 - 2, 'SCYN_D');   // HX secundario out -> bajada a bombas
+pipeX(27, 20, 8, 13, 'SCYN_D');          // colector inferior supply
+pipeY(13, 20, HXY1 - 4, 54, 'SPUR_D');   // retorno morado sube al HX
+pipeX(HXY1 - 4, 20, 13, HXX1 + 2, 'SPUR_D');
+
+// ====== SENSORES flujo / presión / fuga ======
+// sensor de flujo (secundario, en descarga)
+fill(9, 10, 22, 24, 30, 32, 'GRAYK'); vox(9, 23, 32, 'AMBER');
+// transmisor de presión (primario)
+fill(4, 5, 24, 26, 4, 5, 'GRAYK'); vox(4, 25, 5, 'BLUEB' in PAL ? 'BLUEB' : 'AMBER');
+// cable/cuerda de detección de fuga en la base (leak rope)
+for (let x = 2; x <= 21; x++) vox(x, 4, 44, (x % 3 ? 'ORNG' : 'CHAR_D'));
+vox(2, 5, 44, 'ORNG'); vox(21, 5, 44, 'ORNG');
+
+// ====== ESCENA / LUCES ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 140, 360);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(70, 130, 100);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left = -70; sc.right = 70; sc.top = 120; sc.bottom = -30; sc.near = 5; sc.far = 400;
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.5;
+sun.target.position.set(12, 40, 22);
+scene.add(sun, sun.target);
+const fillL = new THREE.DirectionalLight(0x88aaff, 0.4);
+fillL.position.set(-60, 50, 80);
+scene.add(fillL);
+const rimL = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rimL.position.set(30, 50, -90);
+scene.add(rimL);
+
+// ====== INSTANCED MESH POR COLOR (voxeles estáticos) ======
+const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+const byColor = new Map();
+for (const [k, c] of cells) {
+  if (!byColor.has(c)) byColor.set(c, []);
+  byColor.get(c).push(k);
+}
+const staticMeshes = [];
+for (const [cname, keys] of byColor) {
+  const def = PAL[cname];
+  const mat = new THREE.MeshStandardMaterial({
+    color: def.c, roughness: def.r, metalness: def.m, envMapIntensity: 0.5
+  });
+  if (def.e) { mat.emissive = new THREE.Color(def.e); mat.emissiveIntensity = def.ei; }
+  if (def.t) { mat.transparent = true; mat.opacity = def.t; mat.depthWrite = false; mat.side = THREE.DoubleSide; }
+  const im = new THREE.InstancedMesh(cubeGeo, mat, keys.length);
+  const M = new THREE.Matrix4();
+  keys.forEach((key, i) => {
+    const p = key.split(',');
+    M.setPosition(+p[0] + 0.5, +p[1] + 0.5, +p[2] + 0.5);
+    im.setMatrixAt(i, M);
+  });
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = !def.t;
+  im.receiveShadow = true;
+  if (def.t) im.renderOrder = 2;
+  im.name = 'vox_' + cname;
+  scene.add(im);
+  staticMeshes.push(im);
+}
+
+// ====== ESTADO ======
+const state = { p1: true, p2: false, redundant: false, leak: false, rot: false };
+function pumpRunning(n) { return state['p' + n]; }
+function pumpsOn() { return state.p1 || state.p2; }
+
+// ====== PARTES DINÁMICAS (Groups separados del InstancedMesh) ======
+const dynGeo = new THREE.BoxGeometry(1, 1, 1);
+function emat(hex, base, i) {
+  return new THREE.MeshStandardMaterial({
+    color: base, emissive: hex, emissiveIntensity: i, roughness: 0.4, metalness: 0.1
+  });
+}
+function dynBox(mat, x, y, z, sx, sy, sz) {
+  const m = new THREE.Mesh(dynGeo, mat);
+  m.position.set(x, y, z);
+  m.scale.set(sx || 1, sy || 1, sz || 1);
+  m.castShadow = false;
+  return m;
+}
+
+// -- Displays 7 segmentos (dígitos 3×5)
+const SEG_CELLS = {
+  a: [[0, 4], [1, 4], [2, 4]], b: [[2, 3]], c: [[2, 1]],
+  d: [[0, 0], [1, 0], [2, 0]], e: [[0, 1]], f: [[0, 3]],
+  g: [[0, 2], [1, 2], [2, 2]]
+};
+const CHAR_SEGS = {
+  '0': 'abcdef', '1': 'bc', '2': 'abgde', '3': 'abgcd', '4': 'fgbc',
+  '5': 'afgcd', '6': 'afgedc', '7': 'abc', '8': 'abcdefg', '9': 'abfgcd',
+  'F': 'aefg', ' ': ''
+};
+function buildDigits(str, mat, ox, oy, oz, sc) {
+  const g = new THREE.Group();
+  const s = sc || 1;
+  let cx = ox;
+  for (const ch of str) {
+    for (const seg of (CHAR_SEGS[ch] || '')) {
+      for (const cell of SEG_CELLS[seg]) {
+        g.add(dynBox(mat, cx + cell[0] * s + 0.5 * s, oy + cell[1] * s + 0.5 * s, oz, 0.85 * s, 0.85 * s, 0.5));
+      }
+    }
+    cx += 4 * s;
+  }
+  return g;
+}
+
+// -- Impulsor de bomba (disco + álabes curvos) — gira sobre eje Z (frente)
+const matBlade = new THREE.MeshStandardMaterial({ color: 0x9aa3ac, roughness: 0.32, metalness: 0.9, envMapIntensity: 0.5 });
+const matHub = new THREE.MeshStandardMaterial({ color: 0x1a1e25, roughness: 0.5, metalness: 0.6 });
+function buildImpeller(r) {
+  const g = new THREE.Group();
+  g.add(dynBox(matHub, 0, 0, 0, 1.4, 1.4, 0.8));
+  for (let i = 0; i < 6; i++) {
+    const arm = new THREE.Group();
+    const b = dynBox(matBlade, 0, r * 0.5, 0, 0.7, r, 0.5);
+    b.rotation.z = 0.5;           // curvatura (backswept)
+    arm.add(b);
+    arm.rotation.z = i * Math.PI / 3;
+    g.add(arm);
+  }
+  return g;
+}
+
+// -- Rigs de bombas: impulsor + lámpara piloto + luz
+const pumpRigs = [];
+for (const p of PUMPS) {
+  const rig = { p: p };
+  const imp = buildImpeller(2.0);
+  const mount = new THREE.Group();
+  mount.add(imp);
+  mount.position.set(p.cx, p.baseY + 7, p.opZ + 0.6);
+  scene.add(mount);
+  rig.imp = imp;
+  rig.lampMat = emat(0x00ff66, 0x062a12, 1.6);
+  scene.add(dynBox(rig.lampMat, p.cx + 0.5, p.baseY + 10.5, p.opZ + 0.7, 0.85, 0.85, 0.75));
+  rig.light = new THREE.PointLight(0x00ff66, 1.2, 18, 2);
+  rig.light.position.set(p.cx + 0.5, p.baseY + 10, p.opZ + 3.5);
+  scene.add(rig.light);
+  pumpRigs.push(rig);
+}
+
+// -- Lámparas piloto del HMI (P1 / P2 / FUGA)
+const hmiP1 = emat(0x00ff66, 0x062a12, 1.6);
+const hmiP2 = emat(0x00ff66, 0x062a12, 0.12);
+const hmiLeak = emat(0xff2233, 0x2a0708, 0.12);
+scene.add(dynBox(hmiP1, 3.5, 61.5, CZ1 + 0.4, 0.9, 0.9, 0.8));
+scene.add(dynBox(hmiP2, 6.5, 61.5, CZ1 + 0.4, 0.9, 0.9, 0.8));
+scene.add(dynBox(hmiLeak, 19.5, 61.5, CZ1 + 0.4, 0.9, 0.9, 0.8));
+
+// -- Mímico del HMI (dos circuitos + caudales) sobre la pantalla Z=47.55
+const SZ = CZ1 + 0.55;
+const mimP = emat(0x2e8bff, 0x04101f, 1.3);   // lazo primario
+const mimS = emat(0x18d8e0, 0x041416, 1.3);   // lazo secundario
+const mimHX = emat(0xffb300, 0x1a1204, 1.2);  // intercambiador
+const mimPumpMat = emat(0x00ff66, 0x062a12, 1.4);
+function screenRect(mat, x0, x1, y0, y1) {
+  const g = new THREE.Group();
+  for (let x = x0; x <= x1; x++) { g.add(dynBox(mat, x + 0.5, y0 + 0.5, SZ, 0.7, 0.7, 0.4)); g.add(dynBox(mat, x + 0.5, y1 + 0.5, SZ, 0.7, 0.7, 0.4)); }
+  for (let y = y0 + 1; y < y1; y++) { g.add(dynBox(mat, x0 + 0.5, y + 0.5, SZ, 0.7, 0.7, 0.4)); g.add(dynBox(mat, x1 + 0.5, y + 0.5, SZ, 0.7, 0.7, 0.4)); }
+  scene.add(g);
+  return g;
+}
+screenRect(mimP, 4, 9, 66, 74);       // lazo primario (izq)
+screenRect(mimS, 13, 18, 66, 74);     // lazo secundario (der)
+scene.add(dynBox(mimHX, 11, 70.5, SZ, 1.6, 6, 0.4));  // barra HX (centro)
+const mimPumpIcons = [dynBox(mimPumpMat, 15.5, 65.5, SZ, 1.2, 1.2, 0.4), dynBox(mimPumpMat, 16.5, 65.5, SZ, 1.2, 1.2, 0.4)];
+mimPumpIcons.forEach(m => scene.add(m));
+// caudales (dígitos) — primario y secundario
+const digPmat = emat(0x2e8bff, 0x04101f, 1.3);
+const digSmat = emat(0x18d8e0, 0x041416, 1.3);
+const digP = buildDigits('45', digPmat, 4, 63.6, SZ, 0.8); scene.add(digP);
+const digS = buildDigits('38', digSmat, 13, 63.6, SZ, 0.8); scene.add(digS);
+// banner de ALARMA (oculto salvo fuga)
+const alarmMat = emat(0xff2233, 0x140607, 1.6);
+const alarmG = buildDigits('F', alarmMat, 10, 70, SZ, 1); alarmG.visible = false; scene.add(alarmG);
+
+// -- Charco de fuga (emisivo, aparece en alarma)
+const leakMat = emat(0xff3344, 0x160305, 0.0);
+const leakPool = new THREE.Group();
+[[3,45],[4,44],[5,45],[6,46],[7,44],[4,46],[6,44],[5,43]].forEach(p =>
+  leakPool.add(dynBox(leakMat, p[0] + 0.5, 4.15, p[1] + 0.5, 1, 0.3, 1)));
+scene.add(leakPool);
+const leakLight = new THREE.PointLight(0xff2233, 0, 22, 2);
+leakLight.position.set(6, 8, 44);
+scene.add(leakLight);
+
+// -- Partículas de flujo por circuito (gateadas por estado)
+function makeFlow(pts, hex, speed) {
+  const v = pts.map(p => new THREE.Vector3(p[0], p[1], p[2]));
+  const segs = [];
+  let L = 0;
+  for (let i = 0; i < v.length - 1; i++) {
+    const l = v[i].distanceTo(v[i + 1]);
+    segs.push({ a: v[i], b: v[i + 1], l0: L, l: l });
+    L += l;
+  }
+  const mat = emat(hex, 0x05070a, 1.5);
+  const g = new THREE.Group();
+  const items = [];
+  const count = Math.max(4, Math.round(L / 5));
+  for (let i = 0; i < count; i++) {
+    const m = dynBox(mat, 0, 0, 0, 0.6, 0.6, 0.6);
+    g.add(m);
+    items.push({ m: m, t: i / count });
+  }
+  function at(t, out) {
+    const d = t * L;
+    for (let i = 0; i < segs.length; i++) {
+      const s = segs[i];
+      if (d <= s.l0 + s.l || i === segs.length - 1) {
+        const k = s.l ? Math.min(Math.max((d - s.l0) / s.l, 0), 1) : 0;
+        out.lerpVectors(s.a, s.b, k);
+        return;
+      }
+    }
+  }
+  return {
+    group: g,
+    update(dt, on) {
+      g.visible = on;
+      if (!on) return;
+      for (const it of items) {
+        it.t = (it.t + dt * speed / L) % 1;
+        at(it.t, it.m.position);
+      }
+    }
+  };
+}
+const flows = [
+  // PRIMARIO supply (azul): acometida -> sube -> HX in (siempre, instalación)
+  { f: makeFlow([[3, 2, 4], [3, 26, 4], [2, 26, 4], [2, 48, 4]], 0x2e8bff, 12), gate: () => true },
+  // PRIMARIO retorno (rojo): HX out -> baja -> acometida
+  { f: makeFlow([[4, 48, 4], [7, 30, 4], [7, 3, 4]], 0xd23c3c, 12), gate: () => true },
+  // SECUNDARIO: HX out -> succión bomba (cian), gate = alguna bomba
+  { f: makeFlow([[14, 30, 20], [14, 24, 20], [7, 24, 31], [7, 8, 31]], 0x18d0e0, 10), gate: () => pumpsOn() },
+  // SECUNDARIO: descarga bomba -> manifold supply -> quick-connects (cian)
+  { f: makeFlow([[7, 18, 31], [7, 27, 46], [16, 27, 46], [16, 55, 46], [16, 55, 51]], 0x18d0e0, 11), gate: () => pumpsOn() },
+  // SECUNDARIO: retorno racks -> manifold return -> HX (morado)
+  { f: makeFlow([[21, 55, 51], [21, 55, 46], [21, 29, 46], [14, 29, 20], [14, 46, 20]], 0x9a54e0, 9), gate: () => pumpsOn() }
+];
+flows.forEach(o => scene.add(o.f.group));
+
+// ====== TICK (node-safe, sin renderer) ======
+let tNow = 0;
+function tick(dt) {
+  tNow += dt;
+  const anyRun = pumpsOn();
+  // bombas: impulsor gira si corre; piloto verde/rojo
+  for (let i = 0; i < pumpRigs.length; i++) {
+    const rig = pumpRigs[i], n = i + 1, on = pumpRunning(n);
+    if (on) rig.imp.rotation.z -= dt * (11 + i * 1.2);
+    rig.lampMat.emissive.setHex(on ? 0x00ff66 : 0xff2233);
+    rig.lampMat.emissiveIntensity = on ? 1.6 : 1.2;
+    rig.light.color.setHex(on ? 0x00ff66 : 0xff2233);
+    rig.light.intensity = on ? 1.2 : 0.7;
+  }
+  // pilotos HMI
+  hmiP1.emissive.setHex(state.p1 ? 0x00ff66 : 0xff2233);
+  hmiP1.emissiveIntensity = 1.6;
+  hmiP2.emissive.setHex(state.p2 ? 0x00ff66 : 0x1a1e25);
+  hmiP2.emissiveIntensity = state.p2 ? 1.6 : 0.12;
+  // mímico: iconos de bomba y lazos pulsando con flujo
+  const pulse = 1.0 + 0.4 * Math.sin(tNow * 4);
+  mimS.emissiveIntensity = anyRun ? 1.3 * pulse : 0.25;
+  mimP.emissiveIntensity = 1.3 * (1.0 + 0.3 * Math.sin(tNow * 3));
+  mimPumpIcons[0].material.emissive.setHex(state.p1 ? 0x00ff66 : 0xff2233);
+  mimPumpIcons[1].material.emissive.setHex(state.p2 ? 0x00ff66 : 0x552222);
+  digS.visible = anyRun;
+  // fuga: alarma roja
+  if (state.leak) {
+    const b = 0.3 + 1.5 * Math.abs(Math.sin(tNow * 8));
+    hmiLeak.emissiveIntensity = b;
+    leakMat.emissiveIntensity = 0.4 + 1.2 * Math.abs(Math.sin(tNow * 6));
+    leakLight.intensity = 0.6 + 1.4 * Math.abs(Math.sin(tNow * 8));
+    alarmG.visible = true;
+    alarmMat.emissiveIntensity = b;
+    mimS.emissive.setHex(0xff2233);
+  } else {
+    hmiLeak.emissiveIntensity = 0.12;
+    leakMat.emissiveIntensity = 0.0;
+    leakLight.intensity = 0.0;
+    alarmG.visible = false;
+    mimS.emissive.setHex(0x18d8e0);
+  }
+  for (const o of flows) o.f.update(dt, o.gate());
+}
+
+// ====== STATS + EXPORT (harness headless) ======
+function computeStats() {
+  const colors = {};
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9, minZ = 1e9, maxZ = -1e9;
+  for (const [k, c] of cells) {
+    colors[c] = (colors[c] || 0) + 1;
+    const p = k.split(',');
+    const x = +p[0], y = +p[1], z = +p[2];
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+    if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+  }
+  return { total: cells.size, overwrites: overwrites, colors: colors,
+           bounds: { minX: minX, maxX: maxX, minY: minY, maxY: maxY, minZ: minZ, maxZ: maxZ } };
+}
+const stats = computeStats();
+globalThis.__VOX__ = { stats: stats, state: state, tick: tick, pumpsOn: pumpsOn, cells: cells };
+
+// ====== INIT (solo navegador) ======
+function init() {
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+  const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.5, 1200);
+  camera.position.set(74, 60, 92);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.target.set(11, 40, 20);
+  controls.autoRotate = state.rot;
+  controls.autoRotateSpeed = 0.5;
+
+  // ---- UI ----
+  function applyMode() {
+    // redundante => ambas bombas ON; normal => P1 ON, P2 standby
+    if (state.redundant) { state.p1 = true; state.p2 = true; }
+    else { state.p2 = false; }
+  }
+  function refreshUI() {
+    const bP1 = document.getElementById('bP1');
+    const bP2 = document.getElementById('bP2');
+    const bMode = document.getElementById('bMode');
+    const bLeak = document.getElementById('bLeak');
+    const bRot = document.getElementById('bRot');
+    bP1.textContent = state.p1 ? 'ON' : 'OFF'; bP1.className = state.p1 ? 'on' : 'off';
+    bP2.textContent = state.p2 ? 'ON' : 'OFF'; bP2.className = state.p2 ? 'on' : 'off';
+    bMode.textContent = state.redundant ? 'REDUND.' : 'NORMAL'; bMode.className = state.redundant ? 'mode' : 'off';
+    bLeak.textContent = state.leak ? 'ON' : 'OFF'; bLeak.className = state.leak ? 'alarm' : 'off';
+    bRot.textContent = state.rot ? 'ON' : 'OFF'; bRot.className = state.rot ? 'on' : 'off';
+  }
+  document.getElementById('bP1').addEventListener('click', () => { state.p1 = !state.p1; refreshUI(); });
+  document.getElementById('bP2').addEventListener('click', () => { state.p2 = !state.p2; refreshUI(); });
+  document.getElementById('bMode').addEventListener('click', () => { state.redundant = !state.redundant; applyMode(); refreshUI(); });
+  document.getElementById('bLeak').addEventListener('click', () => { state.leak = !state.leak; refreshUI(); });
+  document.getElementById('bRot').addEventListener('click', () => { state.rot = !state.rot; refreshUI(); });
+  refreshUI();
+
+  // ---- Captura de coordenadas (raycaster con guard de drag) ----
+  const marker = new THREE.Group();
+  marker.add(new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.15, 1.15),
+    new THREE.MeshBasicMaterial({ color: 0xffe14d, wireframe: true })));
+  marker.add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3),
+    new THREE.MeshBasicMaterial({ color: 0xffe14d })));
+  marker.visible = false;
+  scene.add(marker);
+  const ray = new THREE.Raycaster();
+  const ptr = new THREE.Vector2();
+  let pd = null;
+  renderer.domElement.addEventListener('pointerdown', e => {
+    pd = { x: e.clientX, y: e.clientY, t: performance.now() };
+  });
+  renderer.domElement.addEventListener('pointerup', e => {
+    if (!pd) return;
+    const dx = e.clientX - pd.x, dy = e.clientY - pd.y;
+    const ok = (dx * dx + dy * dy < 36) && (performance.now() - pd.t < 350);
+    pd = null;
+    if (!ok) return;
+    ptr.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+    ray.setFromCamera(ptr, camera);
+    const hits = ray.intersectObjects(staticMeshes, false);
+    if (!hits.length) return;
+    const h = hits[0];
+    const p = h.point.clone().addScaledVector(h.face.normal, -0.5);
+    const vx = Math.floor(p.x), vy = Math.floor(p.y), vz = Math.floor(p.z);
+    marker.position.set(vx + 0.5, vy + 0.5, vz + 0.5);
+    marker.visible = true;
+    const txt = vx + ', ' + vy + ', ' + vz;
+    document.getElementById('coordVal').textContent = 'VOX  ' + txt;
+    if (navigator.clipboard) navigator.clipboard.writeText(txt).catch(() => {});
+  });
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  const clock = new THREE.Clock();
+  renderer.setAnimationLoop(() => {
+    const dt = Math.min(clock.getDelta(), 0.05);
+    tick(dt);
+    controls.autoRotate = state.rot;
+    controls.update();
+    renderer.render(scene, camera);
+  });
+}
+if (!HEADLESS) init();
+</script>
+</body>
+</html>

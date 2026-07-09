@@ -651,7 +651,7 @@ SIMULADA (disparo + piloto rojo), AUTO-ROTATE.
 
 > Escala sugerida: `// SCALE: 1 voxel = 0.025 m`.
 
-- [ ] **H1. Recuperador de energía (ERV / rueda entálpica)** → `disenos/recuperador-energia/recuperador-energia-voxel-v1.html`
+- [x] **H1. Recuperador de energía (ERV / rueda entálpica)** → ✅ propio (subagente): `disenos/recuperador-energia/recuperador-energia-voxel-v1.html` · pendiente comparar con claude.ai
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un RECUPERADOR DE
@@ -667,7 +667,7 @@ Leyenda: Aire exterior / Suministro / Retorno / Expulsión.
 Panel CONTROL DE EQUIPO: RUEDA ON-OFF (gira/detiene), VENTILADORES ON-OFF, CORTE ON-OFF, AUTO-ROTATE.
 ```
 
-- [ ] **H2. Bomba de calor (aire-agua)** → `disenos/bomba-calor/bomba-calor-voxel-v1.html`
+- [x] **H2. Bomba de calor (aire-agua)** → ✅ propio (subagente): `disenos/bomba-calor/bomba-calor-voxel-v1.html` · pendiente comparar con claude.ai
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: una BOMBA DE CALOR
@@ -688,7 +688,7 @@ COMPRESOR ON-OFF, VENTILADOR ON-OFF, AUTO-ROTATE.
 
 > Escala sugerida: `// SCALE: 1 voxel = 0.025 m`.
 
-- [ ] **F1. Sistema de bomba contra incendio** → `disenos/bomba-incendio/bomba-incendio-voxel-v1.html`
+- [x] **F1. Sistema de bomba contra incendio** → ✅ propio (subagente): `disenos/bomba-incendio/bomba-incendio-voxel-v1.html` · pendiente comparar con claude.ai
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un SISTEMA DE BOMBA
@@ -710,7 +710,7 @@ ALARMA (luz roja + parpadeo), AUTO-ROTATE.
 
 > Escala sugerida: `// SCALE: 1 voxel = 0.025 m`.
 
-- [ ] **C1. CDU (Coolant Distribution Unit) — enfriamiento líquido** → `disenos/cdu-liquid/cdu-liquid-voxel-v1.html`
+- [x] **C1. CDU (Coolant Distribution Unit) — enfriamiento líquido** → ✅ propio (subagente): `disenos/cdu-liquid/cdu-liquid-voxel-v1.html` · pendiente comparar con claude.ai
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: una CDU (Coolant
