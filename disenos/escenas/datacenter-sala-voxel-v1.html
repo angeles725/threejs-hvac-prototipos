@@ -82,6 +82,17 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 // renderer / PMREM / OrbitControls / DOM / animate.
 const HEADLESS = (typeof window === 'undefined') || !!(typeof window !== 'undefined' && window.__HEADLESS__);
 
+// PERF (fase 2): consolida N mallas estáticas idénticas (misma geo + material) en UNA
+// InstancedMesh. `nodes` son THREE.Object3D ya transformados; se hornea su matrixWorld
+// como matriz de instancia → render pixel-idéntico, muchas menos draw calls.
+function bakeIM(THREE, geo, mat, nodes, cast) {
+  const im = new THREE.InstancedMesh(geo, mat, nodes.length);
+  for (let i = 0; i < nodes.length; i++) { nodes[i].updateMatrixWorld(true); im.setMatrixAt(i, nodes[i].matrixWorld); }
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = cast !== false; im.receiveShadow = true;
+  return im;
+}
+
 /* ======================================================================
    FACTORIES — cada equipo es un THREE.Group en UNIDADES-VOXEL. Todo es
    local a la función (mapa de voxeles + paleta + InstancedMesh por color),
@@ -376,18 +387,24 @@ function makeRack(THREE) {
   }
   buildWorld(staticWorld, group);
   const doorGroup = new THREE.Group(); doorGroup.position.set(2, 0, 0); buildWorld(doorWorld, doorGroup); group.add(doorGroup);
+  // LEDs estáticos consolidados: agrupados por (color, intensidad) en InstancedMesh (perf).
+  // El faultLed original iba oculto (visible=false) → se omite (mismo render).
   const ledGeo = new THREE.BoxGeometry(0.55, 0.55, 0.32);
-  const faultGeo = new THREE.BoxGeometry(0.75, 0.75, 0.34);
-  function makeLed(spec, sizeGeo){
+  const ledGroups = new Map();
+  const addLed = (spec, ei) => {
     const hex = LED[spec.base] !== undefined ? LED[spec.base] : LED.GREEN;
-    const mm = new THREE.Mesh(sizeGeo, new THREE.MeshStandardMaterial({ color: hex, emissive: hex, emissiveIntensity: 0.15, roughness: 0.4, metalness: 0.1 }));
-    mm.position.set(spec.x, spec.y, spec.z); group.add(mm); return mm;
+    const k = hex + '|' + ei;
+    let g = ledGroups.get(k); if (!g) { g = { hex, ei, nodes: [] }; ledGroups.set(k, g); }
+    const o = new THREE.Object3D(); o.position.set(spec.x, spec.y, spec.z); g.nodes.push(o);
+  };
+  meta.leds.filter(l => l.kind === 'srv').forEach(l => addLed(l, 0.15));
+  meta.leds.filter(l => l.kind === 'sw').forEach(l => addLed(l, 0.15));
+  meta.strip.forEach(l => addLed(l, 0.15));
+  meta.pduLeds.forEach(p => addLed({ ...p, base: 'GREEN' }, 2.0));
+  for (const g of ledGroups.values()) {
+    const mat = new THREE.MeshStandardMaterial({ color: g.hex, emissive: g.hex, emissiveIntensity: g.ei, roughness: 0.4, metalness: 0.1 });
+    group.add(bakeIM(THREE, ledGeo, mat, g.nodes, false));
   }
-  meta.leds.filter(l => l.kind === 'srv').forEach(l => makeLed(l, ledGeo));
-  meta.leds.filter(l => l.kind === 'sw').forEach(l => makeLed(l, ledGeo));
-  meta.strip.forEach(l => makeLed(l, ledGeo));
-  meta.pduLeds.forEach(p => { const mm = makeLed({ ...p, base:'GREEN' }, ledGeo); mm.material.emissiveIntensity = 2.0; });
-  if (meta.faultLed){ const fm = makeLed({ ...meta.faultLed, base:'RED' }, faultGeo); fm.visible = false; }
   return group;
 }
 
@@ -505,21 +522,24 @@ function makeCrac(THREE) {
   const ledFan = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 0.8), ledFanMat); ledFan.position.set(55, 70, UZ0 - 0.4);
   const ledAgua = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 0.8), ledAguaMat); ledAgua.position.set(64, 70, UZ0 - 0.4);
   group.add(ledFan); group.add(ledAgua);
+  // Ventiladores EC estáticos (2) consolidados: aspas + 2 bujes en InstancedMesh (perf).
+  const bladeMatC = new THREE.MeshStandardMaterial({ color: 0xff2233, roughness: 0.45, metalness: 0.6, emissive: 0xff2233, emissiveIntensity: 0.4 });
+  const hubMatC = new THREE.MeshStandardMaterial({ color: COL.HUB, roughness: 0.35, metalness: 0.7 });
+  const bladeGeoC = new THREE.BoxGeometry(0.9, 0.5, 1.4), h1GeoC = new THREE.BoxGeometry(3.4, 1.4, 3.4), h2GeoC = new THREE.BoxGeometry(2.4, 1.0, 2.4);
+  const cbNodes = [], h1Nodes = [], h2Nodes = [];
   FAN_CX.forEach(cx => {
     const g = new THREE.Group(); g.position.set(cx + 0.5, TOP_Y + 1.6, FAN_CZ + 0.5);
-    const bladeMat = new THREE.MeshStandardMaterial({ color: 0xff2233, roughness: 0.45, metalness: 0.6, emissive: 0xff2233, emissiveIntensity: 0.4 });
     for (let i = 0; i < 7; i++) {
       const a = (i / 7) * Math.PI * 2;
-      for (let rr = 2; rr <= 5; rr++) {
-        const b = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 1.4), bladeMat);
-        b.position.set(Math.cos(a) * rr, 0, Math.sin(a) * rr); b.rotation.y = -a; b.castShadow = true; g.add(b);
-      }
+      for (let rr = 2; rr <= 5; rr++) { const bO = new THREE.Object3D(); bO.position.set(Math.cos(a) * rr, 0, Math.sin(a) * rr); bO.rotation.y = -a; g.add(bO); cbNodes.push(bO); }
     }
-    const hubMat = new THREE.MeshStandardMaterial({ color: COL.HUB, roughness: 0.35, metalness: 0.7 });
-    const hub1 = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.4, 3.4), hubMat); hub1.position.y = 0.2;
-    const hub2 = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.0, 2.4), hubMat); hub2.position.y = 1.2;
-    g.add(hub1); g.add(hub2); group.add(g);
+    const h1 = new THREE.Object3D(); h1.position.y = 0.2; g.add(h1); h1Nodes.push(h1);
+    const h2 = new THREE.Object3D(); h2.position.y = 1.2; g.add(h2); h2Nodes.push(h2);
+    g.updateMatrixWorld(true);
   });
+  group.add(bakeIM(THREE, bladeGeoC, bladeMatC, cbNodes));
+  group.add(bakeIM(THREE, h1GeoC, hubMatC, h1Nodes));
+  group.add(bakeIM(THREE, h2GeoC, hubMatC, h2Nodes));
   return group;
 }
 
@@ -718,26 +738,27 @@ function makePdu(THREE) {
     }
   }
   group.add(doorGroup);
+  // Palancas / LEDs / display 7-seg estáticos consolidados en 3 InstancedMesh (perf).
   const matLever = new THREE.MeshStandardMaterial({ color:0xe8eaee, roughness:0.4, metalness:0.2 });
   const matLedOn = new THREE.MeshStandardMaterial({ color:0x00331a, emissive:0x00ff66, emissiveIntensity:1.4 });
   const matDigit = new THREE.MeshStandardMaterial({ color:0x00331a, emissive:0x00ff66, emissiveIntensity:1.3 });
+  const mkN = (pos, sc) => { const o = new THREE.Object3D(); o.position.set(pos[0], pos[1], pos[2]); o.scale.set(sc[0], sc[1], sc[2]); return o; };
+  const leverNodes = [], ledNodes = [], digitNodes = [];
   const layout = breakerLayout();
   for (const b of layout) {
-    const lv = new THREE.Mesh(cube, matLever); lv.scale.set(1.1, 1.5, 0.9); lv.position.set(b.cx, b.y+1 + 0.85, 34.35); lv.castShadow = true; group.add(lv);
-    const led = new THREE.Mesh(cube, matLedOn); led.scale.set(0.55,0.55,0.55); led.position.set(b.ledx, b.y+1, 34.3); group.add(led);
+    leverNodes.push(mkN([b.cx, b.y + 1 + 0.85, 34.35], [1.1, 1.5, 0.9]));   // palanca ON
+    ledNodes.push(mkN([b.ledx, b.y + 1, 34.3], [0.55, 0.55, 0.55]));         // LED breaker
   }
-  const mainLever = new THREE.Mesh(cube, matLever); mainLever.scale.set(1.8, 3.4, 1.1); mainLever.position.set(18, 36 + 2.2, 34.6); mainLever.castShadow = true; group.add(mainLever);
-  const pilot = new THREE.Mesh(cube, matLedOn.clone()); pilot.scale.set(1.2,1.2,0.8); pilot.position.set(31.5, 78, 35.5); group.add(pilot);
-  const digitPools = DIGIT_SLOTS.map(sx => {
-    const grid = [];
-    for (let c=0; c<3; c++) { grid[c]=[];
-      for (let r=0; r<5; r++) { const dc = new THREE.Mesh(cube, matDigit); dc.scale.set(0.72,0.72,0.5); dc.position.set(sx+c+0.5, 70+(4-r)+0.5, 35.75); group.add(dc); grid[c][r] = dc; }
-    }
-    return grid;
-  });
-  for (const dx of DOT_X) { const dot = new THREE.Mesh(cube, matDigit); dot.scale.set(0.6,0.6,0.5); dot.position.set(dx+0.5, 70.7, 35.75); group.add(dot); }
-  const str7 = '4548053';
-  for (let i=0; i<7; i++) { const bm = FONT[str7[i]] || FONT['0']; for (let c=0; c<3; c++) for (let r=0; r<5; r++) digitPools[i][c][r].visible = (bm[r][c] === '1'); }
+  leverNodes.push(mkN([18, 36 + 2.2, 34.6], [1.8, 3.4, 1.1]));               // interruptor principal
+  ledNodes.push(mkN([31.5, 78, 35.5], [1.2, 1.2, 0.8]));                     // lámpara piloto
+  const str7 = '4548053';                                                    // display estático "4548053"
+  for (let i = 0; i < 7; i++) { const bm = FONT[str7[i]] || FONT['0']; const sx = DIGIT_SLOTS[i];
+    for (let c = 0; c < 3; c++) for (let r = 0; r < 5; r++) if (bm[r][c] === '1') digitNodes.push(mkN([sx + c + 0.5, 70 + (4 - r) + 0.5, 35.75], [0.72, 0.72, 0.5]));
+  }
+  for (const dx of DOT_X) digitNodes.push(mkN([dx + 0.5, 70.7, 35.75], [0.6, 0.6, 0.5]));
+  group.add(bakeIM(THREE, cube, matLever, leverNodes));
+  group.add(bakeIM(THREE, cube, matLedOn, ledNodes));
+  group.add(bakeIM(THREE, cube, matDigit, digitNodes));
   return group;
 }
 
@@ -882,20 +903,24 @@ function makeDryCooler(THREE) {
     if (!p.transparent) { im.castShadow = true; im.receiveShadow = true; }
     group.add(im);
   }
+  // Ventiladores estáticos (10) consolidados: 1 InstancedMesh de aspas + 1 de bujes (perf).
   const bladeMat = new THREE.MeshStandardMaterial({ color: 0x16191d, roughness: 0.4, metalness: 0.55 });
   const hubMat = new THREE.MeshStandardMaterial({ color: 0x2a3138, roughness: 0.35, metalness: 0.6 });
+  const bladeGeoD = new THREE.BoxGeometry(1.15, 0.5, 2.3), hubGeoD = new THREE.BoxGeometry(3, 2.6, 3);
+  const bladeNodes = [], hubNodes = [];
   for (const cx of FAN_XC) {
     for (const cz of FAN_ZC) {
       const g = new THREE.Group(); g.position.set(cx, 38.6, cz);
-      const hub = new THREE.Mesh(new THREE.BoxGeometry(3, 2.6, 3), hubMat); hub.castShadow = true; g.add(hub);
+      const hubO = new THREE.Object3D(); g.add(hubO); hubNodes.push(hubO);
       for (let b = 0; b < 7; b++) {
-        const bg = new THREE.Group(); bg.rotation.y = b * Math.PI * 2 / 7;
-        for (let r = 2.2; r <= 8; r += 1.15) { const blade = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.5, 2.3), bladeMat); blade.position.set(r, 0, 0); blade.rotation.x = 0.55; blade.castShadow = true; bg.add(blade); }
-        g.add(bg);
+        const bg = new THREE.Group(); bg.rotation.y = b * Math.PI * 2 / 7; g.add(bg);
+        for (let r = 2.2; r <= 8; r += 1.15) { const bO = new THREE.Object3D(); bO.position.set(r, 0, 0); bO.rotation.x = 0.55; bg.add(bO); bladeNodes.push(bO); }
       }
-      group.add(g);
+      g.updateMatrixWorld(true);
     }
   }
+  group.add(bakeIM(THREE, bladeGeoD, bladeMat, bladeNodes));
+  group.add(bakeIM(THREE, hubGeoD, hubMat, hubNodes));
   const ledMat = new THREE.MeshStandardMaterial({ color: 0xff2233, emissive: 0xff2233, emissiveIntensity: 1.2 });
   const led1 = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 1), ledMat); led1.position.set(123.5, 14.5, W + 6.4); group.add(led1);
   const led2 = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 1), ledMat); led2.position.set(128.5, 14.5, W + 6.4); group.add(led2);
@@ -1066,14 +1091,16 @@ function makeFan(THREE) {
     im.instanceMatrix.needsUpdate = true; base.add(im);
   }
   base.scale.setScalar(0.05); outer.add(base);
-  const blades = new THREE.Group(); blades.position.y = 0.17;
+  const blades = new THREE.Group(); blades.position.y = 0.17;   // gira (animado) → el IM va dentro
   const bmat = new THREE.MeshStandardMaterial({ color: 0x9aa2b0, roughness: 0.45, metalness: 0.45 });
   const bgeo = new THREE.BoxGeometry(0.30, 0.015, 0.11);
+  const armNodes = [];
   for (let i = 0; i < 5; i++) {
-    const arm = new THREE.Group(); arm.rotation.y = i * Math.PI * 2 / 5;
-    const b = new THREE.Mesh(bgeo, bmat); b.position.set(0.17, 0, 0); b.rotation.x = 0.5; b.castShadow = true;
-    arm.add(b); blades.add(arm);
+    const arm = new THREE.Object3D(); arm.rotation.y = i * Math.PI * 2 / 5;
+    const b = new THREE.Object3D(); b.position.set(0.17, 0, 0); b.rotation.x = 0.5; arm.add(b);
+    arm.updateMatrixWorld(true); armNodes.push(b);
   }
+  blades.add(bakeIM(THREE, bgeo, bmat, armNodes));
   const hub = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.09), new THREE.MeshStandardMaterial({ color: 0x2a2e35, roughness: 0.35, metalness: 0.6 }));
   blades.add(hub); outer.add(blades);
   return { outer, blades };
@@ -1100,13 +1127,17 @@ if (!HEADLESS) {
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;   // escena estática → el shadow map se recalcula solo bajo demanda
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   document.body.appendChild(renderer.domElement);
 
   const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  const envRT = pmrem.fromScene(new RoomEnvironment(), 0.04);
+  scene.environment = envRT.texture;
+  pmrem.dispose();                          // libera recursos temporales del PMREM
+  renderer.shadowMap.needsUpdate = true;    // una sola actualización tras construir la escena
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -1122,7 +1153,7 @@ if (!HEADLESS) {
   const bRot = document.getElementById('bRot');
   bRot.onclick = () => { controls.autoRotate = !controls.autoRotate; bRot.className = controls.autoRotate ? 'on' : 'off'; bRot.textContent = controls.autoRotate ? 'ON' : 'OFF'; };
   const bShadow = document.getElementById('bShadow');
-  bShadow.onclick = () => { renderer.shadowMap.enabled = !renderer.shadowMap.enabled; scene.traverse(o => { if (o.isInstancedMesh) o.material.needsUpdate = true; }); bShadow.className = renderer.shadowMap.enabled ? 'on' : 'off'; bShadow.textContent = renderer.shadowMap.enabled ? 'ON' : 'OFF'; };
+  bShadow.onclick = () => { renderer.shadowMap.enabled = !renderer.shadowMap.enabled; renderer.shadowMap.needsUpdate = true; scene.traverse(o => { if (o.isInstancedMesh) o.material.needsUpdate = true; }); bShadow.className = renderer.shadowMap.enabled ? 'on' : 'off'; bShadow.textContent = renderer.shadowMap.enabled ? 'ON' : 'OFF'; };
 
   // ---- PILLS de telemetría (Sprites con CanvasTexture auto-iluminada, alto contraste) ----
   const pillsGroup = new THREE.Group();
