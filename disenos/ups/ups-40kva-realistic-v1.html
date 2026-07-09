@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UPS 40 kVA · 3Ø 480V · Realistic PBR · 1 unidad = 1 m</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.80); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter:blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#aebfd2; }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.80); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter:blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; color:#aebfd2; }
+  #legend i { width:12px; height:10px; display:inline-block; border-radius:2px; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.80); padding:8px 12px; border:1px solid #00d4aa44; color:#aebfd2; backdrop-filter:blur(6px); }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.86); border:1px solid #00d4aa44; padding:12px 14px; min-width:252px; font-size:11px; backdrop-filter:blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .sub { color:#3f7a84; font-size:9px; letter-spacing:0.2em; margin:9px 0 4px; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; gap:12px; }
+  #panel label { color:#aebfd2; letter-spacing:0.06em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 12px; border:1px solid; background:transparent; cursor:pointer; min-width:54px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel button.alarm { color:#06080d; border-color:#ff2233; background:#ff2233; box-shadow:0 0 12px #ff223388; animation:blink 1s infinite; }
+  #panel .modes { display:flex; gap:6px; }
+  #panel .modes button { flex:1; min-width:0; padding:5px 4px; color:#5a6a74; border-color:#2a3a44; }
+  #panel .modes button.on { color:#06080d; }
+  @keyframes blink { 50% { opacity:0.55; } }
+</style>
+<script>
+// Inyeccion dinamica de importmap: String.fromCharCode(64) evita el mangling de '@' por Cloudflare.
+(function(){
+  var AT = String.fromCharCode(64);
+  var tag = document.createElement('script');
+  tag.type = 'importmap';
+  tag.textContent = JSON.stringify({ imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }});
+  document.head.appendChild(tag);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>UPS INDUSTRIAL 40 kVA · 3Ø 480V</b><br>
+  <span>Doble conversión · Banco VRLA · Realistic PBR · 1 unidad = 1 m</span>
+</div>
+<div id="legend">
+  <div><i style="background:#ffb300"></i> Entrada AC (red)</div>
+  <div><i style="background:#0f8a4f"></i> Salida AC (carga)</div>
+  <div><i style="background:#c22233"></i> DC batería</div>
+  <div><i style="background:#3aa0ff"></i> Control / bypass</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="sub">MODO</div>
+  <div class="modes">
+    <button id="mOnline" class="on">ONLINE</button>
+    <button id="mBat">BATERÍA</button>
+    <button id="mByp">BYPASS</button>
+  </div>
+  <div class="row"><label>SIMULAR CORTE DE RED</label><button id="bCorteRed" class="off">OFF</button></div>
+  <div class="row"><label>FALLA SIMULADA</label><button id="bFalla" class="off">OFF</button></div>
+  <div class="row"><label>CORTE (VER INTERIOR)</label><button id="bCorte" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="off">OFF</button></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ============================================================
+// SCALE: 1 unidad = 1 m. Spec dimensional/composicion: ups/ups-40kva-voxel.html (1 vox = 0.025 m).
+// Plantilla de estilo PBR: mcc-vfd/mcc-vfd-realistic-v1.html (pariente electrico de gabinete).
+// UPS de doble conversion: gabinete UPS (0.60 x 0.85 x 1.75 m) + gabinete de baterias contiguo,
+// panel HMI frontal (LCD con mimico ENTRADA->RECTIFICADOR->INVERSOR->SALIDA + LEDs + medidor de carga),
+// interior con modulos rectificador/inversor/cargador/bypass + barras de cobre (visible en CORTE),
+// banco VRLA con bornes rojo(+)/negro(-), rejillas de ventilacion con ventiladores girando.
+// GEOMETRIA PARAMETRICA con biseles (ExtrudeGeometry para gabinetes/puertas, CylinderGeometry para
+// ventiladores, BoxGeometry para modulos). NADA de cubos voxel.
+// ============================================================
+
+// HEADLESS GUARD — sin WebGL (node/CI) construimos geometria + estado pero omitimos renderer/PMREM/loop.
+const HEADLESS = (() => {
+  try {
+    const c = document.createElement('canvas');
+    return !(c.getContext('webgl2') || c.getContext('webgl'));
+  } catch (e) { return true; }
+})();
+
+// ============================================================
+// DIMENSIONES (world units = metros)
+// ============================================================
+const UPS = { x0: 0.00, x1: 0.60, cx: 0.30, w: 0.60 };
+const BAT = { x0: 0.60, x1: 1.20, cx: 0.90, w: 0.60 };
+const D = 0.85;                 // fondo
+const H = 1.75;                 // alto
+const FZ = D;                   // cara frontal en z = D (frente hacia +z)
+const PLINTH = 0.09;            // altura del plinto / zoclo
+const BODY_Y0 = PLINTH;         // base del cuerpo del gabinete
+const BODY_H = H - PLINTH;      // altura del cuerpo
+const CENTER_X = (UPS.x0 + BAT.x1) / 2;   // 0.60
+
+// ============================================================
+// SCENE / CAMERA (siempre — el arnes headless los necesita)
+// ============================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 5.5, 24);
+
+const camera = new THREE.PerspectiveCamera(44, (HEADLESS ? 16/9 : innerWidth/innerHeight), 0.05, 200);
+camera.position.set(1.85, 1.32, 1.95);
+
+// ============================================================
+// TEXTURAS PROCEDURALES (CanvasTexture)
+// ============================================================
+function canvasTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  draw(ctx, w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  t._ctx = ctx;
+  return t;
+}
+function dataTex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 4;
+  return t;
+}
+
+// rugosidad sutil para la pintura del gabinete (roughnessMap multiplica el escalar)
+const paintRoughTex = dataTex(256, 256, (g) => {
+  g.fillStyle = '#8c8c8c'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2400; i++){
+    const v = 118 + Math.floor(Math.random() * 60);
+    g.fillStyle = 'rgba(' + v + ',' + v + ',' + v + ',0.16)';
+    g.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 3, 1 + Math.random() * 3);
+  }
+});
+paintRoughTex.wrapS = paintRoughTex.wrapT = THREE.RepeatWrapping;
+paintRoughTex.repeat.set(2, 3);
+
+// veteado longitudinal del cobre (roughnessMap del bus)
+const copperRoughTex = dataTex(128, 128, (g) => {
+  g.fillStyle = '#5a5a5a'; g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = 'rgba(90,90,90,0.5)'; g.lineWidth = 1;
+  for (let x = 0; x < 128; x += 2){ g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 128); g.stroke(); }
+});
+copperRoughTex.wrapS = copperRoughTex.wrapT = THREE.RepeatWrapping;
+copperRoughTex.repeat.set(1, 8);
+
+// placa de datos metalica generica
+function nameplateTex(title, sub, rows){
+  return canvasTex(512, 256, (g, w, h) => {
+    const grad = g.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#d8dade'); grad.addColorStop(0.5, '#b8bcc2'); grad.addColorStop(1, '#c8ccd2');
+    g.fillStyle = grad; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#3a3f46'; g.lineWidth = 6; g.strokeRect(10, 10, w - 20, h - 20);
+    g.fillStyle = '#22262c';
+    g.font = 'bold 34px monospace'; g.textAlign = 'center';
+    g.fillText(title, w/2, 58);
+    g.font = '20px monospace';
+    g.fillText(sub, w/2, 92);
+    g.font = '19px monospace'; g.textAlign = 'left';
+    rows.forEach((r, i) => g.fillText(r, 44, 138 + i * 30));
+    for (const [bx, by] of [[26, 26], [w-26, 26], [26, h-26], [w-26, h-26]]){
+      g.beginPath(); g.arc(bx, by, 7, 0, Math.PI*2); g.fillStyle = '#787c82'; g.fill();
+    }
+  });
+}
+const plateTex = nameplateTex('UPS 40 kVA', '3Ø 480V · 60 Hz', [
+  'TOPOLOGIA   DOBLE CONVERSION', 'BATERIA     VRLA 480 V DC', 'BYPASS      ESTATICO AUTOMATICO']);
+
+// etiqueta arc-flash amarilla
+const arcFlashTex = canvasTex(256, 320, (g, w, h) => {
+  g.fillStyle = '#f4c500'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#141414'; g.lineWidth = 8; g.strokeRect(6, 6, w - 12, h - 12);
+  g.fillStyle = '#141414'; g.fillRect(6, 6, w - 12, 66);
+  g.fillStyle = '#f4c500'; g.font = 'bold 40px monospace'; g.textAlign = 'center';
+  g.fillText('WARNING', w/2, 52);
+  g.fillStyle = '#141414';
+  g.beginPath(); g.moveTo(w/2, 92); g.lineTo(w/2 - 44, 168); g.lineTo(w/2 + 44, 168); g.closePath(); g.fill();
+  g.fillStyle = '#f4c500'; g.font = 'bold 54px monospace'; g.fillText('!', w/2, 162);
+  g.fillStyle = '#141414'; g.font = 'bold 22px monospace';
+  g.fillText('ARC FLASH &', w/2, 210);
+  g.fillText('SHOCK HAZARD', w/2, 236);
+  g.font = '16px monospace';
+  g.fillText('Appropriate PPE', w/2, 272);
+  g.fillText('Required', w/2, 294);
+});
+
+// ============================================================
+// PALETA PBR (metalness 0 = pintado · metalness 1 = metal desnudo — nunca intermedio en color solido)
+// ============================================================
+const M = {
+  CAB:     new THREE.MeshStandardMaterial({ color:0x1b1e24, roughness:0.55, metalness:0, roughnessMap:paintRoughTex }), // gabinete negro datacenter pintado
+  CAB_D:   new THREE.MeshStandardMaterial({ color:0x121419, roughness:0.6,  metalness:0 }),  // recesos / marcos
+  DOOR:    new THREE.MeshStandardMaterial({ color:0x22262d, roughness:0.55, metalness:0, roughnessMap:paintRoughTex, transparent:true, opacity:1 }),
+  DOORFR:  new THREE.MeshStandardMaterial({ color:0x2c313a, roughness:0.5,  metalness:0, transparent:true, opacity:1 }),
+  HAT:     new THREE.MeshStandardMaterial({ color:0x2a2e36, roughness:0.5,  metalness:0 }),
+  BASE:    new THREE.MeshStandardMaterial({ color:0x101216, roughness:0.85, metalness:0.1 }), // plinto / zoclo
+  STEEL:   new THREE.MeshStandardMaterial({ color:0x9aa0a8, roughness:0.34, metalness:1 }),    // metal desnudo claro (manijas)
+  STEEL_D: new THREE.MeshStandardMaterial({ color:0x5c626b, roughness:0.5,  metalness:0.55 }),
+  BOLT:    new THREE.MeshStandardMaterial({ color:0x8b929a, roughness:0.4,  metalness:1 }),
+  COPPER:  new THREE.MeshStandardMaterial({ color:0xb87333, roughness:0.35, metalness:1, roughnessMap:copperRoughTex }), // barras de cobre
+  MOD:     new THREE.MeshStandardMaterial({ color:0x24272e, roughness:0.6,  metalness:0 }),    // cuerpo de modulos
+  MOD_D:   new THREE.MeshStandardMaterial({ color:0x191b21, roughness:0.65, metalness:0 }),
+  GRILLE:  new THREE.MeshStandardMaterial({ color:0x0a0b0e, roughness:0.6,  metalness:0.2 }),  // rejillas / louvers
+  DISPBODY:new THREE.MeshStandardMaterial({ color:0x0b0d11, roughness:0.4,  metalness:0.1 }),  // bisel del HMI
+  FANRING: new THREE.MeshStandardMaterial({ color:0x2b2f36, roughness:0.5,  metalness:0.4 }),  // venturi del ventilador
+  BLADE:   new THREE.MeshStandardMaterial({ color:0x14161b, roughness:0.5,  metalness:0.1 }),  // aspa pintada
+  HUB:     new THREE.MeshStandardMaterial({ color:0x55585f, roughness:0.4,  metalness:0.8 }),  // maza del ventilador
+  BAT:     new THREE.MeshStandardMaterial({ color:0x33353b, roughness:0.62, metalness:0 }),    // bateria VRLA
+  BAT_D:   new THREE.MeshStandardMaterial({ color:0x24262b, roughness:0.6,  metalness:0 }),    // tapa de bateria
+  SHELF:   new THREE.MeshStandardMaterial({ color:0x3a3d44, roughness:0.5,  metalness:0.6 }),  // repisa metalica
+  TERM_R:  new THREE.MeshStandardMaterial({ color:0xd42a2a, roughness:0.45, metalness:0.2 }),  // borne positivo (rojo)
+  TERM_K:  new THREE.MeshStandardMaterial({ color:0x111114, roughness:0.5,  metalness:0.2 }),  // borne negativo (negro)
+  ACC_A:   new THREE.MeshStandardMaterial({ color:0xffb300, roughness:0.5,  metalness:0.2 }),  // ambar (entrada/rectificador)
+  ACC_G:   new THREE.MeshStandardMaterial({ color:0x0f8a4f, roughness:0.5,  metalness:0.2 }),  // verde (salida/inversor)
+  ACC_R:   new THREE.MeshStandardMaterial({ color:0xc22233, roughness:0.5,  metalness:0.2 }),  // rojo (DC/cargador)
+  ACC_B:   new THREE.MeshStandardMaterial({ color:0x3aa0ff, roughness:0.5,  metalness:0.2 }),  // azul (control/bypass)
+};
+
+// fabricas de material de lampara piloto (emisivo, mutado por estado)
+function lampMat(color, i){ return new THREE.MeshStandardMaterial({ color:0x14161a, emissive:color, emissiveIntensity:i, roughness:0.3, metalness:0.2 }); }
+
+// ============================================================
+// HELPERS DE GEOMETRIA
+// ============================================================
+const root = new THREE.Group();
+scene.add(root);
+
+function mesh(geo, mat, x = 0, y = 0, z = 0, parent = root){
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+function box(w, h, d, mat, x, y, z, parent = root){
+  return mesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent);
+}
+function cylY(r, len, mat, x, y, z, seg = 18, parent = root){
+  return mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+}
+function cylZ(r, len, mat, x, y, z, seg = 18, parent = root){
+  const m = mesh(new THREE.CylinderGeometry(r, r, len, seg), mat, x, y, z, parent);
+  m.rotation.x = Math.PI / 2;
+  return m;
+}
+
+// Caja CHAFLANADA (bisel real): shape de esquinas redondeadas extruido en profundidad con bevel.
+// Da aristas verticales/horizontales biseladas en la cara frontal -> look de chapa doblada.
+function roundedRectShape(w, h, r){
+  const s = new THREE.Shape();
+  const x = -w/2, y = -h/2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+  return s;
+}
+function chamferBox(w, h, d, mat, x, y, z, r = 0.02, bevel = 0.008, parent = root){
+  const cr = Math.min(r, w/2 - 0.001, h/2 - 0.001);
+  const inner = Math.max(0.001, d - bevel * 2);
+  const geo = new THREE.ExtrudeGeometry(roundedRectShape(w, h, cr), {
+    depth: inner, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, steps: 1
+  });
+  geo.translate(0, 0, -inner / 2);   // centra la profundidad en el origen local
+  return mesh(geo, mat, x, y, z, parent);
+}
+
+// ============================================================
+// ACUMULADORES DE INSTANCIAS (una draw call por coleccion)
+// ============================================================
+const Q0 = new THREE.Quaternion();
+const S1 = new THREE.Vector3(1, 1, 1);
+function tMat(x, y, z, q, s){ return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q || Q0, s || S1); }
+function makeIM(geo, mat, mats, cast = true, parent = root){
+  if (!mats.length) return null;
+  const im = new THREE.InstancedMesh(geo, mat, mats.length);
+  mats.forEach((m, i) => im.setMatrixAt(i, m));
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = cast; im.receiveShadow = true;
+  parent.add(im);
+  return im;
+}
+const boltMats = [];     // tornillos de bisel / esquinas
+const louverMats = [];   // ranuras de ventilacion en puertas
+const BOLT_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2, 0, 0)); // cilindro a lo largo de Z
+
+// ============================================================
+// PLINTO / ZOCLO (ambos gabinetes)
+// ============================================================
+box(BAT.x1 - UPS.x0 + 0.02, PLINTH, D + 0.02, M.BASE, CENTER_X, PLINTH/2, D/2);
+
+// ============================================================
+// CUERPOS DE GABINETE (chaflanados) + techos
+// ============================================================
+function cabinetShell(cx){
+  // cuerpo (respaldo en z=0, frente en z=D): extruido en profundidad
+  chamferBox(UPS.w - 0.004, BODY_H, D - 0.01, M.CAB, cx, BODY_Y0 + BODY_H/2, D/2, 0.025, 0.01);
+  // techo / hat
+  box(UPS.w + 0.02, 0.035, D + 0.02, M.HAT, cx, H + 0.015, D/2);
+}
+cabinetShell(UPS.cx);
+cabinetShell(BAT.cx);
+// junta central entre gabinetes
+box(0.02, BODY_H, D, M.CAB_D, UPS.x1, BODY_Y0 + BODY_H/2, D/2);
+
+// ============================================================
+// FACHADAS (voxF equivalente) — puertas que se desvanecen con CORTE
+// ============================================================
+const facadeGroup = new THREE.Group();
+root.add(facadeGroup);
+const facadeMats = [];   // materiales cuya opacidad baja en CORTE
+
+// puerta con rejilla inferior + manija + louvers. door delantera en z ~ FZ
+function buildDoor(cx, ventBands){
+  const dw = UPS.w - 0.05, dh = BODY_H - 0.06, dcy = BODY_Y0 + 0.03 + dh/2;
+  const dmat = M.DOOR.clone(); const fmat = M.DOORFR.clone();
+  facadeMats.push(dmat, fmat);
+  // panel de puerta chaflanado (proud sobre la cara)
+  chamferBox(dw, dh, 0.028, dmat, cx, dcy, FZ - 0.014, 0.02, 0.008, facadeGroup);
+  // marco de rebaje
+  const fr = chamferBox(dw + 0.018, dh + 0.018, 0.012, fmat, cx, dcy, FZ - 0.03, 0.02, 0.006, facadeGroup);
+  fr.castShadow = false;
+  // manija de leva vertical + escudo
+  box(0.03, 0.03, 0.024, M.STEEL_D, cx + dw/2 - 0.05, dcy, FZ + 0.008, facadeGroup);
+  box(0.024, 0.15, 0.03, M.STEEL, cx + dw/2 - 0.05, dcy - 0.085, FZ + 0.02, facadeGroup);
+  // louvers de ventilacion inferiores (instanciados)
+  for (const by of ventBands){
+    for (let i = 0; i < 7; i++)
+      louverMats.push(tMat(cx, by + i * 0.024, FZ + 0.004, Q0, new THREE.Vector3(dw * 0.72, 1, 1)));
+  }
+  // etiqueta arc-flash
+  const lbl = mesh(new THREE.PlaneGeometry(0.085, 0.106),
+    new THREE.MeshStandardMaterial({ map:arcFlashTex, roughness:0.55, metalness:0, transparent:true, opacity:1 }),
+    cx - dw/2 + 0.075, dcy + dh*0.30, FZ + 0.006, facadeGroup);
+  lbl.castShadow = false;
+  facadeMats.push(lbl.material);
+  return { dcy, dh, dw };
+}
+// puerta UPS: rejilla inferior (2 bandas bajas). Reserva la franja media-alta para el HMI.
+const upsDoor = buildDoor(UPS.cx, [BODY_Y0 + 0.16, BODY_Y0 + 0.34]);
+// puerta baterias: 3 bandas de rejilla (mas ventilada)
+buildDoor(BAT.cx, [BODY_Y0 + 0.30, BODY_Y0 + 0.60, BODY_Y0 + 0.90]);
+
+// nameplate en la parte superior de la puerta UPS
+const np = mesh(new THREE.PlaneGeometry(0.24, 0.12),
+  new THREE.MeshStandardMaterial({ map:plateTex, roughness:0.4, metalness:0, transparent:true, opacity:1 }),
+  UPS.cx, BODY_Y0 + BODY_H - 0.12, FZ + 0.006, facadeGroup);
+np.castShadow = false;
+facadeMats.push(np.material);
+
+// ============================================================
+// PANEL HMI FRONTAL (display LCD auto-iluminado con CanvasTexture — rasgo estrella)
+// ============================================================
+const hmiGroup = new THREE.Group();
+facadeGroup.add(hmiGroup);
+const HMI_CX = UPS.cx, HMI_CY = BODY_Y0 + BODY_H * 0.66;
+const HMI_W = 0.26, HMI_H = 0.36;
+// bisel del panel HMI
+box(HMI_W + 0.05, HMI_H + 0.05, 0.02, M.DISPBODY, HMI_CX, HMI_CY, FZ + 0.002, hmiGroup).castShadow = false;
+// canvas del mimico
+const hmiCanvas = document.createElement('canvas');
+hmiCanvas.width = 256; hmiCanvas.height = 352;
+const hctx = hmiCanvas.getContext('2d');
+const hmiTex = new THREE.CanvasTexture(hmiCanvas);
+hmiTex.colorSpace = THREE.SRGBColorSpace;
+const hmiPlane = mesh(new THREE.PlaneGeometry(HMI_W, HMI_H),
+  new THREE.MeshBasicMaterial({ map: hmiTex }),   // auto-iluminado
+  HMI_CX, HMI_CY, FZ + 0.013, hmiGroup);
+hmiPlane.castShadow = false;
+
+// LEDs fisicos: ONLINE / BATERIA / BYPASS / FALLA (lentes emisivas sobre el HMI)
+const LED_COLORS = [0x28e07a, 0xffb300, 0x3aa0ff, 0xff3344];
+const ledMats = [];
+const ledY = HMI_CY + HMI_H/2 + 0.03;
+[-0.075, -0.025, 0.025, 0.075].forEach((dx, i) => {
+  const m = lampMat(LED_COLORS[i], 0.06);
+  const led = cylZ(0.008, 0.014, m, HMI_CX + dx, ledY, FZ + 0.006, 14, hmiGroup);
+  led.castShadow = false;
+  ledMats.push(m);
+});
+// luz de relleno del HMI (tinte por modo)
+const hmiLight = new THREE.PointLight(0x28e07a, 0.6, 0.9);
+hmiLight.position.set(HMI_CX, HMI_CY, FZ + 0.12);
+scene.add(hmiLight);
+
+// ============================================================
+// INTERIOR UPS — modulos rectificador/inversor/cargador/bypass (visibles en CORTE)
+// ============================================================
+// caja de modulo con franja de acento, rejilla frontal y LED de estado
+function buildModule(y0, y1, accentMat, label){
+  const h = y1 - y0, cy = (y0 + y1)/2, mw = UPS.w - 0.14, mz = 0.62;
+  box(mw, h, 0.30, M.MOD, UPS.cx, cy, mz - 0.15);          // cuerpo
+  const face = box(mw, h - 0.01, 0.012, M.MOD_D, UPS.cx, cy, mz + 0.001);  // cara frontal
+  face.castShadow = false;
+  // franja de acento superior
+  box(mw * 0.94, 0.02, 0.006, accentMat, UPS.cx, y1 - 0.03, mz + 0.008).castShadow = false;
+  // rejilla de ventilacion frontal
+  box(mw * 0.6, h * 0.5, 0.006, M.GRILLE, UPS.cx, cy - 0.02, mz + 0.008).castShadow = false;
+  // LED de modulo (emisivo estatico)
+  const c = accentMat.color.getHex();
+  cylZ(0.006, 0.01, lampMat(c, 0.9), UPS.cx + mw/2 - 0.03, y1 - 0.03, mz + 0.01, 12).castShadow = false;
+}
+buildModule(0.20, 0.58, M.ACC_A, 'RECTIFICADOR');
+buildModule(0.62, 1.00, M.ACC_G, 'INVERSOR');
+buildModule(1.04, 1.32, M.ACC_R, 'CARGADOR');
+buildModule(1.36, 1.60, M.ACC_B, 'BYPASS ESTATICO');
+
+// ============================================================
+// BARRAS DE COBRE (3 fases verticales al fondo del gabinete UPS)
+// ============================================================
+const busZ = 0.14;
+for (const bx of [UPS.cx - 0.16, UPS.cx, UPS.cx + 0.16]){
+  box(0.03, 1.30, 0.012, M.COPPER, bx, 0.85, busZ);          // barra vertical
+  // stubs hacia los modulos
+  for (const my of [0.4, 0.8, 1.15, 1.45]) box(0.012, 0.02, 0.10, M.COPPER, bx, my, busZ + 0.07);
+  // aisladores stand-off
+  for (const iy of [0.3, 0.9, 1.5]) cylZ(0.012, 0.03, M.STEEL_D, bx, iy, busZ + 0.02, 12);
+}
+box(0.50, 0.03, 0.012, M.COPPER, UPS.cx, 1.52, busZ);         // bus superior de union
+
+// interruptores ENTRADA / BYPASS / SALIDA (base del gabinete UPS)
+function buildBreaker(cx, accentMat){
+  box(0.09, 0.14, 0.10, M.MOD, cx, 0.16, 0.66);
+  box(0.06, 0.02, 0.008, accentMat, cx, 0.24, 0.72).castShadow = false;
+  // palanca (toggle) de metal
+  box(0.014, 0.05, 0.02, M.STEEL, cx, 0.20, 0.73).castShadow = false;
+}
+buildBreaker(UPS.cx - 0.16, M.ACC_A);   // ENTRADA
+buildBreaker(UPS.cx,        M.ACC_B);   // BYPASS
+buildBreaker(UPS.cx + 0.16, M.ACC_G);   // SALIDA
+
+// ============================================================
+// INTERIOR BATERIAS — repisas + celdas VRLA con bornes rojo(+)/negro(-)
+// ============================================================
+function buildVRLA(x, y, z){   // bloque VRLA 0.16 x 0.11 x 0.20 m
+  const bw = 0.155, bh = 0.11, bd = 0.20;
+  box(bw, bh, bd, M.BAT, x, y + bh/2, z);
+  box(bw + 0.004, 0.012, bd + 0.004, M.BAT_D, x, y + bh, z);   // tapa
+  // bornes en la tapa, cara frontal
+  cylY(0.011, 0.02, M.TERM_R, x - 0.045, y + bh + 0.012, z + bd/2 - 0.03, 12);  // + rojo
+  cylY(0.011, 0.02, M.TERM_K, x + 0.045, y + bh + 0.012, z + bd/2 - 0.03, 12);  // - negro
+  // jumper entre bornes
+  box(0.09, 0.008, 0.01, M.STEEL, x, y + bh + 0.02, z + bd/2 - 0.03).castShadow = false;
+}
+const SHELF_Y = [0.16, 0.52, 0.88, 1.24];
+const BAT_X = [BAT.cx - 0.16, BAT.cx, BAT.cx + 0.16];
+for (const sy of SHELF_Y){
+  box(UPS.w - 0.06, 0.02, D - 0.10, M.SHELF, BAT.cx, sy, D/2 - 0.02);   // repisa
+  for (const bx of BAT_X){
+    buildVRLA(bx, sy + 0.02, D/2 - 0.14);   // fila trasera
+    buildVRLA(bx, sy + 0.02, D/2 + 0.12);   // fila frontal
+  }
+}
+
+// ============================================================
+// VENTILADORES (2 traseros + 1 superior) — CylinderGeometry, girando
+// ============================================================
+function buildFan(r, nblade){
+  const outer = new THREE.Group();
+  const shroud = new THREE.Mesh(new THREE.CylinderGeometry(r + 0.02, r + 0.02, 0.05, 26, 1, true), M.FANRING);
+  shroud.rotation.x = Math.PI/2; shroud.castShadow = false; outer.add(shroud);
+  const spin = new THREE.Group(); outer.add(spin);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.04, 14), M.HUB);
+  hub.rotation.x = Math.PI/2; spin.add(hub);
+  for (let i = 0; i < nblade; i++){
+    const a = i / nblade * Math.PI * 2;
+    const bl = new THREE.Mesh(new THREE.BoxGeometry(r * 0.86, 0.03, 0.005), M.BLADE);
+    bl.position.set(Math.cos(a) * r * 0.46, Math.sin(a) * r * 0.46, 0);
+    bl.rotation.z = a; bl.rotation.y = 0.5;
+    spin.add(bl);
+  }
+  return { outer, spin };
+}
+const fans = [];
+// 2 ventiladores traseros (cara z=0), protruyen hacia -z, giran en plano XY
+[[UPS.cx, 1.28], [UPS.cx, 0.55]].forEach(([fx, fy]) => {
+  const f = buildFan(0.12, 7);
+  f.outer.position.set(fx, fy, -0.02);
+  root.add(f.outer);
+  fans.push(f);
+});
+// 1 ventilador superior (techo UPS), gira en plano XZ
+{
+  const f = buildFan(0.13, 7);
+  f.outer.position.set(UPS.cx, H + 0.03, D/2);
+  f.outer.rotation.x = -Math.PI/2;
+  root.add(f.outer);
+  fans.push(f);
+}
+
+// ============================================================
+// CONSTRUCCION DE INSTANCIAS
+// ============================================================
+makeIM(new THREE.CylinderGeometry(0.005, 0.005, 0.016, 6), M.BOLT, boltMats, false);
+makeIM(new THREE.BoxGeometry(1, 0.012, 0.006), M.GRILLE, louverMats, false);
+
+// ============================================================
+// MAQUINA DE ESTADOS
+// ============================================================
+const state = {
+  mode: 'online',        // 'online' | 'bateria' | 'bypass'
+  corteRed: false,       // simular corte de red -> fuerza bateria
+  falla: false,
+  corte: false,          // corte de gabinete (desvanece fachadas)
+  batt: 100,
+};
+const effMode = () => state.corteRed ? 'bateria' : state.mode;
+let facadeTarget = 1.0;
+
+function setLed(i, on){
+  ledMats[i].emissiveIntensity = on ? 2.0 : 0.06;
+  ledMats[i].color.set(on ? LED_COLORS[i] : 0x14161a);
+}
+function applyState(){
+  const m = effMode();
+  setLed(0, m === 'online' && !state.falla);
+  setLed(1, m === 'bateria' && !state.falla);
+  setLed(2, m === 'bypass' && !state.falla);
+  // LED 3 (FALLA) parpadea en tick()
+  if (!state.falla){ ledMats[3].emissiveIntensity = 0.06; ledMats[3].color.set(0x14161a); }
+  hmiLight.color.set(state.falla ? 0xff3344 : (m === 'online' ? 0x28e07a : (m === 'bateria' ? 0xffb300 : 0x3aa0ff)));
+  facadeTarget = state.corte ? 0.05 : 1.0;
+  hmiGroup.visible = !state.corte;
+  paintModes();
+  drawHMI(0);
+}
+
+// ============================================================
+// HMI DRAW (mimico de flujo de energia + medidor de carga — alto contraste)
+// ============================================================
+function drawHMI(time){
+  const g = hctx, W = 256, Hc = 352;
+  const m = effMode();
+  const gridOK = !state.corteRed;
+  g.fillStyle = '#02090c'; g.fillRect(0, 0, W, Hc);
+  g.strokeStyle = '#0b3a40'; g.lineWidth = 2; g.strokeRect(3, 3, W-6, Hc-6);
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  g.font = 'bold 20px monospace'; g.fillStyle = '#bfe9dc';
+  g.fillText('UPS 40 kVA', W/2, 30);
+  g.font = '12px monospace'; g.fillStyle = '#5a7a86';
+  g.fillText('3Ø 480V · 60 Hz', W/2, 48);
+  const fBlink = state.falla && (Math.sin(time*8) > 0);
+  const stTxt = state.falla ? (fBlink ? 'FALLA' : '') :
+    (m === 'online' ? 'ONLINE' : (m === 'bateria' ? 'EN BATERÍA' : 'BYPASS'));
+  const stCol = state.falla ? '#ff3344' :
+    (m === 'online' ? '#28e07a' : (m === 'bateria' ? '#ffb300' : '#3aa0ff'));
+  g.font = 'bold 17px monospace'; g.fillStyle = stCol;
+  g.fillText(stTxt, W/2, 76);
+  // --- mimico ENTRADA -> RECT -> INV -> SALIDA (+ bypass / bateria) ---
+  const nodes = { red:[38,142], byp:[128,104], rect:[92,164], inv:[164,164], sal:[218,142], bat:[128,220] };
+  function line(a, b, col, on){
+    g.strokeStyle = on ? col : '#123039';
+    g.lineWidth = on ? 3 : 1.5;
+    g.beginPath(); g.moveTo(nodes[a][0], nodes[a][1]); g.lineTo(nodes[b][0], nodes[b][1]); g.stroke();
+  }
+  line('red','rect','#ffb300', gridOK && m === 'online');
+  line('rect','inv','#ffb300', m === 'online');
+  line('inv','sal','#0f8a4f', m !== 'bypass');
+  line('red','byp','#ffb300', gridOK && m === 'bypass');
+  line('byp','sal','#0f8a4f', m === 'bypass');
+  line('rect','bat','#c22233', m === 'online');
+  line('bat','inv','#c22233', m === 'bateria');
+  function node(id, label, col, on){
+    const [x,y] = nodes[id];
+    g.fillStyle = on ? col : '#0d2229';
+    g.fillRect(x-21, y-11, 42, 22);
+    g.strokeStyle = on ? '#dffcf2' : '#1d4450'; g.lineWidth = 1; g.strokeRect(x-21, y-11, 42, 22);
+    g.fillStyle = on ? '#04110d' : '#4a6a74'; g.font = 'bold 11px monospace';
+    g.fillText(label, x, y+4);
+  }
+  node('red', 'RED',  '#ffb300', gridOK);
+  node('byp', 'BYP',  '#3aa0ff', m === 'bypass');
+  node('rect','RECT', '#ffb300', m === 'online');
+  node('inv', 'INV',  '#0f8a4f', m !== 'bypass');
+  node('sal', 'SAL',  '#0f8a4f', true);
+  node('bat', 'BAT',  '#c22233', true);
+  // --- medidor de carga ---
+  const load = 58 + Math.sin(time*0.7)*6;
+  g.textAlign = 'left'; g.font = '12px monospace'; g.fillStyle = '#7a9aa6';
+  g.fillText('CARGA', 24, 266);
+  g.strokeStyle = '#1d4450'; g.lineWidth = 1; g.strokeRect(24, 274, 208, 18);
+  g.fillStyle = state.falla ? '#ff3344' : '#28e07a';
+  g.fillRect(26, 276, Math.max(4, 204*load/100), 14);
+  g.fillStyle = '#bfe9dc'; g.font = 'bold 13px monospace'; g.textAlign = 'right';
+  g.fillText(Math.round(load) + ' %', 232, 310);
+  // --- bateria ---
+  g.textAlign = 'left'; g.fillStyle = '#7a9aa6'; g.font = '12px monospace';
+  const bmode = (m === 'bateria') ? 'DESCARGANDO' : 'FLOTACIÓN';
+  g.fillText('BATERÍA ' + Math.round(state.batt) + '%  ·  ' + bmode, 24, 334);
+  g.textAlign = 'center';
+  hmiTex.needsUpdate = true;
+}
+
+// ============================================================
+// UI
+// ============================================================
+const modeBtns = {
+  online: document.getElementById('mOnline'),
+  bateria: document.getElementById('mBat'),
+  bypass: document.getElementById('mByp'),
+};
+function paintModes(){
+  const m = effMode();
+  for (const k in modeBtns) modeBtns[k].className = (k === m) ? 'on' : '';
+}
+for (const k in modeBtns) modeBtns[k].onclick = () => { state.mode = k; applyState(); };
+
+function bindToggle(id, key, alarmClass){
+  const btn = document.getElementById(id);
+  const paint = () => {
+    btn.textContent = state[key] ? 'ON' : 'OFF';
+    btn.className = state[key] ? (alarmClass || 'on') : 'off';
+  };
+  paint();
+  btn.onclick = () => { state[key] = !state[key]; paint(); applyState(); };
+}
+bindToggle('bCorteRed', 'corteRed');
+bindToggle('bFalla', 'falla', 'alarm');
+bindToggle('bCorte', 'corte');
+
+// ============================================================
+// SIMULACION (independiente del render, para arnes headless)
+// ============================================================
+let clockT = 0;
+function tick(dt){
+  clockT += dt;
+  const m = effMode();
+  // ventiladores (siempre energizados)
+  for (let i = 0; i < fans.length; i++) fans[i].spin.rotation.z += dt * (9 + i * 0.7);
+  // fachadas: fade con CORTE
+  for (const mm of facadeMats){
+    mm.opacity += (facadeTarget - mm.opacity) * Math.min(1, dt * 5);
+    mm.depthWrite = mm.opacity > 0.5;
+  }
+  // LED FALLA parpadeante
+  const fOn = state.falla && (Math.sin(clockT * 8) > 0);
+  ledMats[3].emissiveIntensity = fOn ? 2.4 : 0.06;
+  ledMats[3].color.set(fOn ? 0xff3344 : 0x14161a);
+  if (!HEADLESS) hmiLight.intensity = state.falla ? (fOn ? 1.0 : 0.25) : 0.6;
+  // bateria: descarga en modo bateria, recarga en el resto
+  if (m === 'bateria') state.batt = Math.max(18, state.batt - dt * 1.4);
+  else state.batt = Math.min(100, state.batt + dt * 2.5);
+  // HMI a ~3 Hz
+  if (!state.corte && clockT > tick._hmiNext){
+    drawHMI(clockT);
+    tick._hmiNext = clockT + 0.33;
+  }
+}
+tick._hmiNext = 0;
+
+// ============================================================
+// GANCHO PARA ARNES HEADLESS
+// ============================================================
+applyState();
+window.__ups = {
+  state, effMode, tick, applyState, drawHMI, HEADLESS,
+  counts: {
+    fans: fans.length,
+    modules: 4,
+    busbars: 3,
+    batteries: SHELF_Y.length * BAT_X.length * 2,
+    leds: ledMats.length,
+    facadeMats: facadeMats.length,
+    louvers: louverMats.length,
+  }
+};
+
+// ============================================================
+// RENDER (solo con WebGL)
+// ============================================================
+if (!HEADLESS){
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;    // sol estatico -> bake una vez
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.target.set(CENTER_X, 0.95, 0.25);
+  controls.autoRotate = false;              // arranca OFF
+  controls.autoRotateSpeed = 0.55;
+  controls.minDistance = 1.1;
+  controls.maxDistance = 9;
+  controls.maxPolarAngle = Math.PI * 0.5;
+  // ground clamp (regla de la casa)
+  controls.addEventListener('change', () => {
+    if (controls.target.y < 0) controls.target.y = 0;
+    if (camera.position.y < 0.12) camera.position.y = 0.12;
+  });
+
+  // luces
+  scene.add(new THREE.AmbientLight(0xffffff, 0.26));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+  sun.position.set(2.4, 3.4, 2.6);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  const sc = sun.shadow.camera;
+  sc.left = -1.8; sc.right = 1.8; sc.top = 2.4; sc.bottom = -0.6; sc.near = 0.6; sc.far = 12;
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.02;
+  sun.target.position.set(CENTER_X, 0.9, 0.25);
+  scene.add(sun); scene.add(sun.target);
+  const fill = new THREE.DirectionalLight(0x88aaff, 0.4); fill.position.set(-2.6, 2.0, -1.8); scene.add(fill);
+  const rim  = new THREE.DirectionalLight(0x00d4aa, 0.2);  rim.position.set(0.6, 1.2, -2.6); scene.add(rim);
+
+  // suelo + grid
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60),
+    new THREE.MeshStandardMaterial({ color: 0x0a0e16, roughness: 0.92, metalness: 0.05 }));
+  ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+  const grid = new THREE.GridHelper(30, 60, 0x123f35, 0x0c1d1a);
+  grid.material.opacity = 0.28; grid.material.transparent = true; grid.position.y = 0.002; scene.add(grid);
+
+  // auto-rotate toggle
+  const bRot = document.getElementById('bRot');
+  bRot.onclick = () => {
+    controls.autoRotate = !controls.autoRotate;
+    bRot.className = controls.autoRotate ? 'on' : 'off';
+    bRot.textContent = controls.autoRotate ? 'ON' : 'OFF';
+  };
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  renderer.shadowMap.needsUpdate = true;    // horneado unico tras construir la escena
+
+  const clock = new THREE.Clock();
+  (function animate(){
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.05);
+    tick(dt);
+    controls.update();
+    renderer.render(scene, camera);
+  })();
+}
+</script>
+</body>
+</html>
