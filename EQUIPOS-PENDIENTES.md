@@ -540,7 +540,7 @@ SIMULAR CORTE DE RED (transfiere a batería), FALLA SIMULADA (LED rojo parpadean
 > Cierra el dominio del cuarto frío (Safran): la cámara ya existe como escena, faltan sus equipos.
 > Escala sugerida: `// SCALE: 1 voxel = 0.025 m`.
 
-- [ ] **R1. Central de refrigeración (rack de compresores)** → `disenos/central-refrigeracion/central-refrigeracion-voxel-v1.html`
+- [x] **R1. Central de refrigeración (rack de compresores)** → ✅ propio (subagente): `disenos/central-refrigeracion/central-refrigeracion-voxel-v1.html` · pendiente comparar con la versión claude.ai
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: una CENTRAL DE
@@ -596,7 +596,7 @@ ventiladores), AUTO-ROTATE.
 > Completa la cadena que ya empezaste con generador + UPS + MCC-VFD.
 > Escala sugerida: `// SCALE: 1 voxel = 0.025 m`.
 
-- [ ] **E1. Transformador (seco / pad-mounted)** → `disenos/transformador/transformador-voxel-v1.html`
+- [x] **E1. Transformador (seco / pad-mounted)** → ✅ propio (subagente): `disenos/transformador/transformador-voxel-v1.html` · pendiente comparar con la versión claude.ai
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un TRANSFORMADOR
