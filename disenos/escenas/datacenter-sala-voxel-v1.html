@@ -21,6 +21,13 @@
   #panel button.off { color:#ff4455; border-color:#ff4455; }
   #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
   #stat { color:#aebfd2; margin-top:8px; font-size:10px; }
+  #detailOverlay { position:fixed; inset:0; z-index:1000; background:rgba(3,5,9,0.94); display:none; }
+  #detailOverlay.open { display:block; }
+  #detailFrame { width:100%; height:100%; border:0; background:#06080d; }
+  #detailBar { position:fixed; top:0; left:0; right:0; height:44px; z-index:1002; display:flex; align-items:center; justify-content:space-between; padding:0 16px; background:rgba(6,8,13,0.92); border-bottom:1px solid #00d4aa44; }
+  #detailBar span { color:#eef3f9; font-size:12px; letter-spacing:0.12em; }
+  #detailClose { font-family:inherit; font-size:16px; line-height:1; color:#eef3f9; background:transparent; border:1px solid #00d4aa66; border-radius:4px; width:30px; height:30px; cursor:pointer; }
+  #detailClose:hover { border-color:#00d4aa; box-shadow:0 0 10px #00d4aa55; }
 </style>
 </head>
 <body>
@@ -36,12 +43,17 @@
   <div><i style="background:#00d4aa"></i> Equipo de precisión</div>
   <div><i style="background:#c4712e"></i> Barras de cobre</div>
 </div>
-<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan &nbsp;·&nbsp; CLIC en un equipo: ver detalle</div>
 <div id="panel">
   <div class="ph">CONTROL DE ESCENA</div>
+  <div class="row"><label>PILLS</label><button id="bPills" class="on">ON</button></div>
   <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="off">OFF</button></div>
   <div class="row"><label>SOMBRAS</label><button id="bShadow" class="on">ON</button></div>
   <div id="stat">voxeles: — · instancias: —</div>
+</div>
+<div id="detailOverlay">
+  <div id="detailBar"><span id="detailTitle">DETALLE DE EQUIPO</span><button id="detailClose" title="Cerrar (Esc)">✕</button></div>
+  <iframe id="detailFrame" title="Detalle de equipo"></iframe>
 </div>
 
 <!-- Importmap dinámico (unpkg three@0.160.0). El '@' se compone con
@@ -940,20 +952,52 @@ room.scale.setScalar(0.05);
 scene.add(room);
 
 // ---- equipos alrededor (metros) ----
-// CRAC downflow en los extremos de la sala (encaran las filas)
-scene.add(placeOnFloor(makeCrac(THREE), { x: 1.0, z: -1.7, y: FLOOR_H, rotY: Math.PI, scale: V.crac, restVoxelY: 25 }));
-scene.add(placeOnFloor(makeCrac(THREE), { x: 3.2, z: 13.6, y: FLOOR_H, rotY: 0,       scale: V.crac, restVoxelY: 25 }));
+// Registro de equipos: cada uno guarda su pivot, su pill de telemetría y la ruta
+// RELATIVA a su HTML de detalle (para el iframe on-click). Rutas sin ?clean=1
+// (ninguno de los HTML de equipo soporta ese parámetro).
+const EQUIP = [];
+function place(factory, opts, meta) {
+  const pivot = placeOnFloor(factory, opts);
+  pivot.userData.route = meta.route;
+  scene.add(pivot);
+  EQUIP.push({ pivot, pill: meta.pill, alarm: !!meta.alarm, route: meta.route });
+  return pivot;
+}
+const R = {
+  rack:  '../server-rack/rack-42u-voxel-v1.html',
+  crac:  '../crac/crac-downflow-voxel.html',
+  inrow: '../in-row/inrow-cooler-voxel.html',
+  pdu:   '../pdu/pdu-datacenter-voxel-v1.html',
+  dry:   '../dry-cooler/dry-cooler-voxel-v1.html',
+  ups:   '../ups/ups-40kva-voxel.html',
+};
+// BANCO DE CRAC downflow: 3 unidades lado a lado contra el muro del fondo, encarando
+// las filas (rotY 0 → frente -z hacia el pasillo caliente de la fila 4). Pills siguen a c/u.
+place(makeCrac(THREE), { x: 1.65, z: 13.6, y: FLOOR_H, rotY: 0, scale: V.crac, restVoxelY: 25 }, { pill: 'CRAC · 16°→24° · 84%', route: R.crac });
+place(makeCrac(THREE), { x: 3.20, z: 13.6, y: FLOOR_H, rotY: 0, scale: V.crac, restVoxelY: 25 }, { pill: 'CRAC · 15°→23° · 79%', route: R.crac });
+place(makeCrac(THREE), { x: 4.75, z: 13.6, y: FLOOR_H, rotY: 0, scale: V.crac, restVoxelY: 25 }, { pill: 'CRAC · 17°→25° · 88%', route: R.crac });
 // In-row coolers intercalados en la fila 2 (soplan al pasillo frío +z)
-scene.add(placeOnFloor(makeInrow(THREE), { x: 2.88, z: 6.0, y: FLOOR_H, rotY: Math.PI, scale: V.inrow }));
-scene.add(placeOnFloor(makeInrow(THREE), { x: 4.08, z: 6.0, y: FLOOR_H, rotY: Math.PI, scale: V.inrow }));
+place(makeInrow(THREE), { x: 2.88, z: 6.0, y: FLOOR_H, rotY: Math.PI, scale: V.inrow }, { pill: 'IN-ROW · 22°C', route: R.inrow });
+place(makeInrow(THREE), { x: 4.08, z: 6.0, y: FLOOR_H, rotY: Math.PI, scale: V.inrow }, { pill: 'IN-ROW · 23°C', route: R.inrow });
 // UPS + PDU al frente de la sala, contra el muro lateral
-scene.add(placeOnFloor(makeUps(THREE), { x: 5.8, z: -1.7, y: FLOOR_H, rotY: Math.PI, scale: V.ups }));
-scene.add(placeOnFloor(makePdu(THREE), { x: 3.4, z: -1.7, y: FLOOR_H, rotY: 0,       scale: V.pdu }));
+place(makeUps(THREE), { x: 5.8, z: -1.7, y: FLOOR_H, rotY: Math.PI, scale: V.ups }, { pill: 'UPS · 78% · BAT 100%', route: R.ups });
+place(makePdu(THREE), { x: 3.4, z: -1.7, y: FLOOR_H, rotY: 0,       scale: V.pdu }, { pill: 'PDU · 142 kW', route: R.pdu });
 // Dry cooler EXTERIOR (largo a lo largo de z, fuera del muro +x)
-scene.add(placeOnFloor(makeDryCooler(THREE), { x: 9.4, z: 6.0, y: 0, rotY: Math.PI / 2, scale: V.dry }));
-// Hero racks detallados en la primera fila
-const HERO_X = [0.475, 1.075, 1.675];
-HERO_X.forEach(hx => scene.add(placeOnFloor(makeRack(THREE), { x: hx, z: 0.4, y: FLOOR_H, rotY: Math.PI, scale: V.rack })));
+place(makeDryCooler(THREE), { x: 9.4, z: 6.0, y: 0, rotY: Math.PI / 2, scale: V.dry }, { pill: 'DRY · 34°C agua', route: R.dry });
+// Hero racks detallados en la primera fila (uno en ALARMA roja)
+const HERO = [
+  { x: 0.475, pill: 'RACK · 72% · 24°C', alarm: false },
+  { x: 1.075, pill: 'RACK · 88% · 27°C', alarm: false },
+  { x: 1.675, pill: 'RACK · 98% · 41°C', alarm: true },
+];
+HERO.forEach(h => place(makeRack(THREE), { x: h.x, z: 0.4, y: FLOOR_H, rotY: Math.PI, scale: V.rack }, { pill: h.pill, alarm: h.alarm, route: R.rack }));
+// Pills informativos por FILA de racks silueta (no clicables; van dentro del room group)
+const ROW_PILLS = [
+  { z: 3.225, pill: 'RACK · 68% · 23°C', alarm: false },
+  { z: 6.025, pill: 'RACK · 74% · 25°C', alarm: false },
+  { z: 8.825, pill: 'RACK · 61% · 22°C', alarm: false },
+  { z: 11.625, pill: 'RACK · 80% · 26°C', alarm: false },
+];
 
 // ---- TENDIDO CHW REAL sala -> dry cooler exterior (tubería voxel, codos 90°) ----
 // El dry cooler está en placeOnFloor(scale 0.05, centrado por Box3, rotY π/2, en (9.4,0,6)).
@@ -997,6 +1041,47 @@ voxelRun([
 [[6.70, 8.6], [6.70, 9.9], [8.70, 10.25]].forEach(([sx, sz]) =>
   voxelRun([[sx, 0, sz], [sx, 1.45, sz]], PIPE_ROD, 0.16));
 
+// ---- VENTILADORES AXIALES SUELTOS (exhibidos en el piso exterior, izquierda) ----
+// Cada uno: base cuadrada voxel + aro/venturi + aspas en un Group que GIRA (animado).
+// No van en EQUIP (no clicables). Escalonados en diagonal, fuera del perímetro de la sala.
+function makeFan(THREE) {
+  const outer = new THREE.Group();
+  const base = new THREE.Group();
+  const cube = new THREE.BoxGeometry(1, 1, 1);
+  const vmap = new Map();
+  const key = (x, y, z) => ((x + 128) * 1048576) + ((y + 128) * 1024) + (z + 128);
+  const put = (x, y, z, c) => vmap.set(key(x, y, z), c);
+  const C = { PLATE: 0x363b44, PLATE2: 0x2a2e35, RING: 0x6a6a72, RING_D: 0x4a4e57 };
+  for (let x = -9; x <= 9; x++) for (let z = -9; z <= 9; z++) put(x, 0, z, ((x + z) % 2 === 0) ? C.PLATE : C.PLATE2);
+  for (const [cx, cz] of [[-8, -8], [8, -8], [-8, 8], [8, 8]]) { put(cx, 1, cz, C.RING_D); put(cx, 2, cz, C.RING_D); }
+  const RAD = 7;
+  for (let a = 0; a < 56; a++) { const ang = a / 56 * Math.PI * 2; const x = Math.round(Math.cos(ang) * RAD), z = Math.round(Math.sin(ang) * RAD); put(x, 1, z, C.RING); put(x, 2, z, C.RING); put(x, 3, z, C.RING_D); }
+  const byColor = new Map();
+  for (const [k, c] of vmap) { const x = Math.floor(k / 1048576) - 128; const r = k % 1048576; const y = Math.floor(r / 1024) - 128; const z = r % 1024 - 128; if (!byColor.has(c)) byColor.set(c, []); byColor.get(c).push([x, y, z]); }
+  const mm = new THREE.Matrix4();
+  for (const [c, ps] of byColor) {
+    const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, metalness: 0.5 });
+    const im = new THREE.InstancedMesh(cube, mat, ps.length); im.castShadow = true; im.receiveShadow = true;
+    ps.forEach((p, i) => { mm.setPosition(p[0] + 0.5, p[1] + 0.5, p[2] + 0.5); im.setMatrixAt(i, mm); });
+    im.instanceMatrix.needsUpdate = true; base.add(im);
+  }
+  base.scale.setScalar(0.05); outer.add(base);
+  const blades = new THREE.Group(); blades.position.y = 0.17;
+  const bmat = new THREE.MeshStandardMaterial({ color: 0x9aa2b0, roughness: 0.45, metalness: 0.45 });
+  const bgeo = new THREE.BoxGeometry(0.30, 0.015, 0.11);
+  for (let i = 0; i < 5; i++) {
+    const arm = new THREE.Group(); arm.rotation.y = i * Math.PI * 2 / 5;
+    const b = new THREE.Mesh(bgeo, bmat); b.position.set(0.17, 0, 0); b.rotation.x = 0.5; b.castShadow = true;
+    arm.add(b); blades.add(arm);
+  }
+  const hub = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.09), new THREE.MeshStandardMaterial({ color: 0x2a2e35, roughness: 0.35, metalness: 0.6 }));
+  blades.add(hub); outer.add(blades);
+  return { outer, blades };
+}
+const FAN_POS = [[-2.0, 1.2], [-2.9, 2.4], [-3.8, 3.6]];   // diagonal, x < -0.9 (fuera del piso)
+const fanBlades = [];
+FAN_POS.forEach(([fx, fz]) => { const f = makeFan(THREE); f.outer.position.set(fx, 0, fz); scene.add(f.outer); fanBlades.push(f.blades); });
+
 // ---- estadísticas de escena (voxeles / instancias) ----
 let voxTotal = 0, meshTotal = 0;
 scene.traverse(o => { if (o.isInstancedMesh) { voxTotal += o.count; meshTotal++; } });
@@ -1008,7 +1093,7 @@ if (typeof window !== 'undefined') window.__SCENE_STATS__ = STATS;
    ====================================================================== */
 if (!HEADLESS) {
   const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 400);
-  camera.position.set(18, 14, 23);
+  camera.position.set(19, 15, 25);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -1026,7 +1111,7 @@ if (!HEADLESS) {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.target.set(3.5, 1.5, 6);
+  controls.target.set(3.2, 1.3, 6);
   controls.autoRotate = false;
   controls.autoRotateSpeed = 0.4;
   controls.maxPolarAngle = Math.PI * 0.495;
@@ -1039,9 +1124,71 @@ if (!HEADLESS) {
   const bShadow = document.getElementById('bShadow');
   bShadow.onclick = () => { renderer.shadowMap.enabled = !renderer.shadowMap.enabled; scene.traverse(o => { if (o.isInstancedMesh) o.material.needsUpdate = true; }); bShadow.className = renderer.shadowMap.enabled ? 'on' : 'off'; bShadow.textContent = renderer.shadowMap.enabled ? 'ON' : 'OFF'; };
 
+  // ---- PILLS de telemetría (Sprites con CanvasTexture auto-iluminada, alto contraste) ----
+  const pillsGroup = new THREE.Group();
+  scene.add(pillsGroup);
+  function makePill(text, alarm) {
+    const c = document.createElement('canvas'); const W = 512, H = 128; c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+    g.fillStyle = alarm ? 'rgba(46,8,10,0.88)' : 'rgba(6,10,16,0.84)';
+    rr(6, 6, W - 12, H - 12, 22); g.fill();
+    g.lineWidth = 6; g.strokeStyle = alarm ? '#ff5252' : '#00d4aa'; rr(6, 6, W - 12, H - 12, 22); g.stroke();
+    g.font = '600 46px "JetBrains Mono", ui-monospace, monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = alarm ? '#ffdede' : '#eef3f9'; g.fillText(text, W / 2, H / 2 + 3);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    const hh = 0.42; sp.scale.set(hh * (W / H), hh, 1);
+    return sp;
+  }
+  const _box = new THREE.Box3(), _ctr = new THREE.Vector3();
+  for (const e of EQUIP) {                       // pill sobre cada equipo (tope de su Box3 + 0.4 m)
+    _box.setFromObject(e.pivot); _box.getCenter(_ctr);
+    const sp = makePill(e.pill, e.alarm);
+    sp.position.set(_ctr.x, _box.max.y + 0.4, _ctr.z);
+    pillsGroup.add(sp);
+  }
+  for (const rp of ROW_PILLS) {                  // pills informativos por fila de racks silueta
+    const sp = makePill(rp.pill, rp.alarm);
+    sp.position.set(3.2, 3.05, rp.z);
+    pillsGroup.add(sp);
+  }
+  const bPills = document.getElementById('bPills');
+  bPills.onclick = () => { pillsGroup.visible = !pillsGroup.visible; bPills.className = pillsGroup.visible ? 'on' : 'off'; bPills.textContent = pillsGroup.visible ? 'ON' : 'OFF'; };
+
+  // ---- CLICK en equipo → overlay iframe con su HTML de detalle ----
+  const overlay = document.getElementById('detailOverlay');
+  const frame = document.getElementById('detailFrame');
+  const dTitle = document.getElementById('detailTitle');
+  function openDetail(route, title) { frame.src = route; if (dTitle) dTitle.textContent = title || 'DETALLE DE EQUIPO'; overlay.classList.add('open'); }
+  function closeDetail() { overlay.classList.remove('open'); frame.src = 'about:blank'; }
+  document.getElementById('detailClose').onclick = closeDetail;
+  addEventListener('keydown', ev => { if (ev.key === 'Escape') closeDetail(); });
+
+  const raycaster = new THREE.Raycaster();
+  const ptr = new THREE.Vector2();
+  const pivots = EQUIP.map(e => e.pivot);        // solo equipos son clicables (no piso/silueta)
+  function pick(ev) {
+    const r = renderer.domElement.getBoundingClientRect();
+    ptr.x = ((ev.clientX - r.left) / r.width) * 2 - 1;
+    ptr.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
+    raycaster.setFromCamera(ptr, camera);
+    const hits = raycaster.intersectObjects(pivots, true);
+    if (!hits.length) return null;
+    let o = hits[0].object; while (o && !o.userData.route) o = o.parent;   // sube al Group del equipo
+    return (o && o.userData.route) ? o : null;
+  }
+  renderer.domElement.addEventListener('click', ev => {
+    if (overlay.classList.contains('open')) return;
+    const o = pick(ev); if (o) openDetail(o.userData.route, 'DETALLE · ' + o.userData.route.split('/').pop());
+  });
+  renderer.domElement.addEventListener('pointermove', ev => {
+    renderer.domElement.style.cursor = pick(ev) ? 'pointer' : 'default';
+  });
+
   addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
-  function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
+  function animate() { requestAnimationFrame(animate); for (const b of fanBlades) b.rotation.y += 0.06; controls.update(); renderer.render(scene, camera); }
   animate();
 }
 </script>
