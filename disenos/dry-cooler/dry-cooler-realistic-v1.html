@@ -159,6 +159,19 @@ function finTexture() {
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(26, 1); t.anisotropy = 8;
   return t;
 }
+function grilleAlphaTexture(repX, repY) {
+  // rejilla de barras cruzadas: blanco = barra opaca, negro = hueco (para alphaMap)
+  const c = document.createElement('canvas'); c.width = 128; c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#000000'; g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = '#ffffff'; g.lineWidth = 14;
+  // barras cruzadas: 2 verticales + 2 horizontales por tile -> patrón de malla al repetir
+  for (const x of [0, 64]) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 128); g.stroke(); }
+  for (const y of [0, 64]) { g.beginPath(); g.moveTo(0, y); g.lineTo(128, y); g.stroke(); }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.repeat.set(repX, repY);
+  return t;
+}
 function platePlanteTexture() {
   const c = document.createElement('canvas'); c.width = 256; c.height = 160;
   const g = c.getContext('2d');
@@ -186,6 +199,8 @@ const M = {
   skidDk:     new THREE.MeshStandardMaterial({ color: 0x54585f, roughness: 0.62, metalness: 1.0 }),
   fin:        new THREE.MeshStandardMaterial({ map: finTexture(), color: 0xeef0f2, roughness: 0.35, metalness: 1.0 }), // aluminio de aletas
   finFrame:   new THREE.MeshStandardMaterial({ color: 0x2c2f34, roughness: 0.55, metalness: 1.0 }),
+  grille:     new THREE.MeshStandardMaterial({ color: 0xaab0b8, roughness: 0.5, metalness: 1.0,
+                alphaMap: grilleAlphaTexture(18, 4), transparent: true, depthWrite: false, side: THREE.DoubleSide }), // tapa/rejilla de protección del serpentín
   cowl:       new THREE.MeshStandardMaterial({ color: 0xb7bcc4, roughness: 0.45, metalness: 1.0, side: THREE.DoubleSide }), // venturi galvanizado
   blade:      new THREE.MeshStandardMaterial({ color: 0x1b1e24, roughness: 0.42, metalness: 0.0, side: THREE.DoubleSide }), // aspa pintada oscura
   hub:        new THREE.MeshStandardMaterial({ color: 0x2a2e35, roughness: 0.4,  metalness: 1.0 }),
@@ -266,6 +281,16 @@ function coilBank(bank, sign) {
     const fr = new THREE.Mesh(new THREE.BoxGeometry(0.06, slant + 0.06, 0.16), M.finFrame);
     fr.position.set(cx + ex, cy, cz); fr.rotation.x = ang; fr.castShadow = true; root.add(fr);
   });
+  // TAPA/REJILLA de protección sobre la cara inclinada exterior del banco
+  const outSign = Math.sign(cz - WID / 2) || -1;                 // z hacia afuera del plenum
+  const grille = new THREE.Mesh(new THREE.PlaneGeometry(lenX, slant + 0.04), M.grille);
+  grille.position.set(cx, cy + 0.02, cz + outSign * 0.085);
+  grille.rotation.x = ang;                                        // plano paralelo a la losa (misma pendiente)
+  grille.receiveShadow = true; root.add(grille);
+  // marco perimetral de la rejilla (pletina metálica)
+  [-lenX / 2, lenX / 2].forEach(ex =>
+    root.add(box(0.03, slant + 0.06, 0.05, M.finFrame, cx + ex, cy + 0.02, cz + outSign * 0.085).rotateX(ang)));
+
   // U-bends de cobre insinuados en los cabezales -> aquí acero pintado, en ambos extremos
   [-lenX / 2 - 0.05, lenX / 2 + 0.05].forEach(ex => {
     for (let t = 0.12; t < slant - 0.05; t += 0.16) {
@@ -385,15 +410,17 @@ fanPos.forEach(([cx, cz]) => {
   // hub
   root.add(cyl(0.09, 0.11, 0.10, M.hub, cx, FAN_PY, cz, 18));
   root.add(cyl(0.05, 0.05, 0.07, M.hub, cx, FAN_PY + 0.08, cz, 14));   // muñón del motor
-  // rejilla de protección circular (anillos + radios)
-  const gy = DECK_Y + 0.11;
-  for (const r of [0.16, 0.30, FAN_R]) {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.008, 6, 28), M.guard);
+  // rejilla de protección circular (aro exterior + anillos concéntricos + radios) — bien visible
+  const gy = DECK_Y + 0.12;
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(FAN_R + 0.03, 0.022, 8, 32), M.guard);   // aro exterior grueso
+  rim.position.set(cx, gy - 0.01, cz); rim.rotation.x = Math.PI / 2; rim.castShadow = true; root.add(rim);
+  for (const r of [0.12, 0.24, 0.36, FAN_R]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.013, 6, 30), M.guard);
     ring.position.set(cx, gy, cz); ring.rotation.x = Math.PI / 2; root.add(ring);
   }
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    root.add(tube([cx, gy, cz], [cx + Math.cos(a) * FAN_R, gy, cz + Math.sin(a) * FAN_R], 0.008, M.guard, 5));
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    root.add(tube([cx, gy, cz], [cx + Math.cos(a) * FAN_R, gy, cz + Math.sin(a) * FAN_R], 0.013, M.guard, 6));
   }
 });
 
@@ -430,6 +457,11 @@ root.add(box(0.06, 0.9, 0.05, M.panelDk, PNL_X - 0.5, PNL_Y, PNL_Z + 0.16)); // 
 root.add(box(0.06, 0.9, 0.05, M.panelDk, PNL_X + 0.5, PNL_Y, PNL_Z + 0.16));
 root.add(box(0.05, 0.26, 0.06, M.bolt, PNL_X + 0.44, PNL_Y, PNL_Z + 0.16));  // manija
 root.add(box(0.34, 0.24, 0.03, M.hmi, PNL_X - 0.18, PNL_Y + 0.14, PNL_Z + 0.15)); // HMI
+// rejillas de ventilación tipo louver en la puerta del gabinete
+for (let i = 0; i < 4; i++) {
+  const ls = box(0.40, 0.03, 0.02, M.panelDk, PNL_X + 0.20, PNL_Y - 0.06 - i * 0.05, PNL_Z + 0.145);
+  ls.rotation.x = -0.35; root.add(ls);   // lamas inclinadas
+}
 // placa de datos
 const np = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.21),
   new THREE.MeshStandardMaterial({ map: platePlanteTexture(), roughness: 0.5, metalness: 0.3 }));
@@ -527,7 +559,7 @@ function tick(dt) {
 
 // Gancho para arnés headless
 window.__dc = { state, fans, fanAngle, setMaster, setLoad, tick, LOAD_MAP, HEADLESS,
-  counts: { fans: fanPos.length, blades: NBLADE, legs: LEG_X.length * 2 } };
+  counts: { fans: fanPos.length, blades: NBLADE, legs: LEG_X.length * 2, coilGrilles: 2 } };
 
 // ============================================================
 // RENDER (solo con WebGL)
