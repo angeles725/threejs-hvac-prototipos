@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Datacenter C3NTRO · Visor 3D (standalone)</title>
+<style>
+  :root { --bg:#0a0e14; --panel:rgba(16,22,32,0.88); --line:#1f6feb44; --accent:#2dd4ff;
+    --txt:#c8d3e0; --muted:#6b7a8d; --green:#22c55e; --amber:#f59e0b; --red:#ef4444; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--txt);
+    font-family:'DM Sans','Plus Jakarta Sans',ui-sans-serif,system-ui,sans-serif; overflow:hidden; }
+  #three-canvas-container { position:fixed; inset:0; width:100vw; height:100vh; }
+
+  /* panel lateral de unidades HVAC (como la referencia) */
+  #hvac-panel { position:fixed; top:14px; left:16px; bottom:14px; z-index:10; width:300px;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px; backdrop-filter:blur(8px);
+    display:flex; flex-direction:column; box-shadow:0 0 40px #0008; }
+  #hvac-panel .ph { padding:14px 16px 10px; border-bottom:1px solid #ffffff10; }
+  #hvac-panel .ph b { color:#fff; font-weight:700; font-size:14px; letter-spacing:.03em; }
+  #hvac-panel .ph span { color:var(--muted); font-size:12px; margin-left:8px; }
+  #hvac-head, #hvac-list .row { display:grid; grid-template-columns:1.4fr .6fr .8fr .8fr .7fr;
+    gap:6px; align-items:center; padding:7px 16px; font-size:12px; }
+  #hvac-head { color:var(--muted); font-size:10px; letter-spacing:.08em; text-transform:uppercase; border-bottom:1px solid #ffffff0d; }
+  #hvac-list { overflow-y:auto; }
+  #hvac-list .row { border-bottom:1px solid #ffffff08; }
+  #hvac-list .row .id { color:#fff; font-weight:600; letter-spacing:.02em; }
+  #hvac-list .row.warn { background:#f59e0b12; } #hvac-list .row.warn .id { color:#ffd48a; }
+  #hvac-list .row.fault { background:#ef444414; } #hvac-list .row.fault .id { color:#ffb4b4; }
+  .dot { width:9px; height:9px; border-radius:50%; display:inline-block; }
+  .dot.running { background:var(--green); box-shadow:0 0 8px var(--green); }
+  .dot.warning { background:var(--amber); box-shadow:0 0 8px var(--amber); }
+  .dot.fault { background:var(--red); box-shadow:0 0 8px var(--red); }
+  .num { color:var(--txt); font-variant-numeric:tabular-nums; }
+
+  #views { position:fixed; top:14px; right:16px; z-index:10; background:var(--panel);
+    border:1px solid var(--line); border-radius:10px; padding:8px; backdrop-filter:blur(8px);
+    display:flex; flex-direction:column; gap:6px; min-width:150px; }
+  #views button { font:inherit; font-size:12px; letter-spacing:.03em; text-align:left; cursor:pointer;
+    padding:8px 12px; border-radius:7px; border:1px solid transparent; background:transparent; color:var(--muted); transition:all .15s; }
+  #views button:hover { color:var(--txt); background:#ffffff0d; }
+  #views button.active { color:#04121a; background:linear-gradient(180deg,#41e0ff,#17b6e6);
+    border-color:#41e0ff; font-weight:600; box-shadow:0 0 14px #2dd4ff55; }
+  #hint { position:fixed; bottom:14px; right:16px; z-index:10; color:var(--muted); font-size:11px;
+    background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:7px 12px; backdrop-filter:blur(8px); }
+  #err { position:fixed; inset:auto 16px 16px 330px; z-index:20; display:none; color:#ffb4b4;
+    background:#2a0f14; border:1px solid #ff6b6b55; border-radius:8px; padding:10px 14px; font-size:12px; }
+</style>
+</head>
+<body>
+<div id="three-canvas-container"></div>
+
+<aside id="hvac-panel">
+  <div class="ph"><b>UNIDADES PAQUETE</b><span id="hvac-count">14 unidades</span></div>
+  <div id="hvac-head"><span>ID</span><span>ESTADO</span><span>SUMIN.</span><span>RET.</span><span>FAN</span></div>
+  <div id="hvac-list"></div>
+</aside>
+
+<div id="views">
+  <button data-view="persp" class="active">◇ Perspectiva</button>
+  <button data-view="top">▦ Planta</button>
+  <button data-view="front">▤ Frontal</button>
+  <button data-view="side">▨ Lateral</button>
+</div>
+
+<div id="hint">DRAG: rotar · WHEEL: zoom · click en un rack para inspeccionar</div>
+<div id="err"></div>
+
+<!-- Three.js r128 (el renderer captura THREE en su closure; DEBE cargar antes) -->
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+
+<!-- Datos estáticos que reemplazan al backend Niagara (estados de LED, HVAC y UPS + conteos) -->
+<script>
+  window.C3 = window.C3 || {};
+  window.C3.Utils = window.C3.Utils || {};
+  window.C3.State = { currentLocationId: 'demo' };
+
+  function pad2(id){ id = String(id); return id.length < 2 ? '0'+id : id; }
+  var MAINT = { '07':1, '23':1, '44':1 }, AVAIL = { '12':1, '31':1, '55':1 };
+
+  window.C3.Utils.DataSimulator = {
+    getRackData: function(id){
+      var k = pad2(id);
+      return { estado: MAINT[k] ? 'maintenance' : (AVAIL[k] ? 'available' : 'operative') };
+    },
+    getHvacSensorData: function(id){
+      var k = pad2(id);
+      var st = k==='01' ? 'fault' : (k==='10' ? 'warning' : 'running');
+      return { hvacStatus: st, supplyTemp: 16, returnTemp: 24 };
+    },
+    getUpsSensorData: function(){ return { upsStatus: 'online' }; },
+    getLocationHvacCount: function(){ return 14; },
+    getLocationUpsCount: function(){ return 4; }
+  };
+
+  // Panel lateral: 14 unidades HVAC con datos estáticos (imita la referencia).
+  (function(){
+    var list = document.getElementById('hvac-list');
+    var fans = [83,84,85,85,84,83,81,78,75,72,69,65,62,60];
+    var html = '';
+    for (var i=1; i<=14; i++){
+      var k = pad2(i), d = window.C3.Utils.DataSimulator.getHvacSensorData(k);
+      var cls = d.hvacStatus==='fault' ? 'fault' : (d.hvacStatus==='warning' ? 'warn' : '');
+      var sup = (16 + (i%6)*0.2).toFixed(1), ret = (24 + (i%6)*0.2).toFixed(1);
+      html += '<div class="row '+cls+'">'
+        + '<span class="id">HVAC-'+k+'</span>'
+        + '<span><i class="dot '+d.hvacStatus+'"></i></span>'
+        + '<span class="num">'+sup+'°</span>'
+        + '<span class="num">'+ret+'°</span>'
+        + '<span class="num">'+fans[i-1]+'%</span></div>';
+    }
+    list.innerHTML = html;
+  })();
+</script>
+
+<!-- El renderer 3D real, copiado del proyecto del cliente (Panduit/Tridium c3ntro) -->
+<script src="three-renderer.js"></script>
+
+<script>
+  (function(){
+    var R = window.C3 && window.C3.Utils && window.C3.Utils.ThreeRenderer;
+    var errBox = document.getElementById('err');
+    function fail(msg){ errBox.style.display='block'; errBox.textContent = msg; }
+
+    if (typeof THREE === 'undefined') { return fail('No se cargó Three.js r128 (¿sin internet para el CDN?).'); }
+    if (!R || typeof R.init !== 'function') { return fail('No se encontró C3.Utils.ThreeRenderer.init (revisar three-renderer.js).'); }
+
+    try {
+      R.init('three-canvas-container', 'large', 14);
+    } catch (e) {
+      return fail('Error inicializando la escena 3D: ' + (e && e.message ? e.message : e));
+    }
+
+    var btns = document.querySelectorAll('#views button');
+    btns.forEach(function(b){
+      b.addEventListener('click', function(){
+        var v = b.getAttribute('data-view');           // 'persp' | 'top' | 'front' | 'side'
+        if (typeof R.setView === 'function') { try { R.setView(v); } catch(e){} }
+        btns.forEach(function(x){ x.classList.remove('active'); });
+        b.classList.add('active');
+      });
+    });
+  })();
+</script>
+</body>
+</html>

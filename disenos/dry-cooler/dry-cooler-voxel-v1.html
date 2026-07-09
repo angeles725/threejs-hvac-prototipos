@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dry Cooler · Banco de Condensadores · Voxel Art</title>
+<style>
+  :root { --bg:#06080d; --accent:#00d4aa; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); overflow:hidden; font-family:'JetBrains Mono','Courier New',monospace; }
+  canvas { display:block; }
+  #info {
+    position:fixed; top:16px; left:18px; color:#e8ecf1; z-index:10;
+    background:rgba(10,14,20,0.72); border:1px solid rgba(0,212,170,0.35);
+    padding:10px 14px; border-radius:6px; backdrop-filter:blur(6px);
+    font-size:12px; letter-spacing:0.06em;
+  }
+  #info b { color:var(--accent); font-size:13px; letter-spacing:0.12em; }
+  #info span { color:#9aa7b4; font-size:10px; }
+  #legend {
+    position:fixed; top:16px; right:18px; z-index:10; color:#cfd8e0;
+    background:rgba(10,14,20,0.72); border:1px solid rgba(255,255,255,0.12);
+    padding:10px 14px; border-radius:6px; backdrop-filter:blur(6px); font-size:10.5px;
+  }
+  #legend div { display:flex; align-items:center; gap:8px; margin:4px 0; letter-spacing:0.04em; }
+  #legend i { display:inline-block; width:12px; height:12px; border-radius:2px; }
+  #ctl {
+    position:fixed; bottom:16px; left:18px; z-index:10; color:#5d6b78; font-size:9.5px; letter-spacing:0.08em;
+  }
+  #panel {
+    position:fixed; bottom:16px; right:18px; z-index:10;
+    background:rgba(10,14,20,0.78); border:1px solid rgba(0,212,170,0.35);
+    padding:12px 14px; border-radius:6px; backdrop-filter:blur(6px); min-width:240px;
+  }
+  #panel .ph { color:var(--accent); font-size:10.5px; letter-spacing:0.18em; margin-bottom:9px; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#aeb9c4; font-size:10px; letter-spacing:0.08em; }
+  #panel button {
+    font-family:inherit; font-size:9.5px; letter-spacing:0.1em; cursor:pointer;
+    padding:4px 10px; border-radius:3px; background:transparent; transition:all .15s;
+  }
+  #panel button.on  { color:#00ff66; border:1px solid #00ff66; box-shadow:0 0 10px #00ff6633; }
+  #panel button.off { color:#ff2233; border:1px solid #ff2233; box-shadow:0 0 10px #ff223322; }
+  #panel .loadrow { display:flex; gap:5px; }
+  #panel .loadrow button {
+    flex:1; padding:4px 0; color:#7c8894; border:1px solid #3a4550;
+  }
+  #panel .loadrow button.sel { color:#06080d; background:var(--accent); border-color:var(--accent); box-shadow:0 0 12px #00d4aa55; }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>DRY COOLER · BANCO DE CONDENSADORES</b><br>
+  <span>Azotea · 8.0 × 2.3 × 2.2 m · 10 ventiladores · Voxel Art</span>
+</div>
+<div id="legend">
+  <div><i style="background:#d42a2a"></i> Agua caliente (entrada)</div>
+  <div><i style="background:#2a6bd4"></i> Agua enfriada (salida)</div>
+  <div><i style="background:#bfe6ff"></i> Aire de rechazo</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>VENTILADORES</label><button id="bFan" class="off">OFF</button></div>
+  <div class="row"><label>% CARGA TÉRMICA</label></div>
+  <div class="loadrow">
+    <button id="b25">25</button><button id="b50">50</button>
+    <button id="b75">75</button><button id="b100" class="sel">100</button>
+  </div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="off">OFF</button></div>
+</div>
+
+<!-- Cloudflare-safe importmap: String.fromCharCode(64) evita el mangling de package@version -->
+<script>
+(function(){
+  const AT = String.fromCharCode(64);
+  const im = document.createElement('script');
+  im.type = 'importmap';
+  im.textContent = JSON.stringify({ imports: {
+    "three": "https://unpkg.com/three" + AT + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + AT + "0.160.0/examples/jsm/"
+  }});
+  document.currentScript.after(im);
+})();
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE OVERRIDE: 1 voxel = 0.05 m (declarado y aprobado por el usuario).
+// Motivo: a 0.1 m/voxel el envolvente 8.0×2.3×2.2 m daría solo 80×23×22 voxeles,
+// insuficiente para rejillas de protección circulares, aspas y celosía de aletas.
+// A 0.05 m/voxel: 160 (largo X) × 46 (ancho Z) × 44 (alto Y) voxeles.
+
+// ===PURE-GEN-START===
+const PALETTE = {
+  STEEL:   { c: 0xdfe3e8 },                                    // estructura gris claro/blanco
+  STEEL_D: { c: 0xaab2ba },
+  WHITE:   { c: 0xf2f4f7 },
+  FRAME:   { c: 0x59626b },
+  ALU:     { c: 0xc4cdd4 },                                    // aletas aluminio
+  ALU_D:   { c: 0x939ea8 },
+  BLACK:   { c: 0x16191d },
+  GUARD:   { c: 0x2a3138 },
+  RED:     { c: 0xd42a2a },                                    // agua caliente
+  RED_D:   { c: 0x8f1c1c },
+  BLUE:    { c: 0x2a6bd4 },                                    // agua enfriada
+  BLUE_D:  { c: 0x1c4a8f },
+  TEAL:    { c: 0x00d4aa, emissive: 0x00d4aa, ei: 0.9 },       // display
+  LOUVER:  { c: 0x93a0aa, transparent: true, opacity: 0.32 }   // celosía semi-transparente
+};
+
+const L = 160, W = 46, H = 44;             // envolvente en voxeles
+const FAN_XC = [16, 48, 80, 112, 144];     // centros X — 5 columnas
+const FAN_ZC = [12, 34];                   // centros Z — 2 filas
+const FAN_R_HOLE = 9;                      // radio libre bajo aspas
+const LEG_X = [3, 33, 63, 93, 123, 153];
+const LOAD_MAP = { 25: 3, 50: 5, 75: 8, 100: 10 };
+
+function buildVoxelData() {
+  const voxData = {};                       // { colorKey: [{x,y,z},...] }
+  const occupied = new Map();               // dedup first-wins, clave "x,y,z"
+  let dupSkipped = 0;
+
+  function vox(x, y, z, ck) {
+    x = Math.round(x); y = Math.round(y); z = Math.round(z);
+    const k = x + ',' + y + ',' + z;
+    if (occupied.has(k)) { dupSkipped++; return; }
+    occupied.set(k, ck);
+    (voxData[ck] || (voxData[ck] = [])).push({ x, y, z });
+  }
+  function box(x0, x1, y0, y1, z0, z1, ck) {
+    for (let x = x0; x <= x1; x++)
+      for (let y = y0; y <= y1; y++)
+        for (let z = z0; z <= z1; z++) vox(x, y, z, ck);
+  }
+
+  // ---------- PATAS / SOPORTES ----------
+  for (const lx of LEG_X) {
+    for (const [z0, z1] of [[1, 5], [40, 44]]) {
+      box(lx, lx + 3, 0, 4, z0, z1, 'FRAME');
+      box(lx - 1, lx + 4, 0, 0, z0 - 1, z1 + 1, 'STEEL_D');   // placa de anclaje
+    }
+  }
+
+  // ---------- SKID DE ACERO ----------
+  box(0, L - 1, 5, 7, 0, 3, 'STEEL_D');                        // riel longitudinal frontal
+  box(0, L - 1, 5, 7, W - 4, W - 1, 'STEEL_D');                // riel longitudinal posterior
+  for (const lx of LEG_X) box(lx, lx + 3, 5, 7, 0, W - 1, 'FRAME'); // travesaños
+
+  // ---------- MUROS EXTREMOS ----------
+  box(0, 1, 8, 34, 0, W - 1, 'STEEL');
+  box(L - 2, L - 1, 8, 34, 0, W - 1, 'STEEL');
+
+  // ---------- SERPENTINES EN V INVERTIDA (Λ) ----------
+  // Dos bancos aletados inclinados que se encuentran cerca del centro superior.
+  for (let x = 3; x <= L - 4; x++) {
+    for (let s = 0; s <= 25; s++) {
+      const y = 8 + s;
+      const zA = 3 + Math.round(s * 17 / 25);        // banco A: 3 -> 20
+      const zB = (W - 4) - Math.round(s * 17 / 25);  // banco B: 42 -> 25
+      if (x % 14 === 5) {                            // columna soporte de tubos
+        vox(x, y, zA, 'ALU_D'); vox(x, y, zA + 1, 'ALU_D');
+        vox(x, y, zB, 'ALU_D'); vox(x, y, zB - 1, 'ALU_D');
+      } else {                                       // celosía densa de aletas (tejido)
+        if ((x + s) % 2 === 0) { vox(x, y, zA, 'ALU'); vox(x, y, zB, 'ALU'); }
+        else { vox(x, y, zA + 1, 'ALU'); vox(x, y, zB - 1, 'ALU'); }
+      }
+    }
+  }
+  // Cumbrera / tapa del vértice Λ
+  box(2, L - 3, 34, 34, 20, 26, 'STEEL_D');
+
+  // ---------- TUBERÍA DE DISTRIBUCIÓN ----------
+  // Alimentación caliente (roja) en la cresta de cada banco
+  box(2, L - 3, 33, 33, 20, 21, 'RED');
+  box(2, L - 3, 33, 33, 25, 26, 'RED');
+  // Retorno frío (azul) en la base de cada banco
+  box(2, L - 3, 9, 9, 4, 5, 'BLUE');
+  box(2, L - 3, 9, 9, 40, 41, 'BLUE');
+
+  // ---------- CABEZALES / MANIFOLDS EN LOS EXTREMOS ----------
+  for (const [hx0, hx1] of [[-3, -1], [L, L + 2]]) {
+    box(hx0, hx1, 8, 33, 9, 11, 'RED');       // cabezal caliente
+    box(hx0, hx1, 8, 33, 35, 37, 'BLUE');     // cabezal frío
+    box(hx0, hx1, 34, 34, 9, 11, 'RED_D');    // tapas
+    box(hx0, hx1, 34, 34, 35, 37, 'BLUE_D');
+  }
+  // Bocas bridadas (solo extremo cercano, x negativo)
+  box(-7, -4, 29, 31, 9, 11, 'RED');          // entrada agua caliente
+  box(-8, -8, 27, 33, 7, 13, 'RED_D');        // brida
+  box(-7, -4, 10, 12, 35, 37, 'BLUE');        // salida agua enfriada
+  box(-8, -8, 8, 14, 33, 39, 'BLUE_D');       // brida
+
+  // ---------- CELOSÍA LATERAL SEMI-TRANSPARENTE ----------
+  for (const z of [2, W - 3]) {
+    for (let x = 2; x <= L - 3; x++) {
+      for (let y = 9; y <= 34; y++) {
+        if (x % 19 === 2) { vox(x, y, z, 'STEEL_D'); continue; }   // montantes
+        if (y % 3 === 0) vox(x, y, z, 'LOUVER');                   // lamas
+        else if ((x + y) % 2 === 0) vox(x, y, z, 'LOUVER');        // malla
+      }
+    }
+  }
+
+  // ---------- CUBIERTA SUPERIOR (plenum de ventiladores) ----------
+  for (let x = 0; x <= L - 1; x++) {
+    for (let z = 0; z <= W - 1; z++) {
+      let inHole = false;
+      for (const cx of FAN_XC) {
+        for (const cz of FAN_ZC) {
+          const d = Math.hypot(x + 0.5 - cx, z + 0.5 - cz);
+          if (d < FAN_R_HOLE + 0.6) { inHole = true; break; }
+        }
+        if (inHole) break;
+      }
+      if (!inHole) vox(x, 35, z, 'STEEL');
+    }
+  }
+  // Rodapié perimetral
+  box(0, L - 1, 36, 36, 0, 1, 'STEEL_D');
+  box(0, L - 1, 36, 36, W - 2, W - 1, 'STEEL_D');
+  box(0, 1, 36, 36, 0, W - 1, 'STEEL_D');
+  box(L - 2, L - 1, 36, 36, 0, W - 1, 'STEEL_D');
+
+  // ---------- CARCASAS Y REJILLAS DE VENTILADORES ----------
+  for (const cx of FAN_XC) {
+    for (const cz of FAN_ZC) {
+      // Anillo de carcasa (venturi) — voxelizado
+      for (let y = 36; y <= 40; y++) {
+        for (let dx = -12; dx <= 12; dx++) {
+          for (let dz = -12; dz <= 12; dz++) {
+            const d = Math.hypot(dx, dz);
+            if (d >= 9.5 && d <= 11.2) vox(cx + dx, y, cz + dz, y === 40 ? 'STEEL_D' : 'STEEL');
+          }
+        }
+      }
+      // Rejilla de protección circular (estática): anillos concéntricos + radios
+      for (const r of [3, 6, 9]) {
+        for (let dx = -10; dx <= 10; dx++) {
+          for (let dz = -10; dz <= 10; dz++) {
+            if (Math.abs(Math.hypot(dx, dz) - r) < 0.55) vox(cx + dx, 41, cz + dz, 'GUARD');
+          }
+        }
+      }
+      for (let a = 0; a < 8; a++) {
+        const ang = a * Math.PI / 4;
+        for (let t = 0; t <= 9.6; t += 0.8) {
+          vox(cx + Math.cos(ang) * t, 41, cz + Math.sin(ang) * t, 'GUARD');
+        }
+      }
+    }
+  }
+
+  // ---------- CAJA DE CONTROL ELÉCTRICO LATERAL ----------
+  box(118, 134, 9, 25, W, W + 5, 'STEEL_D');            // gabinete
+  box(118, 134, 25, 25, W, W + 5, 'FRAME');             // tapa
+  box(118, 118, 9, 25, W, W + 5, 'FRAME');              // costados
+  box(134, 134, 9, 25, W, W + 5, 'FRAME');
+  box(121, 131, 18, 22, W + 6, W + 6, 'TEAL');          // display
+  box(120, 132, 17, 23, W + 6, W + 6, 'BLACK');         // marco display (relleno restante)
+  box(126, 127, 0, 8, W + 1, W + 2, 'FRAME');           // conduit a skid
+
+  // ---------- PLACA DE DATOS (muro extremo lejano) ----------
+  // Orden first-wins: líneas de texto → placa blanca → marco perimetral
+  for (const ly of [18, 20, 22]) box(L, L, ly, ly, 17, 29, 'FRAME'); // líneas de texto
+  box(L, L, 16, 24, 15, 31, 'WHITE');                   // placa
+  box(L, L, 15, 25, 14, 32, 'FRAME');                   // marco (solo perímetro restante)
+
+  const stats = {
+    total: occupied.size,
+    dupSkipped,
+    colors: Object.fromEntries(Object.entries(voxData).map(([k, v]) => [k, v.length]))
+  };
+  return { voxData, stats };
+}
+// ===PURE-GEN-END===
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 220, 560);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 1200);
+camera.position.set(205, 128, 178);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(80, 18, 23);
+controls.autoRotate = false;          // default OFF (orientación estable del layout)
+controls.autoRotateSpeed = 0.6;
+
+// ====== LUCES ======
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(110, 190, 130);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left = -180; sc.right = 180; sc.top = 180; sc.bottom = -180; sc.near = 1; sc.far = 460;
+sun.shadow.bias = -0.0003;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-90, 60, -80);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rim.position.set(0, 40, -140);
+scene.add(rim);
+
+// ====== SUELO / AZOTEA ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(1000, 1000),
+  new THREE.MeshStandardMaterial({ color: 0x0a0e16, roughness: 0.92, metalness: 0.05 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(1000, 140, 0x00d4aa, 0x142028);
+grid.material.opacity = 0.12;
+grid.material.transparent = true;
+grid.position.y = 0.01;
+scene.add(grid);
+
+// ====== CONSTRUCCIÓN DE INSTANCEDMESH POR COLOR ======
+const { voxData, stats } = buildVoxelData();
+console.log('[DRY COOLER] voxeles:', stats.total, '| dupSkipped:', stats.dupSkipped, stats.colors);
+
+const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+const dummy = new THREE.Object3D();
+for (const [ck, cells] of Object.entries(voxData)) {
+  const p = PALETTE[ck];
+  const mat = new THREE.MeshStandardMaterial({
+    color: p.c,
+    roughness: p.transparent ? 0.6 : 0.55,
+    metalness: 0.25,
+    transparent: !!p.transparent,
+    opacity: p.opacity !== undefined ? p.opacity : 1
+  });
+  if (p.emissive) { mat.emissive = new THREE.Color(p.emissive); mat.emissiveIntensity = p.ei || 0.8; }
+  if (p.transparent) { mat.depthWrite = false; mat.side = THREE.DoubleSide; }
+  const im = new THREE.InstancedMesh(cubeGeo, mat, cells.length);
+  cells.forEach((v, i) => {
+    dummy.position.set(v.x + 0.5, v.y + 0.5, v.z + 0.5);
+    dummy.updateMatrix();
+    im.setMatrixAt(i, dummy.matrix);
+  });
+  im.instanceMatrix.needsUpdate = true;
+  if (!p.transparent) { im.castShadow = true; im.receiveShadow = true; }
+  scene.add(im);
+}
+
+// ====== VENTILADORES (grupos animados, FUERA del InstancedMesh) ======
+const bladeMat = new THREE.MeshStandardMaterial({ color: 0x16191d, roughness: 0.4, metalness: 0.55 });
+const hubMat   = new THREE.MeshStandardMaterial({ color: 0x2a3138, roughness: 0.35, metalness: 0.6 });
+const fans = [];
+let fanIdx = 0;
+for (const cx of FAN_XC) {
+  for (const cz of FAN_ZC) {
+    const g = new THREE.Group();
+    g.position.set(cx, 38.6, cz);
+    const hub = new THREE.Mesh(new THREE.BoxGeometry(3, 2.6, 3), hubMat);
+    hub.castShadow = true;
+    g.add(hub);
+    for (let b = 0; b < 7; b++) {
+      const bg = new THREE.Group();
+      bg.rotation.y = b * Math.PI * 2 / 7;
+      for (let r = 2.2; r <= 8; r += 1.15) {
+        const cube = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.5, 2.3), bladeMat);
+        cube.position.set(r, 0, 0);
+        cube.rotation.x = 0.55;                 // paso del aspa
+        cube.castShadow = true;
+        bg.add(cube);
+      }
+      g.add(bg);
+    }
+    scene.add(g);
+    fans.push({ group: g, cur: 0, target: 0, startAt: 0, maxSpeed: 9 + fanIdx * 0.3 });
+    fanIdx++;
+  }
+}
+
+// ====== PARTÍCULAS DE AIRE DE RECHAZO ======
+const airParticles = [];
+const airGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+fans.forEach((f, fi) => {
+  for (let i = 0; i < 7; i++) {
+    const m = new THREE.MeshBasicMaterial({ color: 0xbfe6ff, transparent: true, opacity: 0 });
+    const p = new THREE.Mesh(airGeo, m);
+    const cx = f.group.position.x, cz = f.group.position.z;
+    p.userData = {
+      fan: fi,
+      ox: cx + (Math.random() - 0.5) * 11,
+      oz: cz + (Math.random() - 0.5) * 11,
+      h: Math.random() * 14,
+      speed: 7 + Math.random() * 5
+    };
+    scene.add(p);
+    airParticles.push(p);
+  }
+});
+
+// ====== LEDS DE LA CAJA DE CONTROL ======
+const ledOnMat  = new THREE.MeshStandardMaterial({ color: 0x00ff66, emissive: 0x00ff66, emissiveIntensity: 1.4 });
+const ledOffMat = new THREE.MeshStandardMaterial({ color: 0xff2233, emissive: 0xff2233, emissiveIntensity: 1.2 });
+const led1 = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 1), ledOffMat);
+led1.position.set(123.5, 14.5, W + 6.4);
+scene.add(led1);
+const led2 = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 1), ledOffMat);
+led2.position.set(128.5, 14.5, W + 6.4);
+scene.add(led2);
+const ledLight = new THREE.PointLight(0xff2233, 1.0, 26);
+ledLight.position.set(126, 16, W + 9);
+scene.add(ledLight);
+
+// ====== MÁQUINA DE ESTADOS ======
+const state = { master: false, load: 100 };
+let clockT = 0;
+
+function applyFanTargets() {
+  const count = state.master ? LOAD_MAP[state.load] : 0;
+  let stagger = 0;
+  for (let i = 0; i < fans.length; i++) {
+    const f = fans[i];
+    const shouldRun = i < count;
+    if (shouldRun && f.target === 0) {          // arranque escalonado por etapas
+      f.startAt = clockT + stagger;
+      stagger += 0.45;
+    }
+    f.target = shouldRun ? f.maxSpeed : 0;
+  }
+  led1.material = state.master ? ledOnMat : ledOffMat;
+  led2.material = state.master ? ledOnMat : ledOffMat;
+  ledLight.color.set(state.master ? 0x00ff66 : 0xff2233);
+  ledLight.intensity = state.master ? 1.5 : 1.0;
+}
+
+function setMaster(on) {
+  state.master = on;
+  const b = document.getElementById('bFan');
+  if (b) { b.className = on ? 'on' : 'off'; b.textContent = on ? 'ON' : 'OFF'; }
+  applyFanTargets();
+}
+function setLoad(pct) {
+  state.load = pct;
+  for (const p of [25, 50, 75, 100]) {
+    const b = document.getElementById('b' + p);
+    if (b) b.className = (p === pct) ? 'sel' : '';
+  }
+  applyFanTargets();
+}
+
+document.getElementById('bFan').addEventListener('click', () => setMaster(!state.master));
+[25, 50, 75, 100].forEach(p =>
+  document.getElementById('b' + p).addEventListener('click', () => setLoad(p)));
+document.getElementById('bRot').addEventListener('click', () => {
+  controls.autoRotate = !controls.autoRotate;
+  const b = document.getElementById('bRot');
+  b.className = controls.autoRotate ? 'on' : 'off';
+  b.textContent = controls.autoRotate ? 'ON' : 'OFF';
+});
+
+// ====== BUCLE DE ANIMACIÓN ======
+const clock = new THREE.Clock();
+function tick(dt) {
+  clockT += dt;
+  for (const f of fans) {
+    const goal = (f.target > 0 && clockT >= f.startAt) ? f.target : 0;
+    const rate = goal > 0 ? 0.9 : 0.55;          // inercia: rampa lenta, paro con vuelo libre
+    f.cur += (goal - f.cur) * Math.min(1, dt * rate);
+    if (Math.abs(f.cur) < 0.05 && goal === 0) f.cur = 0;
+    f.group.rotation.y += dt * f.cur;
+  }
+  for (const p of airParticles) {
+    const f = fans[p.userData.fan];
+    const ratio = f.cur / f.maxSpeed;
+    p.material.opacity += ((0.75 * ratio) - p.material.opacity) * Math.min(1, dt * 3);
+    if (ratio > 0.05) {
+      p.userData.h += p.userData.speed * ratio * dt;
+      if (p.userData.h > 15) p.userData.h = 0;
+    }
+    p.position.set(p.userData.ox, 42.5 + p.userData.h, p.userData.oz);
+  }
+}
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  tick(dt);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+// Gancho para arnés de pruebas headless
+window.__dc = { state, fans, setMaster, setLoad, tick, stats, LOAD_MAP };
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

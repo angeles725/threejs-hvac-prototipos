@@ -26,10 +26,12 @@ window.C3.Utils.ThreeRenderer = (function() {
   var leds = [];
   var rackMeshes = [];
   var hvacMeshes = [];
+  var upsMeshes = [];
   var floorMeshes = [];
   var frameCount = 0;
   var currentSize = null;
   var currentHvacCount = 14;
+  var currentUpsCount = 4;
 
   // Orbit state
   var drag = false;
@@ -52,6 +54,8 @@ window.C3.Utils.ThreeRenderer = (function() {
   var clickCallback = null;
   var hvacHoverCallback = null;
   var hvacClickCallback = null;
+  var upsHoverCallback = null;
+  var upsClickCallback = null;
   var roomClickCallback = null;
 
   // Raycasting
@@ -544,11 +548,16 @@ window.C3.Utils.ThreeRenderer = (function() {
   }
 
   // ===== Helper: UPS zone =====
-  function buildUPS(dc, x, z, w, d, label) {
+  function buildUPS(dc, x, z, w, d, label, upsId) {
     var h = 1.3;
     var body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), M.ups);
     body.position.set(x, h / 2 + FLOOR_H, z);
     body.castShadow = true;
+    if (upsId) {
+      body.userData.upsId = upsId;
+      body.userData.type = 'ups';
+      upsMeshes.push(body);
+    }
     dc.add(body);
 
     // Status LED
@@ -649,12 +658,17 @@ window.C3.Utils.ThreeRenderer = (function() {
       p.castShadow = true;
       dc.add(p);
     }
-    var bg = new THREE.BoxGeometry(0.65, 1.3, 0.75);
-    for (var bi = 0; bi < 5; bi++) {
-      var b = new THREE.Mesh(bg, M.batt);
-      b.position.set(-MW_l / 4 + 3.0 + bi * 0.75, 0.65 + FLOOR_H, cz);
-      b.castShadow = true;
-      dc.add(b);
+    // UPS units — interactive (replace decorative battery boxes).
+    // Each is registered in upsMeshes for hover/click raycasting.
+    var upsCount = currentUpsCount;
+    var upsW = 0.6;
+    var upsD = 0.75;
+    var upsStep = upsW + 0.2;
+    var upsStartX = -MW_l / 4 + 3.0;
+    for (var bi = 0; bi < upsCount; bi++) {
+      var upsNum = bi + 1;
+      var upsId = upsNum < 10 ? '0' + upsNum : '' + upsNum;
+      buildUPS(dc, upsStartX + bi * upsStep, cz, upsW, upsD, 'UPS-' + upsId, upsId);
     }
     // Labels
     var plbl = new THREE.Mesh(
@@ -664,10 +678,10 @@ window.C3.Utils.ThreeRenderer = (function() {
     plbl.position.set(-MW_l / 4 + 0.6, 1.65 + FLOOR_H, cz + 0.44);
     dc.add(plbl);
     var blbl = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.5, 0.3),
-      mkTextLabel('BANCO DE BATERIAS', '#444', 22, 440)
+      new THREE.PlaneGeometry(2.0, 0.3),
+      mkTextLabel('SISTEMA UPS', '#455a64', 22, 360)
     );
-    blbl.position.set(-MW_l / 4 + 4.5, 1.45 + FLOOR_H, cz + 0.44);
+    blbl.position.set(upsStartX + (upsCount - 1) * upsStep / 2, 1.75 + FLOOR_H, cz + 0.44);
     dc.add(blbl);
 
     // AC units — distributed evenly per side based on currentHvacCount
@@ -880,6 +894,9 @@ window.C3.Utils.ThreeRenderer = (function() {
     if (hvacHoverCallback) {
       hvacHoverCallback(null);
     }
+    if (upsHoverCallback) {
+      upsHoverCallback(null);
+    }
   }
 
   function onWheel(e) {
@@ -948,7 +965,7 @@ window.C3.Utils.ThreeRenderer = (function() {
   // ===== Raycasting =====
   function doRaycast(e, isClick) {
     if (!raycaster || !cam || !renderer) return;
-    if (!rackMeshes.length && !hvacMeshes.length && !floorMeshes.length) return;
+    if (!rackMeshes.length && !hvacMeshes.length && !upsMeshes.length && !floorMeshes.length) return;
 
     var rect = renderer.domElement.getBoundingClientRect();
     mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -967,9 +984,31 @@ window.C3.Utils.ThreeRenderer = (function() {
           if (isClick && hvacClickCallback) {
             hvacClickCallback(hvacId);
           } else if (!isClick && hvacHoverCallback) {
-            // Clear rack hover when hovering HVAC
+            // Clear rack + UPS hover when hovering HVAC
             if (hoverCallback) { hoverCallback(null); }
+            if (upsHoverCallback) { upsHoverCallback(null); }
             hvacHoverCallback(hvacId, e.clientX, e.clientY);
+          }
+          return;
+        }
+      }
+    }
+
+    // Check UPS meshes (clickable, same priority pattern as HVAC)
+    if (upsMeshes.length) {
+      var upsHits = raycaster.intersectObjects(upsMeshes, false);
+      if (upsHits.length > 0) {
+        var upsHit = upsHits[0].object;
+        var upsId = upsHit.userData.upsId;
+        if (upsId) {
+          renderer.domElement.style.cursor = 'pointer';
+          if (isClick && upsClickCallback) {
+            upsClickCallback(upsId);
+          } else if (!isClick && upsHoverCallback) {
+            // Clear rack + HVAC hover when hovering UPS
+            if (hoverCallback) { hoverCallback(null); }
+            if (hvacHoverCallback) { hvacHoverCallback(null); }
+            upsHoverCallback(upsId, e.clientX, e.clientY);
           }
           return;
         }
@@ -985,8 +1024,9 @@ window.C3.Utils.ThreeRenderer = (function() {
         if (rackId) {
           renderer.domElement.style.cursor = 'default';
           if (!isClick && hoverCallback) {
-            // Clear HVAC hover when hovering rack
+            // Clear HVAC + UPS hover when hovering rack
             if (hvacHoverCallback) { hvacHoverCallback(null); }
+            if (upsHoverCallback) { upsHoverCallback(null); }
             hoverCallback(rackId, e.clientX, e.clientY);
           }
           return;
@@ -1015,6 +1055,9 @@ window.C3.Utils.ThreeRenderer = (function() {
     }
     if (!isClick && hvacHoverCallback) {
       hvacHoverCallback(null);
+    }
+    if (!isClick && upsHoverCallback) {
+      upsHoverCallback(null);
     }
   }
 
@@ -1172,10 +1215,20 @@ window.C3.Utils.ThreeRenderer = (function() {
     currentSize = 'large';
     currentHvacCount = (typeof hvacCount === 'number' && hvacCount > 0) ? hvacCount : 14;
 
+    // Resolve UPS unit count for this location (falls back to 4)
+    currentUpsCount = 4;
+    var _sim = window.C3 && window.C3.Utils && window.C3.Utils.DataSimulator;
+    if (_sim && typeof _sim.getLocationUpsCount === 'function') {
+      var _locId = window.C3.State && window.C3.State.currentLocationId;
+      var _uc = _sim.getLocationUpsCount(_locId);
+      if (typeof _uc === 'number' && _uc > 0) { currentUpsCount = _uc; }
+    }
+
     // Reset state
     leds = [];
     rackMeshes = [];
     hvacMeshes = [];
+    upsMeshes = [];
     floorMeshes = [];
     frameCount = 0;
     drag = false;
@@ -1302,6 +1355,7 @@ window.C3.Utils.ThreeRenderer = (function() {
     leds = [];
     rackMeshes = [];
     hvacMeshes = [];
+    upsMeshes = [];
     floorMeshes = [];
     raycaster = null;
     mouse = null;
@@ -1309,6 +1363,8 @@ window.C3.Utils.ThreeRenderer = (function() {
     clickCallback = null;
     hvacHoverCallback = null;
     hvacClickCallback = null;
+    upsHoverCallback = null;
+    upsClickCallback = null;
     roomClickCallback = null;
     camAnim = null;
     currentSize = null;
@@ -1383,6 +1439,24 @@ window.C3.Utils.ThreeRenderer = (function() {
   }
 
   /**
+   * onUpsHover(callback)
+   * Register UPS hover callback: callback(upsId, mouseX, mouseY) or callback(null).
+   * @param {function} callback
+   */
+  function onUpsHover(callback) {
+    upsHoverCallback = callback;
+  }
+
+  /**
+   * onUpsClick(callback)
+   * Register UPS click callback: callback(upsId).
+   * @param {function} callback
+   */
+  function onUpsClick(callback) {
+    upsClickCallback = callback;
+  }
+
+  /**
    * onRoomClick(callback)
    * Register room/floor click callback: callback().
    * @param {function} callback
@@ -1400,6 +1474,8 @@ window.C3.Utils.ThreeRenderer = (function() {
     onRackClick: onRackClick,
     onHvacHover: onHvacHover,
     onHvacClick: onHvacClick,
+    onUpsHover: onUpsHover,
+    onUpsClick: onUpsClick,
     onRoomClick: onRoomClick
   };
 

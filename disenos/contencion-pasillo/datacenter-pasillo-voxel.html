@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Contención de Pasillo · Datacenter · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:240px; font-size:11px; backdrop-filter: blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 12px; border:1px solid; background:transparent; cursor:pointer; min-width:70px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>CONTENCIÓN DE PASILLO · DATACENTER</b><br>
+  <span>Piso técnico · Racks · Tubería CHW overhead · Charolas · Busway · Voxel Art</span>
+</div>
+<div id="legend">
+  <div><i style="background:#66ccff"></i> Agua helada · suministro</div>
+  <div><i style="background:#ff6644"></i> Agua helada · retorno</div>
+  <div><i style="background:#1565c0"></i> Red · datos (azul)</div>
+  <div><i style="background:#2e7d32"></i> Red · datos (verde)</div>
+  <div><i style="background:#8a8a92"></i> Energía · busway</div>
+  <div><i style="background:#8fd4ff"></i> Aire frío · bajo piso</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>PUERTAS CONTENCIÓN</label><button id="bDoor" class="off">CERRADO</button></div>
+  <div class="row"><label>LUCES</label><button id="bLuz" class="off">OFF</button></div>
+  <div class="row"><label>FLUJO AGUA</label><button id="bFlow" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 voxel = 0.05 m
+// DESVIACIÓN DECLARADA: el template nominal es 0.1 m/voxel. Se usa 0.05 m/voxel
+// por la densidad micro-voxel solicitada. Verificación dimensional:
+//   baldosa 0.60 m  = 12 vox        rack 0.6 × 0.85 × 2.0 m = 12 × 17 × 40 vox
+//   pasillo 1.15 m  = 23 vox        piso técnico 0.35 m     = 7 vox (pedestal 6 + baldosa 1)
+//   techo contención 2.40 m = 48 vox sobre piso              tramo 4.0 m = 80 vox
+
+// ====== SCENE / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 220, 700);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 1200);
+camera.position.set(150, 105, 155);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(40, 26, 28);
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.5;
+
+// ====== LIGHTS ======
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(120, 180, 110);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+const sc = sun.shadow.camera;
+sc.left=-140; sc.right=140; sc.top=140; sc.bottom=-140; sc.near=1; sc.far=500;
+sun.shadow.bias = -0.0004;
+sun.target.position.set(40, 0, 28);
+scene.add(sun); scene.add(sun.target);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4);
+fill.position.set(-70, 60, -50);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.2);
+rim.position.set(40, 30, -100);
+scene.add(rim);
+
+// ====== GROUND ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(900,900),
+  new THREE.MeshStandardMaterial({ color:0x0a0e16, roughness:0.92, metalness:0.05 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.position.set(40, 0, 28);
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(900, 150, 0x00d4aa, 0x142028);
+grid.material.opacity = 0.1;
+grid.material.transparent = true;
+grid.position.set(40, 0.01, 28);
+scene.add(grid);
+
+// ====== VOXEL BUILDER (mapa empaquetado, last-wins para colisiones) ======
+const voxMap = new Map();
+const vkey = (x,y,z) => ((x+64)*1048576) + ((y+64)*1024) + (z+64);
+function vox(x,y,z,color) { voxMap.set(vkey(x,y,z), color); }
+
+const COL = {
+  TILE:    0xd8dce8,   // baldosa gris claro reflectiva
+  TILE_P:  0x9aa2b8,   // baldosa perforada (más oscura)
+  SEAM:    0x3a3f4c,   // junta entre baldosas
+  PED:     0x707680,   // pedestales
+  RACK:    0x232730,   // silueta de rack
+  RACK_F:  0x3a4050,   // marco de rack
+  GRILLE:  0x14161c,   // rejilla frontal de rack
+  CONT:    0xe9eaee,   // contención blanca (marcos, ribs)
+  CONT_G:  0xaecbe8,   // panel translúcido azulado
+  PIPE_B:  0x2f5f96,   // suministro agua helada
+  PIPE_R:  0x8a3226,   // retorno agua helada
+  TRAY:    0x607080,   // charola portacables
+  CAB_B:   0x1565c0,   // mazo de red azul
+  CAB_G:   0x2e7d32,   // mazo de red verde
+  BUS:     0x8a8a92,   // busway
+  BUS_D:   0x55555c,   // juntas / tap-off
+  ROD:     0x4a4a52,   // varillas / trapecios
+  DARK:    0x2a2a2e,   // detalles oscuros
+};
+
+// ====== DIMENSIONES (voxeles) ======
+const FLOOR_Y   = 6;    // capa de baldosa
+const FLOOR_TOP = 7;    // superficie transitable (0.35 m)
+const RACK_W = 12, RACK_D = 17, RACK_H = 40;
+const AZ0 = 17, AZ1 = 39;      // pasillo 23 vox = 1.15 m
+const ROOF_Y = 55;             // 48 vox sobre piso = 2.40 m
+const LEN = 80;                // 4.0 m
+
+// ====== PISO TÉCNICO ELEVADO ======
+// Pedestales en retícula de 0.6 m (cada 12 vox)
+for (let x=-6; x<=84; x+=12)
+  for (let z=-6; z<=54; z+=12) {
+    for (let y=1; y<=4; y++) vox(x, y, z, COL.PED);
+    for (let dx=0; dx<=1; dx++)
+      for (let dz=0; dz<=1; dz++) {
+        vox(x+dx, 0, z+dz, COL.DARK);   // placa base
+        vox(x+dx, 5, z+dz, COL.PED);    // cabezal
+      }
+  }
+// Baldosas (corte lateral: franja z<0 sin baldosa, pedestales y plenum expuestos)
+for (let x=-6; x<=85; x++)
+  for (let z=0; z<=62; z++) {
+    const seam = ((x+6)%12===0) || ((z+6)%12===0);
+    if (seam) { vox(x, FLOOR_Y, z, COL.SEAM); continue; }
+    const tix = Math.floor((x+6)/12);
+    const perf = (z>=19 && z<=29) && (tix%2===1) && x>=7 && x<=77;
+    if (perf) {
+      const border = ((x+6)%12===1) || ((x+6)%12===11) || z===19 || z===29;
+      if (border) vox(x, FLOOR_Y, z, COL.TILE_P);
+      else if ((x+z)%2!==0) vox(x, FLOOR_Y, z, COL.TILE_P);
+      // (x+z)%2===0 → hueco de rejilla (se ve el plenum)
+    } else {
+      vox(x, FLOOR_Y, z, COL.TILE);
+    }
+  }
+
+// ====== SILUETAS DE RACK (2 filas de 6) ======
+function buildRack(x0, z0, frontZ) {
+  const x1 = x0 + RACK_W - 1, z1 = z0 + RACK_D - 1;
+  const y0 = FLOOR_TOP, y1 = FLOOR_TOP + RACK_H - 1;
+  for (let x=x0; x<=x1; x++)
+    for (let y=y0; y<=y1; y++)
+      for (let z=z0; z<=z1; z++) {
+        const surf = (x===x0||x===x1||y===y0||y===y1||z===z0||z===z1);
+        if (!surf) continue;
+        if (z === frontZ) {
+          const per = (x===x0||x===x1||y===y0||y===y1);
+          if (per) vox(x,y,z,COL.RACK_F);
+          else vox(x,y,z, ((x+y)%2===0) ? COL.GRILLE : COL.RACK);
+        } else if (y === y1) {
+          vox(x,y,z,COL.RACK_F);
+        } else {
+          const edge = (x===x0||x===x1) && (z===z0||z===z1);
+          vox(x,y,z, edge ? COL.RACK_F : COL.RACK);
+        }
+      }
+}
+for (let i=0; i<6; i++) {
+  buildRack(4 + i*12, 0, 16);    // fila A · frente al pasillo (z=16)
+  buildRack(4 + i*12, 40, 40);   // fila B · frente al pasillo (z=40)
+}
+
+// ====== CONTENCIÓN (baffles + techo + marcos de puerta) ======
+// Baffles verticales sobre el frente de cada fila (rack 2.0 m → techo 2.4 m)
+for (let x=2; x<=77; x++)
+  for (let y=47; y<=54; y++)
+    for (const z of [16, 40])
+      vox(x, y, z, (((x-2)%12)===0 || x===77) ? COL.CONT : COL.CONT_G);
+// Techo de contención (ribs blancos, paneles alternados translúcidos)
+for (let x=2; x<=77; x++)
+  for (let z=16; z<=40; z++) {
+    const rib = (((x-2)%12)===0) || x===77 || z===16 || z===40;
+    const m = Math.floor((x-2)/12);
+    vox(x, ROOF_Y, z, rib ? COL.CONT : (m%2===1 ? COL.CONT_G : COL.CONT));
+  }
+// Marcos y rieles de puerta en ambos extremos
+for (const dx of [2, 77]) {
+  for (let y=FLOOR_TOP; y<=54; y++) { vox(dx,y,16,COL.CONT); vox(dx,y,40,COL.CONT); }
+  for (let z=17; z<=39; z++) vox(dx, 54, z, COL.CONT);
+}
+
+// ====== TUBERÍA CHW OVERHEAD (sobre fila B) ======
+for (let x=-2; x<=81; x++)
+  for (let y=60; y<=61; y++) {
+    for (let z=45; z<=46; z++) vox(x,y,z,COL.PIPE_B);   // suministro
+    for (let z=50; z<=51; z++) vox(x,y,z,COL.PIPE_R);   // retorno
+  }
+// Soportes tipo trapecio
+for (const sx of [4, 24, 44, 64, 78]) {
+  for (let z=43; z<=53; z++) vox(sx, 59, z, COL.ROD);           // canal inferior
+  for (const sz of [43, 53])
+    for (let y=60; y<=68; y++) vox(sx, y, sz, COL.ROD);         // varillas
+  for (let z=42; z<=54; z++) vox(sx, 69, z, COL.DARK);          // anclaje superior
+}
+
+// ====== CHAROLAS PORTACABLES (sobre fila A) ======
+for (let x=-2; x<=81; x++) {
+  for (let y=58; y<=59; y++) { vox(x,y,4,COL.TRAY); vox(x,y,11,COL.TRAY); }  // rieles
+  for (let z=5; z<=10; z++) if ((x+z)%2===0) vox(x, 58, z, COL.TRAY);        // fondo malla
+  for (const z of [6, 7])  vox(x, 59, z, COL.CAB_B);                          // mazo azul
+  for (const z of [9, 10]) vox(x, 59, z, COL.CAB_G);                          // mazo verde
+}
+// Trapecios de charola
+for (const sx of [10, 34, 58, 74]) {
+  for (let z=2; z<=13; z++) vox(sx, 57, z, COL.ROD);
+  for (const sz of [2, 13])
+    for (let y=58; y<=68; y++) vox(sx, y, sz, COL.ROD);
+  for (let z=1; z<=14; z++) vox(sx, 69, z, COL.DARK);
+}
+
+// ====== BUSWAY ELÉCTRICO AÉREO (sobre el pasillo) ======
+for (let x=-2; x<=81; x++)
+  for (let y=63; y<=65; y++)
+    for (let z=26; z<=29; z++)
+      vox(x, y, z, (((x+2)%20)===0) ? COL.BUS_D : COL.BUS);
+// Cajas de derivación (tap-off) con bajada
+for (const tx of [12, 32, 52, 72]) {
+  for (let x=tx; x<=tx+3; x++)
+    for (let y=60; y<=62; y++)
+      for (let z=25; z<=30; z++)
+        vox(x, y, z, COL.BUS_D);
+  for (let y=56; y<=59; y++) vox(tx+1, y, 27, COL.DARK);   // whip de bajada
+}
+// Soportes de busway
+for (const sx of [0, 40, 80]) {
+  for (const sz of [26, 29])
+    for (let y=66; y<=68; y++) vox(sx, y, sz, COL.ROD);
+  for (let z=25; z<=30; z++) vox(sx, 69, z, COL.DARK);
+}
+
+// ====== INSTANCED MESHES ======
+const cubeGeo = new THREE.BoxGeometry(1,1,1);
+const TRANS_COLORS = new Set([COL.CONT_G]);
+const byColor = new Map();
+for (const [k, color] of voxMap) {
+  const x = Math.floor(k/1048576) - 64;
+  const r = k % 1048576;
+  const y = Math.floor(r/1024) - 64;
+  const z = (r % 1024) - 64;
+  if (!byColor.has(color)) byColor.set(color, []);
+  byColor.get(color).push([x,y,z]);
+}
+for (const [color, positions] of byColor) {
+  const isTrans = TRANS_COLORS.has(color);
+  const isTile  = (color === COL.TILE);
+  const mat = new THREE.MeshStandardMaterial({
+    color,
+    roughness: isTrans ? 0.35 : (isTile ? 0.28 : 0.55),
+    metalness: isTrans ? 0.1  : (isTile ? 0.35 : 0.45),
+    transparent: isTrans,
+    opacity: isTrans ? 0.22 : 1.0,
+    depthWrite: !isTrans,
+    side: isTrans ? THREE.DoubleSide : THREE.FrontSide,
+  });
+  const mesh = new THREE.InstancedMesh(cubeGeo, mat, positions.length);
+  mesh.castShadow = !isTrans;
+  mesh.receiveShadow = true;
+  const m = new THREE.Matrix4();
+  positions.forEach((p, i) => {
+    m.setPosition(p[0]+0.5, p[1]+0.5, p[2]+0.5);
+    mesh.setMatrixAt(i, m);
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+  scene.add(mesh);
+}
+
+// ====== ILUMINACIÓN LED LINEAL (mesh dedicado, toggleable) ======
+const ledMat = new THREE.MeshStandardMaterial({
+  color:0x30343c, emissive:0xff2233, emissiveIntensity:0.3,
+  roughness:0.3, metalness:0.2
+});
+const ledPositions = [];
+for (let x=6; x<=73; x++)
+  for (const z of [22, 34])
+    ledPositions.push([x, 54, z]);
+const ledMesh = new THREE.InstancedMesh(cubeGeo, ledMat, ledPositions.length);
+{
+  const m = new THREE.Matrix4();
+  ledPositions.forEach((p, i) => {
+    m.makeScale(1, 0.5, 1);
+    m.setPosition(p[0]+0.5, p[1]+0.3, p[2]+0.5);
+    ledMesh.setMatrixAt(i, m);
+  });
+  ledMesh.instanceMatrix.needsUpdate = true;
+}
+scene.add(ledMesh);
+const aisleLights = [15, 40, 65].map(x => {
+  const pl = new THREE.PointLight(0xf2f6ff, 0, 70);
+  pl.position.set(x, 50, 28);
+  scene.add(pl);
+  return pl;
+});
+
+// ====== LEDS DE FLUJO (válvulas en extremo oeste de tubería) ======
+const flowLedMat = new THREE.MeshStandardMaterial({
+  color:0xff2233, emissive:0xff2233, emissiveIntensity:1.3,
+  roughness:0.25, metalness:0.3
+});
+for (const z of [46, 51]) {
+  const led = new THREE.Mesh(new THREE.BoxGeometry(1.1,1.1,1.1), flowLedMat);
+  led.position.set(-3.5, 61, z);
+  scene.add(led);
+}
+const flowLight = new THREE.PointLight(0xff2233, 0.9, 14);
+flowLight.position.set(-3.5, 61, 48.5);
+scene.add(flowLight);
+
+// ====== PUERTAS CORREDIZAS (Groups animados, fuera del InstancedMesh) ======
+const doorFrameMat = new THREE.MeshStandardMaterial({ color:0xe9eaee, roughness:0.45, metalness:0.4 });
+const doorGlassMat = new THREE.MeshStandardMaterial({
+  color:0xaecbe8, roughness:0.25, metalness:0.1,
+  transparent:true, opacity:0.16, depthWrite:false, side:THREE.DoubleSide
+});
+const doorLeaves = [];
+function makeDoorLeaf(x, zClosed, dir) {
+  const g = new THREE.Group();
+  g.position.set(x, 30.5, zClosed);
+  const w = 11.5, h = 47;
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(0.5, h-2, w-2), doorGlassMat);
+  g.add(glass);
+  const barT = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1, w), doorFrameMat);
+  barT.position.y = h/2 - 0.5; barT.castShadow = true; g.add(barT);
+  const barB = barT.clone(); barB.position.y = -h/2 + 0.5; g.add(barB);
+  const barL = new THREE.Mesh(new THREE.BoxGeometry(0.9, h, 1), doorFrameMat);
+  barL.position.z = -w/2 + 0.5; barL.castShadow = true; g.add(barL);
+  const barR = barL.clone(); barR.position.z = w/2 - 0.5; g.add(barR);
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(1.1, 4, 0.7),
+    new THREE.MeshStandardMaterial({ color:0x2a2a2e, metalness:0.6, roughness:0.4 }));
+  handle.position.set(0, 0, dir * (w/2 - 1.6));
+  g.add(handle);
+  scene.add(g);
+  doorLeaves.push({ g, zClosed, zOpen: zClosed + dir * 12 });
+}
+// Extremo oeste (x=2) y este (x=77): 2 hojas cada uno, deslizan hacia afuera del claro
+makeDoorLeaf(2.5,  22.75, -1);  makeDoorLeaf(2.5,  33.25, 1);
+makeDoorLeaf(77.5, 22.75, -1);  makeDoorLeaf(77.5, 33.25, 1);
+
+// ====== SEÑALIZACIÓN (sprites) ======
+function makeLabel(text, x, y, z, w, colorCss) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 96;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(6,8,13,0.55)';
+  g.fillRect(36, 16, 440, 64);
+  g.font = '600 34px "JetBrains Mono", ui-monospace, monospace';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = colorCss || '#bfe9dc';
+  g.fillText(text, 256, 50);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true, depthWrite:false }));
+  sp.position.set(x, y, z);
+  sp.scale.set(w, w*96/512, 1);
+  scene.add(sp);
+}
+makeLabel('PASILLO FRÍO', 40, 63, 28, 24, '#9fdcff');
+makeLabel('PASILLO CALIENTE', 40, 52, -6, 22, '#ffb090');
+makeLabel('PASILLO CALIENTE', 40, 52, 62, 22, '#ffb090');
+makeLabel('CHW SUMINISTRO / RETORNO', 40, 74, 48, 22, '#9fc4ec');
+makeLabel('CHAROLAS · RED', 40, 74, 8, 18, '#9fc4ec');
+makeLabel('BUSWAY', 40, 72, 28, 12, '#c8c8d0');
+
+// ====== MÁQUINA DE ESTADOS ======
+const COLOR_ON  = new THREE.Color(0x00ff66);
+const COLOR_OFF = new THREE.Color(0xff2233);
+const state = { doors:false, lights:false, flow:false };
+
+function applyState() {
+  // LEDs lineales: ON = blanco frío intenso, OFF = rojo tenue (parado visible SCADA)
+  if (state.lights) {
+    ledMat.color.set(0xf6f8ff);
+    ledMat.emissive.set(0xdfe8ff);
+    ledMat.emissiveIntensity = 1.4;
+  } else {
+    ledMat.color.set(0x30343c);
+    ledMat.emissive.copy(COLOR_OFF);
+    ledMat.emissiveIntensity = 0.3;
+  }
+  aisleLights.forEach(pl => { pl.intensity = state.lights ? 1.1 : 0; });
+
+  // LEDs de flujo de agua
+  flowLedMat.color.copy(state.flow ? COLOR_ON : COLOR_OFF);
+  flowLedMat.emissive.copy(state.flow ? COLOR_ON : COLOR_OFF);
+  flowLedMat.emissiveIntensity = state.flow ? 1.7 : 1.2;
+  flowLight.color.copy(state.flow ? COLOR_ON : COLOR_OFF);
+  flowLight.intensity = state.flow ? 1.3 : 0.9;
+}
+applyState();
+
+// ====== UI ======
+const bDoor = document.getElementById('bDoor');
+bDoor.onclick = () => {
+  state.doors = !state.doors;
+  bDoor.className = state.doors ? 'on' : 'off';
+  bDoor.textContent = state.doors ? 'ABIERTO' : 'CERRADO';
+};
+function bind(id, key) {
+  const btn = document.getElementById(id);
+  btn.onclick = () => {
+    state[key] = !state[key];
+    btn.className = state[key] ? 'on' : 'off';
+    btn.textContent = state[key] ? 'ON' : 'OFF';
+    applyState();
+  };
+}
+bind('bLuz','lights');
+bind('bFlow','flow');
+const bRot = document.getElementById('bRot');
+bRot.onclick = () => {
+  controls.autoRotate = !controls.autoRotate;
+  bRot.className = controls.autoRotate ? 'on' : 'off';
+  bRot.textContent = controls.autoRotate ? 'ON' : 'OFF';
+};
+
+// ====== PARTÍCULAS ======
+function spawn(n, colorHex, size) {
+  const arr = [];
+  const geo = new THREE.BoxGeometry(size||0.6, size||0.6, size||0.6);
+  for (let i=0; i<n; i++) {
+    const p = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:colorHex, transparent:true, opacity:0 }));
+    p.userData = { t: Math.random(), seed: Math.random()*10 };
+    scene.add(p);
+    arr.push(p);
+  }
+  return arr;
+}
+const supplyP = spawn(14, 0x66ccff, 0.6);
+const returnP = spawn(14, 0xff6644, 0.6);
+const airFloorP = spawn(24, 0x8fd4ff, 0.5);
+airFloorP.forEach(p => { p.userData.z = 19 + Math.random()*18; p.userData.y = 1.5 + Math.random()*3; });
+// Penachos que suben por baldosas perforadas (baldosas tix 1,3,5 → x 8-16 / 32-40 / 56-64)
+const PERF_X = [[8,16],[32,40],[56,64]];
+const plumeP = spawn(30, 0x8fd4ff, 0.45);
+function reseatPlume(p) {
+  const r = PERF_X[Math.floor(Math.random()*PERF_X.length)];
+  p.userData.x = r[0] + Math.random()*(r[1]-r[0]);
+  p.userData.z = 20 + Math.random()*8;
+}
+plumeP.forEach(reseatPlume);
+
+// ====== RESIZE ======
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ====== ANIMATE ======
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  // Puertas corredizas (lerp hacia posición objetivo)
+  doorLeaves.forEach(d => {
+    const target = state.doors ? d.zOpen : d.zClosed;
+    d.g.position.z += (target - d.g.position.z) * Math.min(1, dt*3);
+  });
+
+  // Agua helada: suministro hacia +X, retorno hacia -X
+  supplyP.forEach(p => {
+    if (!state.flow) { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.14;
+    if (p.userData.t > 1) p.userData.t -= 1;
+    const tt = p.userData.t, s = p.userData.seed;
+    p.position.set(
+      -2 + tt*84,
+      61 + Math.sin(tt*9 + s)*1.0,
+      46 + Math.cos(tt*7 + s)*1.0
+    );
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.85;
+  });
+  returnP.forEach(p => {
+    if (!state.flow) { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.13;
+    if (p.userData.t > 1) p.userData.t -= 1;
+    const tt = p.userData.t, s = p.userData.seed;
+    p.position.set(
+      82 - tt*84,
+      61 + Math.sin(tt*9 + s)*1.0,
+      51 + Math.cos(tt*7 + s)*1.0
+    );
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.85;
+  });
+
+  // Aire frío bajo piso (encadenado a FLUJO AGUA: agua helada disponible → enfriamiento)
+  airFloorP.forEach(p => {
+    if (!state.flow) { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.12;
+    if (p.userData.t > 1) p.userData.t -= 1;
+    const tt = p.userData.t, s = p.userData.seed;
+    p.position.set(
+      -4 + tt*88,
+      p.userData.y + Math.sin(tt*8 + s)*0.4,
+      p.userData.z + Math.cos(tt*6 + s)*0.5
+    );
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.7;
+  });
+  // Penachos por baldosas perforadas
+  plumeP.forEach(p => {
+    if (!state.flow) { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.35;
+    if (p.userData.t > 1) { p.userData.t = 0; reseatPlume(p); }
+    const tt = p.userData.t, s = p.userData.seed;
+    p.position.set(
+      p.userData.x + Math.sin(tt*6 + s)*0.4,
+      7 + tt*19,
+      p.userData.z + Math.cos(tt*5 + s)*0.4
+    );
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.65;
+  });
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

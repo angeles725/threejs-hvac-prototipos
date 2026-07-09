@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>PDU DATACENTER · Voxel Art</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:10px; height:10px; display:inline-block; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:250px; font-size:11px; backdrop-filter: blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:58px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel button.alarm { color:#06080d; border-color:#ff2233; background:#ff2233; box-shadow:0 0 12px #ff223388; animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:0.55; } }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>PDU DE DATACENTER · 225 kVA</b><br>
+  <span>Unidad de Distribución de Energía · Voxel Art</span><br>
+  <span>0.9 × 0.9 × 2.0 m · Display: kW · V · A</span>
+</div>
+<div id="legend">
+  <div><i style="background:#c22a2a"></i> Alimentación de entrada</div>
+  <div><i style="background:#1b1e24;border:1px solid #444"></i> Salidas a racks</div>
+  <div><i style="background:#c4712e"></i> Barras / bobinados (cobre)</div>
+  <div><i style="background:#00ff66"></i> Control / monitor</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>BREAKERS</label><button id="bBrk" class="on">ON</button></div>
+  <div class="row"><label>CORTE (PUERTA)</label><button id="bCorte" class="off">OFF</button></div>
+  <div class="row"><label>FALLA SIMULADA</label><button id="bFalla" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="off">OFF</button></div>
+</div>
+
+<script>
+// Inyección dinámica del importmap — evita que Cloudflare mangle "package@version" (fix canónico)
+(function(){
+  var at = String.fromCharCode(64);
+  var im = { imports: {
+    "three": "https://unpkg.com/three" + at + "0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three" + at + "0.160.0/examples/jsm/"
+  }};
+  var s = document.createElement('script');
+  s.type = 'importmap';
+  s.textContent = JSON.stringify(im);
+  document.currentScript.after(s);
+})();
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 voxel = 0.025 m — DESVIACIÓN del spec (0.1 m/voxel): a 0.1 m el gabinete
+// sería 9×9×20 voxeles, insuficiente para dígitos 7-seg, breakers y bobinados.
+// Escala fina 0.025 m/voxel aprobada por el usuario → 36 × 80 × 36 voxeles (0.9 × 2.0 × 0.9 m).
+
+// ===PURE-GEN-START===
+const PAL = {
+  CAB:0xc9ced6, CABD:0x8b93a0, BLK:0x15181d, STEEL:0x59616e,
+  CU:0xc4712e, CUD:0x8f4e1d, RED:0xc22a2a, YEL:0xffd23f,
+  PANEL:0x394049, CBK:0x1b1e24, CRD:0xa32222
+};
+const NX = 36, NY = 80, NZ = 36;
+const LEGS = [[6,11],[15,20],[24,29]];
+const CABLE_L = [8,9,10,11], CABLE_R = [24,25,26,27];
+
+function newVM(){ return { map:new Map(), dupSkipped:0 }; }
+function vox(vm,x,y,z,c){
+  const k = x+','+y+','+z;
+  if (vm.map.has(k)) { vm.dupSkipped++; return false; }
+  vm.map.set(k,{x,y,z,c});
+  return true;
+}
+function inLeg(x){ return LEGS.some(([lo,hi]) => x>=lo && x<=hi); }
+function cableGapX(x){ return (x>=8 && x<=11) || (x>=24 && x<=27); }
+
+// Distribución de breakers: 2 panelboards lado a lado, 2 columnas × 9 filas c/u = 36 circuitos
+function breakerLayout(){
+  const out = [];
+  const cols = [[3,7],[11,15],[20,24],[28,32]];
+  const ledXs = [7.7, 10.3, 24.7, 27.3]; // LEDs flanqueando las barras centrales
+  for (let ci=0; ci<4; ci++) for (let r=0; r<9; r++) {
+    const y = 42 + r*3;
+    const [lo,hi] = cols[ci];
+    out.push({ ci, r, lo, hi, cx:(lo+hi)/2 + 0.5, y, ledx: ledXs[ci] });
+  }
+  return out;
+}
+
+function buildStaticVox(){
+  const vm = newVM();
+
+  // --- Cascarón: paredes x=0/x=35, fondo z=0, techo y=79 (frente z=35 aparte) ---
+  for (let x=0; x<NX; x++) for (let y=0; y<NY; y++) for (let z=0; z<NZ; z++) {
+    const bnd = (x===0 || x===NX-1 || z===0 || y===NY-1);
+    if (!bnd) continue;
+    let c = PAL.CAB;
+    if (y <= 3) c = PAL.BLK;                                                        // zócalo
+    else if ((x===0||x===NX-1) && y>=8 && y<=20 && z>=6 && z<=30 && (y+z)%2===0) c = PAL.CABD; // rejilla lateral
+    else if (z===0 && y>=8 && y<=20 && x>=6 && x<=30 && (y+x)%2===0) c = PAL.CABD;  // rejilla trasera
+    else if (y===NY-1 && (x===0||x===NX-1||z===0||z===NZ-1)) c = PAL.CABD;          // borde de tapa
+    vox(vm,x,y,z,c);
+  }
+
+  // --- Bandas frontales z=35 (hueco de puerta y5..68) ---
+  for (let x=1; x<NX-1; x++) {
+    for (let y=0; y<=4; y++) {
+      if (y>=1 && y<=3 && cableGapX(x)) continue; // paso de mazos de salida
+      vox(vm,x,y,NZ-1, y<=3 ? PAL.BLK : PAL.CAB);
+    }
+    for (let y=69; y<=78; y++) {
+      let c = PAL.CAB;
+      if (x>=2 && x<=33 && y<=76) c = PAL.BLK;    // inserto negro del display
+      vox(vm,x,y,NZ-1,c);
+    }
+  }
+
+  // --- Transformador de aislamiento (base): núcleo E-I + 3 bobinados de cobre ---
+  for (let x=5; x<=30; x++) for (let z=14; z<=22; z++) { vox(vm,x,4,z,PAL.BLK); vox(vm,x,5,z,PAL.BLK); } // rieles
+  for (let x=5; x<=30; x++) for (let y=6; y<=23; y++) for (let z=14; z<=22; z++) {
+    const isCore = (y<=7 || y>=22 || inLeg(x));   // yugos + piernas
+    if (isCore) vox(vm,x,y,z,PAL.STEEL);
+  }
+  for (const [lo,hi] of LEGS) {
+    for (let y=9; y<=20; y++) {
+      const c = (y%3===0) ? PAL.CUD : PAL.CU;     // bandeado del bobinado
+      for (let x=lo-1; x<=hi+1; x++) { vox(vm,x,y,12,c); vox(vm,x,y,13,c); vox(vm,x,y,23,c); vox(vm,x,y,24,c); }
+      for (let z=14; z<=22; z++) { vox(vm,lo-1,y,z,c); vox(vm,hi+1,y,z,c); }
+    }
+    // terminales superiores
+    for (let y=24; y<=25; y++) for (let z=17; z<=18; z++) { vox(vm,lo+2,y,z,PAL.CU); vox(vm,lo+3,y,z,PAL.CU); }
+  }
+  // puente terminal→riser y riser de cobre al interruptor principal
+  for (const xx of [17,18]) {
+    for (let z=19; z<=29; z++) vox(vm,xx,25,z,PAL.CU);
+    for (let y=25; y<=27; y++) vox(vm,xx,y,30,PAL.CU);
+  }
+
+  // --- Alimentación de entrada (rojo): conducto exterior trasero + bajada interior ---
+  for (const xx of [17,18]) {
+    for (let y=24; y<=78; y++) {
+      const c = (y>=70 && y<=72) || (y>=40 && y<=42) ? PAL.RED : PAL.CABD;
+      vox(vm,xx,y,-2,c);
+    }
+    for (let y=77; y<=78; y++) vox(vm,xx,y,-1,PAL.CABD);       // codo de entrada
+    for (let y=28; y<=77; y++) vox(vm,xx,y,1,PAL.RED);         // bajada interior
+    for (let z=2; z<=30; z++) vox(vm,xx,28,z,PAL.RED);         // llegada al principal
+  }
+
+  // --- Interruptor principal con banda roja y etiqueta ---
+  for (let x=13; x<=22; x++) for (let y=29; y<=38; y++) for (let z=31; z<=33; z++) {
+    let c = PAL.BLK;
+    if (z===33) {
+      if (y===29) c = PAL.RED;
+      else if (y===37 && x>=14 && x<=17) c = PAL.YEL;
+    }
+    vox(vm,x,y,z,c);
+  }
+
+  // --- Panelboards (backpans) + barras de cobre + alimentador ---
+  for (const [lo,hi] of [[2,16],[19,33]])
+    for (let x=lo; x<=hi; x++) for (let y=40; y<=68; y++) vox(vm,x,y,31,PAL.PANEL);
+  for (const bx of [8,9,10,25,26,27])
+    for (let y=40; y<=67; y++) vox(vm,bx,y,32, (y%6===0) ? PAL.CUD : PAL.CU);
+  for (let x=8; x<=27; x++) vox(vm,x,39,31,PAL.CU);
+
+  // --- Cuerpos de breakers termomagnéticos (negros) + etiquetas amarillas de circuito ---
+  for (const b of breakerLayout()) {
+    for (let x=b.lo; x<=b.hi; x++) for (let y=b.y; y<=b.y+1; y++) for (let z=32; z<=33; z++)
+      vox(vm,x,y,z,PAL.BLK);
+    if (b.ci===0) vox(vm, 2, b.y, 32, PAL.YEL);
+    if (b.ci===3) vox(vm, 33, b.y, 32, PAL.YEL);
+  }
+
+  // --- Mazos de salida a racks (interior + salida inferior + abanico en piso) ---
+  const runCable = (x, right) => {
+    const c = (x%2===0) ? PAL.CBK : PAL.CRD;
+    for (let y=3; y<=39; y++) vox(vm,x,y,33,c);          // bajada interior frontal
+    for (let z=33; z<=36; z++) vox(vm,x,2,z,c);          // cruce del zócalo
+    vox(vm,x,1,37,c);
+    if (!right) { for (let z=38; z<=48; z++) vox(vm,x,0,z,c); }
+    else {
+      const i = 27-x; // el cable exterior gira antes → sin cruces entre verticales
+      for (let z=38; z<=40+i; z++) vox(vm,x,0,z,c);
+      for (let xx=x+1; xx<=46; xx++) vox(vm,xx,0,40+i,c);
+    }
+  };
+  for (const x of CABLE_L) runCable(x,false);
+  for (const x of CABLE_R) runCable(x,true);
+
+  return { cells:[...vm.map.values()], dupSkipped: vm.dupSkipped };
+}
+
+// --- Puerta abatible (voxeles en coordenadas relativas a la bisagra x=1, z=35) ---
+function buildDoorVox(){
+  const vm = newVM();
+  for (let x=1; x<=34; x++) for (let y=5; y<=68; y++) {
+    let c = PAL.CAB;
+    if (y>=33 && y<=36 && x>=14 && x<=21) c = ((x+y)%2===0) ? PAL.YEL : PAL.BLK; // etiqueta de riesgo
+    else if (y>=10 && y<=22 && x>=4 && x<=31 && y%2===0) c = PAL.CABD;           // louvers de ventilación
+    else if (y===60 && x>=4 && x<=31) c = PAL.CABD;                              // ranura superior
+    else if (y===5 || y===68 || x===1 || x===34) c = PAL.CABD;                   // marco
+    vox(vm,x,y,0,c);
+  }
+  for (let y=35; y<=39; y++) vox(vm,32,y,1,PAL.BLK);   // manija
+  vox(vm,31,35,1,PAL.BLK); vox(vm,31,39,1,PAL.BLK);
+  return { cells:[...vm.map.values()], dupSkipped: vm.dupSkipped };
+}
+
+// --- Fuente 3×5 para dígitos 7-seg voxelizados ---
+const FONT = {
+  '0':["111","101","101","101","111"], '1':["010","110","010","010","111"],
+  '2':["111","001","111","100","111"], '3':["111","001","111","001","111"],
+  '4':["101","101","111","001","001"], '5':["111","100","111","001","111"],
+  '6':["111","100","111","101","111"], '7':["111","001","001","010","010"],
+  '8':["111","101","111","101","111"], '9':["111","101","111","001","111"]
+};
+const DIGIT_SLOTS = [3,7, 13,17,21, 27,31];  // kW(2) · V(3) · A(2)
+const DOT_X = [11,25];
+const TRIP = { ci:1, r:4 }; // breaker que dispara en FALLA SIMULADA
+// ===PURE-GEN-END===
+
+// ====== ESCENA / RENDERER ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 160, 420);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 2000);
+camera.position.set(72, 62, 100);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(18, 36, 18);
+controls.autoRotate = false;           // default OFF (evita layout invertido al fondo)
+controls.autoRotateSpeed = 0.6;
+
+// ====== LUCES ======
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(80, 130, 70);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera, { left:-90, right:90, top:110, bottom:-30, near:10, far:400 });
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.4); fill.position.set(-70, 60, -40); scene.add(fill);
+const rim  = new THREE.DirectionalLight(0x00d4aa, 0.2); rim.position.set(-40, 30, 90);  scene.add(rim);
+
+// ====== PISO ======
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(500,500),
+  new THREE.MeshStandardMaterial({ color:0x090c12, roughness:1, metalness:0 })
+);
+ground.rotation.x = -Math.PI/2; ground.position.y = -0.02; ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(280, 28, 0x00d4aa, 0x0e2a26);
+grid.material.transparent = true; grid.material.opacity = 0.18; grid.position.y = 0.0;
+scene.add(grid);
+
+// ====== CONSTRUCCIÓN DE VOXELES (InstancedMesh por color) ======
+const cubeGeo = new THREE.BoxGeometry(1,1,1);
+function matFor(hex){
+  const isCu = (hex===PAL.CU || hex===PAL.CUD);
+  return new THREE.MeshStandardMaterial({
+    color: hex,
+    metalness: isCu ? 0.85 : (hex===PAL.STEEL ? 0.6 : 0.12),
+    roughness: isCu ? 0.35 : (hex===PAL.CAB ? 0.55 : 0.6)
+  });
+}
+function buildInstanced(cells, parent, offset){
+  const byColor = new Map();
+  for (const c of cells) { if(!byColor.has(c.c)) byColor.set(c.c,[]); byColor.get(c.c).push(c); }
+  const m4 = new THREE.Matrix4();
+  for (const [hex,list] of byColor) {
+    const im = new THREE.InstancedMesh(cubeGeo, matFor(hex), list.length);
+    list.forEach((c,i)=>{
+      m4.makeTranslation(c.x+0.5+offset[0], c.y+0.5+offset[1], c.z+0.5+offset[2]);
+      im.setMatrixAt(i,m4);
+    });
+    im.instanceMatrix.needsUpdate = true;
+    im.castShadow = true; im.receiveShadow = true;
+    parent.add(im);
+  }
+}
+
+const staticData = buildStaticVox();
+buildInstanced(staticData.cells, scene, [0,0,0]);
+
+const doorData = buildDoorVox();
+const doorGroup = new THREE.Group();
+doorGroup.position.set(1,0,35);                    // bisagra izquierda
+buildInstanced(doorData.cells, doorGroup, [-1,0,0]); // rel: x-1, z=zr
+scene.add(doorGroup);
+
+console.log('[PDU] static voxels:', staticData.cells.length, '| dupSkipped:', staticData.dupSkipped);
+console.log('[PDU] door voxels:', doorData.cells.length, '| dupSkipped:', doorData.dupSkipped);
+
+// ====== PARTES ANIMADAS / REACTIVAS (fuera del InstancedMesh) ======
+const matLever   = new THREE.MeshStandardMaterial({ color:0xe8eaee, roughness:0.4, metalness:0.2 });
+const matLedOn   = new THREE.MeshStandardMaterial({ color:0x00331a, emissive:0x00ff66, emissiveIntensity:1.4 });
+const matLedOff  = new THREE.MeshStandardMaterial({ color:0x330a0d, emissive:0xff2233, emissiveIntensity:0.7 });
+const matLedTrip = new THREE.MeshStandardMaterial({ color:0x330a0d, emissive:0xff2233, emissiveIntensity:1.8 });
+const matDigit   = new THREE.MeshStandardMaterial({ color:0x00331a, emissive:0x00ff66, emissiveIntensity:1.3 });
+
+// Palancas y LEDs de los 36 breakers
+const layout = breakerLayout();
+const levers = [], leds = [];
+for (const b of layout) {
+  const lv = new THREE.Mesh(cubeGeo, matLever);
+  lv.scale.set(1.1, 1.5, 0.9);
+  lv.position.set(b.cx, b.y+1, 34.35);
+  lv.castShadow = true;
+  lv.userData = { baseY: b.y+1, trip: (b.ci===TRIP.ci && b.r===TRIP.r) };
+  scene.add(lv); levers.push(lv);
+
+  const led = new THREE.Mesh(cubeGeo, matLedOn);
+  led.scale.set(0.55,0.55,0.55);
+  led.position.set(b.ledx, b.y+1, 34.3);
+  led.userData = { trip: lv.userData.trip };
+  scene.add(led); leds.push(led);
+}
+
+// Palanca del interruptor principal
+const mainLever = new THREE.Mesh(cubeGeo, matLever);
+mainLever.scale.set(1.8, 3.4, 1.1);
+mainLever.position.set(18, 36, 34.6);
+mainLever.castShadow = true;
+scene.add(mainLever);
+
+// Lámpara piloto (arriba-derecha del display)
+const pilot = new THREE.Mesh(cubeGeo, matLedOn.clone());
+pilot.scale.set(1.2,1.2,0.8);
+pilot.position.set(31.5, 78, 35.5);
+scene.add(pilot);
+const pilotLight = new THREE.PointLight(0x00ff66, 1.2, 24);
+pilotLight.position.set(31.5, 78, 37.5);
+scene.add(pilotLight);
+
+// Display 7-seg voxelizado: kW · V · A
+const digitPools = DIGIT_SLOTS.map(sx => {
+  const grid = [];
+  for (let c=0; c<3; c++) { grid[c]=[];
+    for (let r=0; r<5; r++) {
+      const cube = new THREE.Mesh(cubeGeo, matDigit);
+      cube.scale.set(0.72,0.72,0.5);
+      cube.position.set(sx+c+0.5, 70+(4-r)+0.5, 35.75);
+      scene.add(cube);
+      grid[c][r] = cube;
+    }
+  }
+  return grid;
+});
+for (const dx of DOT_X) {
+  const dot = new THREE.Mesh(cubeGeo, matDigit);
+  dot.scale.set(0.6,0.6,0.5);
+  dot.position.set(dx+0.5, 70.7, 35.75);
+  scene.add(dot);
+}
+function setDisplay(str7){ // 7 caracteres: KK VVV AA
+  for (let i=0; i<7; i++) {
+    const bm = FONT[str7[i]] || FONT['0'];
+    for (let c=0; c<3; c++) for (let r=0; r<5; r++)
+      digitPools[i][c][r].visible = (bm[r][c] === '1');
+  }
+}
+
+// ====== ESTADO / CONTROL ======
+const state = { breakers:true, corte:false, falla:false, rotate:false };
+let doorAngle = 0, t = 0, dispAcc = 1;
+
+function refreshLeds(){
+  for (const led of leds) {
+    if (state.falla && led.userData.trip) led.material = matLedTrip;
+    else led.material = state.breakers ? matLedOn : matLedOff;
+  }
+}
+function setBreakers(v){ state.breakers = v; refreshLeds(); dispAcc = 1; syncUI(); }
+function setCorte(v){ state.corte = v; syncUI(); }
+function setFalla(v){ state.falla = v; refreshLeds(); syncUI(); }
+function setRotate(v){ state.rotate = v; controls.autoRotate = v; syncUI(); }
+
+function btn(id){ return document.getElementById(id); }
+function paint(b, on, alarm){
+  b.classList.remove('on','off','alarm');
+  b.classList.add(alarm ? 'alarm' : (on ? 'on' : 'off'));
+  b.textContent = alarm ? 'FALLA' : (on ? 'ON' : 'OFF');
+}
+function syncUI(){
+  paint(btn('bBrk'),   state.breakers, false);
+  paint(btn('bCorte'), state.corte,    false);
+  paint(btn('bFalla'), state.falla,    state.falla);
+  paint(btn('bRot'),   state.rotate,   false);
+}
+btn('bBrk').addEventListener('click',   ()=> setBreakers(!state.breakers));
+btn('bCorte').addEventListener('click', ()=> setCorte(!state.corte));
+btn('bFalla').addEventListener('click', ()=> setFalla(!state.falla));
+btn('bRot').addEventListener('click',   ()=> setRotate(!state.rotate));
+syncUI();
+
+// ====== LOOP ======
+function pad(n,w){ return String(Math.max(0,Math.round(n))).padStart(w,'0').slice(-w); }
+
+function update(dt){
+  t += dt;
+  // puerta abatible
+  const target = state.corte ? -1.9 : 0;
+  doorAngle += (target - doorAngle) * Math.min(1, dt*4);
+  doorGroup.rotation.y = doorAngle;
+
+  // palancas de breakers
+  for (const lv of levers) {
+    const tripped = state.falla && lv.userData.trip;
+    const ty = lv.userData.baseY + (tripped ? 0 : (state.breakers ? 0.85 : -0.85));
+    lv.position.y += (ty - lv.position.y) * Math.min(1, dt*8);
+  }
+  const tm = 36 + (state.breakers ? 2.2 : -2.2);
+  mainLever.position.y += (tm - mainLever.position.y) * Math.min(1, dt*8);
+
+  // piloto / parpadeo de falla
+  const blink = Math.sin(t*9) > 0;
+  if (state.falla) {
+    pilot.material.emissive.setHex(0xff2233);
+    pilot.material.emissiveIntensity = blink ? 2.0 : 0.4;
+    pilotLight.color.setHex(0xff2233);
+    pilotLight.intensity = blink ? 2.2 : 0.3;
+    matLedTrip.emissiveIntensity = blink ? 2.2 : 0.3;
+  } else {
+    pilot.material.emissive.setHex(0x00ff66);
+    pilot.material.emissiveIntensity = 1.4;
+    pilotLight.color.setHex(0x00ff66);
+    pilotLight.intensity = 1.2;
+  }
+
+  // display kW · V · A
+  dispAcc += dt;
+  if (dispAcc >= 0.4) {
+    dispAcc = 0;
+    if (state.breakers) {
+      const kw = 42 + Math.random()*6;
+      const a  = (state.falla ? 44 : 51) + Math.random()*6;
+      setDisplay(pad(kw,2) + '480' + pad(a,2));
+    } else {
+      setDisplay('00' + '480' + '00');
+    }
+  }
+  controls.update();
+}
+
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now-last)/1000);
+  last = now;
+  update(dt);
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+setDisplay('4548053');
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// hooks de prueba (harness headless)
+window.__PDU__ = {
+  state, staticData, doorData, doorGroup, levers, leds, mainLever, pilot,
+  api: { setBreakers, setCorte, setFalla, setRotate, tick: update }
+};
+</script>
+</body>
+</html>

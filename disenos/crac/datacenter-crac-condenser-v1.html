@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>DATACENTER · CRAC + CONDENSADOR</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); max-width:300px; }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #legend i { width:12px; height:6px; display:inline-block; border-radius:2px; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:236px; font-size:11px; backdrop-filter: blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 14px; border:1px solid; background:transparent; cursor:pointer; min-width:66px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #panel button.standby { color:#06080d; border-color:#3aa6ff; background:#3aa6ff; box-shadow:0 0 12px #3aa6ff55; }
+  #panel button.alarm   { color:#06080d; border-color:#ff2233; background:#ff2233; box-shadow:0 0 12px #ff223388; animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:0.55; } }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>DATACENTER · CRAC + CONDENSADOR</b><br>
+  <span>Enfriamiento de sala de datos · Vista cut-away<br>
+  HVAC-01 (evaporador interior) &nbsp;+&nbsp; UNIDAD PAQUETE (condensador exterior)</span>
+</div>
+<div id="legend">
+  <div><i style="background:#b87333"></i> Línea de líquido (cobre)</div>
+  <div><i style="background:#8b909a"></i> Línea de succión (aislada)</div>
+  <div><i style="background:#ff4422"></i> Aire de retorno (caliente)</div>
+  <div><i style="background:#44aaff"></i> Aire de suministro (frío)</div>
+  <div><i style="background:#ff8a3a"></i> Descarga de calor (condensador)</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>COMPRESOR SCROLL</label><button id="bComp" class="standby">STANDBY</button></div>
+  <div class="row"><label>VENT. CRAC</label><button id="bEvap" class="standby">STANDBY</button></div>
+  <div class="row"><label>VENT. CONDENSADOR</label><button id="bCond" class="standby">STANDBY</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="off">OFF</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ============================================================
+// SCENE / RENDERER
+// ============================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 180, 460);
+
+const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.1, 1200);
+camera.position.set(-58, 48, -132);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false; // perf: static sun -> bake shadows once
+renderer.shadowMap.needsUpdate = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(0, 16, 0);
+controls.autoRotate = false;        // <-- default OFF per spec
+controls.autoRotateSpeed = 0.6;
+
+// ============================================================
+// LIGHTS
+// ============================================================
+scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(80, 140, -80);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left=-150; sc.right=150; sc.top=150; sc.bottom=-150; sc.near=1; sc.far=380;
+sun.shadow.bias = -0.0003;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.35);
+fill.position.set(-80, 50, 80);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.20);
+rim.position.set(0, 30, 100);
+scene.add(rim);
+
+// ============================================================
+// GROUND
+// ============================================================
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(900, 900),
+  new THREE.MeshStandardMaterial({ color:0x0a0e16, roughness:0.92, metalness:0.05 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(900, 150, 0x00d4aa, 0x142028);
+grid.material.opacity = 0.12;
+grid.material.transparent = true;
+grid.position.y = 0.01;
+scene.add(grid);
+
+// ============================================================
+// MATERIALS (PBR palette — reused from Trane RTU reference)
+// ============================================================
+const M = {
+  shell: new THREE.MeshStandardMaterial({
+    color: 0x2a3038, roughness: 0.55, metalness: 0.35,
+    transparent: true, opacity: 0.20, depthWrite: false, side: THREE.DoubleSide
+  }),
+  shellSolid: new THREE.MeshStandardMaterial({
+    color: 0x30363e, roughness: 0.5, metalness: 0.45
+  }),
+  shellTrim: new THREE.MeshStandardMaterial({
+    color: 0x3c434c, roughness: 0.5, metalness: 0.5
+  }),
+  shellEdge: new THREE.MeshStandardMaterial({
+    color: 0x565e68, roughness: 0.5, metalness: 0.55
+  }),
+  skid: new THREE.MeshStandardMaterial({
+    color: 0x8a8a90, roughness: 0.7, metalness: 0.5
+  }),
+  skidDark: new THREE.MeshStandardMaterial({
+    color: 0x3a3a40, roughness: 0.75, metalness: 0.4
+  }),
+  galv: new THREE.MeshStandardMaterial({
+    color: 0xb0b4b8, roughness: 0.5, metalness: 0.7
+  }),
+  galvDark: new THREE.MeshStandardMaterial({
+    color: 0x6a6e74, roughness: 0.55, metalness: 0.65
+  }),
+  ductBody: new THREE.MeshStandardMaterial({
+    color: 0x6a6e74, roughness: 0.55, metalness: 0.65,
+    transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide
+  }),
+  black: new THREE.MeshStandardMaterial({
+    color: 0x1e1e22, roughness: 0.38, metalness: 0.85
+  }),
+  blackMatte: new THREE.MeshStandardMaterial({
+    color: 0x15151a, roughness: 0.75, metalness: 0.3
+  }),
+  grille: new THREE.MeshStandardMaterial({
+    color: 0x0a0a0e, roughness: 0.85, metalness: 0.2
+  }),
+  copper: new THREE.MeshStandardMaterial({
+    color: 0xb87333, roughness: 0.32, metalness: 0.92
+  }),
+  copperDark: new THREE.MeshStandardMaterial({
+    color: 0x7a4a1f, roughness: 0.45, metalness: 0.85
+  }),
+  aluminum: new THREE.MeshStandardMaterial({
+    color: 0xc0c4c8, roughness: 0.35, metalness: 0.9, side: THREE.DoubleSide
+  }),
+  aluminumBright: new THREE.MeshStandardMaterial({
+    color: 0xd8dce0, roughness: 0.25, metalness: 0.95
+  }),
+  coilFace: new THREE.MeshStandardMaterial({
+    color: 0x4a6878, roughness: 0.68, metalness: 0.55
+  }),
+  rubber: new THREE.MeshStandardMaterial({
+    color: 0x18181c, roughness: 0.9, metalness: 0.05
+  }),
+  filter: new THREE.MeshStandardMaterial({
+    color: 0xd0c090, roughness: 0.95, metalness: 0.02
+  }),
+  insulation: new THREE.MeshStandardMaterial({
+    color: 0x8b909a, roughness: 0.95, metalness: 0.0
+  }),
+  plate: new THREE.MeshStandardMaterial({
+    color: 0x2a2f36, roughness: 0.5, metalness: 0.6
+  }),
+  bolt: new THREE.MeshStandardMaterial({
+    color: 0x40444a, roughness: 0.4, metalness: 0.85
+  }),
+  accent: new THREE.MeshStandardMaterial({
+    color: 0x00d4aa, roughness: 0.4, metalness: 0.4,
+    emissive: 0x00d4aa, emissiveIntensity: 0.6
+  })
+};
+
+// ============================================================
+// UTILITIES (reused from reference)
+// ============================================================
+function box(w,h,d, mat, x,y,z) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.position.set(x,y,z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+function panel(w,h,d, mat, x,y,z) {
+  const m = box(w,h,d, mat, x,y,z);
+  m.castShadow = false;
+  return m;
+}
+function tube(p0, p1, r, mat, radialSegs=10) {
+  const dir = new THREE.Vector3().subVectors(p1,p0);
+  const len = dir.length();
+  const g = new THREE.CylinderGeometry(r, r, len, radialSegs);
+  const m = new THREE.Mesh(g, mat);
+  m.position.copy(p0).add(dir.multiplyScalar(0.5));
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+
+const root = new THREE.Group();
+scene.add(root);
+
+// Waypoint-based pipe run with elbow-sphere joints (reused from reference)
+function pipeRun(waypoints, r, mat, jointScale) {
+  const group = new THREE.Group();
+  const jR = r * (jointScale || 1.18);
+  const pts = waypoints.map(p => new THREE.Vector3(p[0], p[1], p[2]));
+  pts.forEach(p => {
+    const s = new THREE.Mesh(new THREE.SphereGeometry(jR, 12, 8), mat);
+    s.position.copy(p);
+    s.castShadow = true;
+    group.add(s);
+  });
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i+1];
+    const dir = new THREE.Vector3().subVectors(b, a);
+    const len = dir.length();
+    if (len < 0.01) continue;
+    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 12), mat);
+    cyl.position.copy(a).add(dir.clone().multiplyScalar(0.5));
+    cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
+    cyl.castShadow = true;
+    group.add(cyl);
+  }
+  root.add(group);
+  return group;
+}
+
+// Billboard text label (canvas texture sprite) — self-contained
+function makeLabel(text, color, wWorld, hWorld) {
+  const cw = 512, ch = 128;
+  const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(6,8,13,0.82)';
+  ctx.fillRect(0,0,cw,ch);
+  ctx.strokeStyle = color; ctx.lineWidth = 5;
+  ctx.strokeRect(4,4,cw-8,ch-8);
+  ctx.font = 'bold 58px JetBrains Mono, monospace';
+  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, cw/2, ch/2 + 4);
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 4; tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+  const sp = new THREE.Sprite(mat);
+  sp.scale.set(wWorld, hWorld, 1);
+  return sp;
+}
+
+// ============================================================
+// LAYOUT CONSTANTS
+// ============================================================
+// CRAC / evaporator (interior) on the LEFT (-X). Front (cut-away) faces -Z.
+const CRAC = { cx:-50, w:22, h:42, d:20 };
+CRAC.x0 = CRAC.cx - CRAC.w/2;  CRAC.x1 = CRAC.cx + CRAC.w/2;
+CRAC.z0 = -CRAC.d/2;           CRAC.z1 = CRAC.d/2;
+
+// Condenser / packaged unit (exterior) on the RIGHT (+X).
+const COND = { cx:50, w:32, h:24, d:26 };
+COND.x0 = COND.cx - COND.w/2;  COND.x1 = COND.cx + COND.w/2;
+COND.z0 = -COND.d/2;           COND.z1 = COND.d/2;
+
+// ============================================================
+// INTERIOR / EXTERIOR DIVIDER WALL (at X = 0) with pipe penetration
+// ============================================================
+(function buildDividerWall() {
+  const wallMat = new THREE.MeshStandardMaterial({
+    color: 0x141a22, roughness: 0.9, metalness: 0.1,
+    transparent: true, opacity: 0.38, depthWrite: false, side: THREE.DoubleSide
+  });
+  const WZ0 = -38, WZ1 = 38, WH = 48, T = 1.0;
+  // Penetration hole: z in [-6,6], y in [3,15]
+  const hz0 = -6, hz1 = 6, hy0 = 3, hy1 = 15;
+  // Left of hole (z < hz0)
+  root.add(panel((hz0 - WZ0), WH, T, wallMat, 0, WH/2, (WZ0 + hz0)/2).rotateY(Math.PI/2));
+  // Right of hole (z > hz1)
+  root.add(panel((WZ1 - hz1), WH, T, wallMat, 0, WH/2, (hz1 + WZ1)/2).rotateY(Math.PI/2));
+  // Below hole
+  root.add(panel((hz1 - hz0), hy0, T, wallMat, 0, hy0/2, (hz0 + hz1)/2).rotateY(Math.PI/2));
+  // Above hole
+  root.add(panel((hz1 - hz0), (WH - hy1), T, wallMat, 0, (hy1 + WH)/2, (hz0 + hz1)/2).rotateY(Math.PI/2));
+  // Sleeve frame around penetration
+  const frameMat = M.shellEdge;
+  root.add(box(T + 0.4, 0.5, (hz1 - hz0) + 1, frameMat, 0, hy0, 0));
+  root.add(box(T + 0.4, 0.5, (hz1 - hz0) + 1, frameMat, 0, hy1, 0));
+  root.add(box(T + 0.4, (hy1 - hy0), 0.5, frameMat, 0, (hy0 + hy1)/2, hz0));
+  root.add(box(T + 0.4, (hy1 - hy0), 0.5, frameMat, 0, (hy0 + hy1)/2, hz1));
+  // Ground labels
+  const li = makeLabel('INTERIOR · SALA DE DATOS', '#00d4aa', 34, 8.5);
+  li.position.set(-50, 4.5, -16); root.add(li);
+  const le = makeLabel('EXTERIOR', '#7a8a98', 16, 8);
+  le.position.set(50, 4.5, -20); root.add(le);
+})();
+
+// ============================================================
+// SHARED COIL BUILDERS
+// ============================================================
+// Finned evaporator coil: fins face X (thin in X), you see fin edges as
+// vertical lines from the front; copper tubes run along X with U-bends.
+function finnedCoilX(cx, yc, zc, cw, ch, cd, finCount) {
+  // Frame posts
+  const post = (x,z) => root.add(box(0.35, ch, 0.35, M.galvDark, x, yc, z));
+  post(cx - cw/2, zc - cd/2); post(cx - cw/2, zc + cd/2);
+  post(cx + cw/2, zc - cd/2); post(cx + cw/2, zc + cd/2);
+  root.add(box(cw, 0.35, cd, M.galvDark, cx, yc - ch/2, zc));
+  root.add(box(cw, 0.35, cd, M.galvDark, cx, yc + ch/2, zc));
+  // Aluminum fins (planes facing X, stacked along X)
+  const gap = cw / finCount;
+  for (let i = 0; i < finCount; i++) {
+    const x = cx - cw/2 + gap*i + gap/2;
+    const fin = new THREE.Mesh(new THREE.PlaneGeometry(cd - 0.3, ch - 0.5), M.aluminum);
+    fin.position.set(x, yc, zc);
+    fin.rotation.y = Math.PI/2;
+    fin.receiveShadow = true;
+    root.add(fin);
+  }
+  // Bluish coil face plates (front & back)
+  root.add(panel(cw - 0.2, ch - 0.4, 0.14, M.coilFace, cx, yc, zc - cd/2 + 0.08));
+  root.add(panel(cw - 0.2, ch - 0.4, 0.14, M.coilFace, cx, yc, zc + cd/2 - 0.08));
+  // Copper tubes running along X, rows in Y, U-bends alternating on ends
+  const rows = 6;
+  for (let r = 0; r < rows; r++) {
+    const y = yc - ch/2 + (r + 0.5) * (ch / rows);
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, cw + 0.8, 12), M.copper);
+    t.rotation.z = Math.PI/2;
+    t.position.set(cx, y, zc);
+    t.castShadow = true;
+    root.add(t);
+    if (r < rows - 1) {
+      const nextY = yc - ch/2 + (r + 1.5) * (ch / rows);
+      const midY = (y + nextY)/2;
+      const side = (r % 2 === 0) ? (cx + cw/2 + 0.4) : (cx - cw/2 - 0.4);
+      const ub = new THREE.Mesh(
+        new THREE.TorusGeometry((nextY - y)/2, 0.26, 8, 16, Math.PI), M.copper);
+      ub.position.set(side, midY, zc);
+      ub.rotation.z = (r % 2 === 0) ? -Math.PI/2 : Math.PI/2;
+      root.add(ub);
+    }
+  }
+}
+
+// Condenser wall coil, thin in X (vertical side coil). Ribbed aluminum face.
+function condWallX(x, yc, zc, ly, lz) {
+  root.add(box(0.5, ly, lz, M.coilFace, x, yc, zc));
+  const fins = 16;
+  for (let i = 0; i <= fins; i++) {
+    const y = yc - ly/2 + i * (ly/fins);
+    root.add(box(0.7, 0.11, lz + 0.05, M.aluminumBright, x, y, zc));
+  }
+  // corner frame
+  for (const dz of [-lz/2, lz/2]) root.add(box(0.7, ly, 0.5, M.shellEdge, x, yc, zc + dz));
+}
+// Condenser wall coil, thin in Z (back coil).
+function condWallZ(cx, yc, z, lx, ly) {
+  root.add(box(lx, ly, 0.5, M.coilFace, cx, yc, z));
+  const fins = 16;
+  for (let i = 0; i <= fins; i++) {
+    const y = yc - ly/2 + i * (ly/fins);
+    root.add(box(lx + 0.05, 0.11, 0.7, M.aluminumBright, cx, y, z));
+  }
+  for (const dx of [-lx/2, lx/2]) root.add(box(0.5, ly, 0.7, M.shellEdge, cx + dx, yc, z));
+}
+
+// ============================================================
+// CRAC UNIT (HVAC-01) — indoor evaporator, downflow/upflow cut-away
+// ============================================================
+const blowerGroup = new THREE.Group();
+const blowerWheelMat = new THREE.MeshStandardMaterial({
+  color: 0x3aa6ff, roughness: 0.38, metalness: 0.7,
+  emissive: 0x3aa6ff, emissiveIntensity: 0.35
+});
+
+(function buildCRAC() {
+  const { cx, w, h, d, x0, x1, z0, z1 } = CRAC;
+
+  // ---- Skid / base ----
+  root.add(box(w + 1.4, 1.4, d + 1.4, M.skid, cx, 0.7, 0));
+  for (const oz of [z0 + 1, z1 - 1]) root.add(box(w + 1.4, 1.0, 0.9, M.skidDark, cx, 1.7, oz));
+  root.add(box(w + 1.4, 0.5, 0.6, M.grille, cx, 0.5, z0 + 4)); // forklift slot hint
+
+  // ---- Semi-transparent shell (back + sides + roof), front open ----
+  root.add(panel(w, h, 0.5, M.shell, cx, h/2 + 1.4, z1 - 0.25));           // back wall
+  root.add(panel(0.5, h, d, M.shell, x0 + 0.25, h/2 + 1.4, 0));            // left side
+  root.add(panel(0.5, h, d, M.shell, x1 - 0.25, h/2 + 1.4, 0));            // right side
+  root.add(panel(w + 0.5, 0.6, d + 0.5, M.shellTrim, cx, h + 1.4, 0));     // roof
+
+  // Vertical corner posts
+  for (const px of [x0, x1]) for (const pz of [z0, z1]) {
+    root.add(box(0.6, h, 0.6, M.shellEdge, px, h/2 + 1.4, pz));
+  }
+  // Front top rail + control display
+  root.add(box(w, 0.7, 0.6, M.shellTrim, cx, h + 0.8, z0));
+  root.add(panel(7, 4, 0.3, M.plate, cx + 4, h - 5, z0 - 0.1));
+  root.add(panel(5.5, 2.6, 0.15, M.accent, cx + 4, h - 5, z0 - 0.3)); // teal display
+  // Accent brand bar
+  root.add(panel(w - 4, 0.5, 0.2, M.accent, cx, h - 1.5, z0 - 0.1));
+
+  // ---- Lower front RETURN grille (warm air intake) ----
+  const grH = 12;
+  root.add(panel(w - 3, grH, 0.3, M.grille, cx, grH/2 + 2, z0 + 0.1));
+  for (let i = 0; i < 9; i++) {
+    root.add(box(w - 3.5, 0.28, 0.25, M.shellEdge, cx, 3 + i * 1.25, z0 + 0.02));
+  }
+
+  // ---- Top SUPPLY discharge grille (cold air out) ----
+  root.add(panel(w - 4, 0.3, d - 4, M.grille, cx, h + 1.7, 0));
+  for (let i = 0; i < 7; i++) {
+    root.add(box(w - 4.5, 0.2, 0.22, M.shellEdge, cx, h + 1.85, -8 + i * 2.6));
+  }
+
+  // ---- Filter rack (behind grille, before coil) ----
+  root.add(box(w - 6, 16, 1.6, M.filter, cx, 15, z0 + 3));
+  root.add(box(w - 5.6, 0.3, 1.7, M.galvDark, cx, 7, z0 + 3));
+  root.add(box(w - 5.6, 0.3, 1.7, M.galvDark, cx, 23, z0 + 3));
+  for (let i = 1; i < 9; i++) {
+    root.add(box(0.05, 15.6, 1.7, M.aluminum, cx - 8 + i * 1.8, 15, z0 + 3));
+  }
+
+  // ---- EVAPORATOR COIL (finned, hero cut-away element) ----
+  const coilZ = z0 + 7;   // -3
+  finnedCoilX(cx, 20, coilZ, w - 6, 20, 4, 40);
+
+  // ---- Condensate drain pan below coil ----
+  root.add(box(w - 4, 0.5, 6, M.galv, cx, 9.4, coilZ));
+  const drain = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 6, 10), M.blackMatte);
+  drain.position.set(cx - 6, 7, z1 - 2);
+  drain.rotation.x = Math.PI/2;
+  root.add(drain);
+
+  // ---- TXV (expansion valve) at coil top-left ----
+  root.add(box(1.2, 1.6, 1.2, M.copper, cx - 6, 30, coilZ));
+  // TXV sensing bulb on suction header
+  root.add(box(0.35, 0.35, 1.5, M.copper, cx, 11, coilZ + 1.5));
+
+  // ---- CENTRIFUGAL BLOWER (draws through coil, discharges up) ----
+  const bx = cx, by = 34, bz = 2;
+  const scrollR = 6, scrollDepth = 8;
+  // Scroll housing back disk + partial ring
+  const backDisk = new THREE.Mesh(
+    new THREE.CylinderGeometry(scrollR, scrollR, 0.3, 32), M.galv);
+  backDisk.position.set(bx, by, bz + scrollDepth/2);
+  backDisk.rotation.x = Math.PI/2;
+  root.add(backDisk);
+  const frontRing = new THREE.Mesh(new THREE.RingGeometry(scrollR - 0.8, scrollR, 32), M.galvDark);
+  frontRing.position.set(bx, by, bz - scrollDepth/2);
+  root.add(frontRing);
+  const scroll = new THREE.Mesh(
+    new THREE.TorusGeometry(scrollR, 1.1, 12, 32, Math.PI * 1.4), M.galvDark);
+  scroll.position.set(bx, by, bz);
+  root.add(scroll);
+  // Wheel (squirrel cage) — spins around Z
+  const hub = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.2, 1.2, scrollDepth - 1, 16),
+    new THREE.MeshStandardMaterial({ color: 0x55555c, roughness: 0.4, metalness: 0.85 }));
+  hub.rotation.x = Math.PI/2;
+  blowerGroup.add(hub);
+  const BLADES = 26, bladeR = scrollR - 2;
+  const bladeGeo = new THREE.BoxGeometry(0.7, 0.22, scrollDepth - 1.2);
+  for (let i = 0; i < BLADES; i++) {
+    const a = (i / BLADES) * Math.PI * 2;
+    const blade = new THREE.Mesh(bladeGeo, blowerWheelMat);
+    blade.position.set(Math.cos(a) * bladeR, Math.sin(a) * bladeR, 0);
+    blade.rotation.z = a + Math.PI/2 + 0.25;
+    blowerGroup.add(blade);
+  }
+  for (const z of [-(scrollDepth-2)/2, (scrollDepth-2)/2]) {
+    const rimR = new THREE.Mesh(
+      new THREE.TorusGeometry(bladeR + 0.2, 0.16, 6, 32),
+      new THREE.MeshStandardMaterial({ color: 0x55555c, roughness: 0.4, metalness: 0.9 }));
+    rimR.position.set(0, 0, z);
+    blowerGroup.add(rimR);
+  }
+  blowerGroup.position.set(bx, by, bz);
+  blowerGroup.traverse(o => o.castShadow = false); // animated -> excluded from baked shadows
+  root.add(blowerGroup);
+  // Blower motor (side)
+  const motor = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.8, 1.8, 4, 18),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.5, metalness: 0.7 }));
+  motor.rotation.z = Math.PI/2;
+  motor.position.set(cx + scrollR + 2.5, by - 1, bz);
+  root.add(motor);
+  root.add(box(1.3, 1.3, 1.1, M.black, cx + scrollR + 2.5, by + 1, bz - 0.3));
+
+  // Internal partition baffle between filter zone and blower plenum
+  root.add(panel(w - 2, 0.3, d - 4, M.galv, cx, 27, 2));
+
+  // ---- Label ----
+  const lbl = makeLabel('HVAC-01', '#00d4aa', 18, 4.6);
+  lbl.position.set(cx, h + 8, 0);
+  root.add(lbl);
+})();
+
+// ============================================================
+// COMPRESSOR (state-reactive) — reused pattern from reference
+// ============================================================
+const compressorStates = [];  // emissive materials + point light per compressor
+const compTops = [];          // vibration groups
+function buildCompressor(cx, cz, floorY) {
+  const baseY = floorY;
+  root.add(box(9, 0.8, 9, M.blackMatte, cx, baseY + 0.4, cz));
+  for (const ox of [-3, 3]) for (const oz of [-3, 3]) {
+    const iso = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.65, 0.9, 10), M.rubber);
+    iso.position.set(cx + ox, baseY + 0.9, cz + oz);
+    root.add(iso);
+  }
+  const bodyR = 3.3, bodyH = 10;
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(bodyR, bodyR, bodyH, 28), M.black);
+  body.position.set(cx, baseY + 1.3 + bodyH/2, cz);
+  body.castShadow = true;
+  root.add(body);
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(bodyR, 24, 12, 0, Math.PI*2, 0, Math.PI/2), M.black);
+  dome.position.set(cx, baseY + 1.3 + bodyH, cz);
+  root.add(dome);
+  const flange = new THREE.Mesh(
+    new THREE.CylinderGeometry(bodyR + 0.6, bodyR + 0.6, 0.6, 28),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.5, metalness: 0.8 }));
+  flange.position.set(cx, baseY + 1.3, cz);
+  root.add(flange);
+  // Terminal junction box (front)
+  root.add(box(2, 2.4, 1.2, M.galv, cx, baseY + 1.3 + bodyH*0.55, cz - bodyR - 0.6));
+
+  // ---- State-reactive emissive elements ----
+  const mk = (int) => new THREE.MeshStandardMaterial({
+    color: 0x3aa6ff, emissive: 0x3aa6ff, emissiveIntensity: int,
+    roughness: 0.35, metalness: 0.35 });
+  const labelMat = mk(0.9);
+  const label = new THREE.Mesh(
+    new THREE.CylinderGeometry(bodyR + 0.02, bodyR + 0.02, 1.8, 28, 1, true), labelMat);
+  label.position.set(cx, baseY + 1.3 + bodyH*0.35, cz);
+  root.add(label);
+  const glowRingMat = mk(1.4);
+  const glowRing = new THREE.Mesh(
+    new THREE.CylinderGeometry(bodyR + 0.04, bodyR + 0.04, 0.5, 28, 1, true), glowRingMat);
+  glowRing.position.set(cx, baseY + 1.3 + bodyH*0.78, cz);
+  root.add(glowRing);
+  const stripeMat = mk(1.6);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.2, bodyH - 2.5, 0.15), stripeMat);
+  stripe.position.set(cx, baseY + 1.3 + bodyH/2, cz - bodyR - 0.08);
+  root.add(stripe);
+  const baseGlowMat = mk(1.1);
+  const baseGlow = new THREE.Mesh(new THREE.TorusGeometry(bodyR + 0.5, 0.18, 8, 32), baseGlowMat);
+  baseGlow.rotation.x = Math.PI/2;
+  baseGlow.position.set(cx, baseY + 1.55, cz);
+  root.add(baseGlow);
+  const compLight = new THREE.PointLight(0x3aa6ff, 1.0, 20);
+  compLight.position.set(cx, baseY + 1.3 + bodyH*0.6, cz);
+  root.add(compLight);
+  compressorStates.push({ labelMat, glowRingMat, stripeMat, baseGlowMat, compLight });
+
+  // Vibration top group
+  const topGroup = new THREE.Group();
+  topGroup.position.set(cx, baseY + 1.3 + bodyH + 0.05, cz);
+  for (let i = 0; i < 8; i++) {
+    const a = (i/8) * Math.PI*2;
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.4, 6), M.bolt);
+    b.position.set(Math.cos(a)*(bodyR-0.4), 0, Math.sin(a)*(bodyR-0.4));
+    topGroup.add(b);
+  }
+  root.add(topGroup);
+  compTops.push({ group: topGroup, baseY: baseY + 1.3 + bodyH + 0.05 });
+
+  return { bodyR, portY: baseY + 1.3 + bodyH };
+}
+
+// ============================================================
+// CONDENSER FANS (axial, twisted scimitar blades) — reused
+// ============================================================
+const fanGroups = [];
+const fanMats = [];
+function makeAeroBlade() {
+  const shape = new THREE.Shape();
+  shape.moveTo(0.5, -0.30);
+  shape.quadraticCurveTo(1.6, -0.75, 3.1, -0.55);
+  shape.quadraticCurveTo(3.9, -0.35, 4.15, 0.05);
+  shape.quadraticCurveTo(4.25, 0.38, 3.85, 0.58);
+  shape.quadraticCurveTo(2.8, 0.88, 1.4, 0.55);
+  shape.quadraticCurveTo(0.8, 0.35, 0.5, 0.20);
+  shape.closePath();
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.2, bevelEnabled: true, bevelSegments: 2,
+    bevelSize: 0.04, bevelThickness: 0.04, steps: 1 });
+  geo.translate(0, 0, -0.1);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const tP = Math.max(0, Math.min(1, (x - 0.5) / 3.7));
+    const twist = 0.70 - tP * 0.48;
+    const cy = y * Math.cos(twist) - z * Math.sin(twist);
+    const cz = y * Math.sin(twist) + z * Math.cos(twist);
+    pos.setXYZ(i, x, cy, cz);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+const aeroBladeGeo = makeAeroBlade();
+
+function makeCondenserFan(cx, cz, topY) {
+  const fanY = topY + 1.6;
+  const shroud = new THREE.Mesh(
+    new THREE.CylinderGeometry(6, 6, 1.8, 28, 1, true), M.galv);
+  shroud.position.set(cx, fanY, cz);
+  shroud.castShadow = true;
+  root.add(shroud);
+  const lip = new THREE.Mesh(new THREE.TorusGeometry(6, 0.35, 8, 32), M.galvDark);
+  lip.position.set(cx, fanY + 0.95, cz);
+  lip.rotation.x = Math.PI/2;
+  root.add(lip);
+  for (const r of [2, 3.7, 5.4]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.08, 4, 24), M.bolt);
+    ring.position.set(cx, fanY + 1.3, cz);
+    ring.rotation.x = Math.PI/2;
+    root.add(ring);
+  }
+  for (let i = 0; i < 8; i++) {
+    const a = (i/8) * Math.PI*2;
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 11), M.bolt);
+    spoke.rotation.y = a;
+    spoke.position.set(cx, fanY + 1.3, cz);
+    root.add(spoke);
+  }
+  const g = new THREE.Group();
+  g.position.set(cx, fanY - 0.1, cz);
+  const bladeMat = new THREE.MeshStandardMaterial({
+    color: 0x3aa6ff, roughness: 0.4, metalness: 0.65,
+    emissive: 0x3aa6ff, emissiveIntensity: 0.35, side: THREE.DoubleSide });
+  const fhub = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.1, 1.3, 1.2, 16),
+    new THREE.MeshStandardMaterial({ color: 0x45454a, roughness: 0.4, metalness: 0.85 }));
+  g.add(fhub);
+  const BLADES = 6, scale = 1.25;
+  for (let i = 0; i < BLADES; i++) {
+    const a = (i/BLADES) * Math.PI*2;
+    const blade = new THREE.Mesh(aeroBladeGeo, bladeMat);
+    blade.rotation.y = a;
+    blade.scale.set(scale, scale, scale);
+    g.add(blade);
+  }
+  g.traverse(o => o.castShadow = false);
+  root.add(g);
+  fanGroups.push(g);
+  fanMats.push(bladeMat);
+}
+
+// ============================================================
+// CONDENSER UNIT (UNIDAD PAQUETE) — outdoor condensing unit
+// ============================================================
+let condPorts;
+(function buildCondenser() {
+  const { cx, w, h, d, x0, x1, z0, z1 } = COND;
+
+  // ---- Skid / base ----
+  root.add(box(w + 1.6, 1.4, d + 1.6, M.skid, cx, 0.7, 0));
+  for (const oz of [z0 + 1, z1 - 1]) root.add(box(w + 1.6, 1.0, 0.9, M.skidDark, cx, 1.7, oz));
+
+  // ---- Vertical corner posts + top rail frame ----
+  for (const px of [x0, x1]) for (const pz of [z0, z1]) {
+    root.add(box(0.7, h, 0.7, M.shellEdge, px, h/2 + 1.4, pz));
+  }
+  // Top deck (fans sit here)
+  root.add(box(w - 1, 0.7, d - 1, M.galvDark, cx, h + 1.4, 0));
+  for (const px of [x0 + 3, x1 - 3]) root.add(box(0.7, 2, d - 2, M.galvDark, px, h + 0.6, 0));
+
+  // ---- Condensing coils: left (-X faces interior), right (+X), back (+Z) ----
+  condWallX(x0 + 0.3, h/2 - 1, 0, h - 6, d - 4);
+  condWallX(x1 - 0.3, h/2 - 1, 0, h - 6, d - 4);
+  condWallZ(cx, h/2 - 1, z1 - 0.3, w - 4, h - 6);
+  // Louver band above coils (translucent shell)
+  for (const px of [x0 + 0.25, x1 - 0.25]) root.add(panel(0.4, 3, d - 3, M.shell, px, h - 1, 0));
+  root.add(panel(w - 3, 3, 0.4, M.shell, cx, h - 1, z1 - 0.25));
+
+  // ---- Front frame (open for compressor cut-away) ----
+  root.add(box(w, 0.7, 0.6, M.shellTrim, cx, h + 0.9, z0));
+  root.add(box(0.6, h, 0.6, M.shellEdge, x0 + 3, h/2 + 1.4, z0));
+  root.add(box(0.6, h, 0.6, M.shellEdge, x1 - 3, h/2 + 1.4, z0));
+  // Accent brand bar
+  root.add(panel(w - 6, 0.5, 0.2, M.accent, cx, h - 1.2, z0 - 0.1));
+
+  // ---- Interior floor plate ----
+  root.add(box(w - 3, 0.3, d - 3, M.galvDark, cx, 1.5, 0));
+
+  // ---- SCROLL COMPRESSOR (state-reactive) ----
+  const compX = cx - 4, compZ = z0 + 6;
+  const comp = buildCompressor(compX, compZ, 1.5);
+
+  // ---- Electrical/control box on right ----
+  root.add(box(4, 7, 3, M.galv, x1 - 3, 9, z0 + 4));
+  root.add(box(0.15, 1.5, 0.3, M.bolt, x1 - 3, 9, z0 + 2.4));
+
+  // ---- Discharge line: compressor -> back condenser coil (internal, hot copper) ----
+  const dPort = compX + comp.bodyR - 0.6;
+  pipeRun([
+    [dPort, comp.portY - 0.5, compZ],
+    [dPort, comp.portY + 3, compZ],
+    [dPort + 3, h - 4, compZ + 6],
+    [cx + 4, h - 4, z1 - 2],
+    [cx + 6, h - 6, z1 - 1]
+  ], 0.3, M.copper);
+
+  // ---- Liquid & suction ports on -X side (toward interior/CRAC) ----
+  condPorts = {
+    liquidOut: [x0 + 2, 5, 3],                        // from coil bottom, low
+    suctionIn: [compX - comp.bodyR + 0.6, comp.portY - 1.5, compZ]  // compressor suction
+  };
+  // Liquid line short stub from left coil bottom out through side
+  pipeRun([
+    [x0 + 0.5, 6, 3], [x0 + 2, 5.5, 3], condPorts.liquidOut
+  ], 0.22, M.copper);
+  // Suction stub from compressor suction port toward -X
+  pipeRun([
+    condPorts.suctionIn, [compX - comp.bodyR - 1, comp.portY - 1.5, compZ]
+  ], 0.55, M.insulation);
+
+  // ---- Label ----
+  const lbl = makeLabel('UNIDAD PAQUETE', '#00d4aa', 30, 5.2);
+  lbl.position.set(cx, h + 9, 0);
+  root.add(lbl);
+
+  // ---- Two axial fans on top ----
+  makeCondenserFan(cx - 8, 0, h + 1.4);
+  makeCondenserFan(cx + 8, 0, h + 1.4);
+})();
+
+// ============================================================
+// REFRIGERANT INTERCONNECTING LINES (CRAC <-> CONDENSER)
+// Cross the interior/exterior divider wall through the penetration.
+// ============================================================
+(function buildInterconnect() {
+  const glassMat = new THREE.MeshPhysicalMaterial({
+    color: 0x88ccff, transmission: 0.75, roughness: 0.05,
+    metalness: 0.15, thickness: 0.5, ior: 1.45 });
+
+  // CRAC anchor points
+  const cracTXV   = [CRAC.cx - 6, 30, CRAC.z0 + 7];     // TXV inlet (top of evap)
+  const cracSuct  = [CRAC.cx, 11, CRAC.z0 + 7];         // suction header (bottom of evap)
+  const cracRight = CRAC.x1;                             // -39
+
+  // -------- LIQUID LINE (thin copper): condenser liquid out -> CRAC TXV --------
+  pipeRun([
+    condPorts.liquidOut,          // [34,5,3]
+    [30, 5, 3],
+    [18, 5, 1],
+    [4, 5, 0],
+    [0, 5, 0],                     // wall penetration
+    [-16, 5, 0],
+    [-30, 5, -2],
+    [cracRight, 5, -3],           // enter CRAC (-39)
+    [-45, 6, -3],
+    [-48, 16, -3],
+    [CRAC.cx, 27, CRAC.z0 + 7],
+    cracTXV
+  ], 0.22, M.copper);
+  // Filter drier inline (exterior side)
+  const drier = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 3.4, 16), M.copperDark);
+  drier.rotation.z = Math.PI/2;
+  drier.position.set(24, 5, 2);
+  drier.castShadow = true;
+  root.add(drier);
+  for (const dx of [-1.7, 1.7]) {
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.35, 12), M.bolt);
+    cap.rotation.z = Math.PI/2;
+    cap.position.set(24 + dx, 5, 2);
+    root.add(cap);
+  }
+  // Sight glass (interior side)
+  const sg = new THREE.Mesh(new THREE.SphereGeometry(0.44, 14, 10), glassMat);
+  sg.position.set(-16, 5, 0);
+  root.add(sg);
+
+  // -------- SUCTION LINE (thick, insulated): CRAC evap -> condenser compressor --------
+  pipeRun([
+    cracSuct,                     // [-50,11,-3]
+    [-48, 10, -2],
+    [-42, 9, -1],
+    [cracRight, 9, 0],            // exit CRAC (-39)
+    [-28, 9, 0],
+    [-12, 9, 0],
+    [0, 9, 0],                    // wall penetration
+    [14, 9, -1],
+    [30, 10, -2],
+    [40, 11, -3],
+    condPorts.suctionIn
+  ], 0.6, M.insulation);
+  // Copper stub visible where insulation ends near CRAC port
+  root.add(tube(
+    new THREE.Vector3(CRAC.cx, 11, CRAC.z0 + 7),
+    new THREE.Vector3(CRAC.cx, 12.5, CRAC.z0 + 7),
+    0.34, M.copper, 12));
+
+  // -------- Pipe clamps / supports along the runs --------
+  function pipeClamp(x, y, z) {
+    root.add(box(0.25, 0.7, 1.1, M.galvDark, x, y, z));
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.4, 6), M.bolt);
+    rod.position.set(x, y + 1.0, z);
+    root.add(rod);
+  }
+  pipeClamp(18, 5.8, 1);
+  pipeClamp(-28, 5.8, 0);
+  pipeClamp(-24, 9.8, 0);
+  pipeClamp(30, 10.8, -2);
+})();
+
+// ============================================================
+// STATUS LEDs (compressor + fan indicators)
+// ============================================================
+const ledMats = [];
+function makeLed(cx, cy, cz) {
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x3aa6ff, emissive: 0x3aa6ff, emissiveIntensity: 1.3,
+    roughness: 0.3, metalness: 0.3 });
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 8), mat);
+  led.position.set(cx, cy, cz);
+  root.add(led);
+  const pl = new THREE.PointLight(0x3aa6ff, 0.8, 9);
+  pl.position.copy(led.position);
+  root.add(pl);
+  ledMats.push({ mat, light: pl });
+}
+makeLed(COND.cx - 4, 15, COND.z0 - 0.3);   // compressor status LED
+makeLed(CRAC.cx + 4, 34, CRAC.z0 - 0.5);   // CRAC status LED
+
+// ============================================================
+// STATE MACHINE
+// ============================================================
+const COLOR_STANDBY = new THREE.Color(0x3aa6ff);
+const COLOR_ON      = new THREE.Color(0x00ff66);
+const COLOR_ALARM   = new THREE.Color(0xff2233);
+const colorFor = s => s==='on' ? COLOR_ON : s==='alarm' ? COLOR_ALARM : COLOR_STANDBY;
+const intensityFor = s => s==='on' ? 0.55 : s==='alarm' ? 0.7 : 0.4;
+const state = { comp:'standby', evap:'standby', cond:'standby' };
+
+function applyState() {
+  // CRAC blower wheel
+  blowerWheelMat.color.copy(colorFor(state.evap));
+  blowerWheelMat.emissive.copy(colorFor(state.evap));
+  blowerWheelMat.emissiveIntensity = intensityFor(state.evap);
+
+  // Condenser fan blades
+  fanMats.forEach(m => {
+    m.color.copy(colorFor(state.cond));
+    m.emissive.copy(colorFor(state.cond));
+    m.emissiveIntensity = intensityFor(state.cond);
+  });
+
+  // Compressor emissive elements
+  compressorStates.forEach(cs => {
+    const c = colorFor(state.comp), s = state.comp;
+    cs.labelMat.color.copy(c);      cs.labelMat.emissive.copy(c);
+    cs.labelMat.emissiveIntensity = s==='standby' ? 0.8 : 1.1;
+    cs.glowRingMat.color.copy(c);   cs.glowRingMat.emissive.copy(c);
+    cs.glowRingMat.emissiveIntensity = s==='on' ? 1.7 : s==='alarm' ? 1.5 : 1.3;
+    cs.stripeMat.color.copy(c);     cs.stripeMat.emissive.copy(c);
+    cs.stripeMat.emissiveIntensity = s==='on' ? 1.9 : 1.4;
+    cs.baseGlowMat.color.copy(c);   cs.baseGlowMat.emissive.copy(c);
+    cs.baseGlowMat.emissiveIntensity = s==='on' ? 1.5 : 1.1;
+    cs.compLight.color.copy(c);
+    cs.compLight.intensity = s==='on' ? 2.4 : s==='alarm' ? 2.0 : 1.0;
+  });
+
+  // LEDs: [0]=compressor, [1]=CRAC (evap)
+  const ledStates = [state.comp, state.evap];
+  ledMats.forEach((l, i) => {
+    const s = ledStates[i], c = colorFor(s);
+    l.mat.color.copy(c); l.mat.emissive.copy(c);
+    l.mat.emissiveIntensity = s==='standby' ? 1.2 : 1.7;
+    l.light.color.copy(c);
+    l.light.intensity = s==='standby' ? 0.8 : 1.4;
+  });
+}
+
+// ============================================================
+// UI CYCLE: STANDBY -> ON -> ALARM -> STANDBY
+// ============================================================
+const CYCLE = { standby:'on', on:'alarm', alarm:'standby' };
+function bind(id, key) {
+  const btn = document.getElementById(id);
+  btn.onclick = () => {
+    state[key] = CYCLE[state[key]];
+    btn.className = state[key];
+    btn.textContent = state[key].toUpperCase();
+    applyState();
+  };
+}
+bind('bComp','comp');
+bind('bEvap','evap');
+bind('bCond','cond');
+const bRot = document.getElementById('bRot');
+bRot.onclick = () => {
+  controls.autoRotate = !controls.autoRotate;
+  bRot.className = controls.autoRotate ? 'on' : 'off';
+  bRot.textContent = controls.autoRotate ? 'ON' : 'OFF';
+};
+
+applyState();
+
+// ============================================================
+// AIRFLOW PARTICLES
+// ============================================================
+const pGeo = new THREE.SphereGeometry(0.32, 6, 4);
+const mkParticles = (n, colorHex) => {
+  const arr = [];
+  const baseMat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.85 });
+  for (let i = 0; i < n; i++) {
+    const p = new THREE.Mesh(pGeo, baseMat.clone());
+    p.userData = { t: Math.random(), seed: Math.random()*10 };
+    root.add(p); arr.push(p);
+  }
+  return arr;
+};
+const returnP = mkParticles(40, 0xff5533);  // CRAC return (warm, in front-bottom)
+const supplyP = mkParticles(40, 0x44bbff);  // CRAC supply (cold, out top)
+const condP   = mkParticles(50, 0xff8a3a);  // condenser heat rejection (up through fans)
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ============================================================
+// ANIMATE
+// ============================================================
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t  = clock.elapsedTime;
+
+  if (state.evap === 'on') blowerGroup.rotation.z += dt * 7;
+  if (state.cond === 'on') fanGroups.forEach((g, i) => { g.rotation.y += dt * (9 + i*0.5); });
+
+  if (state.comp === 'on') {
+    compTops.forEach((ct, i) => {
+      ct.group.rotation.y += dt * 8;
+      ct.group.position.y = ct.baseY + Math.sin(t*30 + i)*0.08;
+    });
+  } else {
+    compTops.forEach(ct => { ct.group.position.y = ct.baseY; });
+  }
+
+  // Compressor illumination dynamics
+  compressorStates.forEach((cs, i) => {
+    if (state.comp === 'alarm') {
+      const pulse = 0.5 + Math.sin(t*5 + i)*0.5;
+      cs.stripeMat.emissiveIntensity = 0.9 + pulse * 1.0;
+      cs.glowRingMat.emissiveIntensity = 0.8 + pulse * 0.9;
+      cs.compLight.intensity = 1.2 + pulse * 1.2;
+    } else if (state.comp === 'on') {
+      const shimmer = 0.95 + Math.sin(t*12 + i*2)*0.08;
+      cs.compLight.intensity = 2.4 * shimmer;
+      cs.stripeMat.emissiveIntensity = 1.9 * shimmer;
+    }
+  });
+
+  // CRAC return air: front-bottom grille -> up through coil
+  returnP.forEach((p, i) => {
+    if (state.evap !== 'on') { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.16;
+    if (p.userData.t > 1) p.userData.t = 0;
+    const tt = p.userData.t, seed = p.userData.seed;
+    const xJit = ((i % 5) - 2) * 2.2;
+    const zStart = CRAC.z0 - 8;
+    if (tt < 0.35) {
+      const u = tt / 0.35;
+      p.position.x = CRAC.cx + xJit + Math.sin(u*4 + seed)*0.5;
+      p.position.y = 8 + Math.sin(u*5 + seed)*0.6;
+      p.position.z = zStart + u * (CRAC.z0 + 2 - zStart);
+    } else {
+      const u = (tt - 0.35) / 0.65;
+      p.position.x = CRAC.cx + xJit*0.8;
+      p.position.y = 8 + u * 20;                 // rise through coil
+      p.position.z = CRAC.z0 + 4 + Math.sin(u*4 + seed)*1.2;
+    }
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.85;
+  });
+
+  // CRAC supply air: out the top discharge
+  supplyP.forEach((p, i) => {
+    if (state.evap !== 'on') { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.2;
+    if (p.userData.t > 1) p.userData.t = 0;
+    const tt = p.userData.t, seed = p.userData.seed;
+    const xJit = ((i % 5) - 2) * 2.4;
+    const zJit = ((Math.floor(i/5) % 4) - 1.5) * 2.4;
+    p.position.x = CRAC.cx + xJit + Math.sin(tt*4 + seed)*0.4;
+    p.position.z = zJit;
+    p.position.y = CRAC.h + 2 + tt * 16;         // shoot up out of top grille
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.8;
+  });
+
+  // Condenser heat rejection: air rises up through the fans
+  condP.forEach((p, i) => {
+    if (state.cond !== 'on') { p.material.opacity = 0; return; }
+    p.userData.t += dt * 0.22;
+    if (p.userData.t > 1) p.userData.t = 0;
+    const tt = p.userData.t, seed = p.userData.seed;
+    const fanCx = (i % 2 === 0) ? COND.cx - 8 : COND.cx + 8;
+    const a = seed * Math.PI * 2;
+    const rad = 1 + (seed % 1) * 4;
+    p.position.x = fanCx + Math.cos(a) * rad * (1 - tt*0.3);
+    p.position.z = Math.sin(a) * rad * (1 - tt*0.3);
+    p.position.y = COND.h + 2 + tt * 22;         // rise above fans
+    p.material.opacity = Math.sin(tt*Math.PI) * 0.75;
+  });
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

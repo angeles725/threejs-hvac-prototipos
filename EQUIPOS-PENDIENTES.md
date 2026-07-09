@@ -378,8 +378,11 @@ SIN letrero de hotel — no incluir ningún cartel de texto.
 >   cable azul `#1565c0` / verde `#2e7d32`, cada 2.2 m.
 > — El renderer actual **NO tiene** PDU, dry cooler, tubería de agua roja/azul, ni contención física
 >   (solo franjas verdes en el piso) → esos prompts son mejoras genuinas hacia la foto objetivo.
+>
+> **Progreso: 7/7 entregados** ✅ — todos los equipos DATACENTER generados (D1–D7) y ubicados en su
+> carpeta `disenos/<equipo>/`.
 
-- [ ] **D1. Rack de servidores TI** → `disenos/server-rack/server-rack-voxel-v1.html`
+- [x] **D1. Rack de servidores TI** → ✅ `disenos/server-rack/rack-42u-voxel-v1.html` (claude.ai)
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un GABINETE RACK
@@ -404,7 +407,7 @@ Panel CONTROL DE EQUIPO: PUERTA ABRIR-CERRAR, CARGA TI (LO/HI — más LEDs acti
 más rápidos), FALLA SIMULADA (LED rojo parpadeante en un servidor), AUTO-ROTATE.
 ```
 
-- [ ] **D2. CRAC/CRAH de precisión** → `disenos/crac/crac-precision-voxel-v1.html`
+- [x] **D2. CRAC/CRAH de precisión** → ✅ `disenos/crac/crac-downflow-voxel.html` (+ variante `disenos/crac/datacenter-crac-condenser-v1.html`) (claude.ai)
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: una unidad de
@@ -425,7 +428,7 @@ Panel CONTROL DE EQUIPO: VENTILADORES ON-OFF (giro con inercia + partículas de 
 (oculta el panel frontal para ver serpentín y filtros), AGUA ON-OFF, AUTO-ROTATE.
 ```
 
-- [ ] **D3. Enfriador in-row** → `disenos/in-row/in-row-cooler-voxel-v1.html`
+- [x] **D3. Enfriador in-row** → ✅ `disenos/in-row/inrow-cooler-voxel.html` (claude.ai)
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un ENFRIADOR
@@ -443,7 +446,7 @@ Leyenda: Aire caliente (entrada) / Aire frío (salida) / Agua helada / Retorno.
 Panel CONTROL DE EQUIPO: VENTILADORES ON-OFF (velocidad variable), CORTE ON-OFF, AUTO-ROTATE.
 ```
 
-- [ ] **D4. PDU / distribución de energía** → `disenos/pdu/pdu-datacenter-voxel-v1.html`
+- [x] **D4. PDU / distribución de energía** → ✅ `disenos/pdu/pdu-datacenter-voxel-v1.html` (claude.ai)
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: una PDU de
@@ -464,7 +467,7 @@ Panel CONTROL DE EQUIPO: BREAKERS ON-OFF (grupo — cambia palancas y LEDs de ci
 AUTO-ROTATE.
 ```
 
-- [ ] **D5. Dry cooler (banco de condensadores)** → `disenos/dry-cooler/dry-cooler-voxel-v1.html`
+- [x] **D5. Dry cooler (banco de condensadores)** → ✅ `disenos/dry-cooler/dry-cooler-voxel-v1.html` (claude.ai)
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un DRY COOLER
@@ -484,7 +487,7 @@ Panel CONTROL DE EQUIPO: VENTILADORES ON-OFF (arranque escalonado por etapas con
 % CARGA TÉRMICA (25/50/75/100 — cuántos ventiladores activos), AUTO-ROTATE.
 ```
 
-- [ ] **D6. Kit de contención de pasillo** → `disenos/contencion-pasillo/contencion-pasillo-voxel-v1.html`
+- [x] **D6. Kit de contención de pasillo** → ✅ `disenos/contencion-pasillo/datacenter-pasillo-voxel.html` (claude.ai)
 
 ```
 Crea una ESCENA-KIT de VOXEL ART 3D en un solo archivo HTML standalone: un TRAMO DE PASILLO de
@@ -507,7 +510,7 @@ Panel CONTROL DE EQUIPO: PUERTAS CONTENCIÓN ABRIR-CERRAR, LUCES ON-OFF, FLUJO A
 (partículas en la tubería overhead), AUTO-ROTATE.
 ```
 
-- [ ] **D7. UPS + banco de baterías** → `disenos/ups/ups-voxel-v1.html`
+- [x] **D7. UPS + banco de baterías** → ✅ **OFICIAL: `disenos/ups/ups-40kva-voxel.html`** (claude.ai, elegido por el usuario). Alternativas propias: `disenos/ups/ups-voxel-v1.html` (cutaway) · `disenos/ups/ups-voxel-v2.html` (fusión).
 
 ```
 Crea una pieza de VOXEL ART 3D interactiva en un solo archivo HTML standalone: un UPS industrial
