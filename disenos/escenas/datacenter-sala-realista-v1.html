@@ -98,13 +98,14 @@ scene.background = new THREE.Color(0xdfe4ec);           // fondo claro de estudi
 scene.fog = new THREE.Fog(0xdfe4ec, 34, 120);           // niebla clara sutil (look producto)
 
 // ====== TEXTURAS PROCEDURALES (CanvasTexture, guardadas para headless) ======
-function canvasTex(w, h, draw, srgb) {
+function canvasTex(w, h, draw, srgb, after) {
   if (!HAS_DOC) return null;
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   draw(c.getContext('2d'), w, h);
   const t = new THREE.CanvasTexture(c);
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
+  if (after) after(t);
   return t;
 }
 // Piso terrazo/epoxy claro moteado con juntas de baldosa
@@ -361,34 +362,250 @@ function makePdu() {
   return g;
 }
 
-// ---- DRY COOLER exterior (PBR). Largo con V de serpentines + 3 axiales al tope ----
+// ---- DRY COOLER exterior (PBR) — TRASPLANTE del modelo dedicado
+//   dry-cooler/dry-cooler-realistic-v1.html: serpentin en V (Λ), 10 axiales con
+//   aspas scimitar (ExtrudeGeometry + twist, InstancedMesh animado), guardas
+//   circulares (aro + anillos + radios), tapas de rejilla VERTICALES en los 2
+//   costados largos, cabezales/manifolds rojo/azul + bocas bridadas, deck con
+//   recortes, gabinete de control con louvers. Todo NAMESPACED (local a la
+//   factory, sin globales window.__). Envolvente local 8.0(X) × 2.3(Z) × 2.2(Y) m;
+//   origen en la esquina. Bocas bridadas en el extremo x negativo (entrada roja
+//   arriba, salida azul abajo). Escala 1:1 (metros).
 function makeDryCooler() {
   const g = new THREE.Group();
-  const L = 4.0, W = 2.0, H = 1.2;                                                    // L a lo largo de z local
-  box(W, H, L, M.DRY, 0, H / 2, 0, g);                                                // cuerpo
-  box(W + 0.06, 0.12, L + 0.06, M.DRY_D, 0, H, 0, g);                                 // marco superior
-  box(W + 0.06, 0.14, 0.14, M.DRY_D, 0, 0.14, L / 2 + 0.03, g);                       // zocalo
-  box(W + 0.06, 0.14, 0.14, M.DRY_D, 0, 0.14, -L / 2 - 0.03, g);
-  // V de serpentines (2 planos inclinados)
-  for (const s of [-1, 1]) {
-    const coil = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.0, L - 0.4), M.COIL);
-    coil.position.set(s * 0.4, H + 0.5, 0); coil.rotation.z = s * 0.45; coil.castShadow = true; coil.receiveShadow = true; g.add(coil);
+  const root = g;
+  const LEN = 8.0, WID = 2.3;
+  const LEG_H = 0.40, SKID_TY = 0.56, COIL_Y0 = 0.60, RIDGE_Y = 1.78, DECK_Y = 1.82;
+  const NCOL = 5, FAN_R = 0.44, HOLE_R = 0.47, FAN_PY = DECK_Y + 0.06, BLADES = 5;
+  const fanCX = []; for (let i = 0; i < NCOL; i++) fanCX.push(+(LEN / NCOL * (i + 0.5)).toFixed(3));
+  const fanCZ = [WID * 0.27, WID * 0.73];
+  const fanPos = []; fanCX.forEach(x => fanCZ.forEach(z => fanPos.push([x, z])));
+  const BANK = [{ zB: 0.18, zT: 1.02 }, { zB: 2.12, zT: 1.28 }];
+
+  // texturas procedurales (guardadas para headless via canvasTex)
+  const finMap = canvasTex(128, 64, (gg, w, h) => {
+    gg.fillStyle = '#cfd5db'; gg.fillRect(0, 0, w, h);
+    gg.strokeStyle = '#a2a9b2'; gg.lineWidth = 1;
+    for (let x = 0; x < w; x += 2) { gg.beginPath(); gg.moveTo(x, 0); gg.lineTo(x, h); gg.stroke(); }
+    gg.strokeStyle = '#868d97';
+    for (let x = 0; x < w; x += 8) { gg.beginPath(); gg.moveTo(x, 0); gg.lineTo(x, h); gg.stroke(); }
+  }, true, t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(26, 1); t.anisotropy = 8; });
+  const grilleMap = canvasTex(128, 128, (gg) => {
+    gg.fillStyle = '#000000'; gg.fillRect(0, 0, 128, 128);
+    gg.strokeStyle = '#ffffff'; gg.lineWidth = 14;
+    for (const x of [0, 64]) { gg.beginPath(); gg.moveTo(x, 0); gg.lineTo(x, 128); gg.stroke(); }
+    for (const y of [0, 64]) { gg.beginPath(); gg.moveTo(0, y); gg.lineTo(128, y); gg.stroke(); }
+  }, false, t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.repeat.set(18, 4); });
+  const plateMap = canvasTex(256, 160, (gg) => {
+    gg.fillStyle = '#dadfe4'; gg.fillRect(0, 0, 256, 160);
+    gg.fillStyle = '#243044'; gg.fillRect(10, 10, 236, 30);
+    gg.fillStyle = '#dadfe4'; gg.font = 'bold 18px monospace'; gg.fillText('DRY COOLER · V-COIL', 20, 32);
+    gg.fillStyle = '#2a3340';
+    for (let i = 0; i < 6; i++) gg.fillRect(16, 52 + i * 16, 150 + (i * 23) % 74, 6);
+    gg.strokeStyle = '#2a3340'; gg.lineWidth = 3; gg.strokeRect(5, 5, 246, 150);
+  }, true);
+
+  // materiales PBR (namespaced, metalness 0 pintado / 1 metal)
+  const M = {
+    shellWhite: new THREE.MeshStandardMaterial({ color: 0xeef1f5, roughness: 0.52, metalness: 0.0 }),
+    shellGrey:  new THREE.MeshStandardMaterial({ color: 0xcbd2da, roughness: 0.55, metalness: 0.0 }),
+    frame:      new THREE.MeshStandardMaterial({ color: 0x59626b, roughness: 0.55, metalness: 0.0 }),
+    frameDk:    new THREE.MeshStandardMaterial({ color: 0x394049, roughness: 0.58, metalness: 0.0 }),
+    skid:       new THREE.MeshStandardMaterial({ color: 0x8f9298, roughness: 0.6,  metalness: 1.0 }),
+    skidDk:     new THREE.MeshStandardMaterial({ color: 0x54585f, roughness: 0.62, metalness: 1.0 }),
+    fin:        new THREE.MeshStandardMaterial({ map: finMap, color: 0xeef0f2, roughness: 0.35, metalness: 1.0 }),
+    finFrame:   new THREE.MeshStandardMaterial({ color: 0x2c2f34, roughness: 0.55, metalness: 1.0 }),
+    grille:     new THREE.MeshStandardMaterial({ color: 0xaab0b8, roughness: 0.5, metalness: 1.0, alphaMap: grilleMap, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
+    cowl:       new THREE.MeshStandardMaterial({ color: 0xb7bcc4, roughness: 0.45, metalness: 1.0, side: THREE.DoubleSide }),
+    blade:      new THREE.MeshStandardMaterial({ color: 0x1b1e24, roughness: 0.42, metalness: 0.0, side: THREE.DoubleSide }),
+    hub:        new THREE.MeshStandardMaterial({ color: 0x2a2e35, roughness: 0.4,  metalness: 1.0 }),
+    guard:      new THREE.MeshStandardMaterial({ color: 0x3a3f47, roughness: 0.42, metalness: 1.0 }),
+    red:        new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.5,  metalness: 0.0 }),
+    redDk:      new THREE.MeshStandardMaterial({ color: 0x7d2018, roughness: 0.55, metalness: 0.0 }),
+    blue:       new THREE.MeshStandardMaterial({ color: 0x2a6bd4, roughness: 0.5,  metalness: 0.0 }),
+    flange:     new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.42, metalness: 1.0 }),
+    bolt:       new THREE.MeshStandardMaterial({ color: 0x40444a, roughness: 0.4,  metalness: 1.0 }),
+    panel:      new THREE.MeshStandardMaterial({ color: 0xe3e6e2, roughness: 0.5,  metalness: 0.0 }),
+    panelDk:    new THREE.MeshStandardMaterial({ color: 0xb4b7b2, roughness: 0.5,  metalness: 0.0 }),
+    hmi:        new THREE.MeshStandardMaterial({ color: 0x0a1018, roughness: 0.2,  metalness: 0.0, emissive: 0x06222a, emissiveIntensity: 0.6 }),
+    led:        new THREE.MeshStandardMaterial({ color: 0x00ff66, emissive: 0x00ff66, emissiveIntensity: 1.4, roughness: 0.25, metalness: 0.2 }),
+  };
+
+  // helpers locales (retornan mesh; el llamador hace root.add)
+  function box(w, h, d, mat, x, y, z) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; return m; }
+  function cyl(r1, r2, h, mat, x, y, z, seg = 20) { const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, seg), mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; return m; }
+  function tube(p0, p1, r, mat, seg = 12) {
+    const a = new THREE.Vector3(...p0), b = new THREE.Vector3(...p1);
+    const dir = new THREE.Vector3().subVectors(b, a); const len = dir.length();
+    if (len < 1e-4) return new THREE.Group();
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, seg), mat);
+    m.position.copy(a).add(dir.clone().multiplyScalar(0.5));
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+    m.castShadow = m.receiveShadow = true; return m;
   }
-  // 3 ventiladores axiales al tope
-  for (let i = 0; i < 3; i++) {
-    const cz = -L / 2 + 0.75 + i * 1.15;
-    box(0.9, 0.08, 0.9, M.STEEL, 0, H + 0.02, cz, g, false);
-    box(0.14, 0.1, 0.14, M.HUB, 0, H + 0.1, cz, g, false);
-    for (let b = 0; b < 6; b++) {
-      const a = b / 6 * Math.PI * 2;
-      const bl = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.02, 0.12), M.BLADE);
-      bl.position.set(Math.cos(a) * 0.26, H + 0.08, cz + Math.sin(a) * 0.26);
-      bl.rotation.y = -a; bl.rotation.x = 0.3; bl.castShadow = false; g.add(bl);
+
+  // PATAS + SKID
+  const LEG_X = [0.15, 1.65, 3.15, 4.65, 6.15, 7.85];
+  LEG_X.forEach(lx => {
+    [0.18, WID - 0.18].forEach(lz => {
+      root.add(box(0.14, LEG_H, 0.14, M.frameDk, lx, LEG_H / 2, lz));
+      root.add(box(0.30, 0.04, 0.30, M.skidDk, lx, 0.02, lz));
+    });
+  });
+  root.add(box(LEN, 0.12, 0.14, M.skid, LEN / 2, SKID_TY - 0.02, 0.18));
+  root.add(box(LEN, 0.12, 0.14, M.skid, LEN / 2, SKID_TY - 0.02, WID - 0.18));
+  LEG_X.forEach(lx => root.add(box(0.14, 0.12, WID, M.skidDk, lx, SKID_TY - 0.06, WID / 2)));
+  root.add(box(LEN, 0.06, WID, M.frameDk, LEN / 2, SKID_TY, WID / 2));
+
+  // SERPENTIN EN Λ (dos bancos aletados inclinados)
+  function coilBank(bank) {
+    const zB = bank.zB, zT = bank.zT;
+    const dz = zT - zB, dy = RIDGE_Y - COIL_Y0;
+    const slant = Math.hypot(dz, dy), ang = Math.atan2(dz, dy);
+    const cx = LEN / 2, cy = (COIL_Y0 + RIDGE_Y) / 2, cz = (zB + zT) / 2, lenX = LEN - 0.24;
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(lenX, slant, 0.10), M.fin);
+    slab.position.set(cx, cy, cz); slab.rotation.x = ang; slab.castShadow = slab.receiveShadow = true; root.add(slab);
+    [-lenX / 2, lenX / 2].forEach(ex => {
+      const fr = new THREE.Mesh(new THREE.BoxGeometry(0.06, slant + 0.06, 0.16), M.finFrame);
+      fr.position.set(cx + ex, cy, cz); fr.rotation.x = ang; fr.castShadow = true; root.add(fr);
+    });
+    [-lenX / 2 - 0.05, lenX / 2 + 0.05].forEach(ex => {
+      for (let t = 0.12; t < slant - 0.05; t += 0.16) {
+        const yy = cy + (t - slant / 2) * Math.cos(ang), zz = cz + (t - slant / 2) * Math.sin(ang);
+        const u = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.018, 6, 10, Math.PI), M.red);
+        u.position.set(cx + ex, yy, zz); u.rotation.y = Math.PI / 2; u.rotation.z = ang; root.add(u);
+      }
+    });
+  }
+  coilBank(BANK[0]); coilBank(BANK[1]);
+  root.add(box(LEN - 0.1, 0.08, (BANK[1].zT - BANK[0].zT) + 0.12, M.shellGrey, LEN / 2, RIDGE_Y + 0.04, (BANK[0].zT + BANK[1].zT) / 2));
+  [0.06, LEN - 0.06].forEach(ex => root.add(box(0.06, RIDGE_Y - COIL_Y0 + 0.1, WID, M.shellWhite, ex, (COIL_Y0 + RIDGE_Y) / 2 + 0.05, WID / 2)));
+
+  // TAPAS / REJILLAS VERTICALES en los dos costados largos (Z-min / Z-max)
+  (function sideGuardGrilles() {
+    const gLen = LEN - 0.16, gY0 = COIL_Y0 - 0.02, gY1 = RIDGE_Y + 0.02, gH = gY1 - gY0, gCy = (gY0 + gY1) / 2;
+    [0.05, WID - 0.05].forEach(gz => {
+      const panel = new THREE.Mesh(new THREE.PlaneGeometry(gLen, gH), M.grille);
+      panel.position.set(LEN / 2, gCy, gz); panel.receiveShadow = true; root.add(panel);
+      [-gLen / 2, gLen / 2].forEach(ex => root.add(box(0.03, gH + 0.05, 0.04, M.finFrame, LEN / 2 + ex, gCy, gz)));
+      [gY0, gY1].forEach(ey => root.add(box(gLen, 0.03, 0.04, M.finFrame, LEN / 2, ey, gz)));
+    });
+  })();
+
+  // TUBERIA DE PROCESO — colectores + manifolds + bocas bridadas
+  [BANK[0].zT + 0.02, BANK[1].zT - 0.02].forEach(zz => root.add(cyl(0.05, 0.05, LEN - 0.3, M.red, LEN / 2, RIDGE_Y - 0.02, zz, 14).rotateZ(Math.PI / 2)));
+  [BANK[0].zB + 0.08, BANK[1].zB - 0.08].forEach(zz => root.add(cyl(0.05, 0.05, LEN - 0.3, M.blue, LEN / 2, COIL_Y0 + 0.06, zz, 14).rotateZ(Math.PI / 2)));
+  function manifold(xEnd) {
+    root.add(cyl(0.075, 0.075, RIDGE_Y - COIL_Y0 + 0.2, M.red, xEnd, (COIL_Y0 + RIDGE_Y) / 2, BANK[0].zT + 0.02, 16));
+    root.add(cyl(0.075, 0.075, RIDGE_Y - COIL_Y0 + 0.2, M.red, xEnd, (COIL_Y0 + RIDGE_Y) / 2, BANK[1].zT - 0.02, 16));
+    root.add(cyl(0.06, 0.06, (BANK[1].zT - BANK[0].zT), M.redDk, xEnd, RIDGE_Y + 0.02, (BANK[0].zT + BANK[1].zT) / 2, 14).rotateX(Math.PI / 2));
+    root.add(cyl(0.07, 0.07, (BANK[1].zB - BANK[0].zB), M.blue, xEnd, COIL_Y0 + 0.04, WID / 2, 14).rotateX(Math.PI / 2));
+  }
+  manifold(-0.02); manifold(LEN + 0.02);
+  // Bocas bridadas en x negativo: ENTRADA roja arriba (y=RIDGE_Y-0.15), SALIDA azul abajo (y=COIL_Y0+0.06), z=WID/2
+  function flangedNozzle(mat, y, r) {
+    root.add(tube([-0.02, y, WID / 2], [-0.55, y, WID / 2], r, mat, 16));
+    const fl = new THREE.Mesh(new THREE.TorusGeometry(r + 0.05, 0.03, 8, 20), M.flange);
+    fl.position.set(-0.55, y, WID / 2); fl.rotation.y = Math.PI / 2; fl.castShadow = true; root.add(fl);
+    root.add(cyl(r + 0.07, r + 0.07, 0.05, M.flange, -0.55, y, WID / 2, 20).rotateZ(Math.PI / 2));
+  }
+  flangedNozzle(M.red,  RIDGE_Y - 0.15, 0.085);
+  flangedNozzle(M.blue, COIL_Y0 + 0.06, 0.085);
+  root.add(tube([-0.02, RIDGE_Y - 0.02, BANK[0].zT + 0.02], [-0.02, RIDGE_Y - 0.15, WID / 2], 0.075, M.red, 12));
+  root.add(tube([-0.02, COIL_Y0 + 0.04, WID / 2], [-0.02, COIL_Y0 + 0.06, WID / 2], 0.07, M.blue, 12));
+
+  // DECK con recortes circulares para los fans + rodapie
+  (function buildDeck() {
+    const shape = new THREE.Shape();
+    shape.moveTo(0, 0); shape.lineTo(LEN, 0); shape.lineTo(LEN, WID); shape.lineTo(0, WID); shape.lineTo(0, 0);
+    fanPos.forEach(([cx, cz]) => { const hole = new THREE.Path(); hole.absarc(cx, cz, HOLE_R, 0, Math.PI * 2, true); shape.holes.push(hole); });
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: false });
+    geo.rotateX(Math.PI / 2);
+    const deck = new THREE.Mesh(geo, M.shellGrey); deck.position.y = DECK_Y; deck.castShadow = deck.receiveShadow = true; root.add(deck);
+  })();
+  [[LEN / 2, 0.03], [LEN / 2, WID - 0.03]].forEach(([x, z]) => root.add(box(LEN, 0.10, 0.05, M.frame, x, DECK_Y + 0.06, z)));
+  [[0.03, WID / 2], [LEN - 0.03, WID / 2]].forEach(([x, z]) => root.add(box(0.05, 0.10, WID, M.frame, x, DECK_Y + 0.06, z)));
+
+  // ASPA scimitar (ExtrudeGeometry + twist) — geometria compartida
+  function makeAeroBlade() {
+    const s = new THREE.Shape();
+    s.moveTo(0.5, -0.30);
+    s.quadraticCurveTo(1.6, -0.75, 3.1, -0.55);
+    s.quadraticCurveTo(3.9, -0.35, 4.15, 0.05);
+    s.quadraticCurveTo(4.25, 0.38, 3.85, 0.58);
+    s.quadraticCurveTo(2.8, 0.88, 1.4, 0.55);
+    s.quadraticCurveTo(0.8, 0.35, 0.5, 0.20);
+    s.closePath();
+    const geo = new THREE.ExtrudeGeometry(s, { depth: 0.2, bevelEnabled: true, bevelSegments: 2, bevelSize: 0.04, bevelThickness: 0.04, steps: 1 });
+    geo.translate(0, 0, -0.1);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const tp = Math.max(0, Math.min(1, (x - 0.5) / 3.7)), tw = 0.70 - tp * 0.48;
+      pos.setXYZ(i, x, y * Math.cos(tw) - z * Math.sin(tw), y * Math.sin(tw) + z * Math.cos(tw));
     }
+    pos.needsUpdate = true; geo.computeVertexNormals(); geo.scale(0.098, 0.098, 0.098);
+    return geo;
   }
-  // bridas rojo/azul (conexion CHW) en el costado -x
-  box(0.12, 0.24, 0.24, M.PIPE_R, -W / 2 - 0.06, 0.9, 0.6, g, false);
-  box(0.12, 0.24, 0.24, M.PIPE_B, -W / 2 - 0.06, 0.5, -0.6, g, false);
+  const bladeGeo = makeAeroBlade();
+
+  // VENTILADORES: cowl venturi + hub + guardas circulares (estaticos)
+  fanPos.forEach(([cx, cz]) => {
+    const prof = [];
+    for (let i = 0; i <= 8; i++) { const t = i / 8; prof.push(new THREE.Vector2(HOLE_R + Math.pow(t, 1.6) * 0.14, t * 0.18)); }
+    const cowl = new THREE.Mesh(new THREE.LatheGeometry(prof, 30), M.cowl);
+    cowl.position.set(cx, DECK_Y - 0.02, cz); cowl.castShadow = true; root.add(cowl);
+    root.add(cyl(0.09, 0.11, 0.10, M.hub, cx, FAN_PY, cz, 18));
+    root.add(cyl(0.05, 0.05, 0.07, M.hub, cx, FAN_PY + 0.08, cz, 14));
+    const gy = DECK_Y + 0.12;
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(FAN_R + 0.03, 0.022, 8, 32), M.guard);
+    rim.position.set(cx, gy - 0.01, cz); rim.rotation.x = Math.PI / 2; rim.castShadow = true; root.add(rim);
+    for (const r of [0.12, 0.24, 0.36, FAN_R]) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.013, 6, 30), M.guard);
+      ring.position.set(cx, gy, cz); ring.rotation.x = Math.PI / 2; root.add(ring);
+    }
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      root.add(tube([cx, gy, cz], [cx + Math.cos(a) * FAN_R, gy, cz + Math.sin(a) * FAN_R], 0.013, M.guard, 6));
+    }
+  });
+
+  // ASPAS: 10 fans × 5 = 50 instancias (InstancedMesh animado, fuera del shadow map)
+  const NBLADE = fanPos.length * BLADES;
+  const bladeInst = new THREE.InstancedMesh(bladeGeo, M.blade, NBLADE);
+  bladeInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage); bladeInst.castShadow = false; root.add(bladeInst);
+  const _dummy = new THREE.Object3D();
+  const fanAngle = new Array(fanPos.length).fill(0);
+  function updateBlades() {
+    let idx = 0;
+    for (let f = 0; f < fanPos.length; f++) {
+      const [cx, cz] = fanPos[f];
+      for (let b = 0; b < BLADES; b++) {
+        _dummy.position.set(cx, FAN_PY, cz);
+        _dummy.rotation.set(0, fanAngle[f] + (b / BLADES) * Math.PI * 2, 0);
+        _dummy.scale.setScalar(1); _dummy.updateMatrix(); bladeInst.setMatrixAt(idx++, _dummy.matrix);
+      }
+    }
+    bladeInst.instanceMatrix.needsUpdate = true;
+  }
+  updateBlades();
+
+  // GABINETE DE CONTROL (lateral, fondo) + louvers de puerta + placa + LEDs verdes
+  const PNL_X = 6.0, PNL_Z = WID + 0.18, PNL_Y = 0.95;
+  root.add(box(1.1, 0.9, 0.28, M.panel, PNL_X, PNL_Y, PNL_Z));
+  root.add(box(0.06, 0.9, 0.05, M.panelDk, PNL_X - 0.5, PNL_Y, PNL_Z + 0.16));
+  root.add(box(0.06, 0.9, 0.05, M.panelDk, PNL_X + 0.5, PNL_Y, PNL_Z + 0.16));
+  root.add(box(0.05, 0.26, 0.06, M.bolt, PNL_X + 0.44, PNL_Y, PNL_Z + 0.16));
+  root.add(box(0.34, 0.24, 0.03, M.hmi, PNL_X - 0.18, PNL_Y + 0.14, PNL_Z + 0.15));
+  for (let i = 0; i < 4; i++) { const ls = box(0.40, 0.03, 0.02, M.panelDk, PNL_X + 0.20, PNL_Y - 0.06 - i * 0.05, PNL_Z + 0.145); ls.rotation.x = -0.35; root.add(ls); }
+  const np = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.21), new THREE.MeshStandardMaterial({ map: plateMap, roughness: 0.5, metalness: 0.3 }));
+  np.position.set(PNL_X + 0.24, PNL_Y + 0.14, PNL_Z + 0.145); root.add(np);
+  root.add(box(0.06, PNL_Y - LEG_H, 0.06, M.frame, PNL_X, (PNL_Y + LEG_H) / 2 - 0.1, PNL_Z + 0.02));
+  [[-0.34], [-0.24]].forEach(([dx]) => { const led = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 10), M.led); led.position.set(PNL_X + dx, PNL_Y - 0.18, PNL_Z + 0.15); root.add(led); });
+
+  // spin de aspas (Group animado; sin tocar el shadow map estatico)
+  const fanSpeed = fanPos.map((_, i) => 5.5 + (i % 5) * 0.4);
+  g.userData.tickFans = (dt) => { for (let f = 0; f < fanPos.length; f++) fanAngle[f] += dt * fanSpeed[f]; updateBlades(); };
   return g;
 }
 
@@ -403,8 +620,12 @@ register(makeInrow(), 4.08, FLOOR_H, 6.0, 0, { pill: 'IN-ROW · 23°C', route: R
 // UPS + PDU al frente
 register(makeUps(), 5.8, FLOOR_H, -1.7, Math.PI, { pill: 'UPS · 78% · BAT 100%', route: R.ups });
 register(makePdu(), 3.4, FLOOR_H, -1.7, 0, { pill: 'PDU · 142 kW', route: R.pdu });
-// Dry cooler EXTERIOR (largo a lo largo de z, fuera del muro +x)
-register(makeDryCooler(), 9.4, 0, 6.0, 0, { pill: 'DRY · 34°C agua', route: R.dry });
+// Dry cooler EXTERIOR: modelo dedicado (long axis LEN=8 m local → world Z con rotY -90°),
+// fuera del muro +x. Con pivot (10.55,0,2.0) el cuerpo ocupa x∈[8.25,10.55] (centro ~9.4),
+// z∈[2,10] (centro 6), y∈[0,2.2]. Sus 2 bocas bridadas caen en world (9.40, y, 1.45):
+// entrada roja y=1.63, salida azul y=0.66 (ver reconexion CHW abajo).
+const dryPivot = register(makeDryCooler(), 10.55, 0, 2.0, -Math.PI / 2, { pill: 'DRY · 34°C agua', route: R.dry });
+const dryCooler = dryPivot.children[0];   // Group con userData.tickFans(dt)
 // Hero racks detallados en la fila 0 (uno en ALARMA)
 const HERO = [
   { x: 0.5, alarm: false, pill: 'RACK · 72% · 24°C' },
@@ -439,14 +660,16 @@ for (const zc of COLD_AISLE_Z) {
   // varillas de soporte a techo
   for (const sx of [0.4, 3.0, 5.8]) pipeRun([[sx, PIPE_Y, zc], [sx, PIPE_Y + 0.5, zc]], 0.02, M.ROD);
 }
-// Tendido real sala -> dry cooler exterior (codos 90°)
+// Tendido real sala -> bocas bridadas del dry cooler dedicado (codos 90°).
+// Salida AZUL (agua enfriada) del dry cooler @ world (9.40, 0.66, 1.45), cara -z.
 pipeRun([
-  [6.6, PIPE_Y, 7.28], [6.9, PIPE_Y, 7.28], [6.9, 1.15, 7.28],
-  [6.9, 1.15, 5.4], [8.6, 1.15, 5.4], [8.6, 0.5, 5.4]
+  [6.6, PIPE_Y, 7.28], [7.15, PIPE_Y, 7.28], [7.15, 0.66, 7.28],
+  [7.15, 0.66, 1.1], [9.40, 0.66, 1.1], [9.40, 0.66, 1.45]
 ], 0.07, M.PIPE_B);
+// Entrada ROJA (agua caliente) al dry cooler @ world (9.40, 1.63, 1.45), cara -z.
 pipeRun([
-  [6.6, PIPE_Y, 7.52], [7.05, PIPE_Y, 7.52], [7.05, 1.45, 7.52],
-  [7.05, 1.45, 6.6], [8.6, 1.45, 6.6], [8.6, 0.9, 6.6]
+  [6.6, PIPE_Y, 7.52], [6.85, PIPE_Y, 7.52], [6.85, 1.63, 7.52],
+  [6.85, 1.63, 0.8], [9.40, 1.63, 0.8], [9.40, 1.63, 1.45]
 ], 0.07, M.PIPE_R);
 
 // ====== PAREDES DE CRISTAL (cutaway) + marcos de aluminio ======
@@ -604,6 +827,7 @@ if (!HEADLESS) {
   function animate() {
     requestAnimationFrame(animate);
     for (const b of fanBlades) b.rotation.y += 0.06;
+    if (dryCooler.userData.tickFans) dryCooler.userData.tickFans(0.016);   // aspas del dry cooler (no toca el shadow map estatico)
     controls.update();
     renderer.render(scene, camera);
     if (drawN) drawN.textContent = renderer.info.render.calls;
