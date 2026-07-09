@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sala Datacenter · Escena Realista PBR · v1</title>
+<style>
+  body { margin:0; background:#e9edf3; font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; color:#1b2430; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(255,255,255,0.82); padding:10px 14px; border:1px solid #b6c0cd; border-radius:6px; letter-spacing:0.04em; backdrop-filter:blur(6px); max-width:360px; box-shadow:0 6px 20px rgba(20,30,45,0.12); }
+  #info b { color:#0d1420; font-size:13px; letter-spacing:0.08em; }
+  #info span { color:#54606f; }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(255,255,255,0.82); padding:10px 14px; border:1px solid #b6c0cd; border-radius:6px; backdrop-filter:blur(6px); box-shadow:0 6px 20px rgba(20,30,45,0.12); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; color:#3a4653; }
+  #legend i { width:12px; height:10px; display:inline-block; border-radius:2px; }
+  #hud { position:fixed; top:150px; right:14px; font-size:10px; background:rgba(255,255,255,0.82); padding:10px 14px; border:1px solid #b6c0cd; border-radius:6px; backdrop-filter:blur(6px); min-width:150px; box-shadow:0 6px 20px rgba(20,30,45,0.12); }
+  #hud .ph { color:#0d1420; font-size:10px; letter-spacing:0.14em; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #c4ccd6; }
+  #hud .row { display:flex; justify-content:space-between; margin:4px 0; color:#54606f; }
+  #hud b { color:#0d6f5c; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(255,255,255,0.82); padding:8px 12px; border:1px solid #b6c0cd; border-radius:6px; color:#54606f; backdrop-filter:blur(6px); box-shadow:0 6px 20px rgba(20,30,45,0.12); }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(255,255,255,0.88); border:1px solid #b6c0cd; border-radius:6px; padding:12px 14px; min-width:240px; font-size:11px; backdrop-filter:blur(6px); box-shadow:0 6px 20px rgba(20,30,45,0.14); }
+  #panel .ph { color:#0d1420; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #c4ccd6; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#54606f; letter-spacing:0.08em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.1em; padding:5px 12px; border:1px solid; border-radius:4px; background:transparent; cursor:pointer; min-width:72px; transition:all 0.2s; }
+  #panel button.off { color:#c02b3a; border-color:#c02b3a; }
+  #panel button.on  { color:#ffffff; border-color:#0f9d63; background:#0f9d63; box-shadow:0 0 10px #0f9d6355; }
+  #detailOverlay { position:fixed; inset:0; z-index:1000; background:rgba(233,237,243,0.96); display:none; }
+  #detailOverlay.open { display:block; }
+  #detailFrame { width:100%; height:100%; border:0; background:#ffffff; }
+  #detailBar { position:fixed; top:0; left:0; right:0; height:44px; z-index:1002; display:flex; align-items:center; justify-content:space-between; padding:0 16px; background:rgba(255,255,255,0.95); border-bottom:1px solid #b6c0cd; }
+  #detailBar span { color:#0d1420; font-size:12px; letter-spacing:0.1em; }
+  #detailClose { font-family:inherit; font-size:16px; line-height:1; color:#0d1420; background:transparent; border:1px solid #9aa6b4; border-radius:4px; width:30px; height:30px; cursor:pointer; }
+  #detailClose:hover { border-color:#0f9d63; box-shadow:0 0 8px #0f9d6355; }
+</style>
+<script>
+// Importmap dinamico (unpkg three@0.160.0). El '@' se compone con
+// String.fromCharCode(64) por convencion del pipeline de publicacion (evita el mangling).
+(function(){
+  var AT = String.fromCharCode(64);
+  var base = 'https://unpkg.com/three' + AT + '0.160.0/';
+  var tag = document.createElement('script');
+  tag.type = 'importmap';
+  tag.textContent = JSON.stringify({ imports: {
+    'three': base + 'build/three.module.js',
+    'three/addons/': base + 'examples/jsm/'
+  }});
+  document.head.appendChild(tag);
+})();
+</script>
+</head>
+<body>
+<div id="info">
+  <b>SALA DATACENTER · REALISTA PBR</b><br>
+  <span>5 filas × 10 racks · contencion de pasillo frio · banco CRAC · in-row · UPS/PDU · dry cooler exterior · 1 unidad = 1 m</span>
+</div>
+<div id="legend">
+  <div><i style="background:#2f6fb0"></i> Agua helada · suministro</div>
+  <div><i style="background:#9c3b2e"></i> Agua helada · retorno</div>
+  <div><i style="background:#aecbe8"></i> Cristal · contencion / sala</div>
+  <div><i style="background:#1f6fd0"></i> Ventiladores EC (CRAC)</div>
+  <div><i style="background:#1b1d23"></i> Gabinetes / racks</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan &nbsp;·&nbsp; CLIC en un equipo: ver detalle</div>
+<div id="hud">
+  <div class="ph">renderer.info (live)</div>
+  <div class="row"><label>DRAW CALLS</label><b id="drawN">–</b></div>
+  <div class="row"><label>TRIANGLES</label><b id="triN">–</b></div>
+</div>
+<div id="panel">
+  <div class="ph">CONTROL DE ESCENA</div>
+  <div class="row"><label>PILLS</label><button id="bPills" class="on">ON</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="off">OFF</button></div>
+  <div class="row"><label>SOMBRAS</label><button id="bShadow" class="on">ON</button></div>
+</div>
+<div id="detailOverlay">
+  <div id="detailBar"><span id="detailTitle">DETALLE DE EQUIPO</span><button id="detailClose" title="Cerrar (Esc)">✕</button></div>
+  <iframe id="detailFrame" title="Detalle de equipo"></iframe>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 unidad = 1 m. Layout heredado (calibrado) de datacenter-sala-voxel-v1.html
+// (posiciones/composicion en METROS); la estetica es PBR de producto, NO voxel.
+//
+// HEADLESS: true en node (sin window) o cuando el harness fija window.__HEADLESS__.
+// Bajo HEADLESS se arma el grafo de escena (para conteo) pero se omite renderer /
+// PMREM / OrbitControls / DOM / raycaster / pills / animate. Las CanvasTextures se
+// crean solo si existe `document` (en node devuelven null → material sin map).
+const HEADLESS = (typeof window === 'undefined') || !!(typeof window !== 'undefined' && window.__HEADLESS__);
+const HAS_DOC = (typeof document !== 'undefined');
+
+// ====== SCENE ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xdfe4ec);           // fondo claro de estudio
+scene.fog = new THREE.Fog(0xdfe4ec, 34, 120);           // niebla clara sutil (look producto)
+
+// ====== TEXTURAS PROCEDURALES (CanvasTexture, guardadas para headless) ======
+function canvasTex(w, h, draw, srgb) {
+  if (!HAS_DOC) return null;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+// Piso terrazo/epoxy claro moteado con juntas de baldosa
+const floorTex = canvasTex(512, 512, (g, w, h) => {
+  g.fillStyle = '#c9cdd6'; g.fillRect(0, 0, w, h);
+  const spk = ['#a8adba', '#b7bcc8', '#8f95a3', '#e2e6ed', '#9aa0ad'];
+  for (let i = 0; i < 9000; i++) { g.fillStyle = spk[i % spk.length]; const s = 1 + Math.random() * 3; g.fillRect(Math.random() * w, Math.random() * h, s, s); }
+  g.strokeStyle = 'rgba(88,95,110,0.5)'; g.lineWidth = 2;
+  for (let x = 0; x <= w; x += 64) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+  for (let y = 0; y <= h; y += 64) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+}, true);
+if (floorTex) { floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping; floorTex.repeat.set(13, 30); }
+
+// Frente de servidor: bahias 1U/2U con rejilla de ventilacion + LEDs (variante alarma)
+function serverTex(alarm) {
+  return canvasTex(170, 620, (g, w, h) => {
+    g.fillStyle = '#0c0d11'; g.fillRect(0, 0, w, h);
+    const U = 19;
+    for (let y = 6; y < h - 6; y += U) {
+      g.fillStyle = (Math.random() < 0.16) ? '#16171d' : '#1f2027';
+      g.fillRect(7, y, w - 14, U - 3);
+      g.fillStyle = '#0a0b0e';
+      for (let x = 16; x < w - 44; x += 5) g.fillRect(x, y + 3, 2, U - 8);
+      g.fillStyle = '#34363e'; g.fillRect(w - 40, y + 2, 10, U - 5);   // asa/drive bay
+      const leds = ['#39d353', '#39d353', '#f5a623', alarm ? '#ff3b3b' : '#39d353'];
+      for (let i = 0; i < 3; i++) { g.fillStyle = leds[(i + (alarm ? 3 : 0)) % leds.length]; g.fillRect(w - 26 + i * 7, y + 4, 4, 4); }
+    }
+    g.fillStyle = '#2a2c34'; g.fillRect(0, 0, 7, h); g.fillRect(w - 7, 0, 7, h);   // rieles laterales
+  }, true);
+}
+const srvTex = serverTex(false), srvTexAlarm = serverTex(true);
+
+// Louver frontal de CRAC (rejilla horizontal)
+const louverTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#17181d'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#26272e';
+  for (let y = 4; y < h; y += 9) g.fillRect(6, y, w - 12, 5);
+}, true);
+
+// ====== PALETA PBR ======
+// Pintado: metalness 0, roughness 0.5-0.6. Metal desnudo: metalness 1, roughness 0.3-0.45.
+// Nunca metalness intermedio en color solido. Vidrio: MeshPhysicalMaterial (transmission).
+const M = {
+  RACK:     new THREE.MeshStandardMaterial({ color: 0x1b1d23, roughness: 0.52, metalness: 0 }),
+  RACK_D:   new THREE.MeshStandardMaterial({ color: 0x111318, roughness: 0.5,  metalness: 0 }),
+  FRONT:    new THREE.MeshStandardMaterial({ color: 0x2a2c34, roughness: 0.62, metalness: 0, map: srvTex }),
+  FRONT_A:  new THREE.MeshStandardMaterial({ color: 0x342a2c, roughness: 0.62, metalness: 0, map: srvTexAlarm }),
+  CAB:      new THREE.MeshStandardMaterial({ color: 0x1a1c22, roughness: 0.5,  metalness: 0 }),
+  LOUVER:   new THREE.MeshStandardMaterial({ color: 0x1a1b20, roughness: 0.6,  metalness: 0, map: louverTex }),
+  METAL:    new THREE.MeshStandardMaterial({ color: 0xbfc4c9, roughness: 0.38, metalness: 1 }),   // aluminio desnudo
+  STEEL:    new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.42, metalness: 1 }),
+  DRY:      new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.58, metalness: 0 }),   // galvanizado pintado
+  DRY_D:    new THREE.MeshStandardMaterial({ color: 0x7d838b, roughness: 0.6,  metalness: 0 }),
+  COIL:     new THREE.MeshStandardMaterial({ color: 0x2a8a80, roughness: 0.5,  metalness: 0.2 }),
+  BLUEFAN:  new THREE.MeshStandardMaterial({ color: 0x1f6fd0, roughness: 0.42, metalness: 0 }),   // EC fan azul
+  HUB:      new THREE.MeshStandardMaterial({ color: 0x2a2c34, roughness: 0.4,  metalness: 0.6 }),
+  BLADE:    new THREE.MeshStandardMaterial({ color: 0xaab0ba, roughness: 0.45, metalness: 0.5 }),
+  PIPE_B:   new THREE.MeshStandardMaterial({ color: 0x2f6fb0, roughness: 0.5,  metalness: 0 }),
+  PIPE_R:   new THREE.MeshStandardMaterial({ color: 0x9c3b2e, roughness: 0.5,  metalness: 0 }),
+  COPPER:   new THREE.MeshStandardMaterial({ color: 0xb87333, roughness: 0.34, metalness: 1 }),
+  ROD:      new THREE.MeshStandardMaterial({ color: 0x565b64, roughness: 0.4,  metalness: 0.9 }),
+  FLOOR:    new THREE.MeshStandardMaterial({ color: 0xcfd3db, roughness: 0.4,  metalness: 0, map: floorTex }),
+  PLINTH:   new THREE.MeshStandardMaterial({ color: 0xb9bec8, roughness: 0.7,  metalness: 0 }),
+  GROUND:   new THREE.MeshStandardMaterial({ color: 0xdadfe6, roughness: 0.95, metalness: 0 }),
+  SCREEN:   new THREE.MeshStandardMaterial({ color: 0x0e2a33, roughness: 0.25, metalness: 0.2, emissive: 0x1fb6a6, emissiveIntensity: 0.7 }),
+  LED_G:    new THREE.MeshStandardMaterial({ color: 0x39d353, roughness: 0.4, metalness: 0, emissive: 0x39d353, emissiveIntensity: 0.9 }),
+  LED_A:    new THREE.MeshStandardMaterial({ color: 0xf5a623, roughness: 0.4, metalness: 0, emissive: 0xf5a623, emissiveIntensity: 0.9 }),
+  LED_R:    new THREE.MeshStandardMaterial({ color: 0xff3b3b, roughness: 0.4, metalness: 0, emissive: 0xff3b3b, emissiveIntensity: 1.3 }),
+  // Vidrio de contencion / paredes de sala (cutaway) — MeshPhysicalMaterial transmission
+  GLASS:    new THREE.MeshPhysicalMaterial({ color: 0xbcd4ea, roughness: 0.06, metalness: 0, transmission: 0.92, thickness: 0.1, ior: 1.45, transparent: true, opacity: 1, side: THREE.DoubleSide }),
+};
+
+// ====== HELPERS ======
+const _q = new THREE.Quaternion(), _yAxis = new THREE.Vector3(0, 1, 0), _s1 = new THREE.Vector3(1, 1, 1);
+function tMat(x, y, z, ry) {
+  const q = ry ? _q.setFromAxisAngle(_yAxis, ry).clone() : new THREE.Quaternion();
+  return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q, _s1);
+}
+function instanced(geo, mat, mats, parent, cast) {
+  const im = new THREE.InstancedMesh(geo, mat, mats.length);
+  mats.forEach((m, i) => im.setMatrixAt(i, m));
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = cast !== false; im.receiveShadow = true;
+  (parent || scene).add(im);
+  return im;
+}
+function box(w, h, d, mat, x, y, z, parent, cast) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z);
+  m.castShadow = cast !== false; m.receiveShadow = true;
+  (parent || scene).add(m);
+  return m;
+}
+// Tramo de tuberia: cilindros entre waypoints + esferas de codo
+function pipeRun(pts, r, mat) {
+  const g = new THREE.Group();
+  const up = new THREE.Vector3(0, 1, 0);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = new THREE.Vector3(pts[i][0], pts[i][1], pts[i][2]);
+    const b = new THREE.Vector3(pts[i + 1][0], pts[i + 1][1], pts[i + 1][2]);
+    const dir = b.clone().sub(a); const len = dir.length();
+    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 12), mat);
+    cyl.position.copy(a).addScaledVector(dir, 0.5);
+    cyl.quaternion.setFromUnitVectors(up, dir.clone().normalize());
+    cyl.castShadow = true; cyl.receiveShadow = true; g.add(cyl);
+    if (i < pts.length - 2) { const s = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), mat); s.position.copy(b); s.castShadow = true; g.add(s); }
+  }
+  scene.add(g);
+  return g;
+}
+
+// ====== RIG DE LUCES (estudio suave) ======
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const key = new THREE.DirectionalLight(0xffffff, 1.7);
+key.position.set(12, 20, 16);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+{ const sc = key.shadow.camera; sc.left = -14; sc.right = 16; sc.top = 16; sc.bottom = -14; sc.near = 1; sc.far = 70; }
+key.shadow.bias = -0.0004;
+key.target.position.set(3.2, 0, 6);
+scene.add(key); scene.add(key.target);
+const fill = new THREE.DirectionalLight(0xdfe8ff, 0.7); fill.position.set(-10, 12, -6); scene.add(fill);
+const rim  = new THREE.DirectionalLight(0xfff2e0, 0.5); rim.position.set(6, 8, -14); scene.add(rim);
+
+// ====== PISO ======
+const FLOOR_H = 0.35;                                  // altura del piso tecnico elevado (m)
+const ROOM = { x0: -0.7, x1: 6.9, z0: -3.4, z1: 14.6 };
+const RW = ROOM.x1 - ROOM.x0, RD = ROOM.z1 - ROOM.z0, RCX = (ROOM.x0 + ROOM.x1) / 2, RCZ = (ROOM.z0 + ROOM.z1) / 2;
+// terreno exterior (shadow catcher claro)
+box(60, 0.02, 60, M.GROUND, RCX, 0.0, RCZ, scene, false);
+// piso tecnico elevado (skirt) + superficie de baldosa
+box(RW, FLOOR_H, RD, M.PLINTH, RCX, FLOOR_H / 2, RCZ, scene, false);
+const floorTop = new THREE.Mesh(new THREE.PlaneGeometry(RW, RD), M.FLOOR);
+floorTop.rotation.x = -Math.PI / 2; floorTop.position.set(RCX, FLOOR_H + 0.001, RCZ); floorTop.receiveShadow = true; scene.add(floorTop);
+
+// ====== LAYOUT (metros) ======
+const RACK_W = 0.58, RACK_D = 1.0, RACK_H = 2.0;
+const NROWS = 5, NCOLS = 10;
+const rackX = j => 0.5 + 0.6 * j;                      // 0.5 .. 5.9
+const rowZ = [0.4, 3.2, 6.0, 8.8, 11.6];               // centros de fila (paso 2.8 m)
+const rowFace = [1, -1, 1, -1, 1];                     // sentido +z/-z al que mira el frente
+const rackCY = FLOOR_H + RACK_H / 2;
+const SKIP = new Set(['0,0', '0,1', '0,2', '2,4', '2,6']);   // 3 hero + 2 in-row
+const COLD_AISLE_Z = [1.8, 7.4];                       // pasillos frios contenidos (entre filas 0-1 y 2-3)
+
+// ---- Racks silueta instanciados (gabinete + frente de servidor) ----
+const cabMats = [], frontMats = [];
+for (let r = 0; r < NROWS; r++)
+  for (let j = 0; j < NCOLS; j++) {
+    if (SKIP.has(r + ',' + j)) continue;
+    const x = rackX(j), z = rowZ[r], f = rowFace[r];
+    cabMats.push(tMat(x, rackCY, z, 0));
+    frontMats.push(tMat(x, rackCY, z + f * (RACK_D / 2 + 0.02), 0));
+  }
+instanced(new THREE.BoxGeometry(RACK_W, RACK_H, RACK_D), M.RACK, cabMats);
+instanced(new THREE.BoxGeometry(RACK_W - 0.04, RACK_H - 0.08, 0.03), M.FRONT, frontMats);
+
+// ====== REGISTRO DE EQUIPOS CLICABLES ======
+const EQUIP = [];
+const R = {
+  rack:  '../server-rack/rack-42u-voxel-v1.html',
+  crac:  '../crac/crac-downflow-voxel.html',
+  inrow: '../in-row/inrow-cooler-voxel.html',
+  pdu:   '../pdu/pdu-datacenter-voxel-v1.html',
+  dry:   '../dry-cooler/dry-cooler-voxel-v1.html',
+  ups:   '../ups/ups-40kva-voxel.html',
+};
+function register(group, x, y, z, ry, meta) {
+  const pivot = new THREE.Group();
+  pivot.add(group);
+  pivot.position.set(x, y, z); pivot.rotation.y = ry || 0;
+  pivot.userData.route = meta.route;
+  scene.add(pivot);
+  EQUIP.push({ pivot, pill: meta.pill, alarm: !!meta.alarm, route: meta.route });
+  return pivot;
+}
+
+// ---- HERO RACK 42U detallado (PBR). Origen en base; frente hacia +z ----
+function makeHeroRack(alarm) {
+  const g = new THREE.Group();
+  const cy = RACK_H / 2;
+  box(RACK_W, RACK_H, RACK_D, M.RACK, 0, cy, 0, g);                                   // gabinete
+  box(RACK_W - 0.03, RACK_H - 0.06, 0.03, alarm ? M.FRONT_A : M.FRONT, 0, cy, RACK_D / 2 + 0.02, g);  // frente servidores
+  box(RACK_W, 0.06, RACK_D, M.RACK_D, 0, RACK_H - 0.02, 0, g);                        // tapa superior
+  box(RACK_W + 0.02, 0.05, 0.05, M.METAL, 0, RACK_H - 0.06, RACK_D / 2 + 0.02, g);    // moldura frontal sup
+  box(RACK_W + 0.02, 0.05, 0.05, M.METAL, 0, 0.06, RACK_D / 2 + 0.02, g);             // moldura frontal inf
+  // rieles PDU laterales de cobre (traseros)
+  box(0.04, RACK_H - 0.3, 0.04, M.COPPER, -RACK_W / 2 + 0.05, cy, -RACK_D / 2 + 0.08, g, false);
+  box(0.04, RACK_H - 0.3, 0.04, M.COPPER,  RACK_W / 2 - 0.05, cy, -RACK_D / 2 + 0.08, g, false);
+  // tira de LEDs de estado (tope del frente)
+  const ledMat = alarm ? M.LED_R : M.LED_G;
+  for (let i = 0; i < 5; i++) box(0.03, 0.03, 0.02, i === 2 ? M.LED_A : ledMat, -0.1 + i * 0.05, RACK_H - 0.14, RACK_D / 2 + 0.04, g, false);
+  return g;
+}
+
+// ---- CRAC downflow (PBR). Origen en base; frente (louver) hacia -z ----
+function makeCrac() {
+  const g = new THREE.Group();
+  const W = 0.9, H = 1.95, D = 0.9, cy = H / 2;
+  box(W, H, D, M.CAB, 0, cy, 0, g);                                                   // gabinete
+  box(W - 0.06, H - 0.5, 0.03, M.LOUVER, 0, cy - 0.1, -D / 2 - 0.02, g);              // louver frontal
+  box(W, 0.06, D, M.CAB, 0, H, 0, g);                                                 // tapa
+  // display de control
+  box(0.28, 0.2, 0.02, M.SCREEN, W / 2 - 0.24, H - 0.28, -D / 2 - 0.03, g, false);
+  // 2 ventiladores EC AZULES recesados en el tope
+  for (const fx of [-0.22, 0.22]) {
+    box(0.34, 0.06, 0.34, M.STEEL, fx, H + 0.03, 0, g, false);                        // aro/venturi
+    const hub = box(0.08, 0.05, 0.08, M.HUB, fx, H + 0.07, 0, g, false);
+    for (let i = 0; i < 7; i++) {
+      const a = i / 7 * Math.PI * 2;
+      const bl = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.02, 0.05), M.BLUEFAN);
+      bl.position.set(fx + Math.cos(a) * 0.1, H + 0.06, Math.sin(a) * 0.1);
+      bl.rotation.y = -a; bl.castShadow = false; g.add(bl);
+    }
+  }
+  return g;
+}
+
+// ---- IN-ROW cooler (PBR). Gabinete alto y angosto; frente perforado hacia -z ----
+function makeInrow() {
+  const g = new THREE.Group();
+  const W = 0.3, H = 2.0, D = 1.0, cy = H / 2;
+  box(W, H, D, M.CAB, 0, cy, 0, g);
+  box(W - 0.04, H - 0.2, 0.03, M.LOUVER, 0, cy, -D / 2 - 0.02, g);                    // rejilla frontal
+  box(W - 0.04, H - 0.2, 0.03, M.LOUVER, 0, cy,  D / 2 + 0.02, g);                    // rejilla trasera
+  box(W - 0.06, H - 0.4, 0.12, M.COIL, 0, cy, 0.18, g, false);                        // serpentin interno
+  box(0.03, H - 0.5, 0.03, M.COPPER, W / 2 - 0.02, cy, 0.24, g, false);               // colector de cobre
+  box(W, 0.05, D, M.RACK_D, 0, H, 0, g);
+  return g;
+}
+
+// ---- UPS (PBR). Gabinete con puerta + display + LEDs ----
+function makeUps() {
+  const g = new THREE.Group();
+  const W = 0.6, H = 1.9, D = 0.8, cy = H / 2;
+  box(W, H, D, M.CAB, 0, cy, 0, g);
+  box(W - 0.06, H - 0.3, 0.02, M.RACK, 0, cy, D / 2 + 0.01, g);                       // puerta
+  box(0.26, 0.18, 0.02, M.SCREEN, 0, H - 0.35, D / 2 + 0.03, g, false);               // display
+  for (let i = 0; i < 4; i++) box(0.03, 0.03, 0.02, i === 3 ? M.LED_A : M.LED_G, -0.12 + i * 0.08, H - 0.6, D / 2 + 0.03, g, false);
+  box(W, 0.05, D, M.RACK_D, 0, H, 0, g);
+  return g;
+}
+
+// ---- PDU (PBR). Gabinete angosto con interruptores + barra de cobre ----
+function makePdu() {
+  const g = new THREE.Group();
+  const W = 0.4, H = 1.9, D = 0.6, cy = H / 2;
+  box(W, H, D, M.CAB, 0, cy, 0, g);
+  box(W - 0.05, H - 0.3, 0.02, M.RACK, 0, cy, D / 2 + 0.01, g);
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 2; c++)
+    box(0.1, 0.12, 0.02, M.RACK_D, -0.09 + c * 0.18, 0.5 + r * 0.2, D / 2 + 0.03, g, false);   // interruptores
+  box(0.03, H - 0.5, 0.03, M.COPPER, 0, cy, -D / 2 + 0.05, g, false);                 // barra de cobre
+  box(W, 0.05, D, M.RACK_D, 0, H, 0, g);
+  return g;
+}
+
+// ---- DRY COOLER exterior (PBR). Largo con V de serpentines + 3 axiales al tope ----
+function makeDryCooler() {
+  const g = new THREE.Group();
+  const L = 4.0, W = 2.0, H = 1.2;                                                    // L a lo largo de z local
+  box(W, H, L, M.DRY, 0, H / 2, 0, g);                                                // cuerpo
+  box(W + 0.06, 0.12, L + 0.06, M.DRY_D, 0, H, 0, g);                                 // marco superior
+  box(W + 0.06, 0.14, 0.14, M.DRY_D, 0, 0.14, L / 2 + 0.03, g);                       // zocalo
+  box(W + 0.06, 0.14, 0.14, M.DRY_D, 0, 0.14, -L / 2 - 0.03, g);
+  // V de serpentines (2 planos inclinados)
+  for (const s of [-1, 1]) {
+    const coil = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.0, L - 0.4), M.COIL);
+    coil.position.set(s * 0.4, H + 0.5, 0); coil.rotation.z = s * 0.45; coil.castShadow = true; coil.receiveShadow = true; g.add(coil);
+  }
+  // 3 ventiladores axiales al tope
+  for (let i = 0; i < 3; i++) {
+    const cz = -L / 2 + 0.75 + i * 1.15;
+    box(0.9, 0.08, 0.9, M.STEEL, 0, H + 0.02, cz, g, false);
+    box(0.14, 0.1, 0.14, M.HUB, 0, H + 0.1, cz, g, false);
+    for (let b = 0; b < 6; b++) {
+      const a = b / 6 * Math.PI * 2;
+      const bl = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.02, 0.12), M.BLADE);
+      bl.position.set(Math.cos(a) * 0.26, H + 0.08, cz + Math.sin(a) * 0.26);
+      bl.rotation.y = -a; bl.rotation.x = 0.3; bl.castShadow = false; g.add(bl);
+    }
+  }
+  // bridas rojo/azul (conexion CHW) en el costado -x
+  box(0.12, 0.24, 0.24, M.PIPE_R, -W / 2 - 0.06, 0.9, 0.6, g, false);
+  box(0.12, 0.24, 0.24, M.PIPE_B, -W / 2 - 0.06, 0.5, -0.6, g, false);
+  return g;
+}
+
+// ====== COLOCACION DE EQUIPOS (metros) ======
+// Banco de 3 CRAC contra el muro del fondo (frente -z hacia las filas)
+register(makeCrac(), 1.65, FLOOR_H, 13.6, 0, { pill: 'CRAC · 16°→24° · 84%', route: R.crac });
+register(makeCrac(), 3.20, FLOOR_H, 13.6, 0, { pill: 'CRAC · 15°→23° · 79%', route: R.crac });
+register(makeCrac(), 4.75, FLOOR_H, 13.6, 0, { pill: 'CRAC · 17°→25° · 88%', route: R.crac });
+// 2 in-row intercalados en la fila 2
+register(makeInrow(), 2.88, FLOOR_H, 6.0, 0, { pill: 'IN-ROW · 22°C', route: R.inrow });
+register(makeInrow(), 4.08, FLOOR_H, 6.0, 0, { pill: 'IN-ROW · 23°C', route: R.inrow });
+// UPS + PDU al frente
+register(makeUps(), 5.8, FLOOR_H, -1.7, Math.PI, { pill: 'UPS · 78% · BAT 100%', route: R.ups });
+register(makePdu(), 3.4, FLOOR_H, -1.7, 0, { pill: 'PDU · 142 kW', route: R.pdu });
+// Dry cooler EXTERIOR (largo a lo largo de z, fuera del muro +x)
+register(makeDryCooler(), 9.4, 0, 6.0, 0, { pill: 'DRY · 34°C agua', route: R.dry });
+// Hero racks detallados en la fila 0 (uno en ALARMA)
+const HERO = [
+  { x: 0.5, alarm: false, pill: 'RACK · 72% · 24°C' },
+  { x: 1.1, alarm: false, pill: 'RACK · 88% · 27°C' },
+  { x: 1.7, alarm: true,  pill: 'RACK · 98% · 41°C' },
+];
+HERO.forEach(h => register(makeHeroRack(h.alarm), h.x, FLOOR_H, 0.4, 0, { pill: h.pill, alarm: h.alarm, route: R.rack }));
+
+// Pills informativos por FILA de racks silueta (no clicables)
+const ROW_PILLS = [
+  { z: 3.2,  pill: 'RACK · 68% · 23°C' },
+  { z: 6.0,  pill: 'RACK · 74% · 25°C' },
+  { z: 8.8,  pill: 'RACK · 61% · 22°C' },
+  { z: 11.6, pill: 'RACK · 80% · 26°C' },
+];
+
+// ====== CONTENCION DE PASILLO FRIO (cristal) + estructura ======
+for (const zc of COLD_AISLE_Z) {
+  const roofY = FLOOR_H + RACK_H + 0.15;
+  box(RW - 1.0, 0.03, 1.7, M.GLASS, RCX - 0.3, roofY, zc, scene, false);             // techo de cristal
+  box(0.06, 0.7, 1.7, M.GLASS, ROOM.x0 + 1.1, roofY - 0.35, zc, scene, false);       // baffle extremo izq
+  box(0.06, 0.7, 1.7, M.GLASS, 6.4, roofY - 0.35, zc, scene, false);                 // baffle extremo der
+  // costillas de aluminio del techo
+  for (let x = 0.2; x <= 6.2; x += 1.2) box(0.05, 0.06, 1.8, M.METAL, x, roofY + 0.02, zc, scene, false);
+}
+
+// ====== TUBERIA CHW OVERHEAD (rojo retorno / azul suministro) ======
+const PIPE_Y = FLOOR_H + RACK_H + 0.45;
+for (const zc of COLD_AISLE_Z) {
+  pipeRun([[-0.2, PIPE_Y, zc - 0.12], [6.6, PIPE_Y, zc - 0.12]], 0.07, M.PIPE_B);
+  pipeRun([[-0.2, PIPE_Y, zc + 0.12], [6.6, PIPE_Y, zc + 0.12]], 0.07, M.PIPE_R);
+  // varillas de soporte a techo
+  for (const sx of [0.4, 3.0, 5.8]) pipeRun([[sx, PIPE_Y, zc], [sx, PIPE_Y + 0.5, zc]], 0.02, M.ROD);
+}
+// Tendido real sala -> dry cooler exterior (codos 90°)
+pipeRun([
+  [6.6, PIPE_Y, 7.28], [6.9, PIPE_Y, 7.28], [6.9, 1.15, 7.28],
+  [6.9, 1.15, 5.4], [8.6, 1.15, 5.4], [8.6, 0.5, 5.4]
+], 0.07, M.PIPE_B);
+pipeRun([
+  [6.6, PIPE_Y, 7.52], [7.05, PIPE_Y, 7.52], [7.05, 1.45, 7.52],
+  [7.05, 1.45, 6.6], [8.6, 1.45, 6.6], [8.6, 0.9, 6.6]
+], 0.07, M.PIPE_R);
+
+// ====== PAREDES DE CRISTAL (cutaway) + marcos de aluminio ======
+const WALL_H = 2.7, WALL_CY = FLOOR_H + WALL_H / 2;
+function glassWall(w, d, x, z) {
+  box(w, WALL_H, d, M.GLASS, x, WALL_CY, z, scene, false);
+}
+glassWall(RW, 0.05, RCX, ROOM.z1);                       // muro fondo (+z)
+glassWall(RW, 0.05, RCX, ROOM.z0);                       // muro frente (-z)
+glassWall(0.05, RD, ROOM.x0, RCZ);                       // muro izq (-x)
+glassWall(0.05, RD, ROOM.x1, RCZ);                       // muro der (+x)
+// mullions de aluminio (postes verticales cada ~2 m en muros largos)
+const mull = [];
+for (let z = ROOM.z0; z <= ROOM.z1 + 0.01; z += 2.0) { mull.push(tMat(ROOM.x0, WALL_CY, z, 0)); mull.push(tMat(ROOM.x1, WALL_CY, z, 0)); }
+for (let x = ROOM.x0; x <= ROOM.x1 + 0.01; x += 2.0) { mull.push(tMat(x, WALL_CY, ROOM.z0, 0)); mull.push(tMat(x, WALL_CY, ROOM.z1, 0)); }
+instanced(new THREE.BoxGeometry(0.06, WALL_H, 0.06), M.METAL, mull, scene, false);
+// zoclo / cabezal de aluminio perimetral
+for (const yy of [FLOOR_H + 0.05, FLOOR_H + WALL_H]) {
+  box(RW, 0.06, 0.06, M.METAL, RCX, yy, ROOM.z0, scene, false);
+  box(RW, 0.06, 0.06, M.METAL, RCX, yy, ROOM.z1, scene, false);
+  box(0.06, 0.06, RD, M.METAL, ROOM.x0, yy, RCZ, scene, false);
+  box(0.06, 0.06, RD, M.METAL, ROOM.x1, yy, RCZ, scene, false);
+}
+
+// ====== VENTILADORES AXIALES SUELTOS (exterior izq, animados) ======
+function makeFan() {
+  const outer = new THREE.Group();
+  box(0.9, 0.05, 0.9, M.STEEL, 0, 0.03, 0, outer);                                    // placa base
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.05, 8, 24), M.DRY_D);
+  ring.rotation.x = Math.PI / 2; ring.position.y = 0.2; ring.castShadow = true; outer.add(ring);
+  const blades = new THREE.Group(); blades.position.y = 0.2;
+  for (let i = 0; i < 5; i++) {
+    const a = i / 5 * Math.PI * 2;
+    const bl = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.02, 0.12), M.BLADE);
+    bl.position.set(Math.cos(a) * 0.2, 0, Math.sin(a) * 0.2); bl.rotation.y = -a; bl.rotation.x = 0.4; bl.castShadow = false; blades.add(bl);
+  }
+  const hub = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.1), M.HUB); blades.add(hub);
+  outer.add(blades);
+  scene.add(outer);
+  return { outer, blades };
+}
+const FAN_POS = [[-2.0, 1.2], [-2.9, 2.4], [-3.8, 3.6]];
+const fanBlades = [];
+FAN_POS.forEach(([fx, fz]) => { const f = makeFan(); f.outer.position.set(fx, 0, fz); fanBlades.push(f.blades); });
+
+// ====== ESTADISTICAS ======
+let instCount = 0, meshTotal = 0;
+scene.traverse(o => { if (o.isInstancedMesh) { instCount += o.count; meshTotal++; } else if (o.isMesh) meshTotal++; });
+if (typeof window !== 'undefined') window.__SCENE_STATS__ = { instCount, meshTotal, equip: EQUIP.length };
+
+/* ======================================================================
+   RENDER / INTERACCION (solo navegador)
+   ====================================================================== */
+if (!HEADLESS) {
+  const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 400);
+  camera.position.set(16, 12, 21);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;               // escena estatica → horneado bajo demanda
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+
+  // IBL de estudio
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envRT = pmrem.fromScene(new RoomEnvironment(), 0.04);
+  scene.environment = envRT.texture;
+  pmrem.dispose();
+  renderer.shadowMap.needsUpdate = true;               // un solo horneado tras construir
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.target.set(3.2, 1.1, 6);
+  controls.autoRotate = false;
+  controls.autoRotateSpeed = 0.4;
+  controls.maxPolarAngle = Math.PI * 0.495;
+  controls.minDistance = 6; controls.maxDistance = 60;
+  controls.addEventListener('change', () => { if (controls.target.y < 0) controls.target.y = 0; if (camera.position.y < 0.4) camera.position.y = 0.4; });
+
+  // ---- PILLS de telemetria (Sprite + CanvasTexture, alto contraste) ----
+  const pillsGroup = new THREE.Group();
+  scene.add(pillsGroup);
+  function makePill(text, alarm) {
+    const c = document.createElement('canvas'); const W = 512, H = 128; c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+    g.fillStyle = alarm ? 'rgba(46,8,10,0.92)' : 'rgba(10,16,24,0.9)';
+    rr(6, 6, W - 12, H - 12, 22); g.fill();
+    g.lineWidth = 6; g.strokeStyle = alarm ? '#ff5252' : '#12c9ac'; rr(6, 6, W - 12, H - 12, 22); g.stroke();
+    g.font = '600 46px "JetBrains Mono", ui-monospace, monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = alarm ? '#ffdede' : '#eef5fb'; g.fillText(text, W / 2, H / 2 + 3);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    const hh = 0.42; sp.scale.set(hh * (W / H), hh, 1);
+    return sp;
+  }
+  const _box = new THREE.Box3(), _ctr = new THREE.Vector3();
+  for (const e of EQUIP) {
+    _box.setFromObject(e.pivot); _box.getCenter(_ctr);
+    const sp = makePill(e.pill, e.alarm);
+    sp.position.set(_ctr.x, _box.max.y + 0.4, _ctr.z);
+    pillsGroup.add(sp);
+  }
+  for (const rp of ROW_PILLS) {
+    const sp = makePill(rp.pill, false);
+    sp.position.set(3.2, FLOOR_H + RACK_H + 0.9, rp.z);
+    pillsGroup.add(sp);
+  }
+
+  // ---- Panel ----
+  const bPills = document.getElementById('bPills');
+  bPills.onclick = () => { pillsGroup.visible = !pillsGroup.visible; bPills.className = pillsGroup.visible ? 'on' : 'off'; bPills.textContent = pillsGroup.visible ? 'ON' : 'OFF'; };
+  const bRot = document.getElementById('bRot');
+  bRot.onclick = () => { controls.autoRotate = !controls.autoRotate; bRot.className = controls.autoRotate ? 'on' : 'off'; bRot.textContent = controls.autoRotate ? 'ON' : 'OFF'; };
+  const bShadow = document.getElementById('bShadow');
+  bShadow.onclick = () => { renderer.shadowMap.enabled = !renderer.shadowMap.enabled; renderer.shadowMap.needsUpdate = true; scene.traverse(o => { if (o.isMesh) o.material.needsUpdate = true; }); bShadow.className = renderer.shadowMap.enabled ? 'on' : 'off'; bShadow.textContent = renderer.shadowMap.enabled ? 'ON' : 'OFF'; };
+
+  // ---- CLICK en equipo → overlay iframe con su HTML de detalle ----
+  const overlay = document.getElementById('detailOverlay');
+  const frame = document.getElementById('detailFrame');
+  const dTitle = document.getElementById('detailTitle');
+  function openDetail(route, title) { frame.src = route; if (dTitle) dTitle.textContent = title || 'DETALLE DE EQUIPO'; overlay.classList.add('open'); }
+  function closeDetail() { overlay.classList.remove('open'); frame.src = 'about:blank'; }
+  document.getElementById('detailClose').onclick = closeDetail;
+  addEventListener('keydown', ev => { if (ev.key === 'Escape') closeDetail(); });
+
+  const raycaster = new THREE.Raycaster();
+  const ptr = new THREE.Vector2();
+  const pivots = EQUIP.map(e => e.pivot);
+  function pick(ev) {
+    const r = renderer.domElement.getBoundingClientRect();
+    ptr.x = ((ev.clientX - r.left) / r.width) * 2 - 1;
+    ptr.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
+    raycaster.setFromCamera(ptr, camera);
+    const hits = raycaster.intersectObjects(pivots, true);
+    if (!hits.length) return null;
+    let o = hits[0].object; while (o && !o.userData.route) o = o.parent;
+    return (o && o.userData.route) ? o : null;
+  }
+  renderer.domElement.addEventListener('click', ev => {
+    if (overlay.classList.contains('open')) return;
+    const o = pick(ev); if (o) openDetail(o.userData.route, 'DETALLE · ' + o.userData.route.split('/').pop());
+  });
+  renderer.domElement.addEventListener('pointermove', ev => { renderer.domElement.style.cursor = pick(ev) ? 'pointer' : 'default'; });
+
+  addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+  const drawN = document.getElementById('drawN'), triN = document.getElementById('triN');
+  function animate() {
+    requestAnimationFrame(animate);
+    for (const b of fanBlades) b.rotation.y += 0.06;
+    controls.update();
+    renderer.render(scene, camera);
+    if (drawN) drawN.textContent = renderer.info.render.calls;
+    if (triN) triN.textContent = renderer.info.render.triangles.toLocaleString();
+  }
+  animate();
+}
+</script>
+</body>
+</html>
