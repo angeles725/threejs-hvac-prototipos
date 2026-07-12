@@ -1,0 +1,184 @@
+design: damper-motorizado
+track: threejs
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.02 m"
+
+environment:
+  overlays:
+    handbook: /home/cristian/prototipos/three.js/research/HANDBOOK.md
+    house_rules: "/home/cristian/prototipos/three.js/EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    qa_tools: /home/cristian/prototipos/three.js/research/tools
+    design_dir_root: /home/cristian/prototipos/three.js/disenos
+
+references:
+  - source: "Greenheck VCD-33 submittal PDF (via runs/p1-references/NOTES-p1.md)"
+    evidences: "frame channel 127x25 mm 16ga galvanized; blade width 152 mm typical"
+  - source: "Ruskin CD60 datasheet (via NOTES-p1.md)"
+    evidences: "airfoil double-skin blades; 13 mm plated hex axle"
+  - source: "TROX JZ series page (via NOTES-p1.md)"
+    evidences: "flanges both sides; actuator mounts on second blade from top; indicator notch on 12 mm axle"
+  - source: "Belimo LM24A datasheet, novreczky.eu mirror (via NOTES-p1.md)"
+    evidences: "actuator 163x66x61 mm incl. clamp; <=95 deg travel; clamp needs >=37 mm free spindle"
+  - source: "runs/p1-references/ref-1.jpg (Wikimedia CC0)"
+    evidences: "Belimo orange actuator close-up: U-clamp, anti-rotation strap, 0-90 indicator arc + pointer, cable"
+    suitability: pass
+  - source: "runs/p1-references/ref-2.jpg (Wikimedia CC BY 3.0)"
+    evidences: "blade/crank/tie-rod side linkage geometry, 3/4 view"
+    suitability: pass
+  - source: "runs/p1-references/ref-3.jpg (Wikimedia CC BY 2.0)"
+    evidences: "installed placement, jackshaft with multiple actuators; backlit, partial occlusion"
+    suitability: conditional
+
+dimensions_real:
+  length_m: 0.60    # face width (duct 600 mm)
+  width_m: 0.127    # frame/casing depth along duct axis (5-in channel)
+  height_m: 0.40    # face height (duct 400 mm) — 3 opposed blades, pitch ~0.133 m
+
+hierarchy:
+  - name: root
+    children:
+      - name: frame            # galvanized channel casing + flanges both sides, 16ga
+        pivot: [0, 0, 0]
+        animation: none
+      - name: blade_1          # top blade, airfoil; rotates +theta
+        pivot: [0, 0.133, 0]   # axle centerline, horizontal (X axis)
+        animation: "custom:opposed_rotate_pos(0..90deg about X)"
+      - name: blade_2          # DRIVE blade (actuator side); rotates -theta
+        pivot: [0, 0, 0]
+        animation: "custom:opposed_rotate_neg(0..90deg about X)"
+      - name: blade_3          # bottom blade; rotates +theta
+        pivot: [0, -0.133, 0]
+        animation: "custom:opposed_rotate_pos(0..90deg about X)"
+      - name: side_linkage     # crank per blade + vertical tie rod, actuator-opposite side
+        pivot: [-0.30, 0, 0.0]
+        animation: "custom:linkage_follow(blades)"
+        attachment:
+          parent_socket: blade_axle_ends_left
+          local_start: [-0.30, 0.133, 0.0]
+          local_end: [-0.30, -0.133, 0.0]
+          contact_type: hinge
+          embed_depth: 0.0
+          gap_tolerance: 0.002
+      - name: drive_shaft_stub # blade_2 axle protruding through frame side >=37 mm free
+        pivot: [0.30, 0, 0]    # = local_start (frame right face)
+        animation: "custom:opposed_rotate_neg"
+        attachment:
+          parent_socket: blade_2_axle_right
+          local_start: [0.30, 0, 0]
+          local_end: [0.345, 0, 0]     # 45 mm stub: 37 mm clamp + margin
+          contact_type: embedded
+          embed_depth: 0.02
+          gap_tolerance: 0.0
+      - name: actuator
+        pivot: [0.345, 0, 0]
+        animation: none
+        attachment:
+          parent_socket: drive_shaft_stub_tip
+          local_start: [0.345, 0, 0]
+          local_end: [0.345, -0.163, 0]   # body hangs along shaft plane, 163 mm long
+          contact_type: socket
+          embed_depth: 0.0
+          gap_tolerance: 0.001
+        children:
+          - name: actuator_clamp      # U-clamp, rotates 1:1 with shaft
+            pivot: [0.345, 0, 0]
+            animation: "custom:opposed_rotate_neg"
+          - name: indicator_pointer   # rotates 1:1 with shaft over printed 0-90 arc
+            pivot: [0.352, 0, 0]
+            animation: "custom:opposed_rotate_neg"
+          - name: anti_rotation_strap # slotted strap actuator->frame
+            pivot: [0.31, -0.14, 0]
+            animation: none
+            attachment:
+              parent_socket: frame_right_face
+              local_start: [0.31, -0.14, 0]
+              local_end: [0.345, -0.15, 0]
+              contact_type: surface-contact
+              embed_depth: 0.0
+              gap_tolerance: 0.001
+          - name: cable
+            pivot: [0.345, -0.16, 0.02]
+            animation: none
+            attachment:
+              parent_socket: actuator_gland
+              local_start: [0.345, -0.16, 0.02]
+              local_end: [0.36, -0.30, 0.06]
+              contact_type: embedded
+              embed_depth: 0.008
+              gap_tolerance: 0.0
+
+materials:
+  - id: galv_steel
+    family: bare-metal
+    color: "#aeb4b8"
+    metalness: 0.95
+    roughness: 0.45
+    evidence: "HANDBOOK §3.1 skid/bare-metal + physicallybased.info galvanized (NOTES-p1 §3)"
+  - id: plated_steel
+    family: bare-metal
+    color: "#c9ccce"
+    metalness: 1.0
+    roughness: 0.30
+    evidence: "Ruskin plated hex axle; NOTES-p1 §3 plated 1.0/0.25-0.4"
+  - id: actuator_orange
+    family: plastic
+    color: "#e8620c"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "ref-1.jpg Belimo signature orange housing (photo-backed)"
+  - id: actuator_black
+    family: plastic
+    color: "#1c1d20"
+    metalness: 0.0
+    roughness: 0.60
+    evidence: "NOTES-p1 §3 LM/NM black plastic variant (clamp area, underside)"
+  - id: seal_epdm
+    family: rubber
+    color: "#101012"
+    metalness: 0.0
+    roughness: 0.90
+    evidence: "NOTES-p1 §3 EPDM blade-edge/jamb seals"
+
+critical_features:
+  - id: opposed-blades
+    desc: "3 airfoil blades; adjacent blades visibly counter-rotate (never parallel mid-travel), 0-90 deg"
+    threshold: 0.80
+  - id: actuator-on-shaft
+    desc: "orange actuator clamped on a protruding shaft stub (visible >=37mm free spindle) with U-clamp + anti-rotation strap — never flush on the frame"
+    threshold: 0.80
+  - id: indicator-1to1
+    desc: "position pointer rotates 1:1 with drive shaft over a printed 0-90 arc"
+    threshold: 0.75
+  - id: flanged-frame
+    desc: "galvanized channel frame with real depth (~0.13 m) and flanges on both faces"
+    threshold: 0.75
+  - id: side-linkage
+    desc: "exposed crank-and-tie-rod linkage on the non-actuator side, moving coherently with blades"
+    threshold: 0.75
+
+important_features:
+  - id: blade-seals
+    desc: "black EPDM edge seals on blade meeting lines + jamb seals at sides"
+  - id: nameplate
+    desc: "actuator label plate (CanvasTexture) reads as printed spec text"
+  - id: cable-drop
+    desc: "cable exits gland and droops plausibly (catenary), not a straight rod"
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 300
+    tris: 400000
+
+camera:
+  azimuth_deg: 42
+  elevation_deg: 24
+  fov: 36
+
+lighting: house-rig
+
+ui_controls:
+  - "APERTURA % (0-100)"
+  - "MODO AUTO/MANUAL"
+  - "AUTO-ROTATE"
