@@ -1,0 +1,1 @@
+- 2026-07-12 · design3d run damper-motorizado (P0-P8, dual-track) → disenos/damper-motorizado/runs/2026-07-12-retro.md (10 kit deltas proposed, review-status: pending)
