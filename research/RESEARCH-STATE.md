@@ -7,6 +7,16 @@
 > voxel-art first pass, realistic PBR second pass. Research covers the subsystems the
 > pipeline uses (instancing, PBR materials, lighting/IBL, shadows, color management,
 > cameras/controls, procedural geometry/textures, versioning) — not the whole library.
+<!-- research-state.v1 -->
+schema: research-state.v1
+covered_blocks: 44
+gaps_closed: 40
+known_gaps: 40
+investigable_open: 0
+requires_execution_open: 1
+blocked_open: 0
+<!-- /research-state.v1 -->
+
 
 ## Coverage
 
