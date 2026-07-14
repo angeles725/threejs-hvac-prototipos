@@ -225,7 +225,9 @@ test('correction 6: the external Ethernet run connects UG67 to router, internet,
       fovDegrees: preset.fov,
       viewportHeightPx: SURFACE_NETWORK_MEDIA.evidenceViewportHeightPx,
     });
-    assert.ok(widthPx >= 40, `${caption.text} projects ${widthPx.toFixed(1)} px wide and stays unreadable`);
+    // 40px readability floor calibrated under the old 900px-height model; re-expressed for the
+    // measured 636px viewport (X1). Same physical floor in the captured PNG.
+    assert.ok(widthPx >= 40 * (636 / 900), `${caption.text} projects ${widthPx.toFixed(1)} px wide and stays unreadable`);
   }
 });
 

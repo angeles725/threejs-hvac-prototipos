@@ -1001,7 +1001,8 @@ export const LIGHTING_PRESET_ZONE_OWNER = Object.freeze({
 });
 
 export const LIGHTING_OWNED_LABEL_RELAXATION = Object.freeze({
-  minimumProjectedChipPx: 18,
+  // Calibrated under the old 900px-height model; re-expressed for the measured 636px viewport (X1).
+  minimumProjectedChipPx: 18 * (636 / 900),
   defaultScale: 0.6,
 });
 

@@ -66,7 +66,7 @@ if (!OUT_DIR || FILES.length === 0) {
   console.error('usage: node tools/capture.mjs [--url-suffix "<query>"] [--shots <shots.json>] [--jobs N] <out-dir> <file1.html> [file2.html ...]');
   console.error('  --shots <file>: JSON array of {"label": "<out-basename>", "query": "<url query>"} — one page per');
   console.error('    entry against the FIRST html, captured to <label>.png/<label>.console.json. Reuses one browser');
-  console.error('    and runs --jobs pages concurrently (default 4). A gate evidence set is one invocation, not N.');
+  console.error('    and runs --jobs pages concurrently (default 2). A gate evidence set is one invocation, not N.');
   process.exit(2);
 }
 

@@ -26,6 +26,55 @@ Source: `runs/assets/01-shell-circulation-facade/surface-attempt3.review.json`
 | S5 | Strengthen the TC300 status-ring emissive (RING only — the spec forbids inflating device geometry). | `owned-by:lighting-camera` | |
 | S6 | Relax the label distance-cull for the endpoint owning the active preset zone (TC300-02 has no chip in the concessions engineering capture). | **`open`** | Lighting L1 a3 says it moved the concessions preset so the chip lands at NDC 0.69 / 47 px. **Unverified in pixels.** Re-check at P6. |
 
+## From INTERACTION-UI (passed 0.81, attempt 1)
+
+Source: `runs/assets/01-shell-circulation-facade/interaction-ui-attempt1.review.json`
+
+| # | Correction | Status | Note |
+|---|---|---|---|
+| I1 | Add a continuous emissive over-stroke along every edge of the selected path (drop → bus B → UC100-B → LoRaWAN B → UG67 → ethernet → router → internet → Niagara), keeping the base media hue visible. | `open` | Judge scored canonical-network-endpoints 0.83 WITH this defect; node rings alone carry the path. Applying it touches interaction code → re-gate interaction-ui. Decide before P6. |
+| I2 | Cap the wave-ring pool max radius (or fade opacity with radius) so tick-30 rings never occlude the UG67 body/labels at the ug67 preset. | `open` | ug67 preset exists to prove the gateway; at t30 a ring nearly fills the frame. |
+| I3 | Clamp fault/hot zone halo volumes to their room bounds; reduce through-wall bleed so hot-sala-3 tints only sala 3 from engineering-section. | `open` | Single-zone attribution currently locks in only via the red-ringed device. |
+| I4 | Sync Techo/Paredes checkbox states with actual engineering-mode visibility. | `open` | State-reflection gap, no alarm contradiction. Cheap DOM fix; still re-opens the gate if applied. |
+| I5 | Center the red fault emissive on the internet-cloud geometry under its INTERNET label in fault-internet. | `open` | Label-object offset makes red-vs-gray momentarily ambiguous at complete-network. |
+
+## From OPTIMIZATION (passed 0.82, attempt 1)
+
+Source: `runs/assets/01-shell-circulation-facade/optimization-attempt1.review.json`
+
+| # | Correction | Status | Note |
+|---|---|---|---|
+| O1 | Increase label sprite texture resolution / render scale so device IDs resolve crisply at 2064-wide captures (UC-B/UC-D soft at 4x). | `open` | Pre-existing (same softness in interaction-ui and earlier evidence — judged and passed 3 times). Re-check at P6; P6's higher-res hero captures may make it moot or worse. |
+| O2 | Architecture state renders the external chain as unlabeled floating cubes with no links (neutral/net arch-t0). Hide the proxies in architecture state or keep labels/links attached. | `open` | Pre-existing since blockout (`state=architecture` hides network layer but not the external proxies). The P6 architecture capture includes these frames. |
+| O3 | Clamp the selected-device pulse to a minimum marker scale so TC300-08 never reads as vanishing at close range (sala3 t30). | `open` | Interaction polish; touching it re-opens interaction-ui. Only worth it if the P6 judge flags it. |
+
+## From P6-FINAL (passed 0.79, attempt 1 — RUN COMPLETE)
+
+Source: `runs/assets/01-shell-circulation-facade/p6-final-attempt1.review.json`. The run is closed:
+every row below is a USER decision for a future iteration, none blocks delivery. The judge also
+left headroom recommendations (roof articulation, material variation, checkpoint/kitchen detail) —
+see `headroom_recommendation` in the review.
+
+| # | Correction | Status | Note |
+|---|---|---|---|
+| P1 | Lower/pull back the ticket_checkpoint preset (or auto-hide the public roof there) so the checkpoint fit-out is framed instead of the roof plane. | `open` | Its own required view never shows it; front-of-house still passed 0.76. |
+| P2 | Bind the external schematic blocks + system diagram board to engineering/internet visibility so architecture state shows only the building. | `open` | Same defect as O2, now confirmed by the P6 judge (state-pair note). |
+| P3 | Re-articulate per-family roof steps (or lighten roof material) so 2/4/2 massing reads from exterior final views. | `open` | Articulation drift vs blockout; footprint/bands unchanged. Judge suggests spending tri headroom (4.1% used). |
+| P4 | Make display frame 1 change the menu body, not only the header (564 px delta today). | `open` | Weakest animation pair in the set. |
+| P5 | Raise the lights-off emission floor for sala aisle/step LEDs so seating silhouettes stay readable. | `open` | sala3-lightsoff near-black outside screen/exits. |
+| P6d | Reframe the technical preset through the section cut (service corridor, wall, doors, open UC100-B cabinet). | `open` | technical-arch shows mostly roof planes. |
+
+### Adjudicated by the P6 judge (previously open)
+
+| # | Was | Now |
+|---|---|---|
+| S6 | TC300-02 chip missing at concessions engineering capture — unverified in pixels. | **`applied`** — chip visible in p6-final-attempt1-concessions-eng.png (orchestrator pre-look) and the judge raised no label-cull defect at concessions. |
+| X1-delta | TC300-03 chip newly visible at lobby (viewport correction). | **accepted by gate** — visible in p6-final-attempt1-lobby-eng.png; judge verified TC300-03's drop contact in a native crop and flagged nothing. |
+| O1 | Label sprite softness at 4x. | subsumed → P6 defect #8 note (TC300 ring cue unresolvable; labels carry recognition). Remains `open` as polish. |
+| O2 | Orphan external cubes in architecture state. | superseded by **P2** above (same defect, judge-confirmed). |
+| O3 | Selection pulse min scale. | `open`, unflagged by P6 — lowest priority. |
+| I1–I5 | interaction-ui polish corrections. | `open`, none re-flagged by the P6 judge except the TC300 ring visibility (I5-adjacent, see P6 defect #8). |
+
 ## From LIGHTING-CAMERA lineage 1 (exhausted — see `history/lighting-lineage-1/`)
 
 Not deferred: lineage 1 produced no PASS, so its corrections are the lineage-2 work order, not debt.
@@ -34,11 +83,11 @@ Not deferred: lineage 1 produced no PASS, so its corrections are the lineage-2 w
 
 | # | Defect | Status | Note |
 |---|---|---|---|
-| X1 | The gated surface test projects the poster bank through `SURFACE_EVIDENCE_VIEWPORT` at **0.8 portrait aspect**, while `capture.mjs` renders **4:3**. Two different truths about the same image. | **`open`** | Forced the lighting writer to offset the facade 4.5 m east to satisfy both contracts — a patch around a bad spec, which `GATES.md` explicitly prohibits. **This is a `refine-spec`, not a `refine-code`.** Retro delta #11. |
+| X1 | The gated surface test projects the poster bank through `SURFACE_EVIDENCE_VIEWPORT` at **0.8 portrait aspect**, while `capture.mjs` renders **4:3**. Two different truths about the same image. | **`applied`** (2026-07-14) | MEASURED truth on the gated PNGs: canvas-only evidence is **1.0818** (688×636 CSS; surface 2752×2544@DPR4, lighting 2064×1908@DPR3) — neither 0.8 nor 4:3. `SURFACE_EVIDENCE_VIEWPORT` corrected to 688×636; the four legibility floors re-expressed ×(636/900) so their PHYSICAL meaning in the PNG is unchanged (unit conversion, not recalibration). 211/211 green. Runtime delta measured exhaustively (84 chip×preset combos): exactly ONE — TC300-03 becomes visible at the lobby preset, because the real canvas frames it and the 0.8 model wrongly cropped it (same defect class as S6). Strictly additive; adjudicated by the P6 judge on fresh captures. The 4.5 m facade offset stays: judged and passed by three blind reviews; reverting would reopen gates for zero evidence gain. |
 | X2 | `gate-state.mjs` cannot model a lineage reset: it reads the exhausted lineage's FAIL reviews and reports `drift` against a legitimately reset cache. | **`applied`** | FIXED in the kit. It now parses `<pass>[-l<lineage>]-attempt<N>`, derives from the **active (highest) lineage only**, and skips `history/`. Verified: `lighting-camera passed (attempts 1, score 0.8)` — 1 attempt, not 3, because lineage 1's three failures are archived history, not live debt. **Note on how I had been "fixing" it: by copying artifacts under fake names to satisfy the checker. That patch is worse than the bug — it is a lie a later reader takes for truth. Removed.** |
-| X5 | **Alarm messages are ENGLISH strings in a Spanish (es-MX) UI.** `src/alarms.mjs` emits e.g. `TC300-05 · High temperature in Cocina y preparación (31.2 °C)` — half-English, half-Spanish, in the `#alarm-list` a blind reviewer reads at every fault/hot capture. | **`open`** | Pre-existing; surfaced while fixing the HUD derivation bug. Not a HUD bug, so it was correctly left out of that fix. The interaction-ui judge WILL see it — it is in frame in 10 of the 27 capture states. Cheap to fix; fix it before P6 or accept it explicitly. |
-| X4 | **The design has ZERO reference images.** `spec.references[]` is entirely textual (Honeywell datasheets, engram observations, P1 notes). The only PNGs in the repo are our own renders. But `GATES.md` §P6 demands a comparison sheet of *reference\|render same-viewpoint pairs*, and the app carries a `reference-match` camera preset that matches **nothing**. | **`open`** | Would have surfaced at P6 with five passes built on top. Kit now handles it (`GATES.md` §"When there are NO reference images"): record `p6_comparison: spec-only` in the spec, DROP `reference-match` from the evidence contract, and gate P6 on the spec's textual promises + the blockout-vs-final strip. **Action: update `design-spec.yaml` and remove `reference-match` from the lighting/P6 capture sets.** |
-| X3 | The probe loads the DEFAULT camera, which was reframed onto the hero band — so it under-reads (59 draws / 708 tris) and is not a representative load. The 27 PointLights' cost is fragment-side and invisible to a draw/tris probe entirely. | **`open`** | Budget is a ceiling so gates pass, but the **optimization pass must re-measure honestly** or it will optimize against a fiction. |
+| X5 | **Alarm messages are ENGLISH strings in a Spanish (es-MX) UI.** `src/alarms.mjs` emits e.g. `TC300-05 · High temperature in Cocina y preparación (31.2 °C)` — half-English, half-Spanish, in the `#alarm-list` a blind reviewer reads at every fault/hot capture. | **`applied`** (2026-07-13/14) | All four alarm kinds translated to neutral es-MX in `src/alarms.mjs` (verified in code: `Temperatura alta en …`, `… sin comunicación; sus datos no llegan a Niagara`); identifiers stay English. Confirmed in pixels by the interaction-ui gate: the judge read the alarm list in every fault/hot capture and reported full HUD/list coherence (state-pair 0.84), no language defect. Message table in `runs/apply-asset-01-interaction-ui-attempt1.md` §X5. |
+| X4 | **The design has ZERO reference images.** `spec.references[]` is entirely textual (Honeywell datasheets, engram observations, P1 notes). The only PNGs in the repo are our own renders. But `GATES.md` §P6 demands a comparison sheet of *reference\|render same-viewpoint pairs*, and the app carries a `reference-match` camera preset that matches **nothing**. | **`applied`** (2026-07-14) | `design-spec.yaml` → `evidence_contract.p6.comparison: spec-only`, `reference-match` dropped from `p6.required_views`, `comparison_sheet` rewritten to blockout-vs-final strip + textual promises. The app's `reference-match` camera preset stays as a lookdev angle (code untouched, gates intact). Lighting's historical contract rows left as judged. P3 revalidation of the touched fields delegated. |
+| X3 | The probe loads the DEFAULT camera, which was reframed onto the hero band — so it under-reads (59 draws / 708 tris) and is not a representative load. The 27 PointLights' cost is fragment-side and invisible to a draw/tris probe entirely. | `owned-by:optimization` | Tooling half FIXED: `probe.mjs` now reads three.js `renderer.info` (`window.__qaRenderInfo`) and takes `--url-suffix`, so it measures real state/camera loads — interaction-ui gate measured worst-case 195 draws / 25,964 tris at `?camera=complete-network&state=fault-internet&links=all` (the old wrapper reported 59/708 for the SAME scene). Remaining half is the optimization pass's duty: measure the required states honestly, including noting that PointLight fragment cost stays invisible to draws/tris. |
 
 ---
 

@@ -36,13 +36,16 @@ const REQUIRED_DETAIL_CATEGORIES = Object.freeze([
 ]);
 
 /**
- * The capture harness renders into the portrait canvas the UI side panel leaves behind. Every
- * screen-space claim in this pass is derived through this viewport, never through a 16:9 guess.
+ * The canvas the capture harness actually shoots: a 960x720 CSS page minus the UI side panel
+ * leaves a 688x636 CSS canvas (measured on the gated surface/lighting PNGs: 2752x2544 @ DPR 4 and
+ * 2064x1908 @ DPR 3, both 1.0818). Every screen-space claim in this pass is derived through THIS
+ * viewport — the previous 720x900/0.8 portrait model was a guess that contradicted the judged
+ * pixels (deferred defect X1) and forced the facade 4.5 m off-axis to satisfy two truths.
  */
 export const SURFACE_EVIDENCE_VIEWPORT = Object.freeze({
-  widthPx: 720,
-  heightPx: 900,
-  aspect: 0.8,
+  widthPx: 688,
+  heightPx: 636,
+  aspect: 688 / 636,
 });
 
 function subtract(a, b) {
@@ -135,7 +138,9 @@ export const SURFACE_ENGINEERING_CONTRAST = Object.freeze({
 export const SURFACE_NETWORK_MEDIA = Object.freeze({
   camera: 'complete-network',
   widthScale: 5,
-  minimumProjectedPx: 3,
+  // Legibility floor calibrated under the old 900px-height model; re-expressed for the measured
+  // 636px viewport (X1). Same physical floor in the captured PNG, different model unit.
+  minimumProjectedPx: 3 * (636 / 900),
   evidenceViewportHeightPx: SURFACE_EVIDENCE_VIEWPORT.heightPx,
   widths: Object.freeze({
     rs485Tray: 0.24,
@@ -268,7 +273,8 @@ export const SURFACE_NETWORK_LABEL_POLICY = Object.freeze({
  */
 export const SURFACE_TC300_LABEL_POLICY = Object.freeze({
   cameras: Object.freeze(['corridor', 'kitchen', 'lobby', 'sala-3', 'complete-network']),
-  minimumProjectedChipPx: 30,
+  // Calibrated under the old 900px-height model; re-expressed for the measured 636px viewport (X1).
+  minimumProjectedChipPx: 30 * (636 / 900),
   frameMargin: 0.95,
   renderOrder: 1220,
   scaleByCamera: Object.freeze({

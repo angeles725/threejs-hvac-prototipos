@@ -198,7 +198,7 @@ test('application composition wires only the surface shell asset builder into th
   assert.match(main, /architectureAsset\.dispose\(\)/);
   assert.match(main, /architectureAsset\.setEvidenceCamera\(/);
   assert.doesNotMatch(main, /create(?:FrontOfHouse|Auditorium|Device|Network)/);
-  assert.match(html, /id="pass-label"[^>]*>Pase INTERACTION-UI/);
+  assert.match(html, /id="pass-label"[^>]*>Pase P6 FINAL/);
 });
 
 test('silhouette reset exposes one-view room, family, FOH and rear-strip billboards', () => {
