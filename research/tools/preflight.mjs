@@ -79,7 +79,11 @@ const browser = await puppeteer.launch({
 
 async function shoot(query) {
   const page = await browser.newPage();
-  await page.setViewport({ width: 640, height: 480, deviceScaleFactor: 1 }); // small: this is a smoke test
+  // Must match capture.mjs's CSS viewport (960x720). A SMALLER viewport reflows the app's side panel
+  // out of frame, so a state whose only visible effect is a DOM overlay reads as pixel-identical to
+  // its baseline — the preflight would then report a WORKING state as broken. Measure through the
+  // same window the gate will.
+  await page.setViewport({ width: 960, height: 720, deviceScaleFactor: 1 });
   const issues = [];
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') issues.push(m.text().slice(0, 200)); });
   page.on('pageerror', (e) => issues.push(String(e).slice(0, 200)));
@@ -88,7 +92,11 @@ async function shoot(query) {
   await new Promise((r) => setTimeout(r, 9000));
   const canvas = await page.$('canvas');
   if (!canvas) { await page.close(); return { issues, png: null }; }
-  const png = await canvas.screenshot();
+  // Screenshot the whole VIEWPORT, not just the canvas. A state whose only visible effect is a DOM
+  // overlay (alarm banner, selection panel, HUD) is pixel-identical to its baseline in a canvas-only
+  // shot — so a canvas-only distinctness check would report a WORKING state as broken, and a
+  // canvas-only evidence set would hide the entire deliverable of an interaction/UI pass.
+  const png = await page.screenshot();
   await page.close();
   return { issues, png };
 }

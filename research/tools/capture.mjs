@@ -22,6 +22,13 @@ const rawArgs = process.argv.slice(2);
 let URL_SUFFIX = '';
 let SHOTS_FILE = '';
 let DPR_ARG = null;
+// --page captures the whole VIEWPORT (canvas + DOM), not just the <canvas> element.
+// The default canvas-only shot is right for geometry/material/lighting passes, and BLIND to
+// everything a DOM overlay shows: alarm banners, selection panels, HUD readouts, the control
+// panel itself. The interaction-ui pass's entire deliverable lives there — capturing only the
+// canvas made its work literally invisible to the reviewer, and made two genuinely different
+// states render pixel-identical (found by `preflight --contract`, not by a judge).
+let PAGE_MODE = false;
 // Default 2, not 4: under SwiftShader the win comes from NOT relaunching Chrome per shot, not from
 // concurrency — the rasterizer is CPU-bound, so >2 pages just thrash and time out the CDP channel.
 let JOBS = 2;
@@ -43,6 +50,8 @@ for (let i = 0; i < rawArgs.length; i++) {
     DPR_ARG = Number(rawArgs[++i]);
   } else if (rawArgs[i].startsWith('--dpr=')) {
     DPR_ARG = Number(rawArgs[i].slice('--dpr='.length));
+  } else if (rawArgs[i] === '--page') {
+    PAGE_MODE = true;
   } else {
     positional.push(rawArgs[i]);
   }
@@ -187,7 +196,8 @@ async function capture(f, suffix, base) {
     // canvas.toBlob() does; no extra renderer flags needed for this path since Puppeteer
     // captures via the browser's own frame, not toDataURL() — see [Block 38] §38.1 note on
     // why preserveDrawingBuffer only matters for in-page toDataURL()/toBlob() calls.
-    await canvasHandle.screenshot({ path: outPath });
+    if (PAGE_MODE) await page.screenshot({ path: outPath });
+    else await canvasHandle.screenshot({ path: outPath });
     // Uniformity check on the SAVED artifact — free, because the file already exists. A PNG of a
     // blank/black frame compresses to almost nothing; a real scene here is 300-500 KB.
     const bytes = fs.statSync(outPath).size;
