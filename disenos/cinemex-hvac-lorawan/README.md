@@ -28,5 +28,9 @@ Deterministic QA states via URL: `?camera=<preset>&state=<architecture|engineeri
 | [runs/DEFERRED-CORRECTIONS.md](runs/DEFERRED-CORRECTIONS.md) | ledger | Open polish items awaiting user decision |
 
 Gate summary: blockout 0.79 · structural 0.82 · materials 0.81 · surface 0.81 (L2) ·
-lighting 0.80 (L2) · interaction-ui 0.81 · optimization 0.82 · **P6 final 0.79** — peak perf
-225/550 draws, 30.7k/750k tris.
+lighting 0.80 (L2) · interaction-ui 0.81 · optimization 0.82 · **P6 final 0.78 (L2)** — peak perf
+209/550 draws, 47.4k/750k tris. The L2 round added the 14 rooftop package units (one per TC300
+zone), the reframed checkpoint/kitchen/technical presets, per-family roof articulation, and three
+UX fixes: the Techo toggle now hides interior ceilings too, wheel zoom is smoothed (OrbitControls
+never damps dolly natively), and a boot-time shader warm-up removes the first-use freeze on the
+Sección toggle and device selection.

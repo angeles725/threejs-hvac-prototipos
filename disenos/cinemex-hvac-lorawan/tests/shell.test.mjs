@@ -178,11 +178,13 @@ test('fixed evidence cameras frame targets tightly and apply their field of view
   const { camera, orbitControls } = createCameraHarness();
   const controller = createCameraController({ camera, orbitControls });
   // The presets whose framing no later pass owns keep their literal contract.
+  // CONTRACT CHANGE (P6 lineage 2): `kitchen` and `technical` are now owned by the P6 correction
+  // round (1b and P6d ordered both reframes); the literals below are the corrected framings.
   const expected = {
     neutral: { position: [54, 44, 58], target: [0, 1.5, -1], fov: 52 },
-    kitchen: { position: [-17, 2.4, 17.4], target: [-10, 1.7, 12.6], fov: 60 },
+    kitchen: { position: [-17.5, 3.1, 17.8], target: [-9.6, 2.3, 12.4], fov: 62 },
     corridor: { position: [0, 3.2, 9.5], target: [0, 1.35, -8], fov: 65 },
-    technical: { position: [0, 26, -20.5], target: [0, 0, -19.3], fov: 65 },
+    technical: { position: [0, 30, -23], target: [-9, 0, -20.3], fov: 55 },
     ug67: { position: [2, 4.05, 3.55], target: [3.15, 3.45, 2], fov: 55 },
   };
 
@@ -330,7 +332,9 @@ test('materials look-dev cameras match the DesignSpec neutral, grazing and refer
     grazing: { position: [25, 7.5, 44], target: [0, 2.15, 21], fov: 54 },
     'reference-match': { position: [-7.5, 4.2, -8.9], target: [-27.5, 3, -8.9], fov: 70 },
     'family-master': { position: [8, 26, -1], target: [-17, 1.5, -4], fov: 60 },
-    technical: { position: [0, 26, -20.5], target: [0, 0, -19.3], fov: 65 },
+    // CONTRACT CHANGE (P6 lineage 2, correction P6d): the technical framing now looks through the
+    // clipped rear roof at the corridor/wall/doors/UC100-B instead of at the roof plane.
+    technical: { position: [0, 30, -23], target: [-9, 0, -20.3], fov: 55 },
   };
   for (const [name, framing] of Object.entries(expected)) {
     assert.equal(controller.applyPreset(name), true);

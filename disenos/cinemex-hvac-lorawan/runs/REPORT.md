@@ -1,6 +1,16 @@
 # cinemex-hvac-lorawan — run report (design3d HEAVY, threejs track)
 
-**Completed:** 2026-07-14 · **Result:** all 8 ladder passes GATED · `gate-state.mjs` derivation clean.
+**Completed:** 2026-07-14 (P6 lineage 2) · **Result:** all 8 ladder passes GATED · `gate-state.mjs` derivation clean.
+
+> **P6 lineage 2 (user-authorized correction round, same day):** PASSED 0.78 first attempt.
+> Applied and re-gated: the L1 judge's six corrections, the kitchen preset reframe, three
+> user-reported UX fixes (double roof on the Techo toggle, smooth wheel zoom, boot-time shader
+> warm-up killing the first-use freeze) and the user amendment adding **14 rooftop package units,
+> one per TC300 zone** (spec amended + P3-revalidated; silhouette per the house Trane RTU family).
+> Evidence: 33-shot whole-viewport set incl. two new probative views (roof-off, roof-service) +
+> refreshed blockout-vs-final strip. Suite 234/234 · probe 209 draws / 47,364 tris (38% / 6.3%).
+> Review: [p6-final-l2-attempt1.review.json](assets/01-shell-circulation-facade/p6-final-l2-attempt1.review.json) ·
+> six new polish rows in [DEFERRED-CORRECTIONS.md](DEFERRED-CORRECTIONS.md) §P6-L2.
 Scene: eight-screen Cinemex multiplex (60×45 m) with the full HVAC monitoring chain
 TC300 ×14 → RS-485 (4 buses) → UC100 ×4 → LoRaWAN → UG67 → Ethernet/Internet → Niagara + clients,
 deterministic fault/hot simulation, and an es-MX operations HUD.

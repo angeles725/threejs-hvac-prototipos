@@ -4,6 +4,7 @@ import { createCameraController } from './src/controllers/camera.js';
 import { createLayerController } from './src/controllers/layers.js';
 import { resolvePickedSelectionFromIntersections } from './src/controllers/picking.js';
 import { parseQueryState, serializeQueryState } from './src/controllers/query-state.js';
+import { runShaderWarmup } from './src/controllers/warmup.js';
 import { createArchitectureStructure } from './src/scene/architecture.js';
 import { createMaterialRegistry } from './src/scene/materials.js';
 import { createSceneRuntime } from './src/scene/runtime.js';
@@ -85,6 +86,8 @@ async function startApplication() {
     labels: queryState.labels,
     labelsExplicit: queryState.labelsExplicit,
   });
+  // The interior ceilings are the underside of the roof: they follow the Techo layer (UX item 7).
+  architectureAsset.setRoofLayerVisible(queryState.roof);
   architectureAsset.setEvidenceCamera(queryState.camera, createEvidenceViewContext());
   architectureAsset.setSurfaceFrame({
     posterFrame: queryState.posterFrame,
@@ -165,6 +168,8 @@ async function startApplication() {
         mutableQuery.labelsExplicit = true;
         architectureAsset.setLabelPolicy({ labels: input.checked, labelsExplicit: true });
       }
+      // The interior ceilings ride the Techo toggle, or hiding the roof reveals a "second roof".
+      if (input.dataset.layer === 'roof') architectureAsset.setRoofLayerVisible(input.checked);
       if (input.dataset.layer === 'roof' || input.dataset.layer === 'walls') runtime.bakeShadows();
       writeQueryState(mutableQuery);
     });
@@ -175,7 +180,9 @@ async function startApplication() {
   cutaway.addEventListener('change', () => {
     layerController.setCutaway(cutaway.checked);
     mutableQuery.cutaway = cutaway.checked;
-    runtime.bakeShadows();
+    // No shadow re-bake here: `clipShadows` is never enabled, so the clipping planes do not touch
+    // the shadow depth pass — the old re-bake was pure per-toggle cost. The remaining first-toggle
+    // shader compile is paid at boot by `runShaderWarmup`.
     writeQueryState(mutableQuery);
   });
 
@@ -361,6 +368,17 @@ async function startApplication() {
     dispose,
   });
   window.addEventListener('pagehide', dispose, { once: true });
+  // Pay every first-use shader compile (cutaway clipping variants, selection/status overlays)
+  // BEFORE readiness: captures wait on `data-app-ready`, so warming later would race them, and
+  // warming restores the byte-identical boot state.
+  runShaderWarmup({
+    renderer: runtime.renderer,
+    scene: runtime.scene,
+    camera: runtime.camera,
+    materialRegistry,
+    clippingPlane: runtime.clippingPlane,
+    bootCutaway: queryState.cutaway,
+  });
   document.documentElement.dataset.appReady = 'true';
   // The readiness flag is a DOM dataset, never a second status writer: the boot path used to
   // overwrite the derived status line here with a hard-coded healthy copy, so a fault URL loaded

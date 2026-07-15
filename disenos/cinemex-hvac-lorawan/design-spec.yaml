@@ -94,6 +94,9 @@ dimensions_real:
   ug67_antenna_length_m: {value: 0.600, confidence: high, evidence: "Milesight UG67 datasheet accessories"}
   ug67_mount_height_aff_m: {value: 3.5, confidence: high, evidence: "SDD HVAC-IOT-003 / user brief range 3–4 m"}
   person_reference_height_m: {value: 1.8, confidence: high, evidence: "research/HANDBOOK.md §3.0 scale sanity"}
+  rtu_package_length_m: {value: 2.5, confidence: med, evidence: "research/HANDBOOK.md scale table: RTU/AHU 2.5-4 m long × ~2 m tall; per-zone light-commercial packaged unit sized at the family's small end (user amendment 2026-07-14)"}
+  rtu_package_width_m: {value: 1.5, confidence: med, evidence: "typical light-commercial packaged-unit footprint proportion vs HANDBOOK length class; conceptual"}
+  rtu_package_height_m: {value: 1.2, confidence: med, evidence: "HANDBOOK RTU family ~2 m tall applies to large AHUs; per-zone unit authored at 1.2 m + 0.25 m curb so 14 units do not dominate the roofscape"}
   auditorium_families:
     small:
       count: {value: 2, confidence: high, evidence: "SDD CIN-ARCH-003"}
@@ -294,7 +297,37 @@ hierarchy:
           rooftop_supply_plenum: [-1.20, -0.30, -12.0]
           rooftop_return_plenum: [1.20, -0.60, -12.0]
         children:
-          - {name: packaged_hvac_units, pivot: [0, 0.20, 0], animation: none}
+          # User amendment 2026-07-14: one packaged rooftop unit PER THERMOSTAT — 14 units, each
+          # on the roof above the zone its TC300 serves, seated on a visible curb with a supply
+          # drop into the zone. Master gated first, then 14 configured instances (instance_rule).
+          - name: packaged_hvac_units
+            pivot: [0, 0.20, 0]
+            animation: none
+            count: 14
+            rule: "one_per_tc300_zone"
+            placement: "on the roof plate above the owning TC300's zone; never floating — each unit seats on a curb in visible contact with its roof plate, with a short supply-duct drop entering the zone below"
+            unit_dims_ref: [rtu_package_length_m, rtu_package_width_m, rtu_package_height_m]
+            read: "recognizable packaged-unit silhouette: rectangular cabinet, condenser-fan circle(s) on top, hooded outdoor-air intake, short curb — consistent with the house RTU family"
+            children:
+              # Template child, instantiated once per unit (14×). Coordinates DERIVE per owning
+              # zone: x/z from the tc300_endpoint_registry entry of the owning thermostat, y from
+              # that zone's roof plate top (public band 4.61 m plates; auditorium family plates at
+              # their gated heights). DESIGNSPEC rule 4: no appendage without an attachment block.
+              - name: supply_drop
+                pivot: [0, -0.60, 0]
+                animation: none
+                attachment:
+                  socket_owner: packaged_hvac_units
+                  parent_socket: unit_base_outlet
+                  coordinate_space: unit-local
+                  local_start: [0, -0.60, 0]
+                  local_end: [0, -1.10, 0]
+                  length_confidence: med
+                  contact_type: overlap
+                  overlap: 0.20
+                  gap_tolerance: 0.0
+            sockets:
+              unit_base_outlet: [0, -0.60, 0]
           - name: supply_duct_main
             pivot: [-1.20, -0.30, -12.0]
             animation: "custom:engineering_visibility"
@@ -853,7 +886,7 @@ important_features:
   - id: cinema-lighting-hierarchy
     desc: "Bright exterior/lobby and menus transition through red/white commercial accents into dim carpeted corridors and low-emission auditoriums with readable aisle/exit lights."
   - id: technical-containment
-    desc: "RS-485 routes, junction boxes, trays, roof supply/return mains, kitchen extraction and service cabinets visibly attach to named sockets/containment without floating tubes or impossible wall cuts."
+    desc: "RS-485 routes, junction boxes, trays, roof supply/return mains, kitchen extraction, the 14 rooftop package units (curb-seated on their roof plates, one per TC300 zone, with visible supply drops) and service cabinets visibly attach to named sockets/containment without floating tubes or impossible wall cuts."
 
 quality_contract:
   global_min: 0.78
@@ -890,11 +923,17 @@ camera:
     facade: {position: [0, 8, 55], target: [0, 3, 22], fov: 52}
     lobby: {position: [21, 7, 29], target: [0, 1.5, 18], fov: 66}
     concessions: {position: [15, 6, 24], target: [0, 1.5, 16.5], fov: 60}
-    kitchen: {position: [-1, 5.5, 18], target: [-9, 1.4, 12.8], fov: 58}
-    ticket_checkpoint: {position: [0, 4.5, 20], target: [0, 1.4, 12], fov: 55}
+    # P6 lineage-2 corrections: kitchen reframed to include workline + hood + hood->duct contact
+    # (1b); ticket_checkpoint moved to the corridor mouth looking north — the roof plane and the
+    # concession service back wall make every higher/northern stand blind to the checkpoint (P1).
+    kitchen: {position: [-17.5, 3.1, 17.8], target: [-9.6, 2.3, 12.4], fov: 62}
+    ticket_checkpoint: {position: [0.6, 3.6, 4.6], target: [-0.1, 0.75, 12.2], fov: 64}
     auditorium_corridor: {position: [0, 3.0, 8], target: [0, 1.6, -12], fov: 68}
     sala_3: {position: [-7.5, 4.2, -8.9], target: [-27.5, 3.0, -8.9], fov: 70}
-    technical_room: {position: [-7, 5.0, -16.0], target: [-16, 1.5, -21.2], fov: 62}
+    # P6 correction P6d: framed through the section cut — the rear service roof auto-hides for this
+    # preset, and the camera stands high north-east so corridor, separating wall, door heads and the
+    # UC100-B cabinet are all in verified line of sight (the 4.5 m wall forbids a lower stand).
+    technical_room: {position: [0, 30, -23], target: [-9, 0, -20.3], fov: 55}
     ug67: {position: [9, 5.2, 8], target: [3.15, 3.5, 2.0], fov: 48}
     complete_network: {position: [64, 38, 54], target: [11, 2, 0], fov: 82}
     engineering_section: {position: [50, 54, 46], target: [0, 0, -2], fov: 74}

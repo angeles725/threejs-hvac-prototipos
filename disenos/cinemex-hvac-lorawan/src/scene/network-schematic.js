@@ -803,9 +803,11 @@ export function createNetworkSchematicComposition({
 export function resolveNetworkEvidenceVisibility(cameraName, { visualMode = 'engineering' } = {}) {
   // complete-network is the preset whose job is to expose the whole chain: the physical media and
   // the endpoint captions must be present there, with the board beside them as the derived summary.
+  // P6 correction P2: `visual_states.architecture` declares the network hidden, so the board is an
+  // ENGINEERING exhibit — in the architecture state it rendered as a floating red-framed slab.
   if (cameraName === 'complete-network') {
     return freeze({
-      schematic: true,
+      schematic: visualMode === 'engineering',
       densePhysicalNetwork: true,
       technicalLabels: true,
       ug67RfDetail: false,

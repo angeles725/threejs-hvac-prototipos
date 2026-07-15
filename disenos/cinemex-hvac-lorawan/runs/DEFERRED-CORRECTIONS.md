@@ -48,7 +48,26 @@ Source: `runs/assets/01-shell-circulation-facade/optimization-attempt1.review.js
 | O2 | Architecture state renders the external chain as unlabeled floating cubes with no links (neutral/net arch-t0). Hide the proxies in architecture state or keep labels/links attached. | `open` | Pre-existing since blockout (`state=architecture` hides network layer but not the external proxies). The P6 architecture capture includes these frames. |
 | O3 | Clamp the selected-device pulse to a minimum marker scale so TC300-08 never reads as vanishing at close range (sala3 t30). | `open` | Interaction polish; touching it re-opens interaction-ui. Only worth it if the P6 judge flags it. |
 
-## From P6-FINAL (passed 0.79, attempt 1 — RUN COMPLETE)
+## From P6-FINAL LINEAGE 2 (passed 0.78, attempt 1 — correction round closed 2026-07-14)
+
+Source: `runs/assets/01-shell-circulation-facade/p6-final-l2-attempt1.review.json`. The L2 round
+APPLIED and re-gated: P1 (checkpoint preset — passed, but see L1 below), P2 (external blocks
+hidden in architecture — judge-verified), P3 roofs (2/4/2 reads, fascias carry articulation), P4
+(display frame body — pair differs), P5 (sala lights-off floor — borderline, see L2 below), P6d
+(technical preset — reframed, but see L3), 1b kitchen (hood→duct contact crop-verified), user items
+7/8/9 (double roof / smooth zoom / boot warm-up — roof-off probative shot judge-verified) and the
+14-RTU amendment (curb contact crop-verified). New polish rows for a future round:
+
+| # | Correction | Status | Note |
+|---|---|---|---|
+| L1 | Checkpoint gate hardware (pedestals with wings/arms, queue rail, desk face) — masses read as featureless grey blocks. | `open` | Successor of P1: the preset now frames the right place; the fit-out itself is the remaining read. |
+| L2 | Raise sala3 lights-off seat-region fill (~3.3/255 vs walls 6/255) so silhouettes clear the readability floor. | `open` | Successor of P5: pair differs clearly; silhouettes borderline. |
+| L3 | Re-aim/lower technical_room camera + always-on cabinet light so UC100-B reads through the cut. | `open` | Successor of P6d. |
+| L4 | Break near-pure-black exterior upper walls/fascias with panel seams or lighter charcoal. | `open` | New: large exterior regions read as voids at first glance. |
+| L5 | Make all 14 RTUs countable in one probative view (nudge the occluded unit or widen neutral framing). | `open` | 13/14 visible at neutral; fleet corroborated across views. |
+| L6 | Expose a visible stub of each RTU supply drop at the curb edge (or a cutaway detail view). | `open` | The drop-into-zone contract is implied by curb contact, not shown. |
+
+## From P6-FINAL (passed 0.79, attempt 1 — superseded by lineage 2)
 
 Source: `runs/assets/01-shell-circulation-facade/p6-final-attempt1.review.json`. The run is closed:
 every row below is a USER decision for a future iteration, none blocks delivery. The judge also

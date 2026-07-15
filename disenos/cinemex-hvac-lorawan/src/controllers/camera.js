@@ -54,12 +54,33 @@ export const CAMERA_PRESETS = Object.freeze({
   // the east end wall) is finally inside the frame. The counter, menu boards and POS posts keep the
   // same subject distance and framing the surface pass accepted; only the side changes.
   concessions: preset([-7.5, 2.5, 21.4], [2, 2.1, 16], 60),
-  // Aimed so the kitchen workline AND the thermostat that serves it are both inside the frame.
-  kitchen: preset([-17, 2.4, 17.4], [-10, 1.7, 12.6], 60),
-  checkpoint: preset([12, 7, 23], [0, 1.6, 12]),
+  // P6 correction 1b: the old framing buried the frame in the flat worktop and cropped the hood.
+  // Raised and pulled back (still inside the band, under the 4.5 m roof plane) and aimed at the
+  // hood line, so one frame reads workline -> hood -> hood-to-duct contact -> service door. LOS to
+  // the hood front, the outlet, the duct at the soffit and the door verified against the emitted
+  // boxes; TC300-05 keeps its pinned label placement.
+  kitchen: preset([-17.5, 3.1, 17.8], [-9.6, 2.3, 12.4], 62),
+  /**
+   * P6 correction P1. The old preset ([12,7,23] -> [0,1.6,12]) stood ABOVE the 4.5 m public roof
+   * plane: its own required view showed the roof and the floating zone labels instead of the
+   * checkpoint. Approaching from the north is geometrically hopeless — the concession service back
+   * wall closes that sightline — so the camera now stands in the corridor mouth looking north: both
+   * gate blocks, the accessible lane between them and the band wall behind are in an unobstructed
+   * line of sight (verified against the emitted boxes). The public roof is clipped for this preset
+   * like the other fit-out presets, and the overview zone labels are suppressed here.
+   */
+  checkpoint: preset([0.6, 3.6, 4.6], [-0.1, 0.75, 12.2], 64),
   corridor: preset([0, 3.2, 9.5], [0, 1.35, -8], 65),
   auditorium: preset([-37, 13, 17], [-17, 2.5, 6]),
-  technical: preset([0, 26, -20.5], [0, 0, -19.3], 65),
+  /**
+   * P6 correction P6d. The old top-down framing ([0,26,-20.5]) showed the rear roof plane. The rear
+   * service roof is now clipped for this preset (mirroring P1's roof clip), and the camera stands
+   * high on the north-east looking into the opened rooms: the 1.5 m corridor strip, the separating
+   * wall with its door heads, the UC100-B cabinet and both control-room floors all verified in an
+   * unobstructed line of sight. Steepness is forced by geometry: the corridor floor is only visible
+   * over the 4.5 m separating wall above ~70 degrees of elevation.
+   */
+  technical: preset([0, 30, -23], [-9, 0, -20.3], 55),
   ug67: preset([2, 4.05, 3.55], [3.15, 3.45, 2], 55),
   network: preset([70, 48, 72], [9, 0, 0]),
 });
@@ -84,6 +105,42 @@ export const QA_CAMERA_PRESETS = Object.freeze({
 
 const DEFAULT_BOUNDS = Object.freeze({ x: [-29, 29], z: [-21, 21], eyeHeight: 1.7 });
 const MOVE_SPEED_MPS = 4;
+
+/**
+ * UX item 8 — smooth dolly. three.js OrbitControls NEVER damps its dolly: `enableDamping` applies
+ * to rotate/pan only, and every wheel notch lands as an instant distance step. The controller
+ * therefore owns the zoom: wheel input accumulates a TARGET distance (clamped to the controls'
+ * own min/max), and `update()` approaches it exponentially along the camera->target axis.
+ */
+export const SMOOTH_DOLLY = Object.freeze({
+  // OrbitControls' own per-notch scale (0.95^zoomSpeed) — kept so the zoom SPEED feels unchanged;
+  // only the delivery becomes continuous.
+  scalePerNotch: 0.95,
+  notchDeltaPx: 100,
+  // Exponential approach rate (1/s): ~63% of the remaining distance closes in 1/rate seconds.
+  approachRate: 9,
+  // Snap-to-rest distance: one centimetre is invisible at every preset scale and lets the glide
+  // terminate instead of asymptoting forever.
+  restThreshold: 0.01,
+});
+
+/** The distance the dolly should rest at after one wheel event, clamped to the controls' range. */
+export function resolveDollyTarget(currentTarget, wheelDeltaY, { minDistance = 0.1, maxDistance = Infinity } = {}) {
+  if (!Number.isFinite(currentTarget) || currentTarget <= 0) {
+    throw new RangeError('A dolly target needs a positive current distance.');
+  }
+  const notches = (Number(wheelDeltaY) || 0) / SMOOTH_DOLLY.notchDeltaPx;
+  const scaled = currentTarget * SMOOTH_DOLLY.scalePerNotch ** -notches;
+  return Math.min(maxDistance, Math.max(minDistance, scaled));
+}
+
+/** One exponential step toward the target distance. Pure, so convergence is testable. */
+export function stepDollyDistance(current, target, deltaSeconds) {
+  const safeDelta = Math.min(0.1, Math.max(0, Number(deltaSeconds) || 0));
+  const blend = 1 - Math.exp(-SMOOTH_DOLLY.approachRate * safeDelta);
+  const next = current + (target - current) * blend;
+  return Math.abs(next - target) <= SMOOTH_DOLLY.restThreshold ? target : next;
+}
 
 function clamp(value, [minimum, maximum]) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -111,12 +168,44 @@ export function createCameraController({
   eventTarget?.addEventListener?.('keydown', onKeyDown);
   eventTarget?.addEventListener?.('keyup', onKeyUp);
 
+  // Smooth dolly (UX item 8): the controller owns the zoom so the wheel stops stepping.
+  // `dollyTarget === null` means "at rest" — presets and first-person never fight a stale target.
+  let dollyTarget = null;
+  const currentDistance = () => Math.hypot(
+    camera.position.x - orbitControls.target.x,
+    camera.position.y - orbitControls.target.y,
+    camera.position.z - orbitControls.target.z,
+  );
+  const onWheel = (event) => {
+    if (navigation !== 'orbit' || orbitControls.enabled === false) return;
+    event.preventDefault?.();
+    dollyTarget = resolveDollyTarget(dollyTarget ?? currentDistance(), event.deltaY, orbitControls);
+  };
+  if (orbitControls.domElement?.addEventListener) {
+    orbitControls.enableZoom = false;
+    orbitControls.domElement.addEventListener('wheel', onWheel, { passive: false });
+  }
+
+  function applyDollyStep(deltaSeconds) {
+    if (dollyTarget === null) return;
+    const distance = currentDistance();
+    if (distance <= 0) { dollyTarget = null; return; }
+    const next = stepDollyDistance(distance, dollyTarget, deltaSeconds);
+    const scale = next / distance;
+    camera.position.x = orbitControls.target.x + (camera.position.x - orbitControls.target.x) * scale;
+    camera.position.y = orbitControls.target.y + (camera.position.y - orbitControls.target.y) * scale;
+    camera.position.z = orbitControls.target.z + (camera.position.z - orbitControls.target.z) * scale;
+    if (next === dollyTarget) dollyTarget = null;
+  }
+
   function applyPreset(name) {
     const selected = name === 'isometric'
       ? ISOMETRIC_PRESET
       : CAMERA_PRESETS[name] ?? QA_CAMERA_PRESETS[name];
     if (!selected) return false;
     setNavigationMode('orbit');
+    // A preset is an exact framing: any in-flight smooth dolly is cancelled, never blended.
+    dollyTarget = null;
     copyPoint(camera.position, selected.position);
     copyPoint(orbitControls.target, selected.target);
     if (selected.fov !== null) {
@@ -132,6 +221,8 @@ export function createCameraController({
     if (mode !== 'orbit' && mode !== 'first-person') return false;
     navigation = mode;
     orbitControls.enabled = mode === 'orbit';
+    // First-person never inherits an orbit dolly in flight.
+    if (mode === 'first-person') dollyTarget = null;
     if (mode === 'first-person') {
       camera.position.y = bounds.eyeHeight;
       camera.lookAt(camera.position.x, bounds.eyeHeight, camera.position.z - 1);
@@ -146,6 +237,9 @@ export function createCameraController({
 
   function update(deltaSeconds = 0) {
     if (navigation === 'orbit') {
+      // Dolly first: OrbitControls derives its spherical radius from the camera position it reads
+      // on update, so the smoothed distance survives the controls' own damping pass.
+      applyDollyStep(deltaSeconds);
       orbitControls.update();
       return;
     }
@@ -161,12 +255,13 @@ export function createCameraController({
   }
 
   function getState() {
-    return Object.freeze({ navigation, activePreset });
+    return Object.freeze({ navigation, activePreset, dollyTarget });
   }
 
   function dispose() {
     eventTarget?.removeEventListener?.('keydown', onKeyDown);
     eventTarget?.removeEventListener?.('keyup', onKeyUp);
+    orbitControls.domElement?.removeEventListener?.('wheel', onWheel);
     orbitControls.dispose?.();
   }
 

@@ -4,6 +4,7 @@ import {
   GATEWAYS,
   TC300_DEVICES,
   UC100_DEVICES,
+  ZONES,
 } from '../config.mjs';
 import {
   createNetworkSchematicComposition,
@@ -40,6 +41,7 @@ import {
   SURFACE_NETWORK_LABEL_POLICY,
   SURFACE_NETWORK_MEDIA,
   SURFACE_NETWORK_ROLLUPS,
+  SURFACE_REAR_ROOF_CLIP_CAMERAS,
   SURFACE_ROOF_CLIP_CAMERAS,
   SURFACE_RS485_EVIDENCE_POLICY,
   SURFACE_TC300_LABEL_POLICY,
@@ -61,6 +63,11 @@ import {
 /** The public roof buries the lobby, concessions and kitchen fit-out from their own presets. */
 export function resolvePublicRoofVisibility(cameraName) {
   return !SURFACE_ROOF_CLIP_CAMERAS.includes(cameraName);
+}
+
+/** The rear service roof buries the corridor, doors and UC cabinets from the technical preset. */
+export function resolveRearRoofVisibility(cameraName) {
+  return !SURFACE_REAR_ROOF_CLIP_CAMERAS.includes(cameraName);
 }
 
 /**
@@ -114,6 +121,87 @@ const STRUCTURAL_FAMILY_PROFILES = deepFreeze({
   medium: { width: 20, height: 7.2, tiers: 5 },
   small: { width: 16, height: 6, tiers: 3 },
 });
+
+/**
+ * Spec amendment 2026-07-14 (`roof_hvac.children.packaged_hvac_units`): one packaged rooftop unit
+ * per TC300 zone, at the `dimensions_real` RTU size, seated on a curb, with a supply drop entering
+ * the roof plate. The silhouette vocabulary (cabinet / condenser fan circle on top / intake hood /
+ * curb) follows the house Trane RTU family; the scale and palette are this design's own.
+ */
+export const RTU_PACKAGE = deepFreeze({
+  size: [2.5, 1.2, 1.5], // rtu_package_length_m × height_m × width_m
+  curbHeight: 0.25,
+  curbSize: [2.1, 0.25, 1.1],
+  // Half-footprint plus a 0.1 m margin: the derived clamp that keeps a unit inside its roof plate.
+  clearance: { x: 1.35, z: 0.85 },
+  fan: { radius: 0.5, height: 0.05 },
+  // `supply_drop` template: unit-local [0,-0.60,0] → [0,-1.10,0], i.e. cabinet base to 0.25 m below
+  // the plate top face — through the 0.22 m plate, overlap ≥ the spec's 0.20.
+  supplyDrop: { size: [0.45, 0.5, 0.45], requiredOverlap: 0.2 },
+});
+
+/** The front public roof plate the builder emits at line "front-public-roof" — mirrored here so the
+ * RTU derivation and the emitted panel share one truth (a test pins them together). */
+export const PUBLIC_ROOF_PLATE = deepFreeze({
+  top: 4.72,
+  bounds: { x: [-30, 30], z: [10.5, 22.5] },
+});
+
+const clampToRange = (value, [minimum, maximum]) => Math.min(maximum, Math.max(minimum, value));
+const insetRange = ([minimum, maximum], margin) => [minimum + margin, maximum - margin];
+
+/**
+ * One packaged unit per thermostat, derived — never hand-scattered. The x lane comes from the
+ * owning TC300 (clamped into the zone and plate), the z from the zone centre (clamped into the
+ * plate): the unit stands on the roof above the zone it serves, or on the nearest plate point when
+ * the zone (the roofless central corridor) offers none.
+ */
+function createPackagedUnitPlan(auditoriums) {
+  const zoneById = new Map(ZONES.map((zone) => [zone.id, zone]));
+  return TC300_DEVICES.map((device) => {
+    const zone = zoneById.get(device.zoneId);
+    const room = auditoriums.find(({ zoneId }) => zoneId === device.zoneId) ?? null;
+    const plate = room
+      ? { top: room.height + 0.22, bounds: room.bounds, owner: `${room.id}-roof-panel` }
+      : { ...PUBLIC_ROOF_PLATE, owner: 'front-public-roof' };
+    const laneX = insetRange(
+      [
+        Math.max(plate.bounds.x[0], zone.bounds.x[0]),
+        Math.min(plate.bounds.x[1], zone.bounds.x[1]),
+      ],
+      RTU_PACKAGE.clearance.x,
+    );
+    const x = clampToRange(device.position[0], laneX);
+    const z = clampToRange(
+      centre(zone.bounds.z),
+      insetRange(plate.bounds.z, RTU_PACKAGE.clearance.z),
+    );
+    const base = plate.top;
+    return {
+      id: `rtu-${device.id}`,
+      tc300Id: device.id,
+      zoneId: device.zoneId,
+      plateOwner: plate.owner,
+      plateTop: base,
+      plateBounds: plate.bounds,
+      // Base point ON the plate top face: the curb seats here, in visible contact.
+      position: [x, base, z],
+      size: [...RTU_PACKAGE.size],
+      curbSize: [...RTU_PACKAGE.curbSize],
+      supplyDrop: {
+        // unit-local [0,-0.60,0] → [0,-1.10,0] realized in world space.
+        start: [x, base + RTU_PACKAGE.curbHeight, z],
+        end: [x, base - RTU_PACKAGE.curbHeight, z],
+        overlapWithPlate: Math.min(RTU_PACKAGE.curbHeight, 0.22),
+      },
+      metadata: metadata(`rtu-${device.id}`, 'rtu-package-unit', REQUIREMENT_ARCHITECTURE, {
+        tc300Id: device.id,
+        zoneId: device.zoneId,
+        plateOwner: plate.owner,
+      }),
+    };
+  });
+}
 
 function deepFreeze(value) {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
@@ -816,6 +904,7 @@ export function createArchitecturePlan() {
       routeStubs: 0,
     },
     roofService: {
+      packagedUnits: createPackagedUnitPlan(auditoriums),
       routes: [
         ['supply', -1.2],
         ['return', 1.2],
@@ -1075,9 +1164,16 @@ function createFlatMaterials(THREE, materialRegistry) {
     'auditorium-acoustic-wall': 'auditoriumAcousticFabric',
     'portal-red': 'cinemaRedPainted',
     'public-roof': 'exteriorConcrete',
-    'large-roof': 'shellCharcoal',
-    'medium-roof': 'shellCharcoal',
-    'small-roof': 'shellCharcoal',
+    /**
+     * P6 correction P3: as charcoal, the eight per-room plates read from the exterior as two merged
+     * dark slabs — the blockout's 2/4/2 articulation was gone. The plates are now the same light
+     * concrete as the public/rear roofs, so the family HEIGHT STEPS carry shadow lines again and
+     * the existing charcoal seams/fascia outline each plate. Palette unchanged: `exteriorConcrete`
+     * is a gated entry, reused.
+     */
+    'large-roof': 'exteriorConcrete',
+    'medium-roof': 'exteriorConcrete',
+    'small-roof': 'exteriorConcrete',
     'rear-roof': 'exteriorConcrete',
     'rear-strip-blue': 'exteriorConcrete',
     // Zone volumes are wayfinding hints, not a wash over the network media they sit on top of.
@@ -1160,6 +1256,11 @@ function createFlatMaterials(THREE, materialRegistry) {
      */
     'interior-ceiling': custom(LIGHTING_INTERIOR_CEILING_COLOR, { roughness: 0.9 }),
     'roof-seam-charcoal': 'shellCharcoal',
+    // Packaged rooftop units reuse the gated painted-metal device pair — light cabinet, dark
+    // curb/trim — so the roofscape and the UG67 read as one equipment family. No palette entry
+    // is added; both canonical materials already exist.
+    'rtu-cabinet': 'ug67WhitePcAluminum',
+    'rtu-dark': 'ug67DarkMountingShell',
     'surface-service': custom(0x64748b, { roughness: 0.6, metalness: 0.12 }),
     'direction-amber': custom(0xffd43b, {
       roughness: 0.34,
@@ -1271,7 +1372,10 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     'tc-black', 'tc-blue', 'uc-white', 'gateway-dark',
     'rs485-green', 'lorawan-blue', 'ethernet-blue',
     SURFACE_DIRECTION_MARKER.materialKey,
-  ].includes(key) && !key.startsWith('endpoint-') && !key.startsWith('zone-'));
+    // The RTU keys SHARE the gateway's canonical painted metals: registering them for the cutaway/
+    // engineering treatment would drag the gated opaque UG67 body into translucency with them.
+    // The units live on the `roof` layer, which every engineering capture hides outright.
+  ].includes(key) && !key.startsWith('endpoint-') && !key.startsWith('zone-') && !key.startsWith('rtu-'));
   const buckets = new Map();
   const directionMarkerBuckets = new Map();
   const directionMarkerMeshes = [];
@@ -1493,6 +1597,76 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     );
   }
   addBox('roof', 'rear-roof', [0, 4.61, -20.5], [60, 0.22, 4], structuralMetadata('rear-service-roof', 'roof-panel'));
+
+  // P6 correction P3 — plate articulation. Every family plate gets a charcoal edge fascia hanging
+  // 0.55 m below its own top, so each of the eight plates is OUTLINED and the 2/4/2 height steps
+  // read from the exterior finals. Nothing rises: the fascia top is flush with the plate top, so
+  // the 7–9 m envelope is untouched. Shares the existing `surface-dark` bucket (zero new draws).
+  for (const room of plan.auditoriums) {
+    const plateTop = room.height + 0.22;
+    const fascia = { depth: 0.55, thickness: 0.12 };
+    const fasciaY = plateTop - fascia.depth / 2;
+    const spanX = extent(room.bounds.x) + fascia.thickness * 2;
+    for (const [edge, zEdge] of [['north', room.bounds.z[1]], ['south', room.bounds.z[0]]]) {
+      addBox(
+        'roof',
+        'surface-dark',
+        [centre(room.bounds.x), fasciaY, zEdge],
+        [spanX, fascia.depth, fascia.thickness],
+        structuralMetadata(`${room.id}-roof-fascia-${edge}`, 'roof-fascia', REQUIREMENT_ARCHITECTURE, {
+          auditoriumId: room.id,
+          family: room.family,
+          plateTop,
+        }),
+      );
+    }
+    for (const [edge, xEdge] of [['west', room.bounds.x[0]], ['east', room.bounds.x[1]]]) {
+      addBox(
+        'roof',
+        'surface-dark',
+        [xEdge, fasciaY, centre(room.bounds.z)],
+        [fascia.thickness, fascia.depth, extent(room.bounds.z)],
+        structuralMetadata(`${room.id}-roof-fascia-${edge}`, 'roof-fascia', REQUIREMENT_ARCHITECTURE, {
+          auditoriumId: room.id,
+          family: room.family,
+          plateTop,
+        }),
+      );
+    }
+  }
+
+  // Packaged rooftop units — spec `packaged_hvac_units`, one per TC300 zone, positions derived in
+  // `createPackagedUnitPlan`. Boxes share three instanced buckets; the condenser fan circle and its
+  // guard ring are two dedicated pools added after the buckets are emitted.
+  for (const unit of plan.structural.roofService.packagedUnits) {
+    const [x, top, z] = unit.position;
+    const part = (component, requirement = REQUIREMENT_ARCHITECTURE) => structuralMetadata(
+      `${unit.id}-${component}`,
+      `rtu-${component}`,
+      requirement,
+      { rtuId: unit.id, tc300Id: unit.tc300Id, zoneId: unit.zoneId, component },
+    );
+    // Curb first: seated ON the plate top face — the visible roof contact the spec demands.
+    addBox('roof', 'rtu-dark', [x, top + 0.125, z], [...unit.curbSize], part('curb'));
+    addBox('roof', 'rtu-cabinet', [x, top + 0.85, z], [...unit.size], part('cabinet'));
+    // Overhanging dark top cap — the trane-family roof trim band.
+    addBox('roof', 'rtu-dark', [x, top + 1.48, z], [2.56, 0.06, 1.56], part('cap'));
+    // Hooded outdoor-air intake on one long side, with a dark throat under the hood lip.
+    addBox('roof', 'rtu-cabinet', [x - 0.75, top + 1.12, z + 0.86], [0.6, 0.5, 0.26], part('intake-hood'));
+    addBox('roof', 'rtu-dark', [x - 0.75, top + 0.9, z + 0.9], [0.54, 0.08, 0.18], part('intake-hood-throat'));
+    // Access-panel seams on both long faces.
+    for (const [index, seamX] of [-0.42, 0.46].entries()) {
+      addBox('roof', 'rtu-dark', [x + seamX, top + 0.82, z], [0.025, 0.92, 1.52], part(`panel-seam-${index + 1}`));
+    }
+    // `supply_drop` template realized: cabinet base outlet through the curb into the plate.
+    addBox(
+      'roof',
+      'surface-metal',
+      [x, top, z],
+      [...RTU_PACKAGE.supplyDrop.size],
+      part('supply-drop', ['CIN-ARCH-001', 'HVAC-IOT-001']),
+    );
+  }
 
   // Temporary family proxies make all three room types and the Sala 3 evidence countable.
   for (const proxy of plan.blockoutProxies.auditoriums) {
@@ -3037,6 +3211,70 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     directionMarkerMeshes.push(mesh);
   }
 
+  // The RTU condenser-fan circles: the one part of the packaged-unit silhouette a box cannot carry.
+  // One flat dark cylinder (the fan opening) and one light guard ring per unit, instanced 14× each,
+  // both on the `roof` layer so they hide with the roof exactly like the cabinets under them.
+  const rtuFanGeometries = [];
+  {
+    const rtuUnits = plan.structural.roofService.packagedUnits;
+    const fanGeometry = new THREE.CylinderGeometry(
+      RTU_PACKAGE.fan.radius,
+      RTU_PACKAGE.fan.radius,
+      RTU_PACKAGE.fan.height,
+      24,
+    );
+    const guardGeometry = new THREE.TorusGeometry(RTU_PACKAGE.fan.radius * 0.92, 0.028, 8, 28)
+      .rotateX(Math.PI / 2);
+    rtuFanGeometries.push(fanGeometry, guardGeometry);
+    for (const [name, geometry, materialKey, lift] of [
+      ['rtu-fan-pool', fanGeometry, 'rtu-dark', 1.51 + RTU_PACKAGE.fan.height / 2],
+      ['rtu-fan-guard-pool', guardGeometry, 'rtu-cabinet', 1.51 + RTU_PACKAGE.fan.height + 0.03],
+    ]) {
+      const mesh = new THREE.InstancedMesh(geometry, materials[materialKey], rtuUnits.length);
+      mesh.name = `structural-roof-${name}`;
+      mesh.userData = {
+        assetId: ARCHITECTURE_ASSET_ID,
+        pass: 'structural',
+        layer: 'roof',
+        materialKey,
+        lightingZone: 'exterior',
+        zoneDim: resolveZoneDim('exterior'),
+        instances: rtuUnits.map((unit) => ({
+          layer: 'roof',
+          materialKey,
+          zone: 'exterior',
+          // The fan bay sits over the condenser end of the cabinet, on the dark top cap.
+          position: [unit.position[0] + 0.55, unit.position[1] + lift, unit.position[2]],
+          size: [1, 1, 1],
+          rotationY: 0,
+          mediaWidth: 0,
+          mediaOffset: null,
+          metadata: structuralMetadata(
+            `${unit.id}-${name === 'rtu-fan-pool' ? 'condenser-fan' : 'fan-guard'}`,
+            name === 'rtu-fan-pool' ? 'rtu-condenser-fan' : 'rtu-fan-guard',
+            REQUIREMENT_ARCHITECTURE,
+            { rtuId: unit.id, tc300Id: unit.tc300Id, zoneId: unit.zoneId },
+          ),
+        })),
+      };
+      mesh.userData.entities = mesh.userData.instances.map(
+        ({ metadata: entityMetadata }, instanceId) => ({ instanceId, ...entityMetadata }),
+      );
+      mesh.userData.instances.forEach((instance, index) => {
+        dummy.position.set(...instance.position);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(index, dummy.matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      groups.roof.add(mesh);
+      meshes.push(mesh);
+    }
+  }
+
   function createAtlasBatch(name, entries, layer) {
     if (!entries.length || !surfaceAtlas || !surfaceAtlasMaterial) return null;
     const positions = [];
@@ -3186,6 +3424,19 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   const publicRoofMeshes = meshes.filter((mesh) => (
     mesh.userData.layer === 'roof'
       && ['public-roof', 'roof-seam-charcoal'].includes(mesh.userData.materialKey)
+  ));
+  /** The rear service roof, clipped for the technical preset the way the public roof is clipped. */
+  const rearRoofMeshes = meshes.filter((mesh) => (
+    mesh.userData.layer === 'roof' && mesh.userData.materialKey === 'rear-roof'
+  ));
+  /**
+   * P6 correction P2: the external schematic endpoint proxies (router/internet/Niagara/PC/tablet/
+   * smartphone) are network evidence. `visual_states.architecture` hides the network, so these
+   * proxies rendered as unlabeled floating boxes in every architecture capture. Each proxy owns its
+   * bucket (unique `endpoint-*` material key), so the filter is exact.
+   */
+  const externalProxyMeshes = meshes.filter((mesh) => (
+    mesh.userData.layer === 'hvac' && String(mesh.userData.materialKey).startsWith('endpoint-')
   ));
   /** The dark interior soffits: architectural state only, so engineering keeps seeing the ceiling. */
   const interiorCeilingMeshes = meshes.filter((mesh) => mesh.userData.materialKey === 'interior-ceiling');
@@ -3758,6 +4009,9 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
 
   const labelPolicy = { visualMode: 'architectural', labels: true, labelsExplicit: false };
   let activeEvidenceCamera = 'isometric';
+  // The Techo layer toggle, mirrored into the asset so the interior ceilings can follow the roof
+  // panels they are the underside of (UX item 7: hiding the roof used to reveal a "second roof").
+  let roofLayerVisible = true;
 
   function setEvidenceCamera(cameraName, viewContext) {
     activeEvidenceCamera = cameraName;
@@ -3772,7 +4026,12 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     // detail camera frames the board alone, and no packet or halo may float in front of it.
     densePhysicalNetwork = networkVisibility.densePhysicalNetwork;
     for (const mesh of publicRoofMeshes) mesh.visible = resolvePublicRoofVisibility(cameraName);
-    const ceilingVisible = resolveInteriorCeilingVisibility(labelPolicy.visualMode);
+    for (const mesh of rearRoofMeshes) mesh.visible = resolveRearRoofVisibility(cameraName);
+    // The external IP chain is engineering evidence; the architecture state shows only the building.
+    for (const mesh of externalProxyMeshes) mesh.visible = labelPolicy.visualMode === 'engineering';
+    const ceilingVisible = resolveInteriorCeilingVisibility(labelPolicy.visualMode, {
+      roofVisible: roofLayerVisible,
+    });
     for (const mesh of interiorCeilingMeshes) mesh.visible = ceilingVisible;
     setNetworkMediaWidthScale(cameraName);
     // The media cross-section the pools sit on just changed: re-derive them from the same model.
@@ -3880,7 +4139,9 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
         }
       }
       else if (scope === 'overview') {
-        if (['kitchen', 'family-master', 'roof-service'].includes(cameraName)) sprite.visible = false;
+        // `checkpoint` joined this list with P6 correction P1: the giant floating zone labels were
+        // half of what buried the checkpoint fit-out in its own required view.
+        if (['kitchen', 'checkpoint', 'family-master', 'roof-service'].includes(cameraName)) sprite.visible = false;
         else sprite.visible = !['sala-3', 'technical', 'ug67', 'rs485-master'].includes(cameraName);
       }
       else if (scope === 'sala-3') sprite.visible = cameraName === 'sala-3';
@@ -3910,6 +4171,13 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     return Object.freeze({ ...labelPolicy });
   }
 
+  /** UX item 7: the Techo checkbox drives the interior ceilings together with the roof panels. */
+  function setRoofLayerVisible(visible) {
+    roofLayerVisible = Boolean(visible);
+    setEvidenceCamera(activeEvidenceCamera);
+    return roofLayerVisible;
+  }
+
   setEvidenceCamera('isometric');
 
   function dispose() {
@@ -3929,6 +4197,7 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     surfaceAtlasMaterial?.dispose();
     surfaceAtlas?.dispose();
     directionMarkerGeometry.dispose();
+    for (const geometry of rtuFanGeometries) geometry.dispose();
     sharedGeometry.dispose();
     for (const material of ownedMaterials) material.dispose();
   }
@@ -3946,6 +4215,7 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     setEvidenceCamera,
     setLabelPolicy,
     setLightState,
+    setRoofLayerVisible,
     setSurfaceFrame,
     setInteractionState,
     getInteractionModel,

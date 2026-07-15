@@ -763,8 +763,11 @@ export function resolveZoneStopsBelowExterior(zone, options = {}) {
  * interior ceilings cap them — and stay out of the ENGINEERING state, where a top-down capture
  * must still see the RS-485 trunks in the ceiling containment.
  */
-export function resolveInteriorCeilingVisibility(visualMode = 'architectural') {
-  return visualMode !== 'engineering';
+export function resolveInteriorCeilingVisibility(visualMode = 'architectural', { roofVisible = true } = {}) {
+  // The ceilings are the roof's interior face: with the Techo layer off the user asked to see INTO
+  // the building, so the architecture-state soffits leave with the roof panels. Engineering keeps
+  // its gated behaviour: no interior ceiling, ever, so the containment stays visible.
+  return visualMode !== 'engineering' && roofVisible !== false;
 }
 
 export const LIGHTING_TONE_MAPPING = Object.freeze({
@@ -818,11 +821,15 @@ export const LIGHTING_EMISSION_TIERS = Object.freeze([
   Object.freeze({ id: 'auditorium-fixtures', zone: 'auditorium', intensity: 0.4 }),
 ]);
 
-const channel = (tier, color, emissive, intensityScale = 1) => Object.freeze({
+const channel = (tier, color, emissive, intensityScale = 1, offIntensityScale = 0) => Object.freeze({
   tier,
   color,
   emissive,
   intensityScale,
+  // The residual emission `light_state=off` keeps. Almost every channel dies completely — that is
+  // what makes the pair evidence — but a channel may declare a floor when the OFF frame must stay
+  // readable (the sala aisle/step LEDs: P6 found the seating silhouettes below legibility).
+  offIntensityScale,
 });
 
 /**
@@ -876,7 +883,14 @@ export const LIGHTING_EMISSION_CHANNELS = Object.freeze({
    * ratio on the room's real wall value rather than on a wash pool's.
    */
   'screen-emissive': channel('auditorium-fixtures', 0xdfe6f2, 0xcfe0ff, 1.5),
-  'aisle-step-led': channel('auditorium-fixtures', 0x9fd0ff, 0x60a5fa, 2.4),
+  /**
+   * P6 correction P5: `light_state=off` left the sala near-black outside the screen and exit signs;
+   * the stepped seating fell below legibility. In a real cinema the aisle/step LEDs are exactly the
+   * channel that never goes fully dark, so the OFF state keeps a floor (0.72 vs 2.4 — a 3.3:1
+   * on/off ratio, so the pair still reads as two states). The ON value is UNCHANGED: the gated
+   * lights-on ladder (lobby > corridor > sala) is measured at lights-on and does not move.
+   */
+  'aisle-step-led': channel('auditorium-fixtures', 0x9fd0ff, 0x60a5fa, 2.4, 0.72),
   'wheelchair-blue': channel('auditorium-fixtures', 0x0ea5e9, 0x38bdf8, 0.8),
 });
 
@@ -899,7 +913,9 @@ export function resolveEmissiveIntensity(definition, lightState = 'on') {
   if (!LIGHTING_LIGHT_STATES.includes(lightState)) {
     throw new RangeError(`Unknown light state: ${lightState}`);
   }
-  if (lightState === 'off') return 0;
+  if (lightState === 'off') {
+    return TIER_INTENSITY.get(definition.tier) * (definition.offIntensityScale ?? 0);
+  }
   return TIER_INTENSITY.get(definition.tier) * definition.intensityScale;
 }
 
@@ -924,7 +940,11 @@ export const LIGHTING_MEDIA = Object.freeze({
  */
 export const LIGHTING_ENGINEERING_SHELL = Object.freeze({
   specPerLayerOpacity: 0.18,
-  maxStackedLayers: 12,
+  // Measured on the evidence rays, never guessed: the P6 lineage-2 kitchen reframe (correction 1b)
+  // lengthened the kitchen ray to 14 crossed shell boxes, so the budget follows the measurement.
+  // The derived per-layer opacity drops 0.064 -> 0.055 — strictly LESS ghosting, the direction the
+  // surface pass's correction S4 asked for.
+  maxStackedLayers: 14,
   compositeAlphaCeiling: 0.55,
 });
 
@@ -944,7 +964,10 @@ export function isEngineeringShellMaterial(materialKey) {
   return typeof materialKey === 'string'
     && !NON_SHELL_MATERIAL_KEYS.includes(materialKey)
     && !materialKey.startsWith('endpoint-')
-    && !materialKey.startsWith('zone-');
+    && !materialKey.startsWith('zone-')
+    // Packaged rooftop units are EQUIPMENT, like the devices: they share the gateway's opaque
+    // painted metals and live on the roof layer every engineering capture hides.
+    && !materialKey.startsWith('rtu-');
 }
 
 export function compositeAlpha(opacity, layers) {
@@ -973,6 +996,9 @@ export function resolveEngineeringOpacity(surfaceOpacity, shell = LIGHTING_ENGIN
   if (!Number.isFinite(surfaceOpacity) || surfaceOpacity < 0 || surfaceOpacity > 1) {
     throw new RangeError('An engineering opacity must be a fraction.');
   }
+  // The shell's own opacity short-circuits the scale-by-itself roundtrip: `x * (y/x)` is not
+  // bit-identical to `y` for every layer count, and the registry is asserted against `y` exactly.
+  if (surfaceOpacity === shell.specPerLayerOpacity) return resolveShellLayerOpacity(shell);
   return surfaceOpacity * (resolveShellLayerOpacity(shell) / shell.specPerLayerOpacity);
 }
 

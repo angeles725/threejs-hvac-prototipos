@@ -728,7 +728,17 @@ test('correction 4: light_state=off darkens the corridor and the sala, not just 
     const definition = LIGHTING_EMISSION_CHANNELS[key];
     assert.ok(definition, `${key} is not an emission channel at all`);
     assert.ok(resolveEmissiveIntensity(definition, 'on') > 0);
-    assert.equal(resolveEmissiveIntensity(definition, 'off'), 0);
+    // CONTRACT CHANGE (P6 correction P5): `off` is no longer identically zero for every channel.
+    // The sala aisle/step LEDs keep a declared floor so seating silhouettes stay legible; every
+    // channel must still drop hard so the on/off pair stays two unmistakable states.
+    if (key === 'aisle-step-led') {
+      const off = resolveEmissiveIntensity(definition, 'off');
+      assert.ok(off > 0, 'the aisle/step LEDs must keep a lights-off floor');
+      assert.ok(
+        off <= resolveEmissiveIntensity(definition, 'on') / 3,
+        'the lights-off floor must stay far below the ON value or the pair stops reading as two states',
+      );
+    } else assert.equal(resolveEmissiveIntensity(definition, 'off'), 0);
     assert.ok(
       instancesOf(asset, (instance) => instance.materialKey === key).length > 0,
       `${key} switches, but the builder never emits it: the capture pair cannot change`,
@@ -1140,7 +1150,16 @@ test('light_state is a deterministic query state and only touches the emission c
 
   for (const [key, definition] of Object.entries(LIGHTING_EMISSION_CHANNELS)) {
     assert.ok(resolveEmissiveIntensity(definition, 'on') > 0, `${key} must emit when the lights are on`);
-    assert.equal(resolveEmissiveIntensity(definition, 'off'), 0, `${key} must go dark when the lights are off`);
+    // CONTRACT CHANGE (P6 correction P5): a channel may declare an explicit lights-off floor; only
+    // the sala aisle/step LEDs do, and their floor must stay far under the ON value. Every channel
+    // without a declared floor still goes fully dark.
+    const off = resolveEmissiveIntensity(definition, 'off');
+    if (definition.offIntensityScale > 0) {
+      assert.equal(key, 'aisle-step-led', `${key} must not silently gain a lights-off floor`);
+      assert.ok(off > 0 && off <= resolveEmissiveIntensity(definition, 'on') / 3);
+    } else {
+      assert.equal(off, 0, `${key} must go dark when the lights are off`);
+    }
   }
 
   // The network media and the device status ring are NOT house lighting: an engineering capture

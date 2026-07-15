@@ -203,7 +203,15 @@ export function snapSampleToDashCentre(routeT, { dashCount, dashCoverage } = {})
 }
 
 /** Public roof panels hide the whole fit-out from the interior front-of-house presets. */
-export const SURFACE_ROOF_CLIP_CAMERAS = Object.freeze(['lobby', 'concessions', 'kitchen']);
+export const SURFACE_ROOF_CLIP_CAMERAS = Object.freeze(['lobby', 'concessions', 'kitchen', 'checkpoint']);
+
+/**
+ * P6 correction: the technical preset used to frame the rear roof plane instead of the rooms under
+ * it. The rear service roof is clipped for that preset exactly the way the public roof is clipped
+ * for the front-of-house presets, so the 1.5 m corridor, the separating wall with its doors and the
+ * UC100-B cabinet become the subject.
+ */
+export const SURFACE_REAR_ROOF_CLIP_CAMERAS = Object.freeze(['technical']);
 
 /**
  * The evidence widening is per medium. RS-485 and Ethernet are continuous tubes, so a fat
@@ -717,29 +725,89 @@ function drawPoster(context, x, y, width, height, frame, variant) {
   }
 }
 
+/**
+ * P6 correction P4: `display_frame` 0/1 used to differ only in the header caption — a 564 px delta
+ * the final gate called "the weakest two-state animation evidence in the set". The artwork is now a
+ * deterministic MODEL, and frame 1 restructures the BODY: a different header colour, a different
+ * row count, different row geometry and colours, and a price column frame 0 does not have. Frame 0
+ * reproduces the gated drawing exactly.
+ */
+export function createMenuDisplayArtwork(frame, style) {
+  const selectedFrame = frame === 1 ? 1 : 0;
+  if (![0, 1, 2].includes(style)) throw new RangeError(`Unknown menu display style: ${style}`);
+  const titles = selectedFrame === 0
+    ? ['SNACKS', 'DRINKS', 'FRESH']
+    : ['COMBOS', 'POPCORN', 'PICKUP'];
+  if (selectedFrame === 0) {
+    // The shipped default the concessions captures were gated on: three menu bars, warm palette.
+    const patterns = [
+      [0.62, 0.44, 0.72],
+      [0.38, 0.68, 0.52],
+      [0.74, 0.55, 0.32],
+    ];
+    return Object.freeze({
+      frame: 0,
+      style,
+      background: '#10141d',
+      header: Object.freeze({ color: '#d71920', title: titles[style] }),
+      rows: Object.freeze(patterns[style].map((widthFactor, index) => Object.freeze({
+        color: index % 2 ? '#f4d35e' : '#e5e7eb',
+        top: 0.39 + index * 0.17,
+        widthFactor,
+        heightFactor: 0.045,
+      }))),
+      prices: Object.freeze([]),
+    });
+  }
+  // Frame 1: teal header, four thinner rows on a different rhythm, and a right price column.
+  const patterns = [
+    [0.5, 0.66, 0.4, 0.58],
+    [0.7, 0.34, 0.6, 0.46],
+    [0.42, 0.58, 0.7, 0.3],
+  ];
+  return Object.freeze({
+    frame: 1,
+    style,
+    background: '#0b1620',
+    header: Object.freeze({ color: '#0e7490', title: titles[style] }),
+    rows: Object.freeze(patterns[style].map((widthFactor, index) => Object.freeze({
+      color: index % 2 ? '#f8fafc' : '#7dd3fc',
+      top: 0.34 + index * 0.155,
+      widthFactor,
+      heightFactor: 0.035,
+    }))),
+    prices: Object.freeze(patterns[style].map((unused, index) => Object.freeze({
+      color: '#f4d35e',
+      top: 0.335 + index * 0.155,
+      sizeFactor: 0.05,
+    }))),
+  });
+}
+
 function drawDisplay(context, x, y, width, height, variant) {
-  context.fillStyle = '#10141d';
+  const artwork = createMenuDisplayArtwork(variant.frame, variant.style);
+  context.fillStyle = artwork.background;
   context.fillRect(x, y, width, height);
-  context.fillStyle = '#d71920';
+  context.fillStyle = artwork.header.color;
   context.fillRect(x + width * 0.06, y + height * 0.08, width * 0.88, height * 0.18);
   context.fillStyle = '#f8fafc';
   context.font = `800 ${Math.round(height * 0.11)}px system-ui, sans-serif`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  const titles = variant.frame === 0
-    ? ['SNACKS', 'DRINKS', 'FRESH']
-    : ['COMBOS', 'POPCORN', 'PICKUP'];
-  context.fillText(titles[variant.style], x + width / 2, y + height * 0.17);
-  const patterns = [
-    [0.62, 0.44, 0.72],
-    [0.38, 0.68, 0.52],
-    [0.74, 0.55, 0.32],
-  ];
-  const bars = patterns[variant.style];
-  bars.forEach((width, index) => {
-    context.fillStyle = index % 2 ? '#f4d35e' : '#e5e7eb';
-    context.fillRect(x + height * 0.12, y + height * (0.39 + index * 0.17), height * width, height * 0.045);
-  });
+  context.fillText(artwork.header.title, x + width / 2, y + height * 0.17);
+  for (const row of artwork.rows) {
+    context.fillStyle = row.color;
+    context.fillRect(x + height * 0.12, y + height * row.top, height * row.widthFactor, height * row.heightFactor);
+  }
+  for (const price of artwork.prices) {
+    context.fillStyle = price.color;
+    context.fillRect(
+      x + width - height * (0.12 + price.sizeFactor),
+      y + height * price.top,
+      height * price.sizeFactor,
+      height * price.sizeFactor,
+    );
+  }
 }
 
 function drawScreen(context, x, y, width, height, frame) {
