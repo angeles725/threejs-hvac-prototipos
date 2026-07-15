@@ -29,6 +29,12 @@ let DPR_ARG = null;
 // canvas made its work literally invisible to the reviewer, and made two genuinely different
 // states render pixel-identical (found by `preflight --contract`, not by a judge).
 let PAGE_MODE = false;
+// --gpu: opt-in hardware rendering via WSL2's D3D12 paravirtualization (mesa d3d12 -> /dev/dxg).
+// MEASURED 2026-07-15 on this machine (gpu-probe.mjs): raster 10.8s -> 1.5s per 2880x2160 shot
+// (7x), total per cold shot 54s -> 43s (1.6x — page LOAD dominates, not raster). Visual identity
+// vs SwiftShader: 0.61% of pixels with delta>8 (AA edges only). SwiftShader stays the DEFAULT
+// canonical renderer; switching mid-lineage must be declared in the review JSON's mechanical.note.
+let GPU_MODE = false;
 // Default 2, not 4: under SwiftShader the win comes from NOT relaunching Chrome per shot, not from
 // concurrency — the rasterizer is CPU-bound, so >2 pages just thrash and time out the CDP channel.
 let JOBS = 2;
@@ -52,6 +58,8 @@ for (let i = 0; i < rawArgs.length; i++) {
     DPR_ARG = Number(rawArgs[i].slice('--dpr='.length));
   } else if (rawArgs[i] === '--page') {
     PAGE_MODE = true;
+  } else if (rawArgs[i] === '--gpu') {
+    GPU_MODE = true;
   } else {
     positional.push(rawArgs[i]);
   }
@@ -113,9 +121,16 @@ const browser = await puppeteer.launch({
   // SwiftShader is CPU-rasterized: a 3840x2880 screenshot is slow, and concurrent pages contend for
   // the same cores. The default 180s CDP protocolTimeout fires under that load and kills the shot.
   protocolTimeout: 600000,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+  env: GPU_MODE
+    ? { ...process.env, GALLIUM_DRIVER: 'd3d12', MESA_LOADER_DRIVER_OVERRIDE: 'd3d12', LIBGL_ALWAYS_SOFTWARE: '0' }
+    : process.env,
+  args: [
+    ...(GPU_MODE
+      ? ['--use-gl=angle', '--enable-gpu', '--ignore-gpu-blocklist']
+      : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']),
     '--no-sandbox', `--window-size=${CSS_W},${CSS_H}`],
 });
+if (GPU_MODE) console.error('[capture] --gpu: hardware D3D12 rendering (declare the renderer switch in the review mechanical.note)');
 
 async function capture(f, suffix, base) {
   const page = await browser.newPage();

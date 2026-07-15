@@ -48,7 +48,24 @@ Source: `runs/assets/01-shell-circulation-facade/optimization-attempt1.review.js
 | O2 | Architecture state renders the external chain as unlabeled floating cubes with no links (neutral/net arch-t0). Hide the proxies in architecture state or keep labels/links attached. | `open` | Pre-existing since blockout (`state=architecture` hides network layer but not the external proxies). The P6 architecture capture includes these frames. |
 | O3 | Clamp the selected-device pulse to a minimum marker scale so TC300-08 never reads as vanishing at close range (sala3 t30). | `open` | Interaction polish; touching it re-opens interaction-ui. Only worth it if the P6 judge flags it. |
 
-## From P6-FINAL LINEAGE 2 (passed 0.78, attempt 1 — correction round closed 2026-07-14)
+## From P6-FINAL LINEAGE 3 (passed 0.82, attempt 1 — the run's best final score, 2026-07-15)
+
+Source: `runs/assets/01-shell-circulation-facade/p6-final-l3-attempt1.review.json`. L3 applied and
+re-gated: z-fighting by construction (299→0 coplanar pairs), RTU master at the V10 two-section
+read, service-lane alignment (judge: "ordered service lane, not clutter"), 8 duct branches + 14
+condensate drains. Judge's headroom verdict: ONE polish round of upside remains (~0.03-0.05),
+then further attempts are spend without score movement. These five fold into the L4 feature round
+(temperature chips + top view) as that single polish round:
+
+| # | Correction | Status | Note |
+|---|---|---|---|
+| M1 | Galvanized read on duct mains + 8 branches (light-metal albedo/metallic response) — they render near-black. | `owned-by:L4` | The spec's declared read is absent; straps/elbows carry all separation. |
+| M2 | Dress the checkpoint podiums: counter cap, scanner/POS block, one staff proxy in the lane. | `owned-by:L4` | Successor of L1/P1 — preset frames the right place; fit-out still bare. |
+| M3 | Spine duct group hovers unsupported in the roof-off probative view — parent to roof toggle in architecture, or add support stubs. | `owned-by:L4` | Cousin of user item 7. |
+| M4 | Small fill lift in the roof-off state so seating tiers read. | `owned-by:L4` | Probative shot only; gated lighting untouched. |
+| M5 | Nudge the two westmost public-band units apart (or stagger drains) — they merge at the facade glancing angle. | `owned-by:L4` | |
+
+## From P6-FINAL LINEAGE 2 (passed 0.78, attempt 1 — superseded by lineage 3)
 
 Source: `runs/assets/01-shell-circulation-facade/p6-final-l2-attempt1.review.json`. The L2 round
 APPLIED and re-gated: P1 (checkpoint preset — passed, but see L1 below), P2 (external blocks

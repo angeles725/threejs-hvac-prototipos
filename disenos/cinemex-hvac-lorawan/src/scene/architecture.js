@@ -128,16 +128,34 @@ const STRUCTURAL_FAMILY_PROFILES = deepFreeze({
  * the roof plate. The silhouette vocabulary (cabinet / condenser fan circle on top / intake hood /
  * curb) follows the house Trane RTU family; the scale and palette are this design's own.
  */
+/**
+ * L3 item 11 — the anti-coplanar authority. Z-fighting under camera rotation is two renderable
+ * faces on (nearly) one plane. Every stacked roof element therefore EMBEDS into the surface it
+ * sits on (contact by interpenetration, never a shared plane) and every flat decal strip (seams,
+ * markings, service bands) CROSSES its surface plane — `decalEmbed` below it, `decalProtrusion`
+ * above it. `minPlaneSeparation` is the pairwise floor the whole emitted assembly must clear.
+ */
+export const ROOF_ANTI_COPLANAR = deepFreeze({
+  minPlaneSeparation: 0.005,
+  contactEmbed: 0.03,
+  stackEmbed: 0.02,
+  decalEmbed: 0.02,
+  decalProtrusion: 0.04,
+  fasciaProtrusion: 0.02,
+});
+
 export const RTU_PACKAGE = deepFreeze({
   size: [2.5, 1.2, 1.5], // rtu_package_length_m × height_m × width_m
   curbHeight: 0.25,
   curbSize: [2.1, 0.25, 1.1],
   // Half-footprint plus a 0.1 m margin: the derived clamp that keeps a unit inside its roof plate.
   clearance: { x: 1.35, z: 0.85 },
-  fan: { radius: 0.5, height: 0.05 },
-  // `supply_drop` template: unit-local [0,-0.60,0] → [0,-1.10,0], i.e. cabinet base to 0.25 m below
-  // the plate top face — through the 0.22 m plate, overlap ≥ the spec's 0.20.
+  fan: { radius: 0.5, height: 0.05, guardRadius: 0.46, guardTube: 0.028 },
+  // `supply_drop` template: unit-local [0,-0.60,0] → [0,-1.10,0] — through the 0.22 m plate,
+  // overlap ≥ the spec's 0.20.
   supplyDrop: { size: [0.45, 0.5, 0.45], requiredOverlap: 0.2 },
+  // `unit_condensate_outlet` socket, unit-local (origin = cabinet centre): AH-end underside.
+  condensateOutlet: [-1.1, -0.45, 0.6],
 });
 
 /** The front public roof plate the builder emits at line "front-public-roof" — mirrored here so the
@@ -152,9 +170,11 @@ const insetRange = ([minimum, maximum], margin) => [minimum + margin, maximum - 
 
 /**
  * One packaged unit per thermostat, derived — never hand-scattered. The x lane comes from the
- * owning TC300 (clamped into the zone and plate), the z from the zone centre (clamped into the
- * plate): the unit stands on the roof above the zone it serves, or on the nearest plate point when
- * the zone (the roofless central corridor) offers none.
+ * owning TC300 (clamped into the zone and plate); L3 item 13 replaces the per-zone z scatter with
+ * SERVICE LANES: every unit on a plate stands on that plate's lane (the plate's own z centre-line,
+ * derived from the plate bounds), so the public band forms one row and the sala units two aligned
+ * columns — the conventional rooftop arrangement. Zone OWNERSHIP is untouched: one unit per TC300
+ * zone, on the roof plate that serves it.
  */
 function createPackagedUnitPlan(auditoriums) {
   const zoneById = new Map(ZONES.map((zone) => [zone.id, zone]));
@@ -172,11 +192,17 @@ function createPackagedUnitPlan(auditoriums) {
       RTU_PACKAGE.clearance.x,
     );
     const x = clampToRange(device.position[0], laneX);
-    const z = clampToRange(
-      centre(zone.bounds.z),
-      insetRange(plate.bounds.z, RTU_PACKAGE.clearance.z),
-    );
+    // Item 13: the plate's service lane, one shared z per plate.
+    const z = centre(plate.bounds.z);
     const base = plate.top;
+    // Item 11: the cabinet embeds `stackEmbed` into the curb and the curb `contactEmbed` into the
+    // plate, so the unit-local origin (cabinet centre) sits at base + curb - embeds + height/2.
+    const cabinetCentreY = base
+      - ROOF_ANTI_COPLANAR.contactEmbed
+      + RTU_PACKAGE.curbHeight
+      - ROOF_ANTI_COPLANAR.stackEmbed
+      + RTU_PACKAGE.size[1] / 2;
+    const outlet = RTU_PACKAGE.condensateOutlet;
     return {
       id: `rtu-${device.id}`,
       tc300Id: device.id,
@@ -184,16 +210,20 @@ function createPackagedUnitPlan(auditoriums) {
       plateOwner: plate.owner,
       plateTop: base,
       plateBounds: plate.bounds,
-      // Base point ON the plate top face: the curb seats here, in visible contact.
+      laneZ: z,
+      // Base point ON the plate top face: the curb seats here (embedded contact, item 11).
       position: [x, base, z],
+      cabinetCentreY,
       size: [...RTU_PACKAGE.size],
       curbSize: [...RTU_PACKAGE.curbSize],
       supplyDrop: {
         // unit-local [0,-0.60,0] → [0,-1.10,0] realized in world space.
-        start: [x, base + RTU_PACKAGE.curbHeight, z],
-        end: [x, base - RTU_PACKAGE.curbHeight, z],
-        overlapWithPlate: Math.min(RTU_PACKAGE.curbHeight, 0.22),
+        start: [x, cabinetCentreY - RTU_PACKAGE.size[1] / 2, z],
+        end: [x, cabinetCentreY - RTU_PACKAGE.size[1] / 2 - 0.5, z],
+        overlapWithPlate: 0.22,
       },
+      // `unit_condensate_outlet` socket realized in world space (item 14).
+      condensateOutlet: [x + outlet[0], cabinetCentreY + outlet[1], z + outlet[2]],
       metadata: metadata(`rtu-${device.id}`, 'rtu-package-unit', REQUIREMENT_ARCHITECTURE, {
         tc300Id: device.id,
         zoneId: device.zoneId,
@@ -201,6 +231,93 @@ function createPackagedUnitPlan(auditoriums) {
       }),
     };
   });
+}
+
+/**
+ * Item 14 — `duct_branches`: one rectangular galvanized branch per auditorium, leaving the supply
+ * main at a strapped joint and running along the spine service band to the owning room's plate
+ * edge. Everything derives from the room bounds, the family height and the main's own extent.
+ */
+const BRANCH_CROSS = deepFreeze({ width: 0.5, height: 0.35 });
+const SUPPLY_MAIN_EXTENT = deepFreeze({ x: [-1.65, -0.75], y: [8.0, 8.72], z: [-12.3, -6.2] });
+
+function createDuctBranchPlan(auditoriums) {
+  // Joint slots: a room whose z centre lies outside the supply main gets its own slot near the
+  // main's closest end, spread 0.6 m apart per side so no two joints (straps, risers) stack on
+  // one plane. Rooms whose centre lies inside the main span join it right there.
+  const jointSpan = insetRange(SUPPLY_MAIN_EXTENT.z, 0.3);
+  const slotOrder = new Map();
+  for (const room of auditoriums) {
+    const west = room.bounds.x[1] < 0;
+    const roomZ = centre(room.bounds.z);
+    if (roomZ >= jointSpan[0] && roomZ <= jointSpan[1]) continue;
+    const end = roomZ > jointSpan[1] ? 'north' : 'south';
+    const key = `${west ? 'west' : 'east'}:${end}`;
+    const order = slotOrder.get(key) ?? [];
+    order.push(room.id);
+    slotOrder.set(key, order);
+  }
+  return auditoriums.map((room) => {
+    const west = room.bounds.x[1] < 0;
+    const roomZ = centre(room.bounds.z);
+    // West and east branches ride separate lanes inside the supply main's own x band.
+    const laneX = west ? -1.5 : -0.9;
+    // The strapped joint: in-span rooms tap the main at their own z; out-of-span rooms take a
+    // spread slot at the nearest main end.
+    let jointZ = clampToRange(roomZ, jointSpan);
+    if (roomZ < jointSpan[0] || roomZ > jointSpan[1]) {
+      const end = roomZ > jointSpan[1] ? 'north' : 'south';
+      const order = slotOrder.get(`${west ? 'west' : 'east'}:${end}`);
+      const slot = order.indexOf(room.id);
+      jointZ = end === 'north' ? jointSpan[1] - slot * 0.6 : jointSpan[0] + slot * 0.6;
+    }
+    // The branch runs just under its own room's plate bottom — per-family levels, which is also
+    // what keeps every same-lane pair separated (item 11: no two branches share a face plane).
+    const level = room.height - 0.55;
+    const innerEdgeX = west ? room.bounds.x[1] : room.bounds.x[0];
+    return {
+      id: `duct-branch-${room.id}`,
+      auditoriumId: room.id,
+      family: room.family,
+      side: west ? 'west' : 'east',
+      laneX,
+      jointZ,
+      roomZ,
+      level,
+      // The run ends 0.25 m INSIDE the room's plate x-range: overlap contact, never a butt joint.
+      endX: west ? innerEdgeX - 0.25 : innerEdgeX + 0.25,
+      // The joint socket on the supply main this branch leaves from.
+      socket: [laneX, Math.min(level, 8.2), jointZ],
+      needsRiser: level + BRANCH_CROSS.height / 2 < SUPPLY_MAIN_EXTENT.y[0] + 0.05,
+      hasSpineRun: Math.abs(roomZ - jointZ) > 0.3,
+      metadata: structuralMetadata(`duct-branch-${room.id}`, 'roof-service-branch', REQUIREMENT_ARCHITECTURE, {
+        auditoriumId: room.id,
+        family: room.family,
+      }),
+    };
+  });
+}
+
+/**
+ * Item 14 — `condensate_drains`: one thin dark drain per packaged unit, elbowing down from the
+ * `unit_condensate_outlet` socket and running along the plate to that plate's drain lane (a fixed
+ * 0.3 m offset from the plate's rear edge). The pipe embeds 0.01 into the plate — attached, never
+ * floating, never coplanar (item 11).
+ */
+function createCondensateDrainPlan(units) {
+  return units.map((unit) => ({
+    id: `condensate-${unit.id}`,
+    rtuId: unit.id,
+    socket: [...unit.condensateOutlet],
+    plateTop: unit.plateTop,
+    // The horizontal run centre-line: 0.01 below the plate top face (embedded contact).
+    runLevel: unit.plateTop + 0.01,
+    laneZ: unit.plateBounds.z[0] + 0.3,
+    metadata: structuralMetadata(`condensate-${unit.id}`, 'rtu-condensate-drain', REQUIREMENT_ARCHITECTURE, {
+      rtuId: unit.id,
+      tc300Id: unit.tc300Id,
+    }),
+  }));
 }
 
 function deepFreeze(value) {
@@ -743,6 +860,7 @@ export function createArchitecturePlan() {
   }));
   const gatewayEthernetPort = [3.15, 3.46, 2.0505];
 
+  const packagedUnits = createPackagedUnitPlan(auditoriums);
   const structural = {
     pass: 'structural',
     sections: {
@@ -904,7 +1022,9 @@ export function createArchitecturePlan() {
       routeStubs: 0,
     },
     roofService: {
-      packagedUnits: createPackagedUnitPlan(auditoriums),
+      packagedUnits,
+      ductBranches: createDuctBranchPlan(auditoriums),
+      condensateDrains: createCondensateDrainPlan(packagedUnits),
       routes: [
         ['supply', -1.2],
         ['return', 1.2],
@@ -926,14 +1046,18 @@ export function createArchitecturePlan() {
             id: `roof-${medium}-main`,
             owner: plenumId,
             position: [x, 8.36, -9.25],
-            size: [0.9, 0.72, 6.1],
+            // Item 11: 0.86 wide (was 0.9) — the main's long side faces shared the plenum's exact
+            // vertical planes and flickered; the 2 cm reveal reads as the plenum collar instead.
+            size: [0.86, 0.72, 6.1],
             metadata: structuralMetadata(`roof-${medium}-main`, 'roof-service-main'),
           },
           sleeve: {
             id: `roof-${medium}-owned-sleeve`,
             owner: plenumId,
             position: socketPosition,
-            size: [1.15, 0.24, 1.15],
+            // Item 11: 0.26 tall (was 0.24) so the collar's top clears the plenum's top plane by
+            // 0.01 instead of sharing it — the two coplanar 1.15 m faces flickered under rotation.
+            size: [1.15, 0.26, 1.15],
             metadata: structuralMetadata(`roof-${medium}-owned-sleeve`, 'roof-service-sleeve'),
           },
         };
@@ -1598,26 +1722,37 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   }
   addBox('roof', 'rear-roof', [0, 4.61, -20.5], [60, 0.22, 4], structuralMetadata('rear-service-roof', 'roof-panel'));
 
-  // P6 correction P3 — plate articulation. Every family plate gets a charcoal edge fascia hanging
-  // 0.55 m below its own top, so each of the eight plates is OUTLINED and the 2/4/2 height steps
-  // read from the exterior finals. Nothing rises: the fascia top is flush with the plate top, so
-  // the 7–9 m envelope is untouched. Shares the existing `surface-dark` bucket (zero new draws).
+  // P6 correction P3 — plate articulation — reworked by L3 item 11. Every family plate keeps a
+  // charcoal edge fascia, but the fascia now PROTRUDES `fasciaProtrusion` above the plate top
+  // instead of sharing its plane (two overlapping up-facing coplanar faces = the trembling roofs),
+  // equal-height neighbours no longer emit twin coplanar bands on their shared border (there is no
+  // step to articulate there), and the x-edge bands stop short of the corners the z-edge bands
+  // own, so no two fascias overlap. Shares the existing `surface-dark` bucket (zero new draws).
   for (const room of plan.auditoriums) {
     const plateTop = room.height + 0.22;
     const fascia = { depth: 0.55, thickness: 0.12 };
-    const fasciaY = plateTop - fascia.depth / 2;
+    const fasciaY = plateTop + ROOF_ANTI_COPLANAR.fasciaProtrusion - fascia.depth / 2;
     const spanX = extent(room.bounds.x) + fascia.thickness * 2;
+    const fasciaMetadata = (edge) => structuralMetadata(
+      `${room.id}-roof-fascia-${edge}`,
+      'roof-fascia',
+      REQUIREMENT_ARCHITECTURE,
+      { auditoriumId: room.id, family: room.family, plateTop },
+    );
+    const equalHeightNeighbour = (zEdge) => plan.auditoriums.some((other) => (
+      other !== room
+      && other.bounds.x[0] === room.bounds.x[0]
+      && (other.bounds.z[0] === zEdge || other.bounds.z[1] === zEdge)
+      && Math.abs(other.height - room.height) < 1e-6
+    ));
     for (const [edge, zEdge] of [['north', room.bounds.z[1]], ['south', room.bounds.z[0]]]) {
+      if (equalHeightNeighbour(zEdge)) continue;
       addBox(
         'roof',
         'surface-dark',
         [centre(room.bounds.x), fasciaY, zEdge],
         [spanX, fascia.depth, fascia.thickness],
-        structuralMetadata(`${room.id}-roof-fascia-${edge}`, 'roof-fascia', REQUIREMENT_ARCHITECTURE, {
-          auditoriumId: room.id,
-          family: room.family,
-          plateTop,
-        }),
+        fasciaMetadata(edge),
       );
     }
     for (const [edge, xEdge] of [['west', room.bounds.x[0]], ['east', room.bounds.x[1]]]) {
@@ -1625,19 +1760,20 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
         'roof',
         'surface-dark',
         [xEdge, fasciaY, centre(room.bounds.z)],
-        [fascia.thickness, fascia.depth, extent(room.bounds.z)],
-        structuralMetadata(`${room.id}-roof-fascia-${edge}`, 'roof-fascia', REQUIREMENT_ARCHITECTURE, {
-          auditoriumId: room.id,
-          family: room.family,
-          plateTop,
-        }),
+        // Stops 2 cm short of each z-edge band, so the corner is owned by exactly one box.
+        [fascia.thickness, fascia.depth, extent(room.bounds.z) - fascia.thickness * 2 - 0.04],
+        fasciaMetadata(edge),
       );
     }
   }
 
   // Packaged rooftop units — spec `packaged_hvac_units`, one per TC300 zone, positions derived in
-  // `createPackagedUnitPlan`. Boxes share three instanced buckets; the condenser fan circle and its
-  // guard ring are two dedicated pools added after the buckets are emitted.
+  // `createPackagedUnitPlan`. L3 rework: (item 11) every stacked part EMBEDS into the surface under
+  // it — curb into plate, cabinet into curb, cap/platform into cabinet — so no two faces share a
+  // plane; (item 12) the master follows the accepted Trane V10 read at spec scale: a two-section
+  // cabinet (air-handling end: hood, panel seams, handles; condenser end: distinct top platform,
+  // one dominant fan ring with guard and blade cross, end grille), on a visible curb. Boxes share
+  // the same instanced buckets as before; the fan disc and guard ring stay the only two pools.
   for (const unit of plan.structural.roofService.packagedUnits) {
     const [x, top, z] = unit.position;
     const part = (component, requirement = REQUIREMENT_ARCHITECTURE) => structuralMetadata(
@@ -1646,26 +1782,163 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
       requirement,
       { rtuId: unit.id, tc300Id: unit.tc300Id, zoneId: unit.zoneId, component },
     );
-    // Curb first: seated ON the plate top face — the visible roof contact the spec demands.
-    addBox('roof', 'rtu-dark', [x, top + 0.125, z], [...unit.curbSize], part('curb'));
-    addBox('roof', 'rtu-cabinet', [x, top + 0.85, z], [...unit.size], part('cabinet'));
-    // Overhanging dark top cap — the trane-family roof trim band.
-    addBox('roof', 'rtu-dark', [x, top + 1.48, z], [2.56, 0.06, 1.56], part('cap'));
-    // Hooded outdoor-air intake on one long side, with a dark throat under the hood lip.
-    addBox('roof', 'rtu-cabinet', [x - 0.75, top + 1.12, z + 0.86], [0.6, 0.5, 0.26], part('intake-hood'));
-    addBox('roof', 'rtu-dark', [x - 0.75, top + 0.9, z + 0.9], [0.54, 0.08, 0.18], part('intake-hood-throat'));
-    // Access-panel seams on both long faces.
-    for (const [index, seamX] of [-0.42, 0.46].entries()) {
-      addBox('roof', 'rtu-dark', [x + seamX, top + 0.82, z], [0.025, 0.92, 1.52], part(`panel-seam-${index + 1}`));
+    // Curb: embedded contact with the plate (base 0.03 below the top face, item 11).
+    addBox('roof', 'rtu-dark', [x, top - 0.03 + 0.125, z], [...unit.curbSize], part('curb'));
+    // Cabinet: base embeds 0.02 into the curb top (curb top = plateTop + 0.22).
+    addBox('roof', 'rtu-cabinet', [x, unit.cabinetCentreY, z], [...unit.size], part('cabinet'));
+    // Dark roof-trim cap over the AIR-HANDLING section only (V10: the condenser end carries its
+    // own platform instead). Cap bottom embeds 0.02 into the cabinet top.
+    addBox('roof', 'rtu-dark', [x - 0.56, top + 1.41, z], [1.44, 0.06, 1.56], part('cap'));
+    // Condenser-section top platform, slightly lower than the cap and clear of it in x.
+    addBox('roof', 'rtu-cabinet', [x + 0.73, top + 1.41, z], [1.1, 0.05, 1.46], part('condenser-platform'));
+    // Section divider band between air-handling and condenser sections.
+    addBox('roof', 'rtu-dark', [x + 0.12, top + 0.83, z], [0.04, 1.06, 1.544], part('section-divider'));
+    // Hooded outdoor-air intake on the AH end, with a dark throat under the hood lip.
+    addBox('roof', 'rtu-cabinet', [x - 0.75, top + 1.1, z + 0.86], [0.6, 0.5, 0.26], part('intake-hood'));
+    addBox('roof', 'rtu-dark', [x - 0.75, top + 0.87, z + 0.88], [0.54, 0.08, 0.18], part('intake-hood-throat'));
+    // Condenser end grille on the +x face.
+    addBox('roof', 'rtu-dark', [x + 1.255, top + 0.8, z], [0.03, 0.7, 1.2], part('condenser-grille'));
+    // Access-panel seams on the AH section, protruding 0.015 from both long faces.
+    for (const [index, seamX] of [-0.85, -0.35].entries()) {
+      addBox('roof', 'rtu-dark', [x + seamX, top + 0.82, z], [0.025, 0.92, 1.53], part(`panel-seam-${index + 1}`));
     }
-    // `supply_drop` template realized: cabinet base outlet through the curb into the plate.
+    // Panel handles between the seams, one per long face.
+    for (const [index, direction] of [-1, 1].entries()) {
+      addBox('roof', 'rtu-dark', [x - 0.6, top + 0.72, z + direction * 0.765], [0.05, 0.05, 0.05], part(`panel-handle-${index + 1}`));
+    }
+    // Fan guard bars over the condenser fan (parallel, z-separated: two coincident crossing bars
+    // would share their horizontal planes — item 11 forbids exactly that).
+    for (const [index, barZ] of [-0.18, 0.18].entries()) {
+      addBox('roof', 'rtu-cabinet', [x + 0.73, top + 1.474, z + barZ], [0.8, 0.02, 0.06], part(`fan-guard-bar-${index + 1}`));
+    }
+    // `supply_drop` template realized: cabinet base outlet through the curb and the plate.
     addBox(
       'roof',
       'surface-metal',
       [x, top, z],
-      [...RTU_PACKAGE.supplyDrop.size],
+      [RTU_PACKAGE.supplyDrop.size[0], 0.6, RTU_PACKAGE.supplyDrop.size[2]],
       part('supply-drop', ['CIN-ARCH-001', 'HVAC-IOT-001']),
     );
+  }
+
+  // Item 14 — `condensate_drains`: outlet riser, elbow, run along the plate to the drain lane,
+  // and a trap stub dropping through the plate. Dark painted family, `rtu-dark` bucket (0 draws).
+  for (const drain of plan.structural.roofService.condensateDrains) {
+    const [sx, socketY, sz] = drain.socket;
+    const pipe = 0.04;
+    // Fittings (riser, trap) are one size up from the run: shared face planes at the elbows are
+    // exactly what item 11 forbids, and the size step reads as a real pipe fitting.
+    const fitting = 0.06;
+    const drainPart = (component) => ({ ...drain.metadata, component });
+    // Riser: from just inside the horizontal run up to the unit's condensate outlet socket.
+    const riserBottom = drain.runLevel + 0.01;
+    addBox(
+      'roof',
+      'rtu-dark',
+      [sx, (riserBottom + socketY) / 2, sz],
+      [fitting, socketY - riserBottom, fitting],
+      drainPart('outlet-riser'),
+    );
+    // Horizontal run along the plate, embedded 0.01 into the plate top (attached, not coplanar),
+    // overshooting the riser centre-line by 0.05 so the elbow is an overlap, not a butt joint.
+    const runEnd = sz + 0.05;
+    addBox(
+      'roof',
+      'rtu-dark',
+      [sx, drain.runLevel, (runEnd + drain.laneZ) / 2],
+      [pipe, pipe, Math.abs(runEnd - drain.laneZ)],
+      drainPart('plate-run'),
+    );
+    // Trap stub: through the plate at the drain lane (overlap ≥ the spec's 0.15).
+    addBox(
+      'roof',
+      'rtu-dark',
+      [sx, drain.plateTop - 0.1, drain.laneZ],
+      [fitting, 0.3, fitting],
+      drainPart('drain-trap'),
+    );
+  }
+
+  // Item 14 — `duct_branches`: one galvanized branch per auditorium off the supply main. Same
+  // bucket family as the mains (`structural-steel` on the architecture layer, 0 added draws),
+  // so it inherits the mains' visibility in every state.
+  for (const branch of plan.structural.roofService.ductBranches) {
+    const branchPart = (component) => ({ ...branch.metadata, component });
+    const laneHalf = BRANCH_CROSS.width / 2;
+    if (branch.hasSpineRun) {
+      const runLength = Math.abs(branch.roomZ - branch.jointZ);
+      addBox(
+        'architecture',
+        'structural-steel',
+        [branch.laneX, branch.level, (branch.jointZ + branch.roomZ) / 2],
+        [BRANCH_CROSS.width, BRANCH_CROSS.height, runLength],
+        branchPart('spine-run'),
+      );
+      // TDC seam collars every ~4 m (the duct catalog's flanged straight-section vocabulary).
+      const seamCount = Math.floor(runLength / 4);
+      for (let seam = 1; seam <= seamCount; seam += 1) {
+        const t = seam / (seamCount + 1);
+        addBox(
+          'architecture',
+          'structural-steel',
+          [branch.laneX, branch.level, branch.jointZ + (branch.roomZ - branch.jointZ) * t],
+          [BRANCH_CROSS.width + 0.06, BRANCH_CROSS.height + 0.06, 0.04],
+          branchPart(`tdc-seam-${seam}`),
+        );
+      }
+      // Flanged elbow fitting where the spine run turns toward the room (catalog codo piece):
+      // proud of both runs on every axis, so no plane is shared at the corner.
+      addBox(
+        'architecture',
+        'structural-steel',
+        [branch.laneX, branch.level, branch.roomZ],
+        [BRANCH_CROSS.width + 0.06, BRANCH_CROSS.height + 0.06, BRANCH_CROSS.width + 0.06],
+        branchPart('elbow-fitting'),
+      );
+    }
+    // Cross run to the room: it ends 0.25 m inside the room plate's x-range and re-enters the
+    // spine lane band by 0.2 m, so both joints are overlap contacts. It is 0.02 shallower than
+    // the spine run — the elbow of two equal-height boxes would share both horizontal planes
+    // (item 11); the step reads as a reducer take-off.
+    const laneJoinX = branch.side === 'west' ? branch.laneX + laneHalf - 0.05 : branch.laneX - laneHalf + 0.05;
+    addBox(
+      'architecture',
+      'structural-steel',
+      [(branch.endX + laneJoinX) / 2, branch.level, branch.roomZ],
+      [Math.abs(laneJoinX - branch.endX), BRANCH_CROSS.height - 0.02, BRANCH_CROSS.width],
+      branchPart('room-run'),
+    );
+    if (branch.needsRiser) {
+      // Riser from just above the branch level up into the supply main's belly. It is 0.04
+      // narrower than the run it leaves, so no lateral face plane is ever shared (item 11).
+      const riserBottom = branch.level - BRANCH_CROSS.height / 2 + 0.02;
+      const riserZ = branch.hasSpineRun ? branch.jointZ : branch.roomZ;
+      addBox(
+        'architecture',
+        'structural-steel',
+        [branch.laneX, (riserBottom + 8.2) / 2, riserZ],
+        [BRANCH_CROSS.width - 0.04, 8.2 - riserBottom, BRANCH_CROSS.width - 0.04],
+        branchPart('main-riser'),
+      );
+      // The strap at the joint wraps the riser just under the main. +0.08 girth: proud of the
+      // riser it wraps, while west/east lane straps keep a 0.02 air clearance (item 11).
+      addBox(
+        'architecture',
+        'containment-orange',
+        [branch.laneX, 7.975, riserZ],
+        [BRANCH_CROSS.width + 0.08, 0.25, BRANCH_CROSS.width + 0.08],
+        branchPart('joint-strap'),
+      );
+    } else {
+      // Large rooms run at main height: the strap wraps the spine run where it enters the main.
+      addBox(
+        'architecture',
+        'containment-orange',
+        [branch.laneX, branch.level, branch.jointZ + 0.1],
+        [BRANCH_CROSS.width + 0.08, BRANCH_CROSS.height + 0.08, 0.12],
+        branchPart('joint-strap'),
+      );
+    }
   }
 
   // Temporary family proxies make all three room types and the Sala 3 evidence countable.
@@ -2747,13 +3020,16 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     }
   }
 
-  // Own bucket: the public roof seams are clipped together with the public roof panel they belong to.
+  // Own bucket: the public roof seams are clipped together with the public roof panel they belong
+  // to. L3 item 11: every seam is a DECAL that crosses its plate's top plane — 0.02 embedded,
+  // 0.04 proud — so neither of its horizontal faces sits near the plane it decorates (the old
+  // 0.0025 m offsets quantized to the same depth value at capture distances and flickered).
   for (const [index, z] of [11.2, 13.8, 16.4, 19, 21.6].entries()) {
     addBox(
       'roof',
       'roof-seam-charcoal',
-      [0, 4.735, z],
-      [59.2, 0.035, 0.045],
+      [0, 4.72 + 0.01, z],
+      [59.2, 0.06, 0.045],
       surfaceMetadata(`public-roof-seam-${index + 1}`, 'roof-seam'),
     );
   }
@@ -2761,28 +3037,33 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     addBox(
       'roof',
       'surface-dark',
-      [centre(room.bounds.x), room.height + 0.235, centre(room.bounds.z)],
-      [extent(room.bounds.x) - 0.8, 0.035, 0.05],
+      [centre(room.bounds.x), room.height + 0.22 + 0.01, centre(room.bounds.z)],
+      [extent(room.bounds.x) - 0.8, 0.06, 0.05],
       surfaceMetadata(`${room.id}-roof-seam`, 'roof-seam'),
     );
   }
   for (const sleeve of plan.structural.containment.futureSleeves) {
     const [x, y, z] = sleeve.position;
+    // Item 11: the curb ring used to end EXACTLY on the public plate top plane (the kitchen sleeve)
+    // and 2.5 mm under its own marking — both flicker classes. The curbs now stop 0.02 short of any
+    // plate plane and the marking is a crossing decal (0.02 embedded / 0.04 proud of the curb top).
     for (const [axis, direction] of [['x', -1], ['x', 1], ['z', -1], ['z', 1]]) {
       const alongX = axis === 'x';
+      // The z pieces run BETWEEN the x pieces (0.66 long, 0.01 clear): the old full-length ring
+      // overlapped at all four corners with identical face planes — item 11's corner flicker.
       addBox(
         'roof',
         'surface-marking',
-        [x + (alongX ? direction * 0.38 : 0), y + 0.12, z + (!alongX ? direction * 0.38 : 0)],
-        alongX ? [0.08, 0.24, 0.84] : [0.84, 0.24, 0.08],
+        [x + (alongX ? direction * 0.38 : 0), y + 0.11, z + (!alongX ? direction * 0.38 : 0)],
+        alongX ? [0.08, 0.22, 0.84] : [0.66, 0.22, 0.08],
         surfaceMetadata(`${sleeve.id}-curb-${axis}-${direction}`, 'roof-curb'),
       );
     }
     addBox(
       'roof',
       'surface-white',
-      [x, y + 0.255, z],
-      [0.42, 0.025, 0.12],
+      [x, y + 0.22 + 0.01, z],
+      [0.42, 0.06, 0.12],
       surfaceMetadata(`${sleeve.id}-surface-marking`, 'containment-marking'),
     );
   }
@@ -2790,20 +3071,26 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     const [x, , z] = route.plenum.position;
     for (const [axis, direction] of [['x', -1], ['x', 1], ['z', -1], ['z', 1]]) {
       const alongX = axis === 'x';
+      // Item 11: x offset 0.545 (was 0.53) — the flashing's inner face used to sit exactly the
+      // epsilon away from the 1.15 m sleeve's side plane.
+      // The z pieces run between the x pieces (0.99 long, 0.01 clear) — the full-length ring
+      // overlapped at its corners on one shared horizontal plane.
       addBox(
         'roof',
         direction > 0 ? 'surface-white' : 'surface-service',
-        [x + (alongX ? direction * 0.53 : 0), 8.285, z + (!alongX ? direction * 0.63 : 0)],
-        alongX ? [0.08, 0.05, 1.32] : [1.12, 0.05, 0.08],
+        [x + (alongX ? direction * 0.545 : 0), 8.285, z + (!alongX ? direction * 0.63 : 0)],
+        alongX ? [0.08, 0.05, 1.32] : [0.99, 0.05, 0.08],
         surfaceMetadata(`${route.id}-flashing-${axis}-${direction}`, 'roof-curb'),
       );
     }
     for (const [markIndex, markZ] of [-10.9, -8.6, -6.7].entries()) {
+      // Item 11: crossing decal over the main's top plane (0.02 embedded / 0.04 proud), replacing
+      // the 2.5 mm near-coplanar float that flickered.
       addBox(
         'roof',
         markIndex === 1 ? 'surface-white' : 'surface-marking',
-        [x, 8.735, markZ],
-        [0.98, 0.025, 0.09],
+        [x, 8.72 + 0.01, markZ],
+        [0.98, 0.06, 0.09],
         surfaceMetadata(`${route.id}-service-band-${markIndex + 1}`, 'containment-marking'),
       );
     }
@@ -3223,12 +3510,14 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
       RTU_PACKAGE.fan.height,
       24,
     );
-    const guardGeometry = new THREE.TorusGeometry(RTU_PACKAGE.fan.radius * 0.92, 0.028, 8, 28)
+    const guardGeometry = new THREE.TorusGeometry(RTU_PACKAGE.fan.guardRadius, RTU_PACKAGE.fan.guardTube, 8, 28)
       .rotateX(Math.PI / 2);
     rtuFanGeometries.push(fanGeometry, guardGeometry);
+    // Item 11/12: the disc embeds 0.015 into the condenser platform top (1.435) and the guard ring
+    // seats INTO the disc top (1.47) — contact by interpenetration at every stage, no shared plane.
     for (const [name, geometry, materialKey, lift] of [
-      ['rtu-fan-pool', fanGeometry, 'rtu-dark', 1.51 + RTU_PACKAGE.fan.height / 2],
-      ['rtu-fan-guard-pool', guardGeometry, 'rtu-cabinet', 1.51 + RTU_PACKAGE.fan.height + 0.03],
+      ['rtu-fan-pool', fanGeometry, 'rtu-dark', 1.42 + RTU_PACKAGE.fan.height / 2],
+      ['rtu-fan-guard-pool', guardGeometry, 'rtu-cabinet', 1.475],
     ]) {
       const mesh = new THREE.InstancedMesh(geometry, materials[materialKey], rtuUnits.length);
       mesh.name = `structural-roof-${name}`;
@@ -3243,8 +3532,8 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
           layer: 'roof',
           materialKey,
           zone: 'exterior',
-          // The fan bay sits over the condenser end of the cabinet, on the dark top cap.
-          position: [unit.position[0] + 0.55, unit.position[1] + lift, unit.position[2]],
+          // The fan sits centred on the condenser-section platform (V10 read, item 12).
+          position: [unit.position[0] + 0.73, unit.position[1] + lift, unit.position[2]],
           size: [1, 1, 1],
           rotationY: 0,
           mediaWidth: 0,

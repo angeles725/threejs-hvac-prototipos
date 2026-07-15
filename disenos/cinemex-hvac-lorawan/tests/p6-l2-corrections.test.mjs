@@ -440,20 +440,26 @@ test('P3: family roof plates are light concrete with dark fascia outlining every
   }
   assert.equal(new Set(heightsByFamily.values()).size, 3, 'the three families must keep distinct plate heights');
 
+  // CONTRACT CHANGE (L3 item 11): the fascia PROTRUDES 0.02 above its plate instead of sharing
+  // its plane (the shared plane z-fought under rotation), and equal-height shared borders emit no
+  // band (there is no step to articulate, and twin coplanar bands were the worst flicker source).
   const fascias = instancesOf(asset, ({ metadata }) => metadata.kind === 'roof-fascia');
-  assert.equal(fascias.length, 32, 'four fascia edges per plate, eight plates');
+  assert.equal(fascias.length, 28, 'four edges per plate minus the four equal-height shared borders');
   for (const room of plan.auditoriums) {
     const own = fascias.filter(({ metadata }) => metadata.auditoriumId === room.id);
-    assert.equal(own.length, 4, `${room.id} must be outlined on all four edges`);
+    assert.ok(own.length === 3 || own.length === 4, `${room.id} must be outlined on every stepped edge`);
     const plateTop = room.height + 0.22;
     for (const band of own) {
       const top = band.position[1] + band.size[1] / 2;
-      assert.ok(Math.abs(top - plateTop) < 1e-6, `${room.id} fascia must stay flush with its plate top (no envelope change)`);
+      assert.ok(
+        top > plateTop && top <= plateTop + 0.02 + 1e-9,
+        `${room.id} fascia must protrude (a shared plane flickers), by 0.02 at most`,
+      );
     }
   }
-  // Envelope guard: nothing in the articulation rises above the tallest gated plate.
+  // Envelope guard: the articulation adds at most the 2 cm anti-coplanar protrusion.
   const ceiling = Math.max(...plates.map(({ position, size }) => position[1] + size[1] / 2));
-  assert.ok(fascias.every(({ position, size }) => position[1] + size[1] / 2 <= ceiling + 1e-6));
+  assert.ok(fascias.every(({ position, size }) => position[1] + size[1] / 2 <= ceiling + 0.02 + 1e-6));
 });
 
 // ---------------------------------------------------------------------------
@@ -794,11 +800,16 @@ test('item 10: the builder emits every RTU part, in the roof layer, in contact w
     byKind.set(part.metadata.kind, (byKind.get(part.metadata.kind) ?? 0) + 1);
     assert.equal(part.meshLayer, 'roof', `${part.metadata.entityId} must live on the roof layer (Techo toggle, eng roof=off)`);
   }
+  // CONTRACT CHANGE (L3 item 12): the master is now the two-section V10 read — AH cap, condenser
+  // platform, section divider, end grille, guard bars and handles joined the part list.
   for (const [kind, expected] of [
-    ['rtu-curb', 14], ['rtu-cabinet', 14], ['rtu-cap', 14], ['rtu-intake-hood', 14],
-    ['rtu-intake-hood-throat', 14], ['rtu-supply-drop', 14],
+    ['rtu-curb', 14], ['rtu-cabinet', 14], ['rtu-cap', 14], ['rtu-condenser-platform', 14],
+    ['rtu-section-divider', 14], ['rtu-condenser-grille', 14],
+    ['rtu-intake-hood', 14], ['rtu-intake-hood-throat', 14], ['rtu-supply-drop', 14],
     ['rtu-condenser-fan', 14], ['rtu-fan-guard', 14],
+    ['rtu-fan-guard-bar-1', 14], ['rtu-fan-guard-bar-2', 14],
     ['rtu-panel-seam-1', 14], ['rtu-panel-seam-2', 14],
+    ['rtu-panel-handle-1', 14], ['rtu-panel-handle-2', 14],
   ]) {
     assert.equal(byKind.get(kind), expected, `expected ${expected} × ${kind}`);
   }
@@ -816,12 +827,16 @@ test('item 10: the builder emits every RTU part, in the roof layer, in contact w
     PUBLIC_ROOF_PLATE.bounds.z,
   );
 
-  // Visible contact: every curb base sits exactly on its unit's plate top.
+  // CONTRACT CHANGE (L3 item 11): visible contact is now contact by INTERPENETRATION — the curb
+  // base sits 0.03 below the plate top face, because sharing the plane exactly z-fought.
   const units = new Map(asset.plan.structural.roofService.packagedUnits.map((unit) => [unit.id, unit]));
   for (const curb of parts.filter(({ metadata }) => metadata.kind === 'rtu-curb')) {
     const unit = units.get(curb.metadata.rtuId);
     assert.ok(unit, `${curb.metadata.entityId} names no unit`);
-    assert.ok(Math.abs((curb.position[1] - curb.size[1] / 2) - unit.plateTop) < 1e-9, `${unit.id} curb floats off its plate`);
+    const base = curb.position[1] - curb.size[1] / 2;
+    assert.ok(base < unit.plateTop, `${unit.id} curb floats off its plate`);
+    assert.ok(unit.plateTop - base <= 0.03 + 1e-9, `${unit.id} curb sinks too deep into its plate`);
+    assert.ok(curb.position[1] + curb.size[1] / 2 > unit.plateTop, `${unit.id} curb must stay visible above the plate`);
   }
 
   // Draw budget: per-part instancing keeps the whole fleet within six added draws.
