@@ -20,7 +20,8 @@ import {
   routeIds,
   samplePolyline,
 } from './interaction.js';
-import { CAMERA_PRESETS, QA_CAMERA_PRESETS } from '../controllers/camera.js';
+import { CAMERA_PRESETS, ISOMETRIC_PRESET, QA_CAMERA_PRESETS } from '../controllers/camera.js';
+import { TEMPERATURE_CHIP, createChipEnvelope, createTemperatureChips } from './temperature-chips.js';
 import {
   LIGHTING_EMISSION_CHANNELS,
   LIGHTING_INTERIOR_CEILING_COLOR,
@@ -68,6 +69,16 @@ export function resolvePublicRoofVisibility(cameraName) {
 /** The rear service roof buries the corridor, doors and UC cabinets from the technical preset. */
 export function resolveRearRoofVisibility(cameraName) {
   return !SURFACE_REAR_ROOF_CLIP_CAMERAS.includes(cameraName);
+}
+
+/**
+ * L4 correction M3: with the roof toggled off in the ARCHITECTURE state, the spine duct assembly
+ * hovered unsupported over the open corridor trench. It now follows the Techo toggle there — the
+ * plates it serves leave, the plant leaves with them. Engineering keeps it always on (the spec's
+ * `custom:engineering_visibility` behavior for the mains).
+ */
+export function resolveSpineAssemblyVisibility(visualMode = 'architectural', { roofVisible = true } = {}) {
+  return visualMode === 'engineering' || roofVisible !== false;
 }
 
 /**
@@ -178,7 +189,7 @@ const insetRange = ([minimum, maximum], margin) => [minimum + margin, maximum - 
  */
 function createPackagedUnitPlan(auditoriums) {
   const zoneById = new Map(ZONES.map((zone) => [zone.id, zone]));
-  return TC300_DEVICES.map((device) => {
+  const seats = TC300_DEVICES.map((device) => {
     const zone = zoneById.get(device.zoneId);
     const room = auditoriums.find(({ zoneId }) => zoneId === device.zoneId) ?? null;
     const plate = room
@@ -191,7 +202,23 @@ function createPackagedUnitPlan(auditoriums) {
       ],
       RTU_PACKAGE.clearance.x,
     );
-    const x = clampToRange(device.position[0], laneX);
+    return { device, plate, laneX, x: clampToRange(device.position[0], laneX) };
+  });
+  // L4 correction M5: on a lane shared by several units, the two OUTERMOST units snap to their
+  // own outer clamp limits, so the row's end silhouettes stay discrete at glancing angles (the
+  // two westmost public units used to read as one double-length cabinet from the facade preset).
+  const byPlate = new Map();
+  for (const seat of seats) {
+    if (!byPlate.has(seat.plate.owner)) byPlate.set(seat.plate.owner, []);
+    byPlate.get(seat.plate.owner).push(seat);
+  }
+  for (const sharing of byPlate.values()) {
+    if (sharing.length < 2) continue;
+    const sorted = [...sharing].sort((a, b) => a.x - b.x);
+    sorted[0].x = sorted[0].laneX[0];
+    sorted[sorted.length - 1].x = sorted[sorted.length - 1].laneX[1];
+  }
+  return seats.map(({ device, plate, x }) => {
     // Item 13: the plate's service lane, one shared z per plate.
     const z = centre(plate.bounds.z);
     const base = plate.top;
@@ -1150,6 +1177,9 @@ export function createArchitecturePlan() {
       ['human-corridor', [0.8, 0, -3], 1.74],
       ['human-kitchen', [-6.2, 0, 13.4], 1.68],
       ['human-technical', [24, 0, -19.2], 1.75],
+      // L4 correction M2: staff presence inside the checkpoint's accessible lane, behind the
+      // gate line so the lane floor sample of the gated checkpoint LOS stays unobstructed.
+      ['human-checkpoint-staff', [0.55, 0, 12.55], 1.7],
     ].map(([id, position, height]) => ({
       id,
       position,
@@ -1278,6 +1308,9 @@ function createFlatMaterials(THREE, materialRegistry) {
     'glass-blue': 'facadeGlass',
     'facade-frame-charcoal': 'shellCharcoal',
     'structural-steel': 'galvanizedDuct',
+    // The rooftop duct network's OWN bucket key (same pooled galvanized canonical): it keeps the
+    // spine plant out of the shared structural-steel buckets so M3 can toggle it as one assembly.
+    'duct-galv': 'galvanizedDuct',
     'service-door': 'shellCharcoal',
     'containment-orange': custom(0xf59e0b, { roughness: 0.48 }),
     'accessible-yellow': emissionChannel('accessible-yellow', { roughness: 0.46 }),
@@ -1491,7 +1524,7 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   } = createFlatMaterials(THREE, materialRegistry);
   // The live house state the zone-fill uniform is derived from: `light_state` and the visual mode
   // both move the room bounce, and both arrive through their own setter.
-  const houseState = { lightState: 'on', visualMode: 'architectural' };
+  const houseState = { lightState: 'on', visualMode: 'architectural', roofVisible: true };
   const cutawayMaterialKeys = Object.keys(materials).filter((key) => ![
     'tc-black', 'tc-blue', 'uc-white', 'gateway-dark',
     'rs485-green', 'lorawan-blue', 'ethernet-blue',
@@ -1518,10 +1551,14 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     rotationY = 0,
     mediaWidth = 0,
     mediaOffset = null,
+    zoneOverride = null,
   ) {
     // The lighting zone is DERIVED from where the box lands in the DesignSpec plan bands, so the
     // ladder can never drift from the building: one bucket per (layer, material, zone).
-    const zone = resolveLightingZone({ layer, position });
+    // `zoneOverride` exists for the ONE class the x/z bands misclassify: rooftop plant standing in
+    // full sun ABOVE the roofline whose footprint lies over an interior band (L4 correction M1 —
+    // the corridor dim rendered the galvanized spine ducts near-black).
+    const zone = zoneOverride ?? resolveLightingZone({ layer, position });
     const key = `${layer}:${materialKey}:${zone}`;
     if (!buckets.has(key)) buckets.set(key, { layer, materialKey, zone, instances: [] });
     buckets.get(key).instances.push({
@@ -1860,8 +1897,8 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   }
 
   // Item 14 — `duct_branches`: one galvanized branch per auditorium off the supply main. Same
-  // bucket family as the mains (`structural-steel` on the architecture layer, 0 added draws),
-  // so it inherits the mains' visibility in every state.
+  // dedicated `duct-galv` bucket (pooled galvanizedDuct canonical), explicit exterior zone (M1)
+  // so the sun reaches the declared galvanized read, and toggled as one assembly by M3.
   for (const branch of plan.structural.roofService.ductBranches) {
     const branchPart = (component) => ({ ...branch.metadata, component });
     const laneHalf = BRANCH_CROSS.width / 2;
@@ -1869,10 +1906,14 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
       const runLength = Math.abs(branch.roomZ - branch.jointZ);
       addBox(
         'architecture',
-        'structural-steel',
+        'duct-galv',
         [branch.laneX, branch.level, (branch.jointZ + branch.roomZ) / 2],
         [BRANCH_CROSS.width, BRANCH_CROSS.height, runLength],
         branchPart('spine-run'),
+        0,
+        0,
+        null,
+        'exterior',
       );
       // TDC seam collars every ~4 m (the duct catalog's flanged straight-section vocabulary).
       const seamCount = Math.floor(runLength / 4);
@@ -1880,20 +1921,28 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
         const t = seam / (seamCount + 1);
         addBox(
           'architecture',
-          'structural-steel',
+          'duct-galv',
           [branch.laneX, branch.level, branch.jointZ + (branch.roomZ - branch.jointZ) * t],
           [BRANCH_CROSS.width + 0.06, BRANCH_CROSS.height + 0.06, 0.04],
           branchPart(`tdc-seam-${seam}`),
+          0,
+          0,
+          null,
+          'exterior',
         );
       }
       // Flanged elbow fitting where the spine run turns toward the room (catalog codo piece):
       // proud of both runs on every axis, so no plane is shared at the corner.
       addBox(
         'architecture',
-        'structural-steel',
+        'duct-galv',
         [branch.laneX, branch.level, branch.roomZ],
         [BRANCH_CROSS.width + 0.06, BRANCH_CROSS.height + 0.06, BRANCH_CROSS.width + 0.06],
         branchPart('elbow-fitting'),
+        0,
+        0,
+        null,
+        'exterior',
       );
     }
     // Cross run to the room: it ends 0.25 m inside the room plate's x-range and re-enters the
@@ -1903,10 +1952,14 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     const laneJoinX = branch.side === 'west' ? branch.laneX + laneHalf - 0.05 : branch.laneX - laneHalf + 0.05;
     addBox(
       'architecture',
-      'structural-steel',
+      'duct-galv',
       [(branch.endX + laneJoinX) / 2, branch.level, branch.roomZ],
       [Math.abs(laneJoinX - branch.endX), BRANCH_CROSS.height - 0.02, BRANCH_CROSS.width],
       branchPart('room-run'),
+      0,
+      0,
+      null,
+      'exterior',
     );
     if (branch.needsRiser) {
       // Riser from just above the branch level up into the supply main's belly. It is 0.04
@@ -1915,10 +1968,14 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
       const riserZ = branch.hasSpineRun ? branch.jointZ : branch.roomZ;
       addBox(
         'architecture',
-        'structural-steel',
+        'duct-galv',
         [branch.laneX, (riserBottom + 8.2) / 2, riserZ],
         [BRANCH_CROSS.width - 0.04, 8.2 - riserBottom, BRANCH_CROSS.width - 0.04],
         branchPart('main-riser'),
+        0,
+        0,
+        null,
+        'exterior',
       );
       // The strap at the joint wraps the riser just under the main. +0.08 girth: proud of the
       // riser it wraps, while west/east lane straps keep a 0.02 air clearance (item 11).
@@ -1928,6 +1985,10 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
         [branch.laneX, 7.975, riserZ],
         [BRANCH_CROSS.width + 0.08, 0.25, BRANCH_CROSS.width + 0.08],
         branchPart('joint-strap'),
+        0,
+        0,
+        null,
+        'exterior',
       );
     } else {
       // Large rooms run at main height: the strap wraps the spine run where it enters the main.
@@ -1937,6 +1998,10 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
         [branch.laneX, branch.level, branch.jointZ + 0.1],
         [BRANCH_CROSS.width + 0.08, BRANCH_CROSS.height + 0.08, 0.12],
         branchPart('joint-strap'),
+        0,
+        0,
+        null,
+        'exterior',
       );
     }
   }
@@ -2174,15 +2239,42 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     }
     const sideWidth = (proxy.size[0] - proxy.accessGapWidth) / 2;
     const offset = proxy.accessGapWidth / 2 + sideWidth / 2;
+    const podiumTop = proxy.position[1] + proxy.size[1] / 2;
     for (const direction of [-1, 1]) {
+      const podiumX = proxy.position[0] + direction * offset;
       addBox(
         'architecture',
         proxy.materialKey,
-        [proxy.position[0] + direction * offset, proxy.position[1], proxy.position[2]],
+        [podiumX, proxy.position[1], proxy.position[2]],
         [sideWidth, proxy.size[1], proxy.size[2]],
         { ...proxy.metadata, component: 'checkpoint-side', openAccess: true },
       );
+      // L4 correction M2 — dress the checkpoint. A dark counter cap on each podium (embedded
+      // 0.02, proud 0.03: the item-11 discipline, applied beyond its scanner scope).
+      addBox(
+        'architecture',
+        'surface-dark',
+        [podiumX, podiumTop + 0.005, proxy.position[2]],
+        [sideWidth + 0.06, 0.05, proxy.size[2] + 0.06],
+        { ...proxy.metadata, component: 'checkpoint-counter-cap', side: direction },
+      );
     }
+    // Ticket scanner / POS block on the west podium's lane-side corner, screen toward the lane.
+    const posX = -(proxy.accessGapWidth / 2 + 0.25);
+    addBox(
+      'architecture',
+      'surface-dark',
+      [posX, podiumTop + 0.03 + 0.11, proxy.position[2] + 0.5],
+      [0.16, 0.22, 0.16],
+      { ...proxy.metadata, component: 'checkpoint-pos-body' },
+    );
+    addBox(
+      'architecture',
+      'surface-pos-screen',
+      [posX + 0.09, podiumTop + 0.03 + 0.16, proxy.position[2] + 0.5],
+      [0.02, 0.12, 0.14],
+      { ...proxy.metadata, component: 'checkpoint-pos-screen' },
+    );
   }
 
   const kitchenExtraction = plan.structural.kitchenExtraction;
@@ -2654,16 +2746,25 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   for (const sleeve of plan.structural.containment.futureSleeves) {
     addBox('architecture', 'containment-orange', sleeve.position, sleeve.size, sleeve.metadata);
   }
+  // L4 correction M1: the whole spine plant is rooftop equipment in full sun — its footprint over
+  // the interior corridor band misclassified it into the corridor dim and it rendered near-black.
+  // The explicit `exterior` zone restores the declared galvanized/stainless read, and the plant's
+  // dedicated buckets (`duct-galv` + exterior-only orange/steel) are what M3's visibility rule
+  // toggles as one assembly.
   for (const route of plan.structural.roofService.routes) {
-    addBox('architecture', 'hood-steel', route.plenum.position, route.plenum.size, route.plenum.metadata);
-    addBox('architecture', 'structural-steel', route.main.position, route.main.size, route.main.metadata);
-    addBox('architecture', 'containment-orange', route.sleeve.position, route.sleeve.size, route.sleeve.metadata);
+    addBox('architecture', 'hood-steel', route.plenum.position, route.plenum.size, route.plenum.metadata, 0, 0, null, 'exterior');
+    addBox('architecture', 'duct-galv', route.main.position, route.main.size, route.main.metadata, 0, 0, null, 'exterior');
+    addBox('architecture', 'containment-orange', route.sleeve.position, route.sleeve.size, route.sleeve.metadata, 0, 0, null, 'exterior');
     addBox(
       'architecture',
       'containment-orange',
       [route.plenum.socketPosition[0], 8.26, route.plenum.socketPosition[2]],
       [0.7, 0.42, 0.7],
       { ...route.plenum.metadata, component: 'plenum-main-overlap-collar' },
+      0,
+      0,
+      null,
+      'exterior',
     );
   }
 
@@ -3700,6 +3801,54 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     appConfig: APP_CONFIG,
     architecturePlan: plan,
   });
+
+  // L4 items 15/16 — the live temperature chips over the packaged units. The envelope the
+  // exterior-only rule tests against derives from the building config and the emitted plates.
+  const chipEnvelope = createChipEnvelope({
+    building: APP_CONFIG.building,
+    maxPlateTop: Math.max(
+      PUBLIC_ROOF_PLATE.top,
+      ...plan.auditoriums.map((room) => room.height + 0.22),
+    ),
+  });
+  const temperatureChips = canvasDocument && THREE.Sprite && THREE.SpriteMaterial && THREE.CanvasTexture
+    ? createTemperatureChips({
+      THREE,
+      documentObject: canvasDocument,
+      units: plan.structural.roofService.packagedUnits,
+      zoneLabels: new Map(APP_CONFIG.zones.map(({ id, label }) => [id, label])),
+      parent: groups.labels,
+    })
+    : null;
+
+  /** The exterior-only rule, fed per frame by the runtime and per preset by the evidence camera. */
+  function setChipCameraPosition(position) {
+    return temperatureChips?.setCameraPosition(chipEnvelope, position) ?? false;
+  }
+
+  /** The chips read the SAME model the alarm list reads — one source of truth for temperature. */
+  let chipReadingSample = null;
+  function applyChipReadings(model) {
+    if (!temperatureChips) return;
+    // Readings refresh on a state change or on the deterministic sample cadence — never per tick:
+    // the live telemetry moves ~0.1 °C per tick and repainting fourteen canvases at tick rate is
+    // the exact per-frame-upload trap the library row documents.
+    const sample = `${model.state}|${Math.floor(model.tick / TEMPERATURE_CHIP.readingIntervalTicks)}`;
+    if (sample !== chipReadingSample) {
+      chipReadingSample = sample;
+      const readings = {};
+      for (const unit of plan.structural.roofService.packagedUnits) {
+        const telemetry = model.telemetry[unit.tc300Id];
+        if (!telemetry) continue;
+        readings[unit.tc300Id] = {
+          temperature: telemetry.temperature,
+          alarm: model.deviceStatus[unit.tc300Id] === 'alarm',
+        };
+      }
+      temperatureChips.setReadings(readings);
+    }
+    temperatureChips.setTick(model.tick);
+  }
   // Zone variants split a bucket into several meshes, so these sets are resolved from the bucket's
   // own layer/material identity rather than from a name that a zone suffix can move.
   const denseNetworkMeshes = meshes.filter((mesh) => (
@@ -3726,6 +3875,17 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
    */
   const externalProxyMeshes = meshes.filter((mesh) => (
     mesh.userData.layer === 'hvac' && String(mesh.userData.materialKey).startsWith('endpoint-')
+  ));
+  /**
+   * The rooftop spine plant + branch network, as whole meshes: their buckets contain ONLY
+   * `roof-service*` entities by construction (dedicated `duct-galv` key; the exterior-zone
+   * orange/steel buckets have no other members), so M3 can toggle the assembly without
+   * per-instance surgery. Derived from the entity kinds, never from a hand-list of names.
+   */
+  const spineAssemblyMeshes = meshes.filter((mesh) => (
+    mesh.userData.layer === 'architecture'
+      && (mesh.userData.entities?.length ?? 0) > 0
+      && mesh.userData.entities.every(({ kind }) => String(kind).startsWith('roof-service'))
   ));
   /** The dark interior soffits: architectural state only, so engineering keeps seeing the ceiling. */
   const interiorCeilingMeshes = meshes.filter((mesh) => mesh.userData.materialKey === 'interior-ceiling');
@@ -4012,6 +4172,9 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
       statusSummary = applyStatusOverlays(model);
       statusFingerprint = fingerprint;
     }
+    // The chips ride the same model pass: canvas redraws only when a reading changed, tick poses
+    // every call (both deterministic — the capture t0/t30 pair reproduces exactly).
+    applyChipReadings(model);
     return applyAnimationPools(model, statusSummary);
   }
 
@@ -4309,6 +4472,10 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
       visualMode: labelPolicy.visualMode,
     });
     const evidencePreset = CAMERA_PRESETS[cameraName] ?? QA_CAMERA_PRESETS[cameraName] ?? null;
+    // Item 16: a preset change re-evaluates the exterior rule immediately (the runtime also feeds
+    // the live camera position per frame, so free orbit crossing the envelope updates too).
+    const chipCameraPreset = cameraName === 'isometric' ? ISOMETRIC_PRESET : evidencePreset;
+    if (chipCameraPreset) setChipCameraPosition(chipCameraPreset.position);
     networkSchematic.setVisibility(networkVisibility);
     for (const mesh of denseNetworkMeshes) mesh.visible = networkVisibility.densePhysicalNetwork;
     // The interaction pools ride the same evidence rule as the media they annotate: the schematic
@@ -4318,6 +4485,11 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     for (const mesh of rearRoofMeshes) mesh.visible = resolveRearRoofVisibility(cameraName);
     // The external IP chain is engineering evidence; the architecture state shows only the building.
     for (const mesh of externalProxyMeshes) mesh.visible = labelPolicy.visualMode === 'engineering';
+    // M3: the spine duct assembly follows the Techo toggle in architecture; engineering keeps it.
+    const spineVisible = resolveSpineAssemblyVisibility(labelPolicy.visualMode, {
+      roofVisible: roofLayerVisible,
+    });
+    for (const mesh of spineAssemblyMeshes) mesh.visible = spineVisible;
     const ceilingVisible = resolveInteriorCeilingVisibility(labelPolicy.visualMode, {
       roofVisible: roofLayerVisible,
     });
@@ -4428,9 +4600,10 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
         }
       }
       else if (scope === 'overview') {
-        // `checkpoint` joined this list with P6 correction P1: the giant floating zone labels were
-        // half of what buried the checkpoint fit-out in its own required view.
-        if (['kitchen', 'checkpoint', 'family-master', 'roof-service'].includes(cameraName)) sprite.visible = false;
+        // `checkpoint` joined this list with P6 correction P1 (the giant floating zone labels
+        // buried the checkpoint); `top` with L4 item 17 (the thermal roof plan belongs to the
+        // temperature chips, not to eight room banners).
+        if (['kitchen', 'checkpoint', 'top', 'family-master', 'roof-service'].includes(cameraName)) sprite.visible = false;
         else sprite.visible = !['sala-3', 'technical', 'ug67', 'rs485-master'].includes(cameraName);
       }
       else if (scope === 'sala-3') sprite.visible = cameraName === 'sala-3';
@@ -4463,6 +4636,9 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   /** UX item 7: the Techo checkbox drives the interior ceilings together with the roof panels. */
   function setRoofLayerVisible(visible) {
     roofLayerVisible = Boolean(visible);
+    // M4: the roof-off architecture state lifts the room fill so the opened interiors stay legible.
+    houseState.roofVisible = roofLayerVisible;
+    applyZoneFillGain();
     setEvidenceCamera(activeEvidenceCamera);
     return roofLayerVisible;
   }
@@ -4470,6 +4646,7 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   setEvidenceCamera('isometric');
 
   function dispose() {
+    temperatureChips?.dispose();
     networkSchematic.dispose();
     for (const mesh of interactionMeshes) mesh.parent?.remove(mesh);
     haloGeometry.dispose();
@@ -4505,6 +4682,9 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     setLabelPolicy,
     setLightState,
     setRoofLayerVisible,
+    setChipCameraPosition,
+    temperatureChips,
+    chipEnvelope,
     setSurfaceFrame,
     setInteractionState,
     getInteractionModel,

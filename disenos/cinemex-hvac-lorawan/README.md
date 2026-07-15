@@ -28,9 +28,12 @@ Deterministic QA states via URL: `?camera=<preset>&state=<architecture|engineeri
 | [runs/DEFERRED-CORRECTIONS.md](runs/DEFERRED-CORRECTIONS.md) | ledger | Open polish items awaiting user decision |
 
 Gate summary: blockout 0.79 · structural 0.82 · materials 0.81 · surface 0.81 (L2) ·
-lighting 0.80 (L2) · interaction-ui 0.81 · optimization 0.82 · **P6 final 0.78 (L2)** — peak perf
-209/550 draws, 47.4k/750k tris. The L2 round added the 14 rooftop package units (one per TC300
-zone), the reframed checkpoint/kitchen/technical presets, per-family roof articulation, and three
-UX fixes: the Techo toggle now hides interior ceilings too, wheel zoom is smoothed (OrbitControls
-never damps dolly natively), and a boot-time shader warm-up removes the first-use freeze on the
-Sección toggle and device selection.
+lighting 0.80 (L2) · interaction-ui 0.81 · optimization 0.82 · **P6 final 0.80 (L4 — ship
+verdict)** — peak perf 227/550 draws, 51.9k/750k tris. Across the four P6 lineages the design
+gained: 14 rooftop package units (one per TC300 zone, Trane-V10 silhouette, aligned in service
+lanes), 8 galvanized supply duct branches + 14 condensate drains (approved catalog part
+vocabulary), **14 Safran-style temperature chips** (live zone temperatures on camera-facing
+badges, red + pulsing halo on alarm, visible only from OUTSIDE the building — `camera=top` gives
+the thermal roof plan, "Planta térmica" button), reframed checkpoint/kitchen/technical presets,
+per-family roof articulation with zero z-fighting (anti-coplanar scanner 299→0), and three UX
+fixes (Techo toggle hides interior ceilings, smoothed wheel zoom, boot-time shader warm-up).

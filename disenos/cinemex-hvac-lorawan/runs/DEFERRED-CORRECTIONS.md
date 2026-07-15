@@ -48,7 +48,22 @@ Source: `runs/assets/01-shell-circulation-facade/optimization-attempt1.review.js
 | O2 | Architecture state renders the external chain as unlabeled floating cubes with no links (neutral/net arch-t0). Hide the proxies in architecture state or keep labels/links attached. | `open` | Pre-existing since blockout (`state=architecture` hides network layer but not the external proxies). The P6 architecture capture includes these frames. |
 | O3 | Clamp the selected-device pulse to a minimum marker scale so TC300-08 never reads as vanishing at close range (sala3 t30). | `open` | Interaction polish; touching it re-opens interaction-ui. Only worth it if the P6 judge flags it. |
 
-## From P6-FINAL LINEAGE 3 (passed 0.82, attempt 1 — the run's best final score, 2026-07-15)
+## From P6-FINAL LINEAGE 4 (passed 0.80, attempt 1 — SHIP VERDICT, 2026-07-15)
+
+Source: `runs/assets/01-shell-circulation-facade/p6-final-l4-attempt1.review.json`. The judge's
+own recommendation: "Accept and ship... not worth another full gated round unless the client calls
+out the roof ducts." M1-M5 adjudicated (M2/M3/M5 verified landed; M1 landed on the charcoal pole
+on shaded faces; M4 insufficient). These five are USER decisions for a hypothetical future round:
+
+| # | Correction | Status | Note |
+|---|---|---|---|
+| S1 | Galvanized shaded-face response (metalness 0.4-0.6 or env fill) so vertical duct faces sample ≥RGB(120,125,130). | `open` | The judge's only "client might call this out" item. |
+| S2 | Distance-scaled minimum chip size at the top preset (zone-name ≥11px cap height). | `open` | Chips countable 14/14; names blurred at nadir range. |
+| S3 | More roof-off floor fill (or lighter tier material) until step edges read. | `open` | M4's second miss; probative shot only. |
+| S4 | Bigger checkpoint scanner screen + emissive bloom. | `open` | |
+| S5 | Tie chip visibility to the roof layer (or re-anchor to zone centroids) so badges never float over hidden units in roof-off exteriors. | `open` | Contract nuance the spec didn't anticipate: chips are exterior-visible but their anchors are roof-layer. |
+
+## From P6-FINAL LINEAGE 3 (passed 0.82, attempt 1 — superseded by lineage 4)
 
 Source: `runs/assets/01-shell-circulation-facade/p6-final-l3-attempt1.review.json`. L3 applied and
 re-gated: z-fighting by construction (299→0 coplanar pairs), RTU master at the V10 two-section

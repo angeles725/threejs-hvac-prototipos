@@ -337,6 +337,9 @@ async function startApplication() {
     const deltaSeconds = (now - previousTime) / 1000;
     previousTime = now;
     cameraController.update(deltaSeconds);
+    // The temperature chips are exterior-only: the LIVE camera decides, so a free orbit crossing
+    // the envelope hides/shows them exactly like the presets do.
+    architectureAsset.setChipCameraPosition(runtime.camera.position);
     if (!frozenTick) {
       elapsedTicks += Math.min(0.25, Math.max(0, deltaSeconds)) * TICKS_PER_SECOND * animationSpeed;
       const tick = Math.floor(elapsedTicks);

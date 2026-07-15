@@ -145,7 +145,8 @@ test('camera controller applies presets and bounds first-person movement', () =>
   const { camera, orbitControls } = createCameraHarness();
   const controller = createCameraController({ camera, orbitControls });
 
-  assert.equal(Object.keys(CAMERA_PRESETS).length, 10);
+  // CONTRACT CHANGE (L4 item 17): `top` — the thermal roof plan — joined the preset family.
+  assert.equal(Object.keys(CAMERA_PRESETS).length, 11);
   assert.equal(controller.applyPreset('lobby'), true);
   assert.deepEqual(
     [camera.position.x, camera.position.y, camera.position.z],

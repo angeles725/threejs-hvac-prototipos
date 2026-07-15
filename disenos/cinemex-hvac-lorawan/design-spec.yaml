@@ -329,6 +329,32 @@ hierarchy:
             sockets:
               unit_base_outlet: [0, -0.60, 0]
               unit_condensate_outlet: [-1.10, -0.45, 0.60]
+              unit_chip_anchor: [0, 0.60, 0]
+          # User amendment 2026-07-15 (Safran freezer pattern): one floating billboard temperature
+          # chip per package unit, camera-facing, EXTERIOR-ONLY visibility.
+          - name: temperature_chips
+            pivot: [0, 1.60, 0]
+            animation: "custom:exterior_camera_visibility_and_tick_pulse"
+            count: 14
+            rule: "one_per_package_unit"
+            read: "Safran-style floating billboard chip above each unit: rounded badge with inverted pointer arrow showing the owning zone's live temperature (es-MX, one decimal, °C); NORMAL = clean badge; ALARM/HOT = red badge WITH the pulsing additive halo (halo only on alarm — 14 simultaneous pulses would be noise); always camera-facing (Sprite); pulse derives from the tick clock, never wall time"
+            visibility_contract: "chips render ONLY while the camera is OUTSIDE the building envelope (outside the 60x45 footprint AABB with 2 m margin, OR above roof-plate height + 1 m); inside, chips are fully hidden — deterministic and testable from camera position"
+            data_source: "the existing simulation zone temperatures — the same derivation the alarm system reads (two surfaces, one source of truth); hot states recolor their chip automatically"
+            children:
+              - name: chip_anchor
+                pivot: [0, 1.60, 0]
+                animation: none
+                attachment:
+                  socket_owner: packaged_hvac_units
+                  parent_socket: unit_chip_anchor
+                  coordinate_space: unit-local
+                  local_start: [0, 0.60, 0]
+                  local_end: [0, 1.60, 0]
+                  length_confidence: high
+                  contact_type: overlap
+                  overlap: 0.05
+                  gap_tolerance: 0.0
+                derivation: "per-unit anchor derives from the unit position; template instantiated 14x"
           # User amendment 2026-07-14 (realism): visible distribution — duct branches from the two
           # spine mains into each auditorium plenum, and a condensate drain run per package unit.
           - name: duct_branches
@@ -980,8 +1006,14 @@ camera:
     # UC100-B cabinet are all in verified line of sight (the 4.5 m wall forbids a lower stand).
     technical_room: {position: [0, 30, -23], target: [-9, 0, -20.3], fov: 55}
     ug67: {position: [9, 5.2, 8], target: [3.15, 3.5, 2.0], fov: 48}
+    # L4 item 17: the thermal roof plan — straight down, exterior by the temperature-chip
+    # envelope's overhead rule, so the fourteen live chips read as one dashboard.
+    top: {position: [0, 95, 6], target: [0, 0, -2], fov: 55}
     complete_network: {position: [64, 38, 54], target: [11, 2, 0], fov: 82}
     engineering_section: {position: [50, 54, 46], target: [0, 0, -2], fov: 74}
+    # User amendment 2026-07-15: near-nadir top view (perspective — the spec forbids orthographic);
+    # frames the full 60x45 roof so the 14 temperature chips read as a thermal roof plan.
+    top: {position: [0, 95, 6], target: [0, 0, -2], fov: 55}
   evidence_views:
     neutral: {position: [54, 44, 58], target: [0, 1.5, -1], state: architecture}
     grazing: {position: [26, 5.5, 25], target: [0, 2.0, 17], state: architecture}
@@ -1141,7 +1173,7 @@ ui_controls:
   - "FULLSCREEN"
 
 deterministic_query_states:
-  view: [iso, facade, lobby, concessions, kitchen, checkpoint, corridor, sala-3, technical, ug67, network, engineering-section, neutral, grazing, reference-match]
+  view: [iso, facade, lobby, concessions, kitchen, checkpoint, corridor, sala-3, technical, ug67, network, engineering-section, neutral, grazing, reference-match, top]
   state: [architecture, engineering, fault-tc300, fault-uc100-b, fault-internet, hot-sala-3, hot-kitchen]
   links: [none, rs485, lorawan, internet, all]
   labels: [off, on]

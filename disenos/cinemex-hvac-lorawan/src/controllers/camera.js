@@ -83,6 +83,12 @@ export const CAMERA_PRESETS = Object.freeze({
   technical: preset([0, 30, -23], [-9, 0, -20.3], 55),
   ug67: preset([2, 4.05, 3.55], [3.15, 3.45, 2], 55),
   network: preset([70, 48, 72], [9, 0, 0]),
+  /**
+   * L4 item 17 — the thermal roof plan: straight down over the whole 60x45 roofscape, where the
+   * fourteen exterior temperature chips read as one live dashboard. The overview zone labels are
+   * suppressed at this preset (they buried the checkpoint view once already — same mechanism).
+   */
+  top: preset([0, 95, 6], [0, 0, -2], 55),
 });
 
 // Lowered onto the house hero band (azimuth 40-45 deg, elevation 20-28 deg). At y=52 the default

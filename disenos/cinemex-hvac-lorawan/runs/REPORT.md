@@ -2,6 +2,20 @@
 
 **Completed:** 2026-07-14 (P6 lineage 2) · **Result:** all 8 ladder passes GATED · `gate-state.mjs` derivation clean.
 
+> **P6 lineage 4 (2026-07-15) — THE SHIP VERDICT: PASSED 0.80 first attempt**, judge's own words:
+> "Accept and ship; not worth another full gated round." The user's headline feature landed and was
+> verified in the full matrix: **14 Safran-style temperature chips** (live simulation temperatures,
+> billboard badges with pointer arrows, halo only on alarm, tick-deterministic pulse) visible ONLY
+> from outside the building (10 exterior views incl. the new `top` thermal-roof-plan preset; hidden
+> in all 9 interiors), plus M1-M5 polish (galvanized duct network, dressed checkpoint, no hovering
+> ducts, west-unit spacing). Suite 250/250 · probe 227/51,856 (41%/6.9%) · SwiftShader canonical
+> (the 4.5x-faster GPU path was rejected after producing broken canvas-texture evidence — full
+> account in the retro). Five ship-decision polish rows remain in DEFERRED-CORRECTIONS.md §P6-L4.
+>
+> **P6 lineage 3 (2026-07-15): PASSED 0.82** — z-fighting eliminated by construction (anti-coplanar
+> scanner 299→0), RTU master at the approved Trane-V10 read, service-lane alignment, 8 duct
+> branches + 14 condensate drains from the approved catalogs.
+>
 > **P6 lineage 2 (user-authorized correction round, same day):** PASSED 0.78 first attempt.
 > Applied and re-gated: the L1 judge's six corrections, the kitchen preset reframe, three
 > user-reported UX fixes (double roof on the Techo toggle, smooth wheel zoom, boot-time shader

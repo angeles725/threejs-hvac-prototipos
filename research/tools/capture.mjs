@@ -29,11 +29,13 @@ let DPR_ARG = null;
 // canvas made its work literally invisible to the reviewer, and made two genuinely different
 // states render pixel-identical (found by `preflight --contract`, not by a judge).
 let PAGE_MODE = false;
-// --gpu: opt-in hardware rendering via WSL2's D3D12 paravirtualization (mesa d3d12 -> /dev/dxg).
-// MEASURED 2026-07-15 on this machine (gpu-probe.mjs): raster 10.8s -> 1.5s per 2880x2160 shot
-// (7x), total per cold shot 54s -> 43s (1.6x — page LOAD dominates, not raster). Visual identity
-// vs SwiftShader: 0.61% of pixels with delta>8 (AA edges only). SwiftShader stays the DEFAULT
-// canonical renderer; switching mid-lineage must be declared in the review JSON's mechanical.note.
+// --gpu: EXPERIMENTAL, NOT GATE-SAFE (2026-07-15). Hardware D3D12 via WSL2 paravirtualization
+// measured 4.5x faster in-pipeline (37 shots in ~18 min vs ~80) — and then produced BROKEN
+// EVIDENCE: canvas-texture sprites (temperature chips) and inactive DOM buttons rendered with
+// Chromium's crossed-out failed-texture placeholder in full-page DPR-3 captures. The single-shot
+// pilot (0.61% pixel delta) never exercised that content class — a renderer pilot must cover the
+// FULL content matrix (page mode, canvas textures, sprites, DOM raster layers) before adoption.
+// Keep for probes/experiments; NEVER for gate evidence until the texture-upload failure is solved.
 let GPU_MODE = false;
 // Default 2, not 4: under SwiftShader the win comes from NOT relaunching Chrome per shot, not from
 // concurrency — the rasterizer is CPU-bound, so >2 pages just thrash and time out the CDP channel.

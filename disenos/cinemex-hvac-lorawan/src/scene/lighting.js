@@ -344,13 +344,28 @@ export const LIGHTING_FILL_FLATTEN = Object.freeze({ amount: 0.5, neutral: 0.27 
  */
 export const LIGHTING_LIGHT_STATE_FILL = Object.freeze({ on: 1, off: 0.22 });
 
-/** The gain on a zone's fill, for a light state and a visual mode. */
-export function resolveZoneFillGain({ visualMode = 'architectural', lightState = 'on' } = {}) {
+/**
+ * L4 correction M4: `roof=off` in the ARCHITECTURE state is the probative "open building" shot,
+ * and with the plates gone the interiors lost their ceiling bounce and read near-black. The
+ * roof-off state (and only that state) lifts the room fill so the seating tiers stay legible;
+ * every gated lighting state (roof on, engineering, lights on/off pairs) is numerically untouched.
+ */
+export const LIGHTING_ROOF_OPEN_FILL_LIFT = 1.5;
+
+/** The gain on a zone's fill, for a light state, a visual mode and the roof toggle. */
+export function resolveZoneFillGain({
+  visualMode = 'architectural',
+  lightState = 'on',
+  roofVisible = true,
+} = {}) {
   if (!LIGHTING_LIGHT_STATES.includes(lightState)) {
     throw new RangeError(`Unknown light state: ${lightState}`);
   }
   const engineering = visualMode === 'engineering' ? LIGHTING_ENGINEERING_LIFT.fillGain : 1;
-  return LIGHTING_LIGHT_STATE_FILL[lightState] * engineering;
+  const roofOpen = visualMode === 'architectural' && roofVisible === false
+    ? LIGHTING_ROOF_OPEN_FILL_LIFT
+    : 1;
+  return LIGHTING_LIGHT_STATE_FILL[lightState] * engineering * roofOpen;
 }
 
 export function hasZoneFill(zone) {

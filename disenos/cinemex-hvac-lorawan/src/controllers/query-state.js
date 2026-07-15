@@ -16,6 +16,9 @@ const ENUM_VALUES = Object.freeze({
     'neutral', 'grazing', 'engineering-section', 'complete-network', 'sala-3',
     'family-master', 'rs485-master', 'roof-service', 'reference-match', 'material-floor',
     'network-schematic-detail',
+    // L4 item 17: the thermal roof plan. Kept in the enum so `camera=top` is a driveable query
+    // value instead of tripping the atomic invalid-state reset.
+    'top',
   ],
   material_state: ['neutral'],
   nav: ['orbit', 'first-person'],
