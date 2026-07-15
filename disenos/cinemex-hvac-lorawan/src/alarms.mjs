@@ -10,6 +10,9 @@ import { createTopology, evaluateReachability } from './topology.mjs';
 const HIGH_LIMIT = 27.5;
 const LOW_LIMIT = 18;
 
+/** The alarm thresholds, exported for the dashboard's verdict/band derivations — ONE authority. */
+export const ALARM_LIMITS = Object.freeze({ high: HIGH_LIMIT, low: LOW_LIMIT });
+
 export function deriveAlarms(config, state) {
   const alarms = [];
   const zones = new Map(config.zones.map((zone) => [zone.id, zone]));

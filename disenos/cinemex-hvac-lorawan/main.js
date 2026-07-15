@@ -315,6 +315,19 @@ async function startApplication() {
     pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
     pointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
     raycaster.setFromCamera(pointer, runtime.camera);
+    // Integration point 1 (cartelera dashboard): a visible temperature chip is a navigation
+    // target — clicking it opens that unit's page with the current scenario preserved.
+    const chipsGroup = architectureAsset.temperatureChips?.group;
+    if (chipsGroup?.visible) {
+      const chipHit = raycaster.intersectObjects(chipsGroup.children, false)
+        .find((hit) => hit.object.userData?.tc300Id);
+      if (chipHit) {
+        const unitId = `RTU-${chipHit.object.userData.tc300Id.slice(-2)}`;
+        const state = mutableQuery.sceneState === 'architecture' ? '' : `&state=${mutableQuery.sceneState}`;
+        location.href = `dashboard.html?unit=${unitId}${state}`;
+        return;
+      }
+    }
     const hits = raycaster.intersectObjects(runtime.groups.hvac.children, true);
     const picked = resolvePickedSelectionFromIntersections(hits);
     applyInteraction({ selection: picked ?? 'none' });
