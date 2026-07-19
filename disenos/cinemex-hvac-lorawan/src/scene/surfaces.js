@@ -1,7 +1,4 @@
-import {
-  LIGHTING_MEDIA,
-  LIGHTING_OWNED_LABEL_RELAXATION,
-} from './lighting.js';
+import { LIGHTING_MEDIA } from './lighting.js';
 
 const REQUIRED_DETAIL_CATEGORIES = Object.freeze([
   'facade-word-sign',
@@ -202,17 +199,6 @@ export function snapSampleToDashCentre(routeT, { dashCount, dashCoverage } = {})
   return (cell + dashCoverage / 2) / dashCount;
 }
 
-/** Public roof panels hide the whole fit-out from the interior front-of-house presets. */
-export const SURFACE_ROOF_CLIP_CAMERAS = Object.freeze(['lobby', 'concessions', 'kitchen', 'checkpoint']);
-
-/**
- * P6 correction: the technical preset used to frame the rear roof plane instead of the rooms under
- * it. The rear service roof is clipped for that preset exactly the way the public roof is clipped
- * for the front-of-house presets, so the 1.5 m corridor, the separating wall with its doors and the
- * UC100-B cabinet become the subject.
- */
-export const SURFACE_REAR_ROOF_CLIP_CAMERAS = Object.freeze(['technical']);
-
 /**
  * The evidence widening is per medium. RS-485 and Ethernet are continuous tubes, so a fat
  * cross-section only makes them traceable; a LoRaWAN dash has a finite length, so the same
@@ -264,93 +250,6 @@ export const SURFACE_DIRECTION_MARKER_VIEW_POLICY = Object.freeze({
   minimumSeparationPx: SURFACE_DIRECTION_MARKER.minimumGlyphSeparationPx,
   minimumScale: 0.05,
   maximumScale: 12,
-});
-
-export const SURFACE_NETWORK_LABEL_POLICY = Object.freeze({
-  camera: 'complete-network',
-  visibleKinds: Object.freeze(['uc100', 'ug67', 'external', 'bus-rollup']),
-  culledKinds: Object.freeze(['bus-group', 'room-family', 'foh', 'rear-strip']),
-  scaleByKind: Object.freeze({ uc100: 1.5, ug67: 2.2, external: 1.5, 'bus-rollup': 1.4 }),
-  priorityByKind: Object.freeze({ uc100: 1230, ug67: 1260, external: 1210, 'bus-rollup': 1200 }),
-});
-
-/**
- * The first node of the canonical chain has to be legible in the model, not only on the board.
- * The chip carries that legibility, so the device body can keep its true 100 mm width. A chip is
- * shown only where it survives its own projection: the distance cull is derived, never a guess.
- */
-export const SURFACE_TC300_LABEL_POLICY = Object.freeze({
-  cameras: Object.freeze(['corridor', 'kitchen', 'lobby', 'sala-3', 'complete-network']),
-  // Calibrated under the old 900px-height model; re-expressed for the measured 636px viewport (X1).
-  minimumProjectedChipPx: 30 * (636 / 900),
-  frameMargin: 0.95,
-  renderOrder: 1220,
-  scaleByCamera: Object.freeze({
-    corridor: 0.55,
-    kitchen: 0.5,
-    lobby: 0.6,
-    'sala-3': 0.5,
-    'complete-network': 2.2,
-  }),
-});
-
-/**
- * A chip earns its place: it must land inside the frame and still project wide enough to be read.
- * Both facts are derived from the preset, so the distance cull moves with the camera.
- */
-export function resolveTc300LabelPlacement({
-  cameraName,
-  preset,
-  chipPosition,
-  chipWidthMetres,
-  // The endpoint that OWNS the zone this preset frames is never culled by distance alone: a
-  // capture of the concessions zone that cannot name its own thermostat proves nothing.
-  zoneOwned = false,
-  policy = SURFACE_TC300_LABEL_POLICY,
-} = {}) {
-  const scale = policy.scaleByCamera[cameraName]
-    ?? (zoneOwned ? LIGHTING_OWNED_LABEL_RELAXATION.defaultScale : undefined);
-  const minimumProjectedChipPx = zoneOwned
-    ? LIGHTING_OWNED_LABEL_RELAXATION.minimumProjectedChipPx
-    : policy.minimumProjectedChipPx;
-  const culled = (reason, extra = {}) => Object.freeze({
-    visible: false, reason, scale: scale ?? 1, distance: Infinity, projectedWidthPx: 0, ...extra,
-  });
-  if ((!policy.cameras.includes(cameraName) && !zoneOwned) || !Number.isFinite(scale)) {
-    return culled('off-policy');
-  }
-  if (!Array.isArray(chipPosition) || !preset?.position || !Number.isFinite(preset.fov)
-    || !Number.isFinite(chipWidthMetres)) {
-    throw new TypeError('A TC300 chip placement needs the preset, the chip anchor and the chip width.');
-  }
-
-  const distance = Math.hypot(...subtract(chipPosition, preset.position));
-  const projectedWidthPx = projectedMetresToPixels(chipWidthMetres * scale, {
-    distance,
-    fovDegrees: preset.fov,
-    viewportHeightPx: SURFACE_EVIDENCE_VIEWPORT.heightPx,
-  });
-  const ndc = projectPointToNdc(chipPosition, preset);
-  if (!ndc || Math.abs(ndc.x) > policy.frameMargin || Math.abs(ndc.y) > policy.frameMargin) {
-    return culled('off-frame', { distance, projectedWidthPx });
-  }
-  if (projectedWidthPx < minimumProjectedChipPx) {
-    return culled('too-small', { distance, projectedWidthPx });
-  }
-  return Object.freeze({ visible: true, reason: 'shown', scale, distance, projectedWidthPx });
-}
-
-export const SURFACE_NETWORK_ROLLUPS = Object.freeze([
-  Object.freeze({ id: 'A', text: 'BUS A · TC01/02/03/04/14' }),
-  Object.freeze({ id: 'B', text: 'BUS B · TC06–09' }),
-  Object.freeze({ id: 'C', text: 'BUS C · TC10–13' }),
-  Object.freeze({ id: 'D', text: 'BUS D · TC05' }),
-]);
-
-export const SURFACE_RS485_EVIDENCE_POLICY = Object.freeze({
-  camera: 'rs485-master',
-  visibleKinds: Object.freeze(['tc300', 'uc100', 'bus-group']),
-  requiredCounts: Object.freeze({ tc300: 14, uc100: 4, 'bus-group': 4 }),
 });
 
 export const SURFACE_NETWORK_VIEW_POLICY = Object.freeze({

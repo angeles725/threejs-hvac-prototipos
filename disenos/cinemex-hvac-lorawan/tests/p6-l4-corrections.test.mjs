@@ -152,7 +152,7 @@ function createThreeStub() {
   };
 }
 
-const LAYER_NAMES = ['architecture', 'roof', 'walls', 'hvac', 'rs485', 'lorawan', 'internet', 'zones', 'labels'];
+const LAYER_NAMES = ['architecture', 'roof', 'walls', 'hvac', 'rs485', 'lorawan', 'internet', 'labels'];
 
 function buildArchitecture({ withRegistry = false } = {}) {
   const previousDocument = globalThis.document;
@@ -199,7 +199,12 @@ test('M1: the spine plant and branches are exterior-lit galvanized metal', () =>
   const ductMesh = spine.find((mesh) => mesh.userData.materialKey === 'duct-galv');
   assert.ok(ductMesh, 'the duct network must own its bucket (M3 toggles it as one assembly)');
   assert.equal(ductMesh.material, materialRegistry.materials.galvanizedDuct);
-  assert.ok(MATERIAL_SPECS.galvanizedDuct.metalness >= 0.9, 'the declared read is light METALLIC galvanized');
+  // Deferred S1 activated (correction round): >= 0.95 metal with the weak env fill sampled
+  // near-black on shaded vertical faces; the judge's prescription is the 0.4-0.6 band.
+  assert.ok(
+    MATERIAL_SPECS.galvanizedDuct.metalness >= 0.4 && MATERIAL_SPECS.galvanizedDuct.metalness <= 0.6,
+    'the declared read is light galvanized in the S1 metalness band',
+  );
   const luminance = (color) => (
     ((color >> 16) & 0xff) * 0.2126 + ((color >> 8) & 0xff) * 0.7152 + (color & 0xff) * 0.0722
   );
@@ -219,20 +224,18 @@ test('M1: the spine plant and branches are exterior-lit galvanized metal', () =>
 // assembly hovering over the open trench.
 // ---------------------------------------------------------------------------
 
-test('M3: roof-off architecture hides the spine assembly; engineering keeps it', () => {
-  assert.equal(resolveSpineAssemblyVisibility('architectural', { roofVisible: true }), true);
-  assert.equal(resolveSpineAssemblyVisibility('architectural', { roofVisible: false }), false);
-  assert.equal(resolveSpineAssemblyVisibility('engineering', { roofVisible: false }), true);
-  assert.equal(resolveSpineAssemblyVisibility('engineering', { roofVisible: true }), true);
+test('M3: roof-off hides the spine assembly; roof-on restores it', () => {
+  // Limpieza fase 2 (2026-07-18): the engineering mode that kept the mains always-on was
+  // retired — the Techo toggle is the only remaining input to the rule.
+  assert.equal(resolveSpineAssemblyVisibility({ roofVisible: true }), true);
+  assert.equal(resolveSpineAssemblyVisibility({ roofVisible: false }), false);
+  assert.equal(resolveSpineAssemblyVisibility(), true, 'the default state shows the plant');
 
   const { asset } = buildArchitecture();
   const spine = spineMeshesOf(asset);
-  assert.ok(spine.every((mesh) => mesh.visible === true), 'architecture with the roof on shows the plant');
+  assert.ok(spine.every((mesh) => mesh.visible === true), 'roof on shows the plant');
   asset.setRoofLayerVisible(false);
-  assert.ok(spine.every((mesh) => mesh.visible === false), 'roof-off architecture must take the plant with the plates');
-  asset.setLabelPolicy({ visualMode: 'engineering' });
-  assert.ok(spine.every((mesh) => mesh.visible === true), 'engineering keeps the mains regardless of the roof toggle');
-  asset.setLabelPolicy({ visualMode: 'architectural' });
+  assert.ok(spine.every((mesh) => mesh.visible === false), 'roof-off must take the plant with the plates');
   asset.setRoofLayerVisible(true);
   assert.ok(spine.every((mesh) => mesh.visible === true));
 });
@@ -263,10 +266,13 @@ test('M2: counter caps, POS block and a staff proxy dress the checkpoint', () =>
   const zone = APP_CONFIG.zones.find(({ id }) => id === 'ticket-checkpoint');
   assert.ok(Math.abs(staff.position[0]) < 1.2, 'the staff proxy stands inside the accessible lane');
   assert.ok(staff.position[2] > zone.bounds.z[0] && staff.position[2] < zone.bounds.z[1]);
+  // Interior prune (2026-07-18, maintainer-ordered): the staff proxy stays in the PLAN (asserted
+  // above) but is no longer BUILT — the 17-view capture diff proved every interior human is
+  // sealed from reachable pixels (only the forecourt reference is shipped geometry).
   const torso = instancesOf(asset, ({ metadata }) => (
     metadata.entityId === 'human-checkpoint-staff' && metadata.component === 'torso'
   ));
-  assert.equal(torso.length, 1, 'the staff proxy must be emitted like every human reference');
+  assert.equal(torso.length, 0, 'the pruned interior staff proxy crept back into the build');
 });
 
 // ---------------------------------------------------------------------------
@@ -275,23 +281,21 @@ test('M2: counter caps, POS block and a staff proxy dress the checkpoint', () =>
 // ---------------------------------------------------------------------------
 
 test('M4: the fill lift exists ONLY in the roof-off architecture state', () => {
-  const base = resolveZoneFillGain({ visualMode: 'architectural', lightState: 'on' });
+  const base = resolveZoneFillGain({ visualMode: 'architectural' });
   assert.equal(
-    resolveZoneFillGain({ visualMode: 'architectural', lightState: 'on', roofVisible: false }),
+    resolveZoneFillGain({ visualMode: 'architectural', roofVisible: false }),
     base * LIGHTING_ROOF_OPEN_FILL_LIFT,
   );
   assert.equal(
-    resolveZoneFillGain({ visualMode: 'architectural', lightState: 'on', roofVisible: true }),
+    resolveZoneFillGain({ visualMode: 'architectural', roofVisible: true }),
     base,
     'roof-on architecture is gated and must not move',
   );
   assert.equal(
-    resolveZoneFillGain({ visualMode: 'engineering', lightState: 'on', roofVisible: false }),
-    resolveZoneFillGain({ visualMode: 'engineering', lightState: 'on', roofVisible: true }),
+    resolveZoneFillGain({ visualMode: 'engineering', roofVisible: false }),
+    resolveZoneFillGain({ visualMode: 'engineering', roofVisible: true }),
     'engineering has its own gated lift; the roof toggle must not stack another',
   );
-  // Back-compat: the two-argument calls of every existing gated test resolve as roof-on.
-  assert.equal(resolveZoneFillGain({ visualMode: 'architectural', lightState: 'off' }) > 0, true);
   assert.ok(LIGHTING_ROOF_OPEN_FILL_LIFT > 1 && LIGHTING_ROOF_OPEN_FILL_LIFT <= 2, 'a SMALL lift, not a relight');
 });
 
@@ -338,14 +342,15 @@ test('M5: multi-unit lanes push their end units to the outer clamp limits', () =
 // RED before the fix: src/scene/temperature-chips.js did not exist.
 // ---------------------------------------------------------------------------
 
-test('item 15: fourteen chips read the one simulation the alarms read, and recolor on alarm', () => {
+test('item 15: fourteen chips read the one healthy simulation the dashboard reads', () => {
   const { asset } = buildArchitecture();
   const chips = asset.temperatureChips;
   assert.ok(chips, 'the chip field must build');
   assert.equal(chips.chips.length, 14, 'one chip per packaged unit');
   assert.equal(chips.getStats().chips, 14);
 
-  // Healthy boot: every chip carries its zone's live reading, no halo anywhere.
+  // Healthy boot: every chip carries its zone's live reading. The alarm palette and the
+  // additive halo died with the fault machinery (client simplification 2026-07-15).
   const healthyModel = asset.getInteractionModel();
   for (const chip of chips.chips) {
     assert.equal(
@@ -353,27 +358,12 @@ test('item 15: fourteen chips read the one simulation the alarms read, and recol
       formatChipTemperature(healthyModel.telemetry[chip.unit.tc300Id].temperature),
       `${chip.unit.tc300Id} chip must read the model's own telemetry`,
     );
-    assert.equal(chip.halo.visible, false, 'a normal chip is clean — no halo');
+    assert.equal('halo' in chip, false, 'no halo sprite survives the simplification');
+    assert.equal('alarm' in chip.reading, false, 'no alarm flag survives on a reading');
     assert.equal(chip.badgeMaterial.toneMapped, false, 'ACES would wash the canvas without toneMapped:false');
-    assert.equal(chip.haloMaterial.toneMapped, false);
     assert.equal(chip.badge.renderOrder, TEMPERATURE_CHIP.renderOrder.badge);
-    assert.equal(chip.halo.renderOrder, TEMPERATURE_CHIP.renderOrder.halo);
   }
-
-  // A hot state recolors ITS chip automatically: same derivation the alarm list reads.
-  asset.setInteractionState({ state: 'hot-sala-3', tick: 0 });
-  const hotModel = asset.getInteractionModel();
-  const hotChip = chips.chipsById.get('TC300-08');
-  assert.equal(hotModel.deviceStatus['TC300-08'], 'alarm');
-  assert.equal(hotChip.reading.alarm, true);
-  assert.equal(hotChip.halo.visible, true, 'the alarm chip pulses an additive halo');
-  assert.equal(hotChip.reading.temperature, hotModel.telemetry['TC300-08'].temperature);
-  const others = chips.chips.filter((chip) => chip.unit.tc300Id !== 'TC300-08');
-  assert.ok(others.every((chip) => chip.halo.visible === false), 'only the alarmed zone lights a halo');
-
-  // Restore: the chip returns to the clean read.
-  asset.setInteractionState({ state: 'engineering', tick: 0 });
-  assert.equal(chips.chipsById.get('TC300-08').halo.visible, false);
+  assert.equal('alarm' in TEMPERATURE_CHIP.colors, false, 'the alarm chip palette is gone');
 });
 
 test('item 15: the badge canvas redraws on the sample cadence and on state changes, never per tick', () => {
@@ -400,12 +390,10 @@ test('item 15: the badge canvas redraws on the sample cadence and on state chang
     `redraws are bounded by the sample cadence (${afterMinute - bootRedraws} > ${samples * 14})`,
   );
 
-  // A state change repaints immediately — and ONLY the chips whose reading changed.
-  const beforeFault = chips.getStats().redraws;
-  asset.setInteractionState({ state: 'hot-kitchen', tick: 60 });
-  const afterFault = chips.getStats().redraws;
-  assert.ok(afterFault > beforeFault, 'the kitchen chip must repaint red at once');
-  assert.ok(afterFault - beforeFault < 14, 'unchanged chips must not repaint');
+  // A state change with unchanged readings repaints nothing: the canvas key is the reading.
+  const beforeState = chips.getStats().redraws;
+  asset.setInteractionState({ state: 'architecture', tick: 60 });
+  assert.equal(chips.getStats().redraws, beforeState, 'unchanged readings must not repaint');
 
   // Deterministic pose: t0/t30 are exact functions of the tick clock.
   const at0 = resolveChipPose(0, 3);
@@ -421,84 +409,76 @@ test('item 15: the badge canvas redraws on the sample cadence and on state chang
 // RED before the fix: neither isCameraOutside nor the envelope existed.
 // ---------------------------------------------------------------------------
 
-test('item 16: the envelope derives from the building and classifies every preset correctly', () => {
+test('item 16: the envelope derives from the building and classifies viewpoints correctly', () => {
   const envelope = createChipEnvelope({ building: APP_CONFIG.building, maxPlateTop: 9.02 });
   assert.deepEqual([...envelope.x], [-30, 30]);
   assert.deepEqual([...envelope.z], [-22.5, 22.5]);
   assert.equal(envelope.margin, 2);
   assert.ok(Math.abs(envelope.minOverheadY - 10.02) < 1e-9);
 
+  // Limpieza fase 2 (2026-07-18): the evidence preset catalogue was pruned — the standpoints
+  // below are TEST-OWNED fixtures (the old interior/exterior framings). The exterior-only rule
+  // itself is live product behaviour: free orbit feeds raw positions every frame.
   const { asset } = buildArchitecture();
-  const hidden = ['lobby', 'concessions', 'kitchen', 'checkpoint', 'corridor', 'ug67'];
-  for (const name of hidden) {
+  const inside = [
+    [6, 2.9, 21.7], [-7.5, 2.5, 21.4], [-17.5, 3.1, 17.8],
+    [0.6, 3.6, 4.6], [0, 3.2, 9.5], [2, 4.05, 3.55], [-7.5, 4.2, -8.9],
+  ];
+  for (const position of inside) {
     assert.equal(
-      isCameraOutside(asset.chipEnvelope, CAMERA_PRESETS[name].position),
+      isCameraOutside(asset.chipEnvelope, position),
       false,
-      `${name} stands inside the envelope: chips must hide`,
+      `[${position}] stands inside the envelope: chips must hide`,
     );
   }
-  // The validator's boundary case: reference-match is INSIDE the building — chips hidden.
-  assert.equal(isCameraOutside(asset.chipEnvelope, [-7.5, 4.2, -8.9]), false);
-
-  const visible = ['facade', 'auditorium', 'network', 'top'];
-  for (const name of visible) {
+  const outside = [[37, 12.5, 44], [-37, 13, 17], [...CAMERA_PRESETS.network.position], [0, 57, 2.8]];
+  for (const position of outside) {
     assert.equal(
-      isCameraOutside(asset.chipEnvelope, CAMERA_PRESETS[name].position),
+      isCameraOutside(asset.chipEnvelope, position),
       true,
-      `${name} stands outside: chips must show`,
+      `[${position}] stands outside: chips must show`,
     );
   }
-  // `technical` is exterior BY CONTRACT: y=30 clears the overhead rule (roof plates + 1 m).
-  assert.equal(isCameraOutside(asset.chipEnvelope, CAMERA_PRESETS.technical.position), true);
+  // y=30 over the roofscape is exterior BY CONTRACT: it clears the overhead rule (plates + 1 m).
+  assert.equal(isCameraOutside(asset.chipEnvelope, [0, 30, -23]), true);
   assert.throws(() => isCameraOutside(asset.chipEnvelope, null), TypeError);
 });
 
-test('item 16: the chip group follows the camera across presets and live positions', () => {
+test('item 16: the chip group follows the live camera position', () => {
   const { asset } = buildArchitecture();
   const group = asset.temperatureChips.group;
   assert.equal(group.visible, true, 'boot camera (isometric) is exterior');
-  asset.setEvidenceCamera('lobby');
-  assert.equal(group.visible, false, 'an interior preset hides the whole field');
-  asset.setEvidenceCamera('neutral');
-  assert.equal(group.visible, true);
-  asset.setEvidenceCamera('reference-match');
-  assert.equal(group.visible, false, 'the in-envelope lookdev position hides the chips');
   // The live orbit path: the runtime feeds raw positions every frame.
   assert.equal(asset.setChipCameraPosition({ x: 0, y: 50, z: 0 }), true);
+  assert.equal(group.visible, true);
   assert.equal(asset.setChipCameraPosition({ x: 0, y: 2, z: 0 }), false);
   assert.equal(group.visible, false);
+  assert.equal(asset.setChipCameraPosition({ x: 66, y: 46, z: 68 }), true);
+  assert.equal(group.visible, true);
 });
 
 // ---------------------------------------------------------------------------
-// Item 17 — the `top` thermal roof plan preset, spec+code+enum in sync.
-// RED before the fix: no `top` preset, `camera=top` tripped the atomic query reset.
+// Item 17 — originally the `top` thermal roof plan preset. Limpieza fase 2 (2026-07-18): the
+// preset was retired with the evidence catalogue; what survives is the inert-token guard and
+// the billboard-free thermal chip field.
 // ---------------------------------------------------------------------------
 
-test('item 17: top preset exists, is driveable, suppresses the zone banners, matches the spec', async () => {
-  assert.deepEqual([...CAMERA_PRESETS.top.position], [0, 95, 6]);
-  assert.deepEqual([...CAMERA_PRESETS.top.target], [0, 0, -2]);
-  assert.equal(CAMERA_PRESETS.top.fov, 55);
-
-  // Driveable, non-resetting query value (the atomic-reset trap).
+test('item 17: camera=top is an inert token and the chip field carries the thermal read', async () => {
+  // Single-view correction (2026-07-18): `camera` left the URL contract — the token is now an
+  // unknown parameter. The original guard survives inverted: it must still NOT trip the atomic
+  // reset of the rest of the state, and the pinned view must not move.
   const parsed = parseQueryState('?camera=top&state=engineering&links=all');
-  assert.equal(parsed.camera, 'top');
+  assert.equal(parsed.camera, 'network', 'the pinned single view — no URL token moves it');
   assert.equal(parsed.sceneState, 'engineering', 'camera=top must not reset the rest of the state');
 
   const { asset } = buildArchitecture();
-  asset.setEvidenceCamera('top');
-  const overview = asset.billboards.filter((sprite) => sprite.userData.visibilityScope === 'overview');
-  assert.ok(overview.length > 0);
-  assert.ok(overview.every((sprite) => sprite.visible === false), 'the zone banners would bury the thermal plan');
-  assert.equal(asset.temperatureChips.group.visible, true, 'the thermal roof plan IS the chip field');
-
-  const spec = await readFile(new URL('../design-spec.yaml', import.meta.url), 'utf8');
-  const match = spec.match(/top: \{position: \[([^\]]+)\], target: \[([^\]]+)\], fov: (\d+)\}/);
-  assert.ok(match, 'the spec must carry the top preset');
-  const parse = (list) => list.split(',').map((value) => Number(value.trim()));
-  assert.deepEqual(parse(match[1]), [...CAMERA_PRESETS.top.position]);
-  assert.deepEqual(parse(match[2]), [...CAMERA_PRESETS.top.target]);
-  assert.equal(Number(match[3]), CAMERA_PRESETS.top.fov);
+  // The device-label billboard system is gone (client mandate 2026-07-15): the thermal read can
+  // no longer be buried by any floating billboard because the asset exposes none.
+  assert.equal('billboards' in asset, false, 'no billboard collection may survive the mandate');
+  assert.equal(asset.temperatureChips.group.visible, true, 'the thermal read IS the chip field');
 
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(html, /data-camera="top"/, 'the preset must be reachable from the UI');
+  // Single-view correction (2026-07-18): the product surface offers exactly ONE fixed view — no
+  // UI reaches any other framing, and no markup names one.
+  assert.doesNotMatch(html, /<option/, 'no view list of any kind remains in the shell');
 });

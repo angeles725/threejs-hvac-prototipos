@@ -2,9 +2,8 @@
  * Deterministic 24 h series per unit — the hotel dashboard's seeding policy, re-derived for
  * cinemex: mulberry32 PRNG, seed = the simulation's OWN animation seed (APP_CONFIG.animation.seed
  * = 30067) + unitIndex * 37, 48 points (one every 30 min). The series is PRESENTATION history
- * anchored to the live truth: it mean-reverts around the unit's setpoint (flat line = healthy),
- * ramps into the live reading over the last five hours when the unit is in alarm, and its last
- * point IS the live temperature — the one value the simulation owns.
+ * anchored to the live truth: it mean-reverts around the unit's setpoint (flat line = healthy)
+ * and its last point IS the live temperature — the one value the simulation owns.
  */
 import { APP_CONFIG } from '../config.mjs';
 
@@ -16,8 +15,6 @@ export const SERIES_POLICY = Object.freeze({
   // Mean-reverting walk parameters: ±0.25 °C noise, 15% pull back to the setpoint per step.
   noiseAmplitude: 0.5,
   reversion: 0.15,
-  // Alarm ramp: the failure develops across the last 10 samples (5 hours).
-  rampFrom: 38,
 });
 
 /** mulberry32 — same generator family the hotel policy documented. */
@@ -33,10 +30,10 @@ export function createSeededRandom(seed) {
 
 /**
  * @param {number} unitIndex   0-based index in the TC300 registry order.
- * @param {{ setpoint: number, temperature: number, alarm: boolean }} reading
+ * @param {{ setpoint: number, temperature: number }} reading
  * @returns {number[]} 48 samples, oldest first; the last sample equals `temperature`.
  */
-export function createUnitSeries(unitIndex, { setpoint, temperature, alarm = false } = {}) {
+export function createUnitSeries(unitIndex, { setpoint, temperature } = {}) {
   if (!Number.isInteger(unitIndex) || unitIndex < 0) {
     throw new RangeError('A unit series needs the unit registry index.');
   }
@@ -49,13 +46,6 @@ export function createUnitSeries(unitIndex, { setpoint, temperature, alarm = fal
   for (let index = 0; index < SERIES_POLICY.points; index += 1) {
     value += (random() - 0.5) * SERIES_POLICY.noiseAmplitude + (setpoint - value) * SERIES_POLICY.reversion;
     points.push(value);
-  }
-  if (alarm) {
-    const anchor = points[SERIES_POLICY.rampFrom - 1];
-    const span = SERIES_POLICY.points - SERIES_POLICY.rampFrom;
-    for (let index = SERIES_POLICY.rampFrom; index < SERIES_POLICY.points; index += 1) {
-      points[index] = anchor + (temperature - anchor) * ((index - SERIES_POLICY.rampFrom + 1) / span);
-    }
   }
   points[SERIES_POLICY.points - 1] = temperature;
   return points;

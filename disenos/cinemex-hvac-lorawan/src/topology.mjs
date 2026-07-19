@@ -51,21 +51,6 @@ export function traceFrom(topology, sourceId, targetId = TARGET_ID) {
   });
 }
 
-export function evaluateReachability(topology, healthById, sourceId, targetId = TARGET_ID) {
-  if (healthById[sourceId] === 'offline') return { status: 'offline', reachable: false, causeId: sourceId };
-
-  let trace;
-  try {
-    trace = traceFrom(topology, sourceId, targetId);
-  } catch {
-    return { status: 'offline', reachable: false, causeId: 'missing-path' };
-  }
-
-  const failedDependency = trace.nodeIds.slice(1).find((id) => healthById[id] === 'offline');
-  if (failedDependency) return { status: 'degraded', reachable: false, causeId: failedDependency };
-  return { status: 'reachable', reachable: true, causeId: null };
-}
-
 function validateMedia(errors, edge, deviceById) {
   const source = deviceById.get(edge.from);
   const target = deviceById.get(edge.to);

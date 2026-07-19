@@ -1,36 +1,18 @@
-import { deriveAlarms } from './alarms.mjs';
-import {
-  advanceSimulation,
-  createSimulationState,
-  injectFault,
-  restoreAllFaults,
-  restoreFault,
-  setSetpoint,
-} from './simulation.mjs';
-
-function withAlarms(config, state) {
-  return Object.freeze({ ...state, alarms: deriveAlarms(config, state) });
-}
+import { advanceSimulation, createSimulationState, setSetpoint } from './simulation.mjs';
 
 export function reduceState(config, state, action) {
   switch (action.type) {
     case 'TICK':
-      return withAlarms(config, advanceSimulation(config, state, action.steps ?? 1));
+      return advanceSimulation(config, state, action.steps ?? 1);
     case 'SET_SETPOINT':
-      return withAlarms(config, setSetpoint(config, state, action.deviceId, action.value));
-    case 'INJECT_FAULT':
-      return withAlarms(config, injectFault(config, state, action.faultId));
-    case 'RESTORE_FAULT':
-      return withAlarms(config, restoreFault(config, state, action.faultId));
-    case 'RESTORE_ALL_FAULTS':
-      return withAlarms(config, restoreAllFaults(config, state));
+      return setSetpoint(config, state, action.deviceId, action.value);
     default:
       throw new Error(`Unsupported action ${action.type}.`);
   }
 }
 
 export function createStore(config, options = {}) {
-  let state = withAlarms(config, createSimulationState(config, options));
+  let state = createSimulationState(config, options);
   const listeners = new Set();
 
   return Object.freeze({

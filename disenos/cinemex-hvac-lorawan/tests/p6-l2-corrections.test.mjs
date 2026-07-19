@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { TC300_DEVICES, ZONES } from '../src/config.mjs';
+import { TC300_DEVICES } from '../src/config.mjs';
 import {
   CAMERA_PRESETS,
   SMOOTH_DOLLY,
@@ -16,8 +16,6 @@ import {
   RTU_PACKAGE,
   createArchitecturePlan,
   createArchitectureStructure,
-  resolvePublicRoofVisibility,
-  resolveRearRoofVisibility,
 } from '../src/scene/architecture.js';
 import {
   LIGHTING_EMISSION_CHANNELS,
@@ -25,12 +23,7 @@ import {
   resolveInteriorCeilingVisibility,
 } from '../src/scene/lighting.js';
 import { MATERIAL_SPECS, createMaterialRegistry } from '../src/scene/materials.js';
-import { resolveNetworkEvidenceVisibility } from '../src/scene/network-schematic.js';
-import {
-  SURFACE_REAR_ROOF_CLIP_CAMERAS,
-  SURFACE_ROOF_CLIP_CAMERAS,
-  createMenuDisplayArtwork,
-} from '../src/scene/surfaces.js';
+import { createMenuDisplayArtwork } from '../src/scene/surfaces.js';
 
 // ---------------------------------------------------------------------------
 // Minimal Three.js + document stubs (the shape every builder test in this suite uses).
@@ -159,7 +152,7 @@ function createThreeStub() {
   };
 }
 
-const LAYER_NAMES = ['architecture', 'roof', 'walls', 'hvac', 'rs485', 'lorawan', 'internet', 'zones', 'labels'];
+const LAYER_NAMES = ['architecture', 'roof', 'walls', 'hvac', 'rs485', 'lorawan', 'internet', 'labels'];
 
 function buildArchitecture({ withRegistry = false } = {}) {
   const previousDocument = globalThis.document;
@@ -193,202 +186,31 @@ const aabbsIntersect = (a, b) => [0, 1, 2].every((axis) => (
 ));
 
 // ---------------------------------------------------------------------------
-// Line-of-sight harness: the deterministic half of "the preset frames its subject".
-// Occluders replicate a `state=architecture&roof=on&walls=on` capture with the
-// per-camera roof clips applied — the exact configuration of the failed P6 views.
+// Limpieza fase 2 (2026-07-18): the P1/1b/P6d preset-framing and roof-clip contracts (the
+// line-of-sight harness, SURFACE_ROOF_CLIP_CAMERAS / SURFACE_REAR_ROOF_CLIP_CAMERAS, and the
+// per-camera roof-clip behaviour) were retired with the evidence preset catalogue — the product
+// ships one fixed view where no roof clip ever fires. The network-schematic board module and
+// its visibility rule left the tree with them.
 // ---------------------------------------------------------------------------
 
-function captureOccluders(asset, cameraName) {
-  const boxes = [];
-  for (const mesh of asset.meshes) {
-    const { layer, materialKey } = mesh.userData;
-    if (!['architecture', 'roof', 'walls'].includes(layer)) continue;
-    if (layer === 'roof' && !resolvePublicRoofVisibility(cameraName)
-      && ['public-roof', 'roof-seam-charcoal'].includes(materialKey)) continue;
-    if (layer === 'roof' && !resolveRearRoofVisibility(cameraName) && materialKey === 'rear-roof') continue;
-    for (const instance of mesh.userData.instances ?? []) {
-      const rotation = instance.rotationY ?? 0;
-      let [sx, sy, sz] = instance.size;
-      if (rotation) {
-        const cos = Math.abs(Math.cos(rotation));
-        const sin = Math.abs(Math.sin(rotation));
-        [sx, sz] = [sx * cos + sz * sin, sx * sin + sz * cos];
-      }
-      boxes.push({
-        id: String(instance.metadata?.entityId ?? ''),
-        min: [instance.position[0] - sx / 2, instance.position[1] - sy / 2, instance.position[2] - sz / 2],
-        max: [instance.position[0] + sx / 2, instance.position[1] + sy / 2, instance.position[2] + sz / 2],
-      });
-    }
-  }
-  return boxes;
-}
-
-function segmentHitsBox(origin, target, box) {
-  let entry = 0;
-  let exit = 1;
-  for (let axis = 0; axis < 3; axis += 1) {
-    const delta = target[axis] - origin[axis];
-    if (Math.abs(delta) < 1e-9) {
-      if (origin[axis] < box.min[axis] || origin[axis] > box.max[axis]) return false;
-      continue;
-    }
-    let first = (box.min[axis] - origin[axis]) / delta;
-    let second = (box.max[axis] - origin[axis]) / delta;
-    if (first > second) [first, second] = [second, first];
-    entry = Math.max(entry, first);
-    exit = Math.min(exit, second);
-    if (entry > exit) return false;
-  }
-  return entry > 1e-4 && entry < 0.999;
-}
-
-function assertLineOfSight(asset, cameraName, samples) {
-  const preset = CAMERA_PRESETS[cameraName];
-  const boxes = captureOccluders(asset, cameraName);
-  for (const { name, point, exclude = [] } of samples) {
-    const towardCamera = point.map((value, axis) => preset.position[axis] - value);
-    const length = Math.hypot(...towardCamera);
-    const sample = point.map((value, axis) => value + (towardCamera[axis] / length) * 0.12);
-    const blocker = boxes.find((box) => (
-      !exclude.some((token) => box.id.includes(token))
-      && segmentHitsBox(preset.position, sample, box)
-    ));
-    assert.equal(
-      blocker,
-      undefined,
-      `${cameraName} preset cannot see "${name}": blocked by ${blocker?.id}`,
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// P1 — the ticket checkpoint preset frames the checkpoint, not the roof plane.
-// RED before the fix: the preset stood at [12,7,23], ABOVE the 4.5 m roof plane, with the
-// overview zone labels visible at its own camera.
-// ---------------------------------------------------------------------------
-
-test('P1: the checkpoint preset stands under the roof plane and clips the public roof', () => {
-  const preset = CAMERA_PRESETS.checkpoint;
-  assert.ok(preset.position[1] < 4.5, 'the camera must stand under the 4.5 m public roof plane');
-  assert.ok(SURFACE_ROOF_CLIP_CAMERAS.includes('checkpoint'));
-  assert.equal(resolvePublicRoofVisibility('checkpoint'), false);
-  // The target is the checkpoint zone itself.
-  const zone = ZONES.find(({ id }) => id === 'ticket-checkpoint');
-  assert.ok(preset.target[2] > zone.bounds.z[0] && preset.target[2] < zone.bounds.z[1]);
-  assert.ok(preset.target[0] > zone.bounds.x[0] && preset.target[0] < zone.bounds.x[1]);
-});
-
-test('P1: gates, accessible lane and band wall are in unobstructed line of sight', () => {
+test('P1 (superseded by the 2026-07-15 client mandate): the billboard system is gone entirely', () => {
+  // The P1 correction suppressed the giant overview zone labels at the checkpoint camera. The
+  // client mandate then deleted the whole device-label billboard system, so the invariant is now
+  // structural: the asset exposes no billboard collection at all.
   const { asset } = buildArchitecture();
-  assertLineOfSight(asset, 'checkpoint', [
-    { name: 'west gate visible span', point: [-1.7, 1.5, 11.7], exclude: ['foh-checkpoint'] },
-    { name: 'east gate top', point: [2.6, 1.78, 11.7], exclude: ['foh-checkpoint'] },
-    { name: 'east gate south face', point: [2.6, 1.2, 10.52], exclude: ['foh-checkpoint'] },
-    { name: 'accessible lane floor', point: [0, 0.06, 12.3] },
-    { name: 'band back wall behind the checkpoint', point: [0, 3.0, 14.6] },
-  ]);
+  asset.setEvidenceCamera('network');
+  assert.equal('billboards' in asset, false, 'the asset must not expose any billboard collection');
 });
 
-test('P1: the giant overview zone labels are suppressed at the checkpoint camera', () => {
-  const { asset } = buildArchitecture();
-  asset.setEvidenceCamera('checkpoint');
-  const overview = asset.billboards.filter((sprite) => sprite.userData.visibilityScope === 'overview');
-  assert.ok(overview.length > 0, 'the overview labels must exist for the suppression to mean anything');
-  assert.ok(overview.every((sprite) => sprite.visible === false), 'an overview label leaked into the checkpoint frame');
-});
-
-// ---------------------------------------------------------------------------
-// 1b — the kitchen preset reads workline + hood + hood->duct contact + service door.
-// RED before the fix: the old framing ([-17,2.4,17.4] -> [-10,1.7,12.6]) cropped the hood
-// and the duct out of the frame (the LOS existed; the composition discarded it).
-// ---------------------------------------------------------------------------
-
-test('1b: the kitchen preset keeps hood, hood outlet, duct contact and service door in sight', () => {
-  const { asset } = buildArchitecture();
-  const extraction = asset.plan.structural.kitchenExtraction;
-  assertLineOfSight(asset, 'kitchen', [
-    {
-      name: 'hood body front',
-      point: [
-        extraction.hoodBody.position[0],
-        extraction.hoodBody.position[1],
-        extraction.hoodBody.position[2] + extraction.hoodBody.size[2] / 2,
-      ],
-      exclude: ['hood'],
-    },
-    { name: 'hood outlet', point: [...extraction.hoodOutlet.position], exclude: ['hood', 'kitchen-extract'] },
-    { name: 'duct at the soffit', point: [extraction.duct.socketPosition[0], 4.3, extraction.duct.socketPosition[2]], exclude: ['kitchen-extract'] },
-    { name: 'kitchen service door area', point: [-11.5, 1.2, 14.9] },
-  ]);
-  // The vertical span of the correction: the framing must hold the worktop AND the duct root.
-  const preset = CAMERA_PRESETS.kitchen;
-  assert.ok(preset.position[1] >= 3, 'the camera must rise enough to hold the duct in frame');
-  assert.ok(preset.target[1] >= 2, 'the aim must lift off the worktop toward the hood line');
-});
-
-// ---------------------------------------------------------------------------
-// P6d — the technical preset looks through the section cut.
-// RED before the fix: the rear roof was never clipped and the preset showed roof planes.
-// ---------------------------------------------------------------------------
-
-test('P6d: the technical preset clips the rear roof and sees corridor, wall, doors and UC100-B', () => {
-  assert.deepEqual([...SURFACE_REAR_ROOF_CLIP_CAMERAS], ['technical']);
-  assert.equal(resolveRearRoofVisibility('technical'), false);
-  assert.equal(resolveRearRoofVisibility('isometric'), true);
-  assert.equal(resolveRearRoofVisibility('facade'), true);
-
-  const { asset } = buildArchitecture();
-  assertLineOfSight(asset, 'technical', [
-    { name: '1.5 m service corridor floor (west)', point: [-10, 0.08, -19.25] },
-    { name: 'service corridor floor at the UC100-B door', point: [-16, 0.08, -19.4] },
-    { name: 'separating wall', point: [-14, 2.2, -20.19], exclude: ['rear-separation'] },
-    { name: 'left-control door head', point: [-16, 2.32, -20.15], exclude: ['left-control-service-door'] },
-    { name: 'UC100-B cabinet', point: [-16, 1.55, -21.14], exclude: ['UC100-B'] },
-    { name: 'left-control room floor', point: [-17.5, 0.08, -21.2] },
-    { name: 'right-control room floor', point: [16, 0.08, -21.2] },
-  ]);
-});
-
-test('P6d: the built rear roof panel actually hides at the technical camera and returns elsewhere', () => {
-  const { asset } = buildArchitecture();
-  const rearRoof = asset.meshes.filter((mesh) => mesh.userData.materialKey === 'rear-roof');
-  assert.ok(rearRoof.length > 0);
-  asset.setEvidenceCamera('technical');
-  assert.ok(rearRoof.every((mesh) => mesh.visible === false));
-  asset.setEvidenceCamera('isometric');
-  assert.ok(rearRoof.every((mesh) => mesh.visible === true));
-});
-
-// ---------------------------------------------------------------------------
-// P2 — the external schematic chain and the diagram board are engineering evidence.
-// RED before the fix: the endpoint proxies rendered in every architecture capture and
-// `resolveNetworkEvidenceVisibility('complete-network', { visualMode: 'architectural' })`
-// returned `schematic: true`.
-// ---------------------------------------------------------------------------
-
-test('P2: the diagram board is hidden in the architecture state at complete-network', () => {
-  assert.equal(
-    resolveNetworkEvidenceVisibility('complete-network', { visualMode: 'architectural' }).schematic,
-    false,
-  );
-  assert.equal(
-    resolveNetworkEvidenceVisibility('complete-network', { visualMode: 'engineering' }).schematic,
-    true,
-  );
-  // The board's own inspection preset stays a board view — it exists for nothing else.
-  assert.equal(resolveNetworkEvidenceVisibility('network-schematic-detail').schematic, true);
-});
-
-test('P2: external endpoint proxies hide in architecture and return in engineering', () => {
+test('P2: external endpoint proxies stay hidden in the shipped architectural state', () => {
+  // Limpieza fase 2 (2026-07-18): the engineering mode that restored the external IP chain was
+  // retired — the proxies are pinned hidden, exactly the shipped architectural behaviour.
   const { asset } = buildArchitecture();
   const proxies = asset.meshes.filter((mesh) => String(mesh.userData.materialKey).startsWith('endpoint-'));
   assert.equal(proxies.length, 6, 'router, internet, Niagara, PC, tablet and smartphone proxies');
 
-  // Boot state is architectural: the building must stand alone.
-  asset.setEvidenceCamera('complete-network');
+  asset.setEvidenceCamera('network');
   assert.ok(proxies.every((mesh) => mesh.visible === false), 'an external proxy leaked into the architecture state');
-  assert.equal(asset.networkSchematic.root.visible, false, 'the board leaked into the architecture state');
 
   // `visual_states.architecture` keeps `devices: subtle` — the BUILDING devices stay.
   const buildingDevices = asset.meshes.filter((mesh) => (
@@ -397,13 +219,6 @@ test('P2: external endpoint proxies hide in architecture and return in engineeri
   ));
   assert.ok(buildingDevices.length >= 3);
   assert.ok(buildingDevices.every((mesh) => mesh.visible === true), 'a building device vanished from architecture');
-
-  asset.setLabelPolicy({ visualMode: 'engineering' });
-  assert.ok(proxies.every((mesh) => mesh.visible === true), 'the external chain must return in engineering');
-  assert.equal(asset.networkSchematic.root.visible, true);
-
-  asset.setLabelPolicy({ visualMode: 'architectural' });
-  assert.ok(proxies.every((mesh) => mesh.visible === false), 'the mode round-trip must restore the hidden chain');
 });
 
 // ---------------------------------------------------------------------------
@@ -504,38 +319,26 @@ test('P4: frame 0 reproduces the gated concessions drawing exactly', () => {
 });
 
 // ---------------------------------------------------------------------------
-// P5 — the aisle/step LEDs keep a lights-off floor; the ON ladder is untouched.
-// RED before the fix: `resolveEmissiveIntensity(aisle, 'off')` was 0 and the sala fell
-// below silhouette legibility. (The perceptual outcome is render-judged.)
+// P5 (superseded by the 2026-07-15 simplification) — the lights-off state is gone.
+// The aisle/step LEDs simply hold their gated ON value; no channel has an OFF branch.
 // ---------------------------------------------------------------------------
 
-test('P5: only the aisle/step LED channel keeps a declared lights-off floor', () => {
+test('P5: the aisle/step LED channel holds its gated always-on value', () => {
   const aisle = LIGHTING_EMISSION_CHANNELS['aisle-step-led'];
-  const on = resolveEmissiveIntensity(aisle, 'on');
-  const off = resolveEmissiveIntensity(aisle, 'off');
-  assert.equal(on, 0.4 * 2.4, 'the gated ON value must not move');
-  assert.ok(off > 0, 'the OFF floor must exist');
-  assert.ok(on / off >= 3, 'the pair must still read as two states');
-  for (const [key, definition] of Object.entries(LIGHTING_EMISSION_CHANNELS)) {
-    if (key === 'aisle-step-led') continue;
-    assert.equal(resolveEmissiveIntensity(definition, 'off'), 0, `${key} must still go fully dark`);
+  assert.equal(resolveEmissiveIntensity(aisle), 0.4 * 2.4, 'the gated ON value must not move');
+  for (const definition of Object.values(LIGHTING_EMISSION_CHANNELS)) {
+    assert.equal('offIntensityScale' in definition, false, 'no channel declares an OFF residual');
   }
 });
 
-test('P5: setLightState(off) leaves the built aisle LED strips emitting at the floor', () => {
+test('P5: the pruned aisle LED strips stay out of the build and no light toggle exists', () => {
+  // Interior prune (2026-07-18, maintainer-ordered): the strips' gated emissive VALUE is still
+  // asserted above from the pure channel authority; the built meshes left with the sealed rooms
+  // (17-view capture diff: zero shipped pixels), so the built-mesh emissive read retired.
   const { asset } = buildArchitecture({ withRegistry: true });
   const strips = asset.meshes.filter((mesh) => mesh.userData.materialKey === 'aisle-step-led');
-  assert.ok(strips.length > 0, 'the aisle LED strips must exist in the build');
-  asset.setLightState('off');
-  const aisle = LIGHTING_EMISSION_CHANNELS['aisle-step-led'];
-  for (const mesh of strips) {
-    assert.equal(mesh.material.emissiveIntensity, resolveEmissiveIntensity(aisle, 'off'));
-    assert.ok(mesh.material.emissiveIntensity > 0);
-  }
-  asset.setLightState('on');
-  for (const mesh of strips) {
-    assert.equal(mesh.material.emissiveIntensity, resolveEmissiveIntensity(aisle, 'on'));
-  }
+  assert.equal(strips.length, 0, 'the pruned aisle LED strips crept back into the build');
+  assert.equal('setLightState' in asset, false, 'the light-state switch left the asset API');
 });
 
 // ---------------------------------------------------------------------------
@@ -563,11 +366,6 @@ test('item 7: setRoofLayerVisible(false) hides the built ceilings and restores t
   assert.ok(ceilings.every((mesh) => mesh.visible === false), 'architecture + roof off: ceilings must leave with the roof');
   asset.setRoofLayerVisible(true);
   assert.ok(ceilings.every((mesh) => mesh.visible === true));
-  // Engineering behaviour is untouched by the toggle.
-  asset.setLabelPolicy({ visualMode: 'engineering' });
-  assert.ok(ceilings.every((mesh) => mesh.visible === false));
-  asset.setRoofLayerVisible(true);
-  assert.ok(ceilings.every((mesh) => mesh.visible === false), 'engineering never shows the interior ceilings');
 });
 
 // ---------------------------------------------------------------------------
@@ -640,11 +438,11 @@ test('item 8: the exponential step converges monotonically and snaps at the rest
 
 test('item 8: the controller owns the zoom — wheel accumulates, update glides, presets cancel', () => {
   const { camera, orbitControls, listeners } = createCameraHarness();
-  const controller = createCameraController({ camera, orbitControls, eventTarget: null });
+  const controller = createCameraController({ camera, orbitControls });
   assert.equal(orbitControls.enableZoom, false, 'OrbitControls own stepping dolly must be disabled');
   assert.equal(typeof listeners.wheel, 'function');
 
-  controller.applyPreset('neutral'); // position [54,44,58], target [0,1.5,-1]
+  controller.applyPreset('isometric'); // position [66,46,68], target [0,0,0]
   const distance = () => Math.hypot(
     camera.position.x - orbitControls.target.x,
     camera.position.y - orbitControls.target.y,
@@ -670,73 +468,45 @@ test('item 8: the controller owns the zoom — wheel accumulates, update glides,
   // A preset is an exact framing: any in-flight dolly is cancelled.
   listeners.wheel({ deltaY: -600, preventDefault: () => {} });
   assert.notEqual(controller.getState().dollyTarget, null);
-  controller.applyPreset('kitchen');
+  controller.applyPreset('network');
   assert.equal(controller.getState().dollyTarget, null);
   assert.deepEqual(
     [camera.position.x, camera.position.y, camera.position.z],
-    [...CAMERA_PRESETS.kitchen.position],
+    [...CAMERA_PRESETS.network.position],
   );
 
-  // First-person ignores the wheel entirely.
-  controller.setNavigationMode('first-person');
-  listeners.wheel({ deltaY: 300, preventDefault: () => {} });
-  assert.equal(controller.getState().dollyTarget, null, 'first-person must never inherit an orbit dolly');
   controller.dispose();
   assert.equal(listeners.wheel, undefined, 'dispose must remove the wheel listener');
 });
 
 // ---------------------------------------------------------------------------
 // Item 9 — boot-time shader warm-up. RED before the fix: no warm-up existed; the first
-// cutaway toggle and the first selection paid the shader compile interactively.
+// selection paid the shader compile interactively.
+// CONTRACT CHANGE (limpieza fase 2, 2026-07-18): the cutaway feature was retired, so the
+// second compile pass that pre-paid the flipped clipping variants left with it. The warm-up
+// is a single boot-configuration compile now.
 // ---------------------------------------------------------------------------
 
-test('item 9: the warm-up compiles both cutaway variants and restores the exact boot state', () => {
-  const compiles = [];
-  const cutawayCalls = [];
-  const renderer = {
-    localClippingEnabled: false,
-    compile() { compiles.push(this.localClippingEnabled); },
-  };
-  const materialRegistry = { setCutaway: (enabled, plane) => cutawayCalls.push([enabled, plane]) };
-  const plane = { isPlane: true };
+test('item 9: the warm-up compiles the boot configuration exactly once', () => {
+  let compiles = 0;
+  const renderer = { compile() { compiles += 1; } };
 
-  const summary = runShaderWarmup({
-    renderer, scene: {}, camera: {}, materialRegistry, clippingPlane: plane, bootCutaway: false,
-  });
-  assert.equal(summary.compiles, 2);
-  assert.deepEqual(compiles, [false, true], 'boot variant first, then the flipped clipping variant');
-  assert.deepEqual(cutawayCalls, [[true, plane], [false, plane]], 'flip, then byte-identical restore');
-  assert.equal(renderer.localClippingEnabled, false, 'the boot clipping state must be restored');
-
-  compiles.length = 0;
-  cutawayCalls.length = 0;
-  renderer.localClippingEnabled = true;
-  const engineeringBoot = runShaderWarmup({
-    renderer, scene: {}, camera: {}, materialRegistry, clippingPlane: plane, bootCutaway: true,
-  });
-  assert.deepEqual(compiles, [true, false], 'a cutaway boot warms the UNclipped variant instead');
-  assert.equal(renderer.localClippingEnabled, true);
-  assert.equal(engineeringBoot.restoredCutaway, true);
+  const summary = runShaderWarmup({ renderer, scene: {}, camera: {} });
+  assert.equal(summary.compiles, 1);
+  assert.equal(compiles, 1, 'one pass: the boot configuration itself');
 
   assert.throws(() => runShaderWarmup({ scene: {}, camera: {} }), TypeError);
 });
 
-test('item 9: main.js warms up before readiness and stops re-baking shadows on cutaway', async () => {
+test('item 9: main.js warms up before readiness', async () => {
   const source = await readFile(new URL('../main.js', import.meta.url), 'utf8');
   const warmupAt = source.indexOf('runShaderWarmup({');
   const readyAt = source.indexOf("dataset.appReady = 'true'");
   assert.ok(warmupAt > 0 && readyAt > 0);
   assert.ok(warmupAt < readyAt, 'captures wait on data-app-ready: warming after it would race them');
-  const cutawayHandler = source.slice(
-    source.indexOf('cutaway.addEventListener'),
-    source.indexOf('writeQueryState(mutableQuery);', source.indexOf('cutaway.addEventListener')),
-  );
-  assert.ok(cutawayHandler.length > 0);
-  assert.doesNotMatch(
-    cutawayHandler,
-    /bakeShadows/,
-    'clipShadows is never enabled, so the cutaway toggle must not pay a shadow re-bake',
-  );
+  // Limpieza fase 2 (2026-07-18): the cutaway feature is fully retired — no DOM control, no
+  // handler, no URL token, no clipping-variant warmup coupling.
+  assert.doesNotMatch(source, /cutaway/i, 'no cutaway machinery survives in main.js');
 });
 
 // ---------------------------------------------------------------------------
@@ -853,29 +623,6 @@ test('item 10: the builder emits every RTU part, in the roof layer, in contact w
   assert.equal(fanMesh.userData.entities.length, 14);
 });
 
-// ---------------------------------------------------------------------------
-// Spec/code preset sync — the corrections order it explicitly for the touched presets.
-// ---------------------------------------------------------------------------
-
-test('spec sync: the three reframed presets carry identical values in design-spec.yaml', async () => {
-  const spec = await readFile(new URL('../design-spec.yaml', import.meta.url), 'utf8');
-  const entry = (name) => {
-    const match = spec.match(new RegExp(
-      `${name}: \\{position: \\[([^\\]]+)\\], target: \\[([^\\]]+)\\], fov: (\\d+)\\}`,
-    ));
-    assert.ok(match, `spec camera preset ${name} not found`);
-    const parse = (list) => list.split(',').map((value) => Number(value.trim()));
-    return { position: parse(match[1]), target: parse(match[2]), fov: Number(match[3]) };
-  };
-  for (const [specName, codeName] of [
-    ['ticket_checkpoint', 'checkpoint'],
-    ['technical_room', 'technical'],
-    ['kitchen', 'kitchen'],
-  ]) {
-    const fromSpec = entry(specName);
-    const fromCode = CAMERA_PRESETS[codeName];
-    assert.deepEqual(fromSpec.position, [...fromCode.position], `${specName} position drifted from the code`);
-    assert.deepEqual(fromSpec.target, [...fromCode.target], `${specName} target drifted from the code`);
-    assert.equal(fromSpec.fov, fromCode.fov, `${specName} fov drifted from the code`);
-  }
-});
+// Limpieza fase 2 (2026-07-18): the spec/code preset-sync contract retired with the pruned
+// preset catalogue — design-spec.yaml keeps the historical evidence framings, the code ships
+// only the single live `network` view.

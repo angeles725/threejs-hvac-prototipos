@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { APP_CONFIG, TC300_DEVICES, UC100_DEVICES } from '../src/config.mjs';
-import { deriveHudModel } from '../src/hud.mjs';
 import {
   DEFAULT_QUERY_STATE,
   parseQueryState,
@@ -15,7 +13,6 @@ import {
   INTERACTION_SCENE_STATES,
   INTERACTION_SELECTION_VALUES,
   createInteractionModel,
-  resolveHaloPulse,
   resolveLinkLayers,
   resolvePacketT,
   resolveSceneState,
@@ -158,7 +155,7 @@ function createThreeStub() {
   };
 }
 
-const LAYER_NAMES = ['architecture', 'roof', 'walls', 'hvac', 'rs485', 'lorawan', 'internet', 'zones', 'labels'];
+const LAYER_NAMES = ['architecture', 'roof', 'walls', 'hvac', 'rs485', 'lorawan', 'internet', 'labels'];
 
 function buildArchitecture() {
   const previousDocument = globalThis.document;
@@ -181,13 +178,13 @@ function buildArchitecture() {
 
 // ---------------------------------------------------------------------------
 // Query vocabulary — the spec's `deterministic_query_states` must be DRIVEABLE.
-// An unknown value on a known key resets the whole state atomically, so a capture
-// set built from spec-literal URLs would otherwise be N pictures of the default view.
+// Client simplification (2026-07-15): the fault/hot scenario states are gone —
+// the two visual states are the whole vocabulary.
 // ---------------------------------------------------------------------------
 
-test('every DesignSpec scene state is a driveable query value, not an atomic reset', () => {
+test('both scene states are driveable query values, not an atomic reset', () => {
   const warnings = [];
-  for (const state of ['architecture', 'engineering', 'fault-tc300', 'fault-uc100-b', 'fault-internet', 'hot-sala-3', 'hot-kitchen']) {
+  for (const state of ['architecture', 'engineering']) {
     const parsed = parseQueryState(`?state=${state}&links=all&tick=0`, (message) => warnings.push(message));
     assert.equal(parsed.sceneState, state, `${state} must survive the parser`);
     assert.notDeepEqual(parsed, DEFAULT_QUERY_STATE, `${state} must not collapse to the canonical default`);
@@ -195,12 +192,10 @@ test('every DesignSpec scene state is a driveable query value, not an atomic res
   assert.equal(warnings.length, 0);
 });
 
-test('fault and hot states force the engineering visual mode they are captured in', () => {
+test('the removed fault/hot scenario states reset the state atomically', () => {
   for (const state of ['fault-tc300', 'fault-uc100-b', 'fault-internet', 'hot-sala-3', 'hot-kitchen']) {
-    assert.equal(parseQueryState(`?state=${state}`).visualMode, 'engineering');
+    assert.deepEqual(parseQueryState(`?state=${state}`, () => {}), DEFAULT_QUERY_STATE, `${state} must be unknown`);
   }
-  // A stale mode token can never contradict the scene state that owns the capture.
-  assert.equal(parseQueryState('?state=fault-internet&mode=architectural').visualMode, 'engineering');
 });
 
 test('selection and tick are parsed, not silently ignored as unknown keys', () => {
@@ -231,15 +226,15 @@ test('the links vocabulary implements every declared value, not only `all`', () 
 });
 
 test('the interaction state round-trips through the serialized capture URL', () => {
-  const parsed = parseQueryState('?state=fault-uc100-b&camera=engineering-section&links=all&selection=UC100-B&tick=30');
+  const parsed = parseQueryState('?state=engineering&camera=engineering-section&links=all&selection=UC100-B&tick=30');
   const query = serializeQueryState(parsed);
-  assert.match(query, /state=fault-uc100-b/);
+  assert.match(query, /state=engineering/);
   assert.match(query, /selection=UC100-B/);
   assert.match(query, /tick=30/);
   // A captured URL is a fixed point: reloading it and re-serializing yields the same URL.
   const reloaded = parseQueryState(`?${query}`);
   assert.equal(serializeQueryState(reloaded), query);
-  assert.equal(reloaded.sceneState, 'fault-uc100-b');
+  assert.equal(reloaded.sceneState, 'engineering');
   assert.equal(reloaded.selection, 'UC100-B');
   assert.equal(reloaded.tick, 30);
   // The surface pass pinned the frame tokens to the tail of the contract order.
@@ -247,112 +242,36 @@ test('the interaction state round-trips through the serialized capture URL', () 
 });
 
 // ---------------------------------------------------------------------------
-// Fault propagation — DERIVED from the one topology, never a second source of truth.
+// The healthy model — the fault machinery is gone; the model is telemetry,
+// selection and the deterministic tick, nothing else.
 // ---------------------------------------------------------------------------
 
-test('every scene state maps onto the canonical simulation fault, or onto none', () => {
-  assert.deepEqual(Object.keys(INTERACTION_SCENE_STATES), [
-    'architecture', 'engineering', 'fault-tc300', 'fault-uc100-b',
-    'fault-internet', 'hot-sala-3', 'hot-kitchen',
-  ]);
-  assert.equal(resolveSceneState('architecture').faultId, null);
-  assert.equal(resolveSceneState('engineering').faultId, null);
-  assert.equal(resolveSceneState('fault-tc300').faultId, 'tc300-communication-loss');
-  assert.equal(resolveSceneState('fault-uc100-b').faultId, 'uc100-failure');
-  assert.equal(resolveSceneState('fault-internet').faultId, 'internet-loss');
-  assert.equal(resolveSceneState('hot-sala-3').faultId, 'auditorium-high-temperature');
-  assert.equal(resolveSceneState('hot-kitchen').faultId, 'kitchen-high-temperature');
-  assert.equal(resolveSceneState('fault-nothing'), null);
+test('the scene-state vocabulary is exactly the two visual states', () => {
+  assert.deepEqual(Object.keys(INTERACTION_SCENE_STATES), ['architecture', 'engineering']);
+  assert.equal(resolveSceneState('architecture').visualMode, 'architectural');
+  assert.equal(resolveSceneState('engineering').visualMode, 'engineering');
+  assert.equal(resolveSceneState('fault-tc300'), null);
+  assert.equal(resolveSceneState('hot-kitchen'), null);
 });
 
-test('a healthy engineering state leaves every endpoint and every route normal', () => {
+test('the healthy model exposes telemetry and selection, and no fault-era derivations', () => {
   const model = createInteractionModel({ state: 'engineering', tick: 0 });
-  for (const { id } of [...TC300_DEVICES, ...UC100_DEVICES, ...APP_CONFIG.devices.gateways, ...APP_CONFIG.network.nodes]) {
-    assert.equal(model.deviceStatus[id], 'normal', `${id} must be healthy`);
+  for (const { id } of TC300_DEVICES) {
+    assert.equal(model.telemetry[id].communication, 'normal', `${id} must be healthy`);
+    assert.equal(model.telemetry[id].status, 'normal', `${id} must be healthy`);
   }
-  assert.equal(Object.values(model.routeStatus).every((status) => status === 'normal'), true);
-  assert.equal(model.alarms.length, 0);
-  assert.deepEqual(model.zoneHalos, []);
-  assert.equal(model.niagaraDelivery.stopped.length, 0);
+  for (const { id } of UC100_DEVICES) assert.equal(model.linkMetrics[id].lorawan, 'normal');
+  for (const gone of ['deviceStatus', 'routeStatus', 'zoneHalos', 'alarms', 'niagaraDelivery', 'faultId']) {
+    assert.equal(gone in model, false, `${gone} must not exist on the model`);
+  }
 });
 
-test('fault-tc300 breaks exactly one thermostat and only its own drop route', () => {
-  const model = createInteractionModel({ state: 'fault-tc300', tick: 0 });
-  assert.equal(model.deviceStatus['TC300-08'], 'alarm');
-  // The bus keeps working for the other three members: a comm loss is not a bus failure.
-  for (const id of ['TC300-06', 'TC300-07', 'TC300-09']) assert.equal(model.deviceStatus[id], 'normal');
-  assert.equal(model.deviceStatus['UC100-B'], 'normal');
-  assert.equal(model.routeStatus['TC300-08-contained-drop'], 'blocked');
-  assert.equal(model.routeStatus['TC300-07-contained-drop'], 'normal');
-  assert.equal(model.routeStatus['UC100-B-contained-route'], 'normal');
-  assert.equal(model.routeStatus['lorawan-UC100-B-UG67-01'], 'normal');
-  assert.deepEqual(model.niagaraDelivery.stopped, ['TC300-08']);
-  assert.deepEqual(model.zoneHalos.map(({ zoneId }) => zoneId), ['sala-3']);
-});
-
-test('fault-uc100-b propagates along the RS-485 bus it owns, and no further', () => {
-  const model = createInteractionModel({ state: 'fault-uc100-b', tick: 0 });
-  assert.equal(model.deviceStatus['UC100-B'], 'alarm');
-  // Dependents are unreachable, not faulty: red then gray, exactly as `visual_states` declares.
-  for (const id of ['TC300-06', 'TC300-07', 'TC300-08', 'TC300-09']) {
-    assert.equal(model.deviceStatus[id], 'unreachable', `${id} must gray out`);
-    assert.equal(model.routeStatus[`${id}-contained-drop`], 'blocked');
-  }
-  assert.equal(model.routeStatus['UC100-B-contained-route'], 'blocked');
-  assert.equal(model.routeStatus['lorawan-UC100-B-UG67-01'], 'blocked');
-  // The other three buses, the gateway and the whole IP chain stay healthy.
-  for (const id of ['UC100-A', 'UC100-C', 'UC100-D', 'UG67-01', 'router-firewall', 'internet', 'niagara-supervisor']) {
-    assert.equal(model.deviceStatus[id], 'normal', `${id} must stay healthy`);
-  }
-  assert.equal(model.routeStatus['conceptual-ip-chain'], 'normal');
-  assert.deepEqual(
-    model.niagaraDelivery.stopped,
-    ['TC300-06', 'TC300-07', 'TC300-08', 'TC300-09'],
-  );
-  assert.deepEqual(
-    model.zoneHalos.map(({ zoneId }) => zoneId),
-    ['sala-1', 'sala-2', 'sala-3', 'sala-4'],
-  );
-});
-
-test('fault-internet stops delivery on the shared backbone and spares the field devices', () => {
-  const model = createInteractionModel({ state: 'fault-internet', tick: 0 });
-  assert.equal(model.deviceStatus.internet, 'alarm');
-  // The backbone cannot deliver: gateway, router and supervisor all gray out.
-  for (const id of ['UG67-01', 'router-firewall', 'niagara-supervisor', 'client-pc', 'client-tablet', 'client-smartphone']) {
-    assert.equal(model.deviceStatus[id], 'unreachable', `${id} must gray out`);
-  }
-  // The field keeps measuring: no thermostat and no concentrator is recoloured.
-  for (const { id } of [...TC300_DEVICES, ...UC100_DEVICES]) {
-    assert.equal(model.deviceStatus[id], 'normal', `${id} must stay healthy`);
-  }
-  assert.equal(model.routeStatus['UC100-A-contained-route'], 'normal');
-  assert.equal(model.routeStatus['lorawan-UC100-A-UG67-01'], 'normal');
-  assert.equal(model.routeStatus['UG67-01-contained-ethernet'], 'blocked');
-  assert.equal(model.routeStatus['conceptual-ip-chain'], 'blocked');
-  assert.equal(model.niagaraDelivery.stopped.length, TC300_DEVICES.length);
-});
-
-test('the hot states raise an active alarm without breaking a single link', () => {
-  const hotSala = createInteractionModel({ state: 'hot-sala-3', tick: 0 });
-  assert.equal(hotSala.deviceStatus['TC300-08'], 'alarm');
-  assert.equal(hotSala.alarms.some(({ kind, deviceId }) => kind === 'temperature-high' && deviceId === 'TC300-08'), true);
-  assert.equal(Object.values(hotSala.routeStatus).every((status) => status === 'normal'), true);
-  assert.equal(hotSala.niagaraDelivery.stopped.length, 0);
-  assert.deepEqual(hotSala.zoneHalos.map(({ zoneId }) => zoneId), ['sala-3']);
-
-  const hotKitchen = createInteractionModel({ state: 'hot-kitchen', tick: 0 });
-  assert.equal(hotKitchen.deviceStatus['TC300-05'], 'alarm');
-  assert.equal(Object.values(hotKitchen.routeStatus).every((status) => status === 'normal'), true);
-  assert.deepEqual(hotKitchen.zoneHalos.map(({ zoneId }) => zoneId), ['kitchen']);
-});
-
-test('restoring the state is deterministic: the healthy model returns byte for byte', () => {
+test('the model is deterministic: same state, tick and selection — same model', () => {
   const before = createInteractionModel({ state: 'engineering', tick: 30 });
-  createInteractionModel({ state: 'fault-uc100-b', tick: 30 });
-  const after = createInteractionModel({ state: 'engineering', tick: 30 });
-  assert.deepEqual(after.deviceStatus, before.deviceStatus);
-  assert.deepEqual(after.routeStatus, before.routeStatus);
+  const replay = createInteractionModel({ state: 'engineering', tick: 30 });
+  assert.deepEqual(replay.telemetry, before.telemetry);
+  assert.deepEqual(replay.linkMetrics, before.linkMetrics);
+  assert.deepEqual(replay.selectionPath, before.selectionPath);
 });
 
 // ---------------------------------------------------------------------------
@@ -429,8 +348,7 @@ test('tick 0 and tick 30 are two different, reproducible packet frames', () => {
   // Same tick, same phase, same position — always.
   assert.equal(resolvePacketT(30, 0.25), resolvePacketT(30, 0.25));
   assert.equal(resolvePacketT(30, 0), (INTERACTION_PACKET_STEP * 30) % 1);
-  // The pulses are periodic but never land back on their tick-0 value at tick 30.
-  assert.notEqual(resolveHaloPulse(30).scale, resolveHaloPulse(0).scale);
+  // The RF rings are periodic but never land back on their tick-0 value at tick 30.
   assert.notEqual(resolveWaveRing(30, 0).scale, resolveWaveRing(0, 0).scale);
 });
 
@@ -446,81 +364,33 @@ test('a polyline sample walks the route by arc length', () => {
 // The Three.js adapter — what the BUILDER emits for each state.
 // ---------------------------------------------------------------------------
 
-test('the interaction pools are fixed, and empty in the gated healthy states', () => {
+test('the interaction pools are fixed, fully live, and unhighlighted without a selection', () => {
   const { asset } = buildArchitecture();
   const state = asset.setInteractionState({ state: 'engineering', tick: 0, selection: 'none' });
 
   assert.equal(state.packets.pooled > 0, true);
   assert.equal(state.packets.pooled, asset.interactionPools.packetCapacity);
-  // Healthy: every packet in the fixed pool is live, and nothing is recoloured.
+  // Healthy by construction: every packet in the fixed pool is live, always.
   assert.equal(state.packets.active, state.packets.pooled);
-  assert.equal(state.overlays.alarm, 0);
-  assert.equal(state.overlays.offline, 0);
   assert.equal(state.overlays.selected, 0);
-  assert.equal(state.halos.alarm, 0);
   assert.equal(state.halos.selection, 0);
-  assert.equal(state.zoneHalos, 0);
   assert.equal(state.suppressed, 0);
+  // The fault-era pools are gone: no alarm or offline overlays exist to query.
+  assert.deepEqual(asset.interactionPools.overlayEntities('alarm'), []);
+  assert.deepEqual(asset.interactionPools.overlayEntities('offline'), []);
 });
 
-test('a fault recolours the affected instances through the gated alarm/offline palette', () => {
+test('deselecting is deterministic: the unselected model returns byte for byte', () => {
   const { asset } = buildArchitecture();
-  const state = asset.setInteractionState({ state: 'fault-uc100-b', tick: 0 });
-
-  assert.equal(state.overlays.alarm > 0, true, 'UC100-B must carry alarm-red instances');
-  assert.equal(state.overlays.offline > 0, true, 'its four dependents must gray out');
-  // Every recoloured instance is removed from its own base mesh: no double geometry, no z-fight.
-  assert.equal(state.suppressed, state.overlays.alarm + state.overlays.offline);
-  assert.equal(state.halos.alarm > 0, true);
-  assert.equal(state.zoneHalos, 4, 'the four west rooms carry a fault halo');
-  // The packets that used to ride bus B are the delivery evidence: they stop.
-  assert.equal(state.packets.active < state.packets.pooled, true);
-  assert.equal(state.packets.pooled, asset.interactionPools.packetCapacity);
-
-  const alarmEntities = asset.interactionPools.overlayEntities('alarm');
-  assert.equal(alarmEntities.every(({ entityId }) => entityId === 'UC100-B'), true);
-  const offlineEntities = asset.interactionPools.overlayEntities('offline');
-  const offlineOwners = new Set(offlineEntities.map(({ statusOwner }) => statusOwner));
-  for (const owner of [
-    'TC300-06', 'TC300-07', 'TC300-08', 'TC300-09',
-    'TC300-06-contained-drop', 'TC300-09-contained-drop',
-    'UC100-B-contained-route', 'lorawan-UC100-B-UG67-01',
-  ]) {
-    assert.equal(offlineOwners.has(owner), true, `${owner} must gray out`);
-  }
-  // Nothing outside bus B is touched: no neighbouring bus, no thermostat, no IP hop.
-  for (const owner of [
-    'TC300-01', 'UC100-A', 'UC100-A-contained-route', 'lorawan-UC100-C-UG67-01',
-    'UG67-01', 'conceptual-ip-chain', 'UG67-01-contained-ethernet',
-  ]) {
-    assert.equal(offlineOwners.has(owner), false, `${owner} must stay healthy`);
-  }
+  const before = asset.setInteractionState({ state: 'engineering', tick: 0, selection: 'none' });
+  asset.setInteractionState({ state: 'engineering', tick: 0, selection: 'TC300-08' });
+  const after = asset.setInteractionState({ state: 'engineering', tick: 0, selection: 'none' });
+  assert.deepEqual(after, before);
+  assert.equal(asset.interactionPools.overlayEntities('selected').length, 0);
 });
 
-test('restoring from a fault returns the scene to the exact gated healthy state', () => {
-  const { asset } = buildArchitecture();
-  const healthy = asset.setInteractionState({ state: 'engineering', tick: 0 });
-  asset.setInteractionState({ state: 'fault-internet', tick: 30 });
-  const restored = asset.setInteractionState({ state: 'engineering', tick: 0 });
-  assert.deepEqual(restored, healthy);
-  assert.equal(asset.interactionPools.overlayEntities('alarm').length, 0);
-  assert.equal(asset.interactionPools.overlayEntities('offline').length, 0);
-});
-
-test('no zone, band or room mesh disappears in any interaction state', () => {
-  const { asset } = buildArchitecture();
-  const zoneMeshes = asset.meshes.filter((mesh) => mesh.userData.layer === 'zones');
-  const roomEntities = (mesh) => (mesh.userData.instances ?? []).length;
-  const before = zoneMeshes.map(roomEntities);
-
-  for (const state of Object.keys(INTERACTION_SCENE_STATES)) {
-    asset.setInteractionState({ state, tick: 30, selection: 'TC300-08' });
-    assert.deepEqual(zoneMeshes.map(roomEntities), before, `${state} dropped a zone volume`);
-    for (const mesh of zoneMeshes) {
-      assert.equal(mesh.count, (mesh.userData.instances ?? []).length, `${state} zeroed a zone mesh`);
-    }
-  }
-});
+// Limpieza fase 2 (2026-07-18): the `zones` layer (engineering plan-band volumes) was retired
+// with the engineering visual mode, and the zone-volume stability contract left with it.
 
 test('selection highlights the path without hiding the medium it rides on', () => {
   const { asset } = buildArchitecture();
@@ -532,68 +402,8 @@ test('selection highlights the path without hiding the medium it rides on', () =
   const selected = asset.interactionPools.overlayEntities('selected');
   const media = new Set(selected.map(({ materialKey }) => materialKey));
   for (const key of media) {
-    assert.equal(['rs485-green', 'lorawan-blue', 'ethernet-blue', 'tc-black', 'tc-blue', 'uc-white', 'gateway-dark', 'endpoint-router', 'endpoint-cloud', 'endpoint-server', 'endpoint-pc', 'endpoint-tablet', 'endpoint-phone'].includes(key), true, `${key} is not a gated media/device key`);
+    assert.equal(['rs485-green', 'lorawan-blue', 'ethernet-blue'].includes(key), true, `${key} is not a gated media key`);
   }
   const owners = new Set(selected.map(({ statusOwner }) => statusOwner));
   assert.equal(owners.has('TC300-07'), false, 'a neighbour on the same bus must not be highlighted');
-});
-
-// ---------------------------------------------------------------------------
-// HUD consistency — the status line, its severity and the alarm list are ONE derivation.
-// The bug this locks down: `#app-status` claimed "Sin alarmas" while `#alarm-list` was
-// showing an active alarm, because the boot path wrote the status line a second time.
-// ---------------------------------------------------------------------------
-
-test('the HUD status line never contradicts the alarm list, in any state of the vocabulary', () => {
-  for (const state of Object.keys(INTERACTION_SCENE_STATES)) {
-    for (const tick of [0, 30]) {
-      const model = createInteractionModel({ state, tick });
-      const hud = deriveHudModel(model);
-      const hasAlarms = model.alarms.length > 0;
-
-      // The invariant, derived — not a literal asserted for one lucky state.
-      assert.equal(hud.alarmItems.length > 0, true, `${state} must always render an alarm list`);
-      assert.equal(
-        hud.claimsNoAlarms,
-        !hasAlarms,
-        `${state}: the status line claims "sin alarmas" while the alarm list holds ${model.alarms.length}`,
-      );
-      assert.equal(/[Ss]in alarmas/.test(hud.statusText), !hasAlarms, `${state}: status copy contradicts the alarms`);
-      assert.equal(hud.severity, hasAlarms ? 'alarm' : 'normal', `${state}: severity must follow the alarms`);
-      assert.equal(hud.alarmCount, model.alarms.length, `${state}: the counted events must be the derived events`);
-
-      // One list item per alarm, and each item names the device the alarm belongs to.
-      if (hasAlarms) {
-        assert.equal(hud.alarmItems.length, model.alarms.length, `${state}: an alarm was dropped from the list`);
-        for (const [index, alarm] of model.alarms.entries()) {
-          assert.equal(hud.alarmItems[index].severity, 'alarm');
-          assert.equal(hud.alarmItems[index].text.startsWith(`${alarm.deviceId} · `), true);
-        }
-      } else {
-        assert.equal(hud.alarmItems.length, 1);
-        assert.equal(hud.alarmItems[0].severity, 'normal');
-      }
-    }
-  }
-});
-
-test('the status line reports the delivery it can prove, and never a phantom Niagara outage', () => {
-  // hot-kitchen alarms WITHOUT stopping a single thermostat: the copy must not imply data loss.
-  const hot = deriveHudModel(createInteractionModel({ state: 'hot-kitchen', tick: 0 }));
-  assert.equal(hot.severity, 'alarm');
-  assert.equal(hot.stoppedCount, 0);
-  assert.equal(/sin datos/.test(hot.statusText), false, 'no thermostat stopped reporting in hot-kitchen');
-
-  // fault-internet stops every thermostat: the copy must say so, with the derived count.
-  const outage = deriveHudModel(createInteractionModel({ state: 'fault-internet', tick: 0 }));
-  assert.equal(outage.stoppedCount, TC300_DEVICES.length);
-  assert.match(outage.statusText, new RegExp(`sin datos de ${TC300_DEVICES.length} termostato`));
-});
-
-test('the boot path owns no second status writer: the HUD has one source of truth', async () => {
-  const source = await readFile(new URL('../main.js', import.meta.url), 'utf8');
-  // Any literal status copy in main.js is, by construction, a surface that cannot follow the alarms.
-  assert.equal(/Sistema (listo|en alarma)/.test(source), false, 'main.js must not hard-code the status copy');
-  assert.equal(/[Ss]in alarmas/.test(source), false, 'main.js must not hard-code an "sin alarmas" claim');
-  assert.match(source, /deriveHudModel/, 'main.js must render the HUD from the derived model');
 });

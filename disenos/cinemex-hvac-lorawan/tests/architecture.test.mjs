@@ -201,39 +201,16 @@ test('application composition wires only the surface shell asset builder into th
   assert.match(html, /id="pass-label"[^>]*>Pase P6 FINAL/);
 });
 
-test('silhouette reset exposes one-view room, family, FOH and rear-strip billboards', () => {
+test('the device-label billboard system is gone from the plan entirely', () => {
   const plan = createArchitecturePlan();
-  const architectureLabels = plan.billboards.architecture;
-  const roomLabels = architectureLabels.filter(({ kind }) => kind === 'room-family');
-
-  assert.deepEqual(roomLabels.map(({ text }) => text), [
-    '1 · L', '2 · M', '3 · M', '4 · S',
-    '5 · L', '6 · M', '7 · M', '8 · S',
-  ]);
-  assert.ok(roomLabels.every(({ billboard, halo }) => billboard === true && halo === true));
-  assert.deepEqual(
-    architectureLabels.filter(({ kind }) => kind === 'foh').map(({ text }) => text),
-    ['LOBBY / TICKETS', 'CONCESSIONS', 'KITCHEN', 'CHECKPOINT'],
-  );
-  assert.equal(architectureLabels.find(({ kind }) => kind === 'rear-strip').text, 'REAR SERVICE');
-  const wheelchairLabel = architectureLabels.find(({ kind }) => kind === 'wheelchair-void');
-  assert.equal(wheelchairLabel, undefined);
-  assert.ok(roomLabels.every(({ visibilityScope }) => visibilityScope === 'overview'));
+  // Client mandate (2026-07-15): the whole device-label billboard system was deleted. The plan no
+  // longer carries a `billboards` collection at all — the only floating labels are the temperature
+  // chips, which the Three.js adapter builds directly.
+  assert.equal('billboards' in plan, false, 'the plan must not expose any billboard collection');
 });
 
-test('silhouette reset keeps device geometry true-scale and adds countable halo labels', () => {
+test('silhouette reset keeps device geometry true-scale', () => {
   const plan = createArchitecturePlan();
-  const technical = plan.billboards.technical;
-
-  assert.equal(technical.filter(({ kind }) => kind === 'tc300').length, 14);
-  assert.equal(technical.filter(({ kind }) => kind === 'uc100').length, 4);
-  assert.equal(technical.filter(({ kind }) => kind === 'ug67').length, 1);
-  assert.equal(technical.filter(({ kind }) => kind === 'external').length, 6);
-  assert.deepEqual(
-    technical.filter(({ kind }) => kind === 'bus-group').map(({ text }) => text),
-    ['BUS A', 'BUS B', 'BUS C', 'BUS D'],
-  );
-  assert.ok(technical.every(({ billboard, halo }) => billboard === true && halo === true));
   assert.deepEqual(plan.topologyProxies.tc300[0].size, [0.34, 0.5, 0.2]);
   assert.deepEqual(plan.topologyProxies.uc100[0].size, [0.75, 1, 0.28]);
 });
@@ -357,7 +334,7 @@ test('structural containment exposes owned contact-coherent sockets without phys
   assert.ok(topologyProxies.lorawanLinks.every(({ physical }) => physical === false));
 });
 
-test('structural device bodies use documented real dimensions while labels provide legibility', () => {
+test('structural device bodies use documented real dimensions', () => {
   const { structural } = createArchitecturePlan();
 
   assert.equal(structural.devices.tc300.length, 14);
@@ -369,29 +346,17 @@ test('structural device bodies use documented real dimensions while labels provi
   assert.equal(structural.devices.ug67[0].antennaLength, 0.6);
 });
 
-test('structural evidence corrections improve front labels and technical anchor spread', () => {
-  const { billboards } = createArchitecturePlan();
-  const lobby = billboards.architecture.find(({ id }) => id === 'foh-label-lobby-tickets');
-  const checkpoint = billboards.architecture.find(({ id }) => id === 'foh-label-checkpoint');
-  const ucLabels = billboards.technical.filter(({ kind }) => kind === 'uc100');
-  const gateway = billboards.technical.find(({ kind }) => kind === 'ug67');
-
-  assert.deepEqual(lobby.position, [-10.5, 3.8, 19]);
-  assert.deepEqual(checkpoint.position, [7.5, 3.5, 12]);
-  assert.equal(new Set(ucLabels.map(({ position }) => `${position[0]}:${position[2]}`)).size, 4);
-  assert.ok(ucLabels.every(({ metadata }) => metadata.anchorOffset.length === 3));
-  assert.deepEqual(gateway.position, [4.1, 4.15, 1.4]);
-  assert.deepEqual(gateway.scale, [1.2, 0.3]);
-});
-
-test('materials realism reset uses charcoal frames, neutral later-asset proxies, and a true labels layer', async () => {
+test('materials realism reset uses charcoal frames and neutral later-asset proxies', async () => {
   const source = await readFile(new URL('../src/scene/architecture.js', import.meta.url), 'utf8');
 
   assert.match(source, /'facade-frame-charcoal': 'shellCharcoal'/);
   assert.match(source, /'foh-concession': 'offlineGray'/);
   assert.match(source, /'foh-kitchen': 'offlineGray'/);
-  assert.match(source, /groups\.labels\.add\(sprite\)/);
-  assert.match(source, /!key\.startsWith\('zone-'\)/);
+  // Client mandate (2026-07-15): the device-label billboard system is gone. No billboard sprites
+  // are built and the plan carries no billboard collection.
+  assert.doesNotMatch(source, /billboardSprites/);
+  assert.doesNotMatch(source, /plan\.billboards/);
+  assert.doesNotMatch(source, /groups\.places/);
 });
 
 test('structural attempt 2 joins the kitchen hood outlet to a visible vertical extract duct', () => {

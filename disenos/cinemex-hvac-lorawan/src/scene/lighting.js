@@ -2,9 +2,9 @@
  * LIGHTING-CAMERA pass authority.
  *
  * Everything this pass owns — the house light rig, tone mapping, fog, hero composition, the
- * cinema emission hierarchy, the `light_state` channels and the screen-space budgets the surface
- * review's corrections are measured against — lives here, so no value is ever re-typed into a
- * builder. DesignSpec `lighting: house-rig` + `lighting_notes`; research/HANDBOOK.md §3.3, §4.1.
+ * cinema emission hierarchy and the screen-space budgets the surface review's corrections are
+ * measured against — lives here, so no value is ever re-typed into a builder.
+ * DesignSpec `lighting: house-rig` + `lighting_notes`; research/HANDBOOK.md §3.3, §4.1.
  */
 
 import { AUDITORIUMS } from '../config.mjs';
@@ -94,10 +94,9 @@ export const LIGHTING_ENGINEERING_LIFT = Object.freeze({ ambientBoost: 0.16, fil
  * media at 0.62 architectural / 0.58 engineering — the largest probe the gated read can carry.
  *
  * Which also means: at the size the evidence permits, the probe is NOT the biggest ungated indirect
- * term in this model — the AmbientLight is. Both live in `indirectDiffuse` / `indirectSpecular`, and
- * `LIGHTING_LIGHT_STATE_INDIRECT` gates both. The probe is why that gate has to cover
- * indirectSPECULAR and not just indirectDiffuse: a mirror-finish floor reflects a probe, it does not
- * diffusely bounce it.
+ * term in this model — the AmbientLight is. Both live in `indirectDiffuse` / `indirectSpecular`,
+ * and the indirect-gain uniform scales both. The gain has to cover indirectSPECULAR and not just
+ * indirectDiffuse: a mirror-finish floor reflects a probe, it does not diffusely bounce it.
  */
 export const LIGHTING_ENVIRONMENT = Object.freeze({
   irradiance: 0.05,
@@ -113,20 +112,12 @@ export function resolveEnvironmentSpecularReflectance(roughness = 1) {
 }
 
 /**
- * The house-light gate on the INDIRECT terms — the ambient bounce and the environment probe. This
- * is the uniform the lobby floor was missing: `light_state=off` must take the room's indirect light
- * down with its fixtures, or a mirror-finish floor simply keeps reflecting a probe that never
- * switched off. It does not go to zero: a dark room is not a deleted room, and the exterior zone
- * carries no shader patch at all, so the sun and the sky over the shell are untouched by it.
+ * The gain on the INDIRECT terms — the ambient bounce and the environment probe. The house lights
+ * are always on (client simplification 2026-07-15 removed the lights-off state), so the only
+ * remaining modifier is the engineering lift.
  */
-export const LIGHTING_LIGHT_STATE_INDIRECT = Object.freeze({ on: 1, off: 0.25 });
-
-export function resolveIndirectGain({ visualMode = 'architectural', lightState = 'on' } = {}) {
-  if (!LIGHTING_LIGHT_STATES.includes(lightState)) {
-    throw new RangeError(`Unknown light state: ${lightState}`);
-  }
-  const engineering = visualMode === 'engineering' ? LIGHTING_ENGINEERING_LIFT.fillGain : 1;
-  return LIGHTING_LIGHT_STATE_INDIRECT[lightState] * engineering;
+export function resolveIndirectGain({ visualMode = 'architectural' } = {}) {
+  return visualMode === 'engineering' ? LIGHTING_ENGINEERING_LIFT.fillGain : 1;
 }
 
 /**
@@ -337,35 +328,23 @@ export const LIGHTING_ZONE_FILL = Object.freeze({
 export const LIGHTING_FILL_FLATTEN = Object.freeze({ amount: 0.5, neutral: 0.27 });
 
 /**
- * `light_state=off` also takes the room bounce down — but not to zero. A cinema with the house
- * lights off is a dark room, not a deleted one, and a capture pair whose second frame is pure black
- * proves nothing. The residual is what the auditorium keeps: it lands at 0.004-0.010, well under
- * every lights-on floor, so the pair is unambiguous.
- */
-export const LIGHTING_LIGHT_STATE_FILL = Object.freeze({ on: 1, off: 0.22 });
-
-/**
  * L4 correction M4: `roof=off` in the ARCHITECTURE state is the probative "open building" shot,
  * and with the plates gone the interiors lost their ceiling bounce and read near-black. The
  * roof-off state (and only that state) lifts the room fill so the seating tiers stay legible;
- * every gated lighting state (roof on, engineering, lights on/off pairs) is numerically untouched.
+ * every gated lighting state (roof on, engineering) is numerically untouched.
  */
 export const LIGHTING_ROOF_OPEN_FILL_LIFT = 1.5;
 
-/** The gain on a zone's fill, for a light state, a visual mode and the roof toggle. */
+/** The gain on a zone's fill, for a visual mode and the roof toggle. Lights are always on. */
 export function resolveZoneFillGain({
   visualMode = 'architectural',
-  lightState = 'on',
   roofVisible = true,
 } = {}) {
-  if (!LIGHTING_LIGHT_STATES.includes(lightState)) {
-    throw new RangeError(`Unknown light state: ${lightState}`);
-  }
   const engineering = visualMode === 'engineering' ? LIGHTING_ENGINEERING_LIFT.fillGain : 1;
   const roofOpen = visualMode === 'architectural' && roofVisible === false
     ? LIGHTING_ROOF_OPEN_FILL_LIFT
     : 1;
-  return LIGHTING_LIGHT_STATE_FILL[lightState] * engineering * roofOpen;
+  return engineering * roofOpen;
 }
 
 export function hasZoneFill(zone) {
@@ -510,8 +489,8 @@ export const LIGHTING_INTERIOR_FIXTURES = Object.freeze({
  *
  * Three lights, not thirty: they stand under the marquee and light both the forecourt and the white
  * elevation above them, so the panels finally carry a graded key across their length and the red
- * canopy gets a varied specular instead of one flat slab. They are exterior-zone (dim 1), they are
- * distance-bounded, and `setLightState` takes them down with the rest of the house.
+ * canopy gets a varied specular instead of one flat slab. They are exterior-zone (dim 1) and they
+ * are distance-bounded.
  */
 export const LIGHTING_EXTERIOR_FIXTURES = Object.freeze({
   forecourt: Object.freeze({
@@ -546,7 +525,7 @@ export const LIGHTING_EXTERIOR_FIXTURES = Object.freeze({
   }),
 });
 
-/** Every house fixture the runtime instantiates and `light_state` switches. */
+/** Every house fixture the runtime instantiates. Always lit: the lights-off state was removed. */
 export const LIGHTING_HOUSE_FIXTURES = Object.freeze({
   ...LIGHTING_INTERIOR_FIXTURES,
   ...LIGHTING_EXTERIOR_FIXTURES,
@@ -692,7 +671,6 @@ export function resolveSurfaceRadiance({
   emissive = null,
   emissiveIntensity = 0,
   visualMode = 'architectural',
-  lightState = 'on',
 } = {}) {
   if (!Array.isArray(position) || !Array.isArray(normal)) {
     throw new TypeError('A surface radiance needs a world position and a world normal.');
@@ -716,24 +694,20 @@ export function resolveSurfaceRadiance({
    * exactly as `createZoneShaderPatch` applies it to `reflectedLight.directDiffuse`.
    */
   const direct = resolveRigIrradiance(normal, { visualMode });
-  if (lightState !== 'off') {
-    for (const fixture of Object.values(LIGHTING_HOUSE_FIXTURES)) {
-      const contribution = resolveFixtureIrradianceAt(fixture, position, normal);
-      for (let index = 0; index < 3; index += 1) direct[index] += contribution[index];
-    }
+  for (const fixture of Object.values(LIGHTING_HOUSE_FIXTURES)) {
+    const contribution = resolveFixtureIrradianceAt(fixture, position, normal);
+    for (let index = 0; index < 3; index += 1) direct[index] += contribution[index];
   }
 
-  // The environment probe (`scene.environment`), gated by the house-light channel exactly as the
-  // emitted GLSL gates `indirectDiffuse` / `indirectSpecular`. Without this term the lobby's
-  // mirror-finish tile has no way to hold its lit value in a lights-off frame, which is review
-  // defect 7 — and the model cannot fix what it cannot see.
-  const indirectGain = zoneNeedsVariant(zone) ? resolveIndirectGain({ visualMode, lightState }) : 1;
+  // The environment probe (`scene.environment`), modelled exactly as the emitted GLSL applies it
+  // to `indirectDiffuse` / `indirectSpecular`.
+  const indirectGain = zoneNeedsVariant(zone) ? resolveIndirectGain({ visualMode }) : 1;
   const environmentDiffuse = LIGHTING_ENVIRONMENT.irradiance * envMapIntensity;
   const environmentSpecular = LIGHTING_ENVIRONMENT.radiance
     * envMapIntensity
     * resolveEnvironmentSpecularReflectance(roughness);
 
-  const fill = resolveZoneFillIrradiance(zone, normal, { visualMode, lightState });
+  const fill = resolveZoneFillIrradiance(zone, normal, { visualMode });
   const { amount, neutral } = LIGHTING_FILL_FLATTEN;
   return [0, 1, 2].map((index) => {
     const fillAlbedo = albedo[index] * (1 - amount) + neutral * amount;
@@ -759,10 +733,9 @@ export function resolveSurfaceRadiance({
 export const LIGHTING_LADDER_NORMAL = Object.freeze([0, 0, 1]);
 
 export function resolveZoneIrradiance(zone, options = {}) {
-  const { lightState = 'on' } = options;
   const rig = resolveRigIrradiance(LIGHTING_LADDER_NORMAL, options);
   const fill = resolveZoneFillIrradiance(zone, LIGHTING_LADDER_NORMAL, options);
-  const fixtures = lightState === 'off' ? 0 : resolveFixtureIrradiance(zone);
+  const fixtures = resolveFixtureIrradiance(zone);
   const luminance = (rgb) => 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
   return (luminance(rig) + fixtures) * resolveZoneDim(zone) + luminance(fill);
 }
@@ -792,14 +765,17 @@ export const LIGHTING_TONE_MAPPING = Object.freeze({
 });
 
 /**
- * Lifted off pure black — but only just. The facade review read the sky as "a large pure-black void
- * above the roofline"; a dusk navy gives the roofline something to silhouette against. The lift is
- * bounded from above by the engineering read: this colour is also what sits BEHIND the translucent
- * shell, and `canonical-network-endpoints` (0.82, passing) depends on the RS-485/LoRaWAN/Ethernet
- * media out-luminating that composite by 3:1. The reframed facade does most of the work; the fog
- * only has to stop the sky being literally zero.
+ * Client light restyle (2026-07-15): the dusk-navy ground was superseded by the light SaaS
+ * reference — a pale cool-gray sky the isometric building floats on. The value sits at the DARK
+ * end of the mandated #E8ECF2..#F2F4F8 band deliberately: the scene background is a raw clear
+ * colour (never tone mapped), while the sunlit warm-white shell lands around 0.79–0.86 screen
+ * luminance through the ACES chain, so the band floor buys the roofline its silhouette without
+ * touching the exposure or the rig. This colour also sits BEHIND the translucent engineering
+ * shell; the media read against that near-white composite is chromatic now (saturated green/blue
+ * on neutral), gated by the lighting-camera suite's screen-RGB distance guard. Fog near/far are
+ * unchanged — the depth cue geometry did not move.
  */
-export const LIGHTING_FOG = Object.freeze({ color: 0x080b13, near: 70, far: 170 });
+export const LIGHTING_FOG = Object.freeze({ color: 0xe8ecf2, near: 70, far: 170 });
 
 /** TRACK-THREEJS lighting-camera row: the hero framings must sit in the house band. */
 export const LIGHTING_COMPOSITION = Object.freeze({
@@ -836,22 +812,18 @@ export const LIGHTING_EMISSION_TIERS = Object.freeze([
   Object.freeze({ id: 'auditorium-fixtures', zone: 'auditorium', intensity: 0.4 }),
 ]);
 
-const channel = (tier, color, emissive, intensityScale = 1, offIntensityScale = 0) => Object.freeze({
+const channel = (tier, color, emissive, intensityScale = 1) => Object.freeze({
   tier,
   color,
   emissive,
   intensityScale,
-  // The residual emission `light_state=off` keeps. Almost every channel dies completely — that is
-  // what makes the pair evidence — but a channel may declare a floor when the OFF frame must stay
-  // readable (the sala aisle/step LEDs: P6 found the seating silhouettes below legibility).
-  offIntensityScale,
 });
 
 /**
- * The emissive channels `light_state` owns — the house lights, the menus, the marquee, the
- * corridor strips, the aisle step LEDs and the screens. Network media (RS-485/LoRaWAN/Ethernet),
- * the TC300 status ring and the direction markers are deliberately absent: an engineering capture
- * taken with the house lights off must still show a live network and a live thermostat.
+ * The house emission channels — the house lights, the menus, the marquee, the corridor strips,
+ * the aisle step LEDs and the screens. Network media (RS-485/LoRaWAN/Ethernet), the TC300 status
+ * ring and the direction markers are deliberately absent: they are system evidence, not house
+ * lighting.
  *
  * Every emissive here is BRIGHTER than the albedo it sits on, so a channel can never render darker
  * with the lights on than with them off (the inverted kiosk screen at the facade).
@@ -898,14 +870,7 @@ export const LIGHTING_EMISSION_CHANNELS = Object.freeze({
    * ratio on the room's real wall value rather than on a wash pool's.
    */
   'screen-emissive': channel('auditorium-fixtures', 0xdfe6f2, 0xcfe0ff, 1.5),
-  /**
-   * P6 correction P5: `light_state=off` left the sala near-black outside the screen and exit signs;
-   * the stepped seating fell below legibility. In a real cinema the aisle/step LEDs are exactly the
-   * channel that never goes fully dark, so the OFF state keeps a floor (0.72 vs 2.4 — a 3.3:1
-   * on/off ratio, so the pair still reads as two states). The ON value is UNCHANGED: the gated
-   * lights-on ladder (lobby > corridor > sala) is measured at lights-on and does not move.
-   */
-  'aisle-step-led': channel('auditorium-fixtures', 0x9fd0ff, 0x60a5fa, 2.4, 0.72),
+  'aisle-step-led': channel('auditorium-fixtures', 0x9fd0ff, 0x60a5fa, 2.4),
   'wheelchair-blue': channel('auditorium-fixtures', 0x0ea5e9, 0x38bdf8, 0.8),
 });
 
@@ -916,20 +881,12 @@ export function resolveChannelZone(definition) {
   return tier.zone;
 }
 
-export const LIGHTING_LIGHT_STATES = Object.freeze(['on', 'off']);
-
 const TIER_INTENSITY = new Map(LIGHTING_EMISSION_TIERS.map((tier) => [tier.id, tier.intensity]));
 
-/** A channel's emissive intensity for a light state. `off` is the pass's second evidence state. */
-export function resolveEmissiveIntensity(definition, lightState = 'on') {
+/** A channel's emissive intensity. The house lights are always on. */
+export function resolveEmissiveIntensity(definition) {
   if (!definition || !TIER_INTENSITY.has(definition.tier)) {
     throw new TypeError('An emission channel must name a declared tier.');
-  }
-  if (!LIGHTING_LIGHT_STATES.includes(lightState)) {
-    throw new RangeError(`Unknown light state: ${lightState}`);
-  }
-  if (lightState === 'off') {
-    return TIER_INTENSITY.get(definition.tier) * (definition.offIntensityScale ?? 0);
   }
   return TIER_INTENSITY.get(definition.tier) * definition.intensityScale;
 }
@@ -1026,25 +983,6 @@ export function resolveEngineeringOpacity(surfaceOpacity, shell = LIGHTING_ENGIN
 export const LIGHTING_DEVICE_STATUS = Object.freeze({
   ringEmissiveIntensity: 1.6,
   minimumBlendedLuminance: 0.18,
-});
-
-/**
- * Surface correction 5. A preset that frames a zone must label the endpoint that OWNS that zone,
- * even when the generic distance cull would drop it. Composition and the cull move together: the
- * concessions preset is framed from the west precisely so its own thermostat is in shot.
- */
-export const LIGHTING_PRESET_ZONE_OWNER = Object.freeze({
-  lobby: 'lobby',
-  concessions: 'concessions',
-  kitchen: 'kitchen',
-  corridor: 'central-corridor',
-  'sala-3': 'sala-3',
-});
-
-export const LIGHTING_OWNED_LABEL_RELAXATION = Object.freeze({
-  // Calibrated under the old 900px-height model; re-expressed for the measured 636px viewport (X1).
-  minimumProjectedChipPx: 18 * (636 / 900),
-  defaultScale: 0.6,
 });
 
 /**
@@ -1145,8 +1083,8 @@ export function zoneNeedsVariant(zone) {
 
 /**
  * Applies a zone's lighting to one material: the sun rejection and the room bounce, in the
- * material's own shader. The fill gain is a live uniform, because `light_state` and the engineering
- * lift both move it at runtime and neither may rebuild a program.
+ * material's own shader. The fill gain is a live uniform, because the engineering lift and the
+ * roof toggle move it at runtime and neither may rebuild a program.
  */
 export function applyZoneLighting(material, zone) {
   if (!material || !zoneNeedsVariant(zone)) return material;
@@ -1176,9 +1114,8 @@ export function applyZoneLighting(material, zone) {
 }
 
 /**
- * Moves a zone-lit material's room bounce AND its indirect gate for a light state / visual mode.
- * Both are live uniforms: `light_state` and the engineering lift each move them at runtime, and
- * neither may rebuild a program.
+ * Moves a zone-lit material's room bounce AND its indirect gate for a visual mode / roof toggle.
+ * Both are live uniforms: the engineering lift moves them at runtime without rebuilding a program.
  */
 export function setZoneFillGain(material, options = {}) {
   const gain = material?.userData?.zoneFillGain;

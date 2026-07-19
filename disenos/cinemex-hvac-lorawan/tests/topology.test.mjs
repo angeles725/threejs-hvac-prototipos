@@ -2,12 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { APP_CONFIG } from '../src/config.mjs';
-import {
-  createTopology,
-  evaluateReachability,
-  traceFrom,
-  validateTopology,
-} from '../src/topology.mjs';
+import { createTopology, traceFrom, validateTopology } from '../src/topology.mjs';
 import { selectThermostatsForUc100, selectTrace } from '../src/selectors.mjs';
 
 test('UC100 membership contains every thermostat exactly once and matches the canonical groups', () => {
@@ -48,24 +43,6 @@ test('topology validation rejects direct TC300-to-UG67 shortcuts and incorrect m
   const errors = validateTopology(wiredLorawan).errors.join('\n');
   assert.match(errors, /UC100-A.*UG67-01.*LoRaWAN/i);
   assert.match(errors, /UC100-A.*wireless/i);
-});
-
-test('reachability isolates failures to dependent paths and identifies the cause', () => {
-  const topology = createTopology(APP_CONFIG);
-  const healthy = evaluateReachability(topology, {}, 'TC300-08');
-  assert.deepEqual(healthy, { status: 'reachable', reachable: true, causeId: null });
-
-  const ucFailure = evaluateReachability(topology, { 'UC100-B': 'offline' }, 'TC300-08');
-  assert.deepEqual(ucFailure, { status: 'degraded', reachable: false, causeId: 'UC100-B' });
-  assert.deepEqual(
-    evaluateReachability(topology, { 'UC100-B': 'offline' }, 'TC300-10'),
-    { status: 'reachable', reachable: true, causeId: null },
-  );
-
-  assert.deepEqual(
-    evaluateReachability(topology, { 'TC300-08': 'offline' }, 'TC300-08'),
-    { status: 'offline', reachable: false, causeId: 'TC300-08' },
-  );
 });
 
 test('all configured nodes can reach Niagara without inventing reverse or shortcut links', () => {

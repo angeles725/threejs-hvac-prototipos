@@ -1,17 +1,7 @@
 import { deepFreeze } from './config.mjs';
 
 export const SETPOINT_LIMITS = deepFreeze({ min: 18, max: 26 });
-export const FAULT_IDS = deepFreeze({
-  TC300_COMMUNICATION_LOSS: 'tc300-communication-loss',
-  UC100_FAILURE: 'uc100-failure',
-  INTERNET_LOSS: 'internet-loss',
-  AUDITORIUM_HIGH_TEMPERATURE: 'auditorium-high-temperature',
-  KITCHEN_HIGH_TEMPERATURE: 'kitchen-high-temperature',
-  AUDITORIUM_LOW_TEMPERATURE: 'auditorium-low-temperature',
-});
 
-const FAULT_SET = new Set(Object.values(FAULT_IDS));
-const FAULT_TARGETS = Object.freeze({ auditorium: 'TC300-08', kitchen: 'TC300-05', lowTemperature: 'TC300-07' });
 const BASE_TIMESTAMP_MS = Date.UTC(2026, 0, 1, 12, 0, 0);
 
 function hashString(value) {
@@ -40,6 +30,11 @@ function setpointsFrom(config, previousTelemetry = {}) {
   return Object.fromEntries(config.devices.tc300.map(({ id }) => [id, previousTelemetry[id]?.setpoint ?? 22]));
 }
 
+/**
+ * The deterministic HEALTHY simulation — the one line of truth left after the client
+ * simplification (2026-07-15) removed the fault-injection machinery. Same seed and tick always
+ * produce the same telemetry; every reading stays inside the comfort envelope by construction.
+ */
 function createNominal(config, { seed, tick, setpoints }) {
   const auditoriumById = new Map(config.auditoriums.map((room) => [room.zoneId, room]));
   const timestamp = new Date(BASE_TIMESTAMP_MS + tick * config.animation.stepSeconds * 1000).toISOString();
@@ -92,65 +87,19 @@ function createNominal(config, { seed, tick, setpoints }) {
   return { telemetry, healthById, linkMetrics };
 }
 
-function overlayFaults(nominal, activeFaultIds) {
-  const telemetry = structuredClone(nominal.telemetry);
-  const healthById = { ...nominal.healthById };
-  const linkMetrics = structuredClone(nominal.linkMetrics);
-
-  for (const faultId of activeFaultIds) {
-    switch (faultId) {
-      case FAULT_IDS.TC300_COMMUNICATION_LOSS:
-        healthById[FAULT_TARGETS.auditorium] = 'offline';
-        telemetry[FAULT_TARGETS.auditorium].communication = 'offline';
-        telemetry[FAULT_TARGETS.auditorium].status = 'alarm';
-        break;
-      case FAULT_IDS.UC100_FAILURE:
-        healthById['UC100-B'] = 'offline';
-        linkMetrics['UC100-B'].power = 'failed';
-        linkMetrics['UC100-B'].lorawan = 'offline';
-        break;
-      case FAULT_IDS.INTERNET_LOSS:
-        healthById.internet = 'offline';
-        linkMetrics['UG67-01'].internet = 'offline';
-        linkMetrics['UG67-01'].niagara = 'offline';
-        break;
-      case FAULT_IDS.AUDITORIUM_HIGH_TEMPERATURE:
-        telemetry[FAULT_TARGETS.auditorium].temperature = 29.4;
-        telemetry[FAULT_TARGETS.auditorium].mode = 'cooling';
-        telemetry[FAULT_TARGETS.auditorium].status = 'alarm';
-        break;
-      case FAULT_IDS.KITCHEN_HIGH_TEMPERATURE:
-        telemetry[FAULT_TARGETS.kitchen].temperature = 31.2;
-        telemetry[FAULT_TARGETS.kitchen].mode = 'cooling';
-        telemetry[FAULT_TARGETS.kitchen].status = 'alarm';
-        break;
-      case FAULT_IDS.AUDITORIUM_LOW_TEMPERATURE:
-        telemetry[FAULT_TARGETS.lowTemperature].temperature = 16.4;
-        telemetry[FAULT_TARGETS.lowTemperature].mode = 'standby';
-        telemetry[FAULT_TARGETS.lowTemperature].status = 'alarm';
-        break;
-      default:
-        throw new Error(`Unknown fault ${faultId}.`);
-    }
-  }
-  return { telemetry, healthById, linkMetrics };
-}
-
 function rebuild(config, state) {
   const nominal = createNominal(config, {
     seed: state.seed,
     tick: state.tick,
     setpoints: setpointsFrom(config, state.telemetry),
   });
-  const overlaid = overlayFaults(nominal, state.activeFaultIds);
-  return deepFreeze({ ...state, ...overlaid });
+  return deepFreeze({ ...state, ...nominal });
 }
 
 export function createSimulationState(config, options = {}) {
   const state = {
     seed: Number.isInteger(options.seed) ? options.seed : config.animation.seed,
     tick: Number.isInteger(options.tick) ? options.tick : 0,
-    activeFaultIds: [],
     telemetry: {},
   };
   return rebuild(config, state);
@@ -167,18 +116,4 @@ export function setSetpoint(config, state, deviceId, value) {
   const telemetry = structuredClone(state.telemetry);
   telemetry[deviceId].setpoint = clamp(value, SETPOINT_LIMITS.min, SETPOINT_LIMITS.max);
   return rebuild(config, { ...state, telemetry });
-}
-
-export function injectFault(config, state, faultId) {
-  if (!FAULT_SET.has(faultId)) throw new Error(`Unknown fault ${faultId}.`);
-  if (state.activeFaultIds.includes(faultId)) return state;
-  return rebuild(config, { ...state, activeFaultIds: [...state.activeFaultIds, faultId] });
-}
-
-export function restoreFault(config, state, faultId) {
-  return rebuild(config, { ...state, activeFaultIds: state.activeFaultIds.filter((id) => id !== faultId) });
-}
-
-export function restoreAllFaults(config, state) {
-  return rebuild(config, { ...state, activeFaultIds: [] });
 }

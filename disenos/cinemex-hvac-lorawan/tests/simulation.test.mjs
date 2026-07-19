@@ -2,14 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { APP_CONFIG } from '../src/config.mjs';
-import {
-  FAULT_IDS,
-  advanceSimulation,
-  createSimulationState,
-  injectFault,
-  restoreFault,
-  setSetpoint,
-} from '../src/simulation.mjs';
+import { advanceSimulation, createSimulationState, setSetpoint } from '../src/simulation.mjs';
 import { createStore } from '../src/store.mjs';
 
 test('same seed and tick produce identical telemetry while another seed differs', () => {
@@ -50,36 +43,30 @@ test('setpoints are configurable, clamped and do not mutate the prior snapshot',
   assert.notEqual(original, raised);
 });
 
-test('fault injection is deterministic and restoring a fault rebuilds the nominal state', () => {
-  const baseline = createSimulationState(APP_CONFIG, { seed: 21, tick: 3 });
-  const failed = injectFault(APP_CONFIG, baseline, FAULT_IDS.UC100_FAILURE);
-  const replay = injectFault(APP_CONFIG, baseline, FAULT_IDS.UC100_FAILURE);
-
-  assert.deepEqual(failed, replay);
-  assert.equal(failed.healthById['UC100-B'], 'offline');
-  assert.deepEqual(failed.activeFaultIds, [FAULT_IDS.UC100_FAILURE]);
-
-  const restored = restoreFault(APP_CONFIG, failed, FAULT_IDS.UC100_FAILURE);
-  assert.equal(restored.healthById['UC100-B'], 'normal');
-  assert.deepEqual(restored.telemetry, baseline.telemetry);
-  assert.deepEqual(restored.activeFaultIds, []);
+test('the simulation is always healthy: no fault-injection API survives the simplification', async () => {
+  const simulation = await import('../src/simulation.mjs');
+  for (const name of ['injectFault', 'restoreFault', 'restoreAllFaults', 'FAULT_IDS']) {
+    assert.equal(name in simulation, false, `${name} must not be exported`);
+  }
+  const state = createSimulationState(APP_CONFIG, { seed: 21, tick: 3 });
+  assert.equal('activeFaultIds' in state, false, 'no fault ledger in the state');
+  for (const health of Object.values(state.healthById)) assert.equal(health, 'normal');
+  for (const reading of Object.values(state.telemetry)) assert.equal(reading.status, 'normal');
 });
 
-test('immutable store dispatches deterministic ticks, setpoints and reversible faults', () => {
+test('immutable store dispatches deterministic ticks and setpoints only', () => {
   const store = createStore(APP_CONFIG, { seed: 100 });
   const notifications = [];
   const unsubscribe = store.subscribe((state) => notifications.push(state.tick));
   const initial = store.getState();
 
   store.dispatch({ type: 'SET_SETPOINT', deviceId: 'TC300-08', value: 23.5 });
-  store.dispatch({ type: 'INJECT_FAULT', faultId: FAULT_IDS.AUDITORIUM_HIGH_TEMPERATURE });
-  assert.equal(store.getState().telemetry['TC300-08'].temperature, 29.4);
   assert.equal(store.getState().telemetry['TC300-08'].setpoint, 23.5);
 
-  store.dispatch({ type: 'RESTORE_FAULT', faultId: FAULT_IDS.AUDITORIUM_HIGH_TEMPERATURE });
   store.dispatch({ type: 'TICK', steps: 2 });
   assert.equal(store.getState().tick, initial.tick + 2);
-  assert.equal(notifications.length, 4);
+  assert.equal(notifications.length, 2);
+  assert.throws(() => store.dispatch({ type: 'INJECT_FAULT', faultId: 'anything' }), /Unsupported action/);
   assert.throws(() => { initial.tick = 99; }, TypeError);
   unsubscribe();
 });

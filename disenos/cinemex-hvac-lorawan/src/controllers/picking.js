@@ -28,3 +28,4 @@ export function resolvePickedSelectionFromIntersections(intersections = []) {
   }
   return null;
 }
+

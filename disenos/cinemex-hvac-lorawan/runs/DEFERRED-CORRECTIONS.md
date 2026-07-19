@@ -58,7 +58,7 @@ on shaded faces; M4 insufficient). These five are USER decisions for a hypotheti
 | # | Correction | Status | Note |
 |---|---|---|---|
 | S1 | Galvanized shaded-face response (metalness 0.4-0.6 or env fill) so vertical duct faces sample ≥RGB(120,125,130). | `open` | The judge's only "client might call this out" item. |
-| S2 | Distance-scaled minimum chip size at the top preset (zone-name ≥11px cap height). | `open` | Chips countable 14/14; names blurred at nadir range. |
+| S2 | Distance-scaled minimum chip size at the top preset (zone-name ≥11px cap height). | **`accepted`** (user waived, 2026-07-15) | Implemented twice (v2 CHIP_LEGIBILITY floor, v3 maxScale 5.25), then RETIRED by the user's fixed-size mandate: the distance floor was what made neighboring cards overlap at mid views. Chips now render at one plan-derived fixed size (`resolveFixedChipWidth`, min-neighbor-XZ × 0.9 capped at 2.15 m); nadir names are small by explicit user decision. |
 | S3 | More roof-off floor fill (or lighter tier material) until step edges read. | `open` | M4's second miss; probative shot only. |
 | S4 | Bigger checkpoint scanner screen + emissive bloom. | `open` | |
 | S5 | Tie chip visibility to the roof layer (or re-anchor to zone centroids) so badges never float over hidden units in roof-off exteriors. | `open` | Contract nuance the spec didn't anticipate: chips are exterior-visible but their anchors are roof-layer. |

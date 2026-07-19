@@ -8,7 +8,7 @@ import {
 } from './lighting.js';
 
 const SEMANTIC_GROUP_NAMES = Object.freeze([
-  'architecture', 'roof', 'walls', 'hvac', 'zones',
+  'architecture', 'roof', 'walls', 'hvac',
   'rs485', 'lorawan', 'internet', 'labels',
 ]);
 
@@ -39,7 +39,10 @@ export function createSceneRuntime({ THREE, RoomEnvironment, container, material
   camera.position.set(66, 46, 68);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(resolvePixelRatio(windowObject?.devicePixelRatio));
+  // Boot cut 4 (2026-07-18): the live renderer caps DPR at 1.25 (was the 1.5 default) — with
+  // antialias on, the sharpness delta is marginal and the fragment load drops ~31% on 2x displays.
+  // `resolvePixelRatio`'s own default cap stays 1.5 (it is the asserted module contract).
+  renderer.setPixelRatio(resolvePixelRatio(windowObject?.devicePixelRatio, 1.25));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = LIGHTING_TONE_MAPPING.exposure;
@@ -97,16 +100,24 @@ export function createSceneRuntime({ THREE, RoomEnvironment, container, material
    * building is produced here instead, by real distance-bounded fixtures that pool and fall off, by
    * the zone fill the materials carry, and by the emissive channels the architecture asset owns.
    *
-   * `LIGHTING_HOUSE_FIXTURES` also carries the three forecourt lights, so the marquee pool on the
-   * apron, the graded key across the white elevation and the varied specular on the red canopy all
-   * go dark with `light_state` — the exterior channel the review found missing. No fixture casts a
-   * shadow, per the DesignSpec runtime target.
+   * `LIGHTING_HOUSE_FIXTURES` also carries the three forecourt lights: the marquee pool on the
+   * apron, the graded key across the white elevation and the varied specular on the red canopy.
+   * No fixture casts a shadow, per the DesignSpec runtime target.
    */
   const interiorFixtures = [];
+  // Interior prune (2026-07-18, maintainer-ordered): PointLights ignore occluders, so a fixture
+  // is prunable only when a per-light capture diff proves it moves no reachable pixel. Measured
+  // over the 17-view envelope: lobby, corridor and forecourt fixtures all graze shipped pixels
+  // (glazing, corridor-slot walls, forecourt) and STAY; of the eight auditoriumAisle fixtures
+  // only the FIRST (sala 1, nearest the front height-step band) contributes — positions 2-8 are
+  // byte-identical off and are not instantiated. `LIGHTING_HOUSE_FIXTURES` keeps the full design
+  // table; this is a runtime instantiation cut only (7 fewer live PointLights per shader).
+  const PRUNED_FIXTURE_POSITIONS = { auditoriumAisle: (index) => index > 0 };
   if (THREE.PointLight) {
     for (const [id, fixture] of Object.entries(LIGHTING_HOUSE_FIXTURES)) {
       const intensity = resolveFixtureIntensity(fixture);
       fixture.positions.forEach((position, index) => {
+        if (PRUNED_FIXTURE_POSITIONS[id]?.(index)) return;
         const light = new THREE.PointLight(
           fixture.color,
           intensity,
@@ -116,7 +127,7 @@ export function createSceneRuntime({ THREE, RoomEnvironment, container, material
         light.name = `interior-fixture-${id}-${index + 1}`;
         light.position.set(...position);
         light.castShadow = false;
-        light.userData = { fixtureId: id, zone: fixture.zone, onIntensity: intensity };
+        light.userData = { fixtureId: id, zone: fixture.zone };
         scene.add(light);
         interiorFixtures.push(light);
       });
@@ -128,35 +139,6 @@ export function createSceneRuntime({ THREE, RoomEnvironment, container, material
     renderer.shadowMap.needsUpdate = true;
   }
 
-  /**
-   * `light_state=off` kills the house lighting: every interior fixture and the exterior marquee
-   * emission go dark. The exterior key stays up — it is the sun, not a house light — so the shell
-   * and the site keep their read while the interiors collapse to their dim ambient.
-   */
-  function setLightState(lightState = 'on') {
-    const on = lightState !== 'off';
-    for (const light of interiorFixtures) {
-      light.intensity = on ? light.userData.onIntensity : 0;
-    }
-    return on ? 'on' : 'off';
-  }
-
-  /** `lighting_notes.engineering`: raise the neutral fill slightly so device labels stay legible. */
-  function setVisualMode(visualMode = 'architectural') {
-    ambient.intensity = resolveAmbientIntensity(visualMode);
-    return visualMode;
-  }
-
-  function setLookdevCamera(cameraName) {
-    const grazing = cameraName === 'grazing';
-    renderer.toneMappingExposure = grazing
-      ? LIGHTING_TONE_MAPPING.grazingExposure
-      : LIGHTING_TONE_MAPPING.exposure;
-    sun.position.set(...(grazing ? LIGHTING_RIG.key.grazingPosition : LIGHTING_RIG.key.position));
-    bakeShadows();
-  }
-
-  const clippingPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
   let disposed = false;
 
   function resize() {
@@ -235,7 +217,7 @@ export function createSceneRuntime({ THREE, RoomEnvironment, container, material
   }
 
   return {
-    scene, camera, renderer, groups, clippingPlane, interiorFixtures,
-    setLookdevCamera, setLightState, setVisualMode, bakeShadows, render, resize, dispose,
+    scene, camera, renderer, groups, interiorFixtures,
+    bakeShadows, render, resize, dispose,
   };
 }

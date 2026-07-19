@@ -6,11 +6,7 @@ import {
   SURFACE_ATLAS_TILES,
   SURFACE_DIRECTION_MARKER,
   SURFACE_DIRECTION_MARKER_VIEW_POLICY,
-  SURFACE_NETWORK_LABEL_POLICY,
-  SURFACE_NETWORK_ROLLUPS,
   SURFACE_NETWORK_VIEW_POLICY,
-  SURFACE_RS485_EVIDENCE_POLICY,
-  SURFACE_TC300_LABEL_POLICY,
   createDashedRouteSampleEvidence,
   createDirectionMarkerPlacement,
   createDirectionMarkerViewTransform,
@@ -23,8 +19,6 @@ import {
   validateProjectedDirectionMarkers,
   validateSurfacePlacements,
 } from '../src/scene/surfaces.js';
-import { CAMERA_PRESETS, QA_CAMERA_PRESETS } from '../src/controllers/camera.js';
-import { NETWORK_SCHEMATIC_BOARD } from '../src/scene/network-schematic.js';
 
 function createCanvasHarness() {
   const operations = [];
@@ -208,48 +202,10 @@ test('surface correction rejects wide, crowded or duplicate projected route mark
   ]), /lateral width/i);
 });
 
-test('complete-network uses endpoint hierarchy and four TC rollups while dedicated RS-485 retains every thermostat', () => {
-  assert.deepEqual(SURFACE_NETWORK_LABEL_POLICY, {
-    camera: 'complete-network',
-    visibleKinds: ['uc100', 'ug67', 'external', 'bus-rollup'],
-    culledKinds: ['bus-group', 'room-family', 'foh', 'rear-strip'],
-    scaleByKind: { uc100: 1.5, ug67: 2.2, external: 1.5, 'bus-rollup': 1.4 },
-    priorityByKind: { uc100: 1230, ug67: 1260, external: 1210, 'bus-rollup': 1200 },
-  });
-  // Derived: at ~100 m the caption must survive the projection, so no visible kind may shrink.
-  for (const kind of SURFACE_NETWORK_LABEL_POLICY.visibleKinds) {
-    assert.ok(
-      SURFACE_NETWORK_LABEL_POLICY.scaleByKind[kind] > 1,
-      `${kind} captions must grow, not shrink, at the complete-network distance`,
-    );
-  }
-  // The thermostats are no longer culled by the endpoint hierarchy: their own policy owns them,
-  // and it must cover the complete-network camera so the chain has a visible first node there.
-  assert.equal(SURFACE_NETWORK_LABEL_POLICY.culledKinds.includes('tc300'), false);
-  assert.ok(SURFACE_TC300_LABEL_POLICY.cameras.includes(SURFACE_NETWORK_LABEL_POLICY.camera));
-  assert.ok(SURFACE_TC300_LABEL_POLICY.scaleByCamera[SURFACE_NETWORK_LABEL_POLICY.camera] > 1);
-  assert.deepEqual(SURFACE_NETWORK_ROLLUPS.map(({ id, text }) => ({ id, text })), [
-    { id: 'A', text: 'BUS A · TC01/02/03/04/14' },
-    { id: 'B', text: 'BUS B · TC06–09' },
-    { id: 'C', text: 'BUS C · TC10–13' },
-    { id: 'D', text: 'BUS D · TC05' },
-  ]);
-  assert.deepEqual(SURFACE_RS485_EVIDENCE_POLICY, {
-    camera: 'rs485-master',
-    visibleKinds: ['tc300', 'uc100', 'bus-group'],
-    requiredCounts: { tc300: 14, uc100: 4, 'bus-group': 4 },
-  });
-});
-
-test('complete-network preset keeps endpoint evidence inside margins with useful occupancy', () => {
-  assert.deepEqual(QA_CAMERA_PRESETS['complete-network'], {
-    position: [82, 49, 48],
-    target: [10, 4.2, -2],
-    fov: 50,
-  });
-  // Derived: the detail preset is generated from the board, so the two can never drift apart.
-  assert.deepEqual(QA_CAMERA_PRESETS['network-schematic-detail'].target, [...NETWORK_SCHEMATIC_BOARD.position]);
-  assert.equal(QA_CAMERA_PRESETS['network-schematic-detail'].fov, 48);
+// Limpieza fase 2 (2026-07-18): the QA_CAMERA_PRESETS family (complete-network, the derived
+// network-schematic-detail camera, …) was removed with the evidence-QA capacity; the viewport
+// evidence policy below is a pure validator and keeps its own contract.
+test('network viewport evidence policy validates margins and occupancy', () => {
   assert.deepEqual(SURFACE_NETWORK_VIEW_POLICY, {
     minimumMarginRatio: 0.02,
     maximumMarginRatio: 0.98,
@@ -266,16 +222,8 @@ test('complete-network preset keeps endpoint evidence inside margins with useful
   }), /occupancy/i);
 });
 
-test('corridor surface camera stays below roof members and focuses wayfinding height', () => {
-  assert.deepEqual(CAMERA_PRESETS.corridor, {
-    position: [0, 3.2, 9.5],
-    target: [0, 1.35, -8],
-    fov: 65,
-  });
-  assert.ok(Math.abs(CAMERA_PRESETS.corridor.position[0]) < 3.5, 'camera must remain inside the clear corridor width');
-  assert.ok(CAMERA_PRESETS.corridor.position[1] < 4, 'camera must remain below roof-frame members');
-  assert.ok(CAMERA_PRESETS.corridor.target[1] <= 1.4, 'target must prioritize room numbers, exits, posters and carpet');
-});
+// Limpieza fase 2 (2026-07-18): the corridor surface-camera framing contract was retired with
+// the pruned preset catalogue (the product ships only the fixed whole-building view).
 
 test('surface atlas is one deterministic shared sRGB mipmapped texture with bounded anisotropy', () => {
   const { canvas, context, documentObject } = createCanvasHarness();
@@ -328,15 +276,16 @@ test('surface atlas is one deterministic shared sRGB mipmapped texture with boun
   second.dispose();
 });
 
+// Limpieza fase 2 (2026-07-18): qa/browser-smoke.mjs (the live-scene capture harness for the
+// retired evidence presets and visual modes) was deleted — it drove UI that left the DOM months
+// ago and exercised only the retired QA capacity. Its pattern asserts left with it.
 test('surface integration uses one atlas and deterministic poster/display query frames', async () => {
   const architecture = await readFile(new URL('../src/scene/architecture.js', import.meta.url), 'utf8');
   const main = await readFile(new URL('../main.js', import.meta.url), 'utf8');
-  const smoke = await readFile(new URL('../qa/browser-smoke.mjs', import.meta.url), 'utf8');
 
   assert.match(architecture, /createSurfaceAtlas/);
   assert.match(architecture, /setSurfaceFrame/);
   assert.match(architecture, /getSurfaceState/);
-  assert.match(architecture, /surfaceCleanCameras/);
   assert.match(architecture, /validateSurfacePlacements\(surfacePlacements\)/);
   assert.match(architecture, /transparent: false/);
   assert.match(architecture, /depthWrite: true/);
@@ -355,14 +304,7 @@ test('surface integration uses one atlas and deterministic poster/display query 
   assert.match(architecture, /routeAnchor/);
   assert.match(architecture, /routeComponentId/);
   assert.match(architecture, /single-arrowhead/);
-  assert.match(architecture, /SURFACE_NETWORK_LABEL_POLICY/);
   assert.doesNotMatch(architecture, /chevron-arm|diamond-hub/);
   assert.match(main, /createEvidenceViewContext/);
   assert.match(main, /setEvidenceCamera\([^,]+, createEvidenceViewContext\(\)\)/);
-  assert.match(smoke, /captureLiveSceneSnapshot/);
-  assert.match(smoke, /nonGeneratedHash/);
-  assert.match(smoke, /concessions-frame0-frame1/);
-  assert.match(smoke, /corridor-labels-on-off/);
-  assert.match(smoke, /sala3-frame0-frame1/);
-  assert.match(smoke, /pixelRegionHash/);
 });

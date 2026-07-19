@@ -1,11 +1,12 @@
-import { LIGHTING_DEVICE_STATUS, LIGHTING_SHELL_BREAKUP, resolveEngineeringOpacity } from './lighting.js';
+import { LIGHTING_DEVICE_STATUS, LIGHTING_SHELL_BREAKUP } from './lighting.js';
 import { SURFACE_ENGINEERING_CONTRAST } from './surfaces.js';
 
 const freezeSpecs = (specs) => Object.freeze(Object.fromEntries(
   Object.entries(specs).map(([key, value]) => [key, Object.freeze({ ...value })]),
 ));
 
-// DesignSpec PBR authority. Metalness stays near-binary: coated/dielectric <= .02, bare metal >= .95.
+// DesignSpec PBR authority. Metalness stays near-binary: coated/dielectric <= .02, bare metal >= .95
+// — with ONE gated exception: `galvanizedDuct` sits in the 0.4-0.6 band (deferred S1, see below).
 export const MATERIAL_SPECS = freezeSpecs({
   cinemaRedPainted: {
     type: 'physical', color: 0xd71920, metalness: 0.02, roughness: 0.32,
@@ -41,7 +42,11 @@ export const MATERIAL_SPECS = freezeSpecs({
   },
   seatBurgundyFabric: { type: 'standard', color: 0x8f1726, metalness: 0, roughness: 0.86 },
   kitchenStainless: { type: 'standard', color: 0xc4c7c8, metalness: 0.95, roughness: 0.32 },
-  galvanizedDuct: { type: 'standard', color: 0xaeb4b8, metalness: 0.95, roughness: 0.46 },
+  // Deferred S1 activated (correction round): at metalness 0.95 the duct's shaded vertical faces
+  // sample almost nothing but the weak env and render near-black. The judge's prescription is the
+  // 0.4-0.6 band so the diffuse term keeps the vertical faces at a readable galvanized value; the
+  // albedo is untouched. This is the ONE gated exception to the near-binary metalness rule.
+  galvanizedDuct: { type: 'standard', color: 0xaeb4b8, metalness: 0.55, roughness: 0.5 },
   tc300BlackGlass: {
     type: 'physical', color: 0x0b0d11, metalness: 0, roughness: 0.16,
     clearcoat: 0.7, clearcoatRoughness: 0.12,
@@ -72,10 +77,6 @@ export const MATERIAL_SPECS = freezeSpecs({
   ethernetBlue: {
     type: 'standard', color: 0x2563eb, metalness: 0, roughness: 0.42,
     emissive: 0x1d4ed8, emissiveIntensity: SURFACE_ENGINEERING_CONTRAST.mediaEmissiveIntensity,
-  },
-  alarmRed: {
-    type: 'standard', color: 0xff334d, metalness: 0, roughness: 0.35,
-    emissive: 0xe81631, emissiveIntensity: 0.65,
   },
   offlineGray: { type: 'standard', color: 0x69717a, metalness: 0, roughness: 0.72 },
 });
@@ -140,45 +141,13 @@ function createResponseTexture(THREE, kind, repeat) {
   return texture;
 }
 
-/**
- * Engineering translucency is per-material: the seats and the carpet bled through the shell and
- * washed the thin RS-485 / LoRaWAN media, so they contribute far less than the shell itself.
- *
- * Every value is the surface-pass figure passed through the lighting pass's de-ghosting factor:
- * the spec's single-layer opacities composited across the eleven shell layers the evidence rays
- * actually cross, which is what turned the engineering state milky.
- */
-const ENGINEERING_OPACITY = Object.freeze({
-  seatBurgundyFabric: resolveEngineeringOpacity(SURFACE_ENGINEERING_CONTRAST.seatOpacity),
-  auditoriumCarpet: resolveEngineeringOpacity(SURFACE_ENGINEERING_CONTRAST.carpetOpacity),
-});
-
-function engineeringOpacity(material) {
-  // Zone variants are named `cinemex-<spec>@<zone>`: the zone changes how much of the exterior rig
-  // the surface reflects, never how translucent it goes in the engineering state.
-  const key = String(material.name ?? '').replace(/^cinemex-/, '').replace(/@.*$/, '');
-  return ENGINEERING_OPACITY[key]
-    ?? resolveEngineeringOpacity(SURFACE_ENGINEERING_CONTRAST.shellOpacity);
-}
-
-function normalizedBaseline(material) {
-  return {
-    transparent: material.transparent ?? false,
-    opacity: material.opacity ?? 1,
-    depthWrite: material.depthWrite ?? true,
-  };
-}
-
 export function createMaterialRegistry(THREE) {
   if (!THREE?.MeshStandardMaterial || !THREE?.MeshPhysicalMaterial) {
     throw new TypeError('A complete Three.js material namespace is required.');
   }
 
   const materialPool = new Map();
-  const cutawayMaterials = new Set();
   const responseTextures = new Set();
-  const baselines = new WeakMap();
-  let engineeringEnabled = false;
   let disposed = false;
 
   function instantiate(spec) {
@@ -245,41 +214,10 @@ export function createMaterialRegistry(THREE) {
     glass: canonical.facadeGlass,
   });
 
-  function applyEngineeringState(material) {
-    if (!baselines.has(material)) baselines.set(material, normalizedBaseline(material));
-    Object.assign(material, engineeringEnabled
-      ? { transparent: true, opacity: engineeringOpacity(material), depthWrite: false }
-      : baselines.get(material));
-    material.needsUpdate = true;
-  }
-
-  function registerCutawayMaterials(nextMaterials = []) {
-    for (const material of nextMaterials) {
-      if (!material) continue;
-      if (!baselines.has(material)) baselines.set(material, normalizedBaseline(material));
-      cutawayMaterials.add(material);
-      applyEngineeringState(material);
-    }
-  }
-
-  function setEngineeringMode(enabled) {
-    engineeringEnabled = Boolean(enabled);
-    for (const material of cutawayMaterials) applyEngineeringState(material);
-  }
-
-  function setCutaway(enabled, plane) {
-    for (const material of cutawayMaterials) {
-      material.clippingPlanes = enabled && plane ? [plane] : [];
-      material.needsUpdate = true;
-    }
-  }
-
   function getStats() {
     return Object.freeze({
       materialCount: materialPool.size,
       responseTextureCount: responseTextures.size,
-      cutawayCount: cutawayMaterials.size,
-      engineeringEnabled,
     });
   }
 
@@ -290,15 +228,10 @@ export function createMaterialRegistry(THREE) {
     for (const texture of responseTextures) texture.dispose();
   }
 
-  registerCutawayMaterials([canonical.shellWarmWhite]);
-
   return Object.freeze({
     materials,
     getMaterial,
     getStats,
-    setEngineeringMode,
-    registerCutawayMaterials,
-    setCutaway,
     dispose,
   });
 }

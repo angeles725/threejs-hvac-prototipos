@@ -6,26 +6,20 @@ import {
   UC100_DEVICES,
   ZONES,
 } from '../config.mjs';
-import {
-  createNetworkSchematicComposition,
-  resolveNetworkEvidenceVisibility,
-} from './network-schematic.js';
 import { MATERIAL_SPECS } from './materials.js';
 import {
   INTERACTION_WAVE_RINGS,
   createInteractionModel,
-  resolveHaloPulse,
   resolvePacketT,
   resolveWaveRing,
   routeIds,
   samplePolyline,
 } from './interaction.js';
-import { CAMERA_PRESETS, ISOMETRIC_PRESET, QA_CAMERA_PRESETS } from '../controllers/camera.js';
+import { CAMERA_PRESETS, ISOMETRIC_PRESET } from '../controllers/camera.js';
 import { TEMPERATURE_CHIP, createChipEnvelope, createTemperatureChips } from './temperature-chips.js';
 import {
   LIGHTING_EMISSION_CHANNELS,
   LIGHTING_INTERIOR_CEILING_COLOR,
-  LIGHTING_PRESET_ZONE_OWNER,
   applyZoneLighting,
   resolveEmissiveIntensity,
   resolveInteriorCeilingVisibility,
@@ -37,15 +31,8 @@ import {
 import {
   POSTER_VARIANTS,
   SURFACE_DIRECTION_MARKER,
-  SURFACE_ENGINEERING_CONTRAST,
   SURFACE_LORAWAN_DASH,
-  SURFACE_NETWORK_LABEL_POLICY,
   SURFACE_NETWORK_MEDIA,
-  SURFACE_NETWORK_ROLLUPS,
-  SURFACE_REAR_ROOF_CLIP_CAMERAS,
-  SURFACE_ROOF_CLIP_CAMERAS,
-  SURFACE_RS485_EVIDENCE_POLICY,
-  SURFACE_TC300_LABEL_POLICY,
   createDirectionMarkerPlacement,
   createDirectionMarkerViewTransform,
   createSurfaceAtlas,
@@ -55,48 +42,20 @@ import {
   resolveDashCount,
   resolveDirectionMarkerScale,
   resolveNetworkMediaWidthScale,
-  resolveTc300LabelPlacement,
   resolveTrayOffset,
   snapSampleToDashCentre,
   validateSurfacePlacements,
 } from './surfaces.js';
 
-/** The public roof buries the lobby, concessions and kitchen fit-out from their own presets. */
-export function resolvePublicRoofVisibility(cameraName) {
-  return !SURFACE_ROOF_CLIP_CAMERAS.includes(cameraName);
-}
-
-/** The rear service roof buries the corridor, doors and UC cabinets from the technical preset. */
-export function resolveRearRoofVisibility(cameraName) {
-  return !SURFACE_REAR_ROOF_CLIP_CAMERAS.includes(cameraName);
-}
-
 /**
- * L4 correction M3: with the roof toggled off in the ARCHITECTURE state, the spine duct assembly
- * hovered unsupported over the open corridor trench. It now follows the Techo toggle there — the
- * plates it serves leave, the plant leaves with them. Engineering keeps it always on (the spec's
- * `custom:engineering_visibility` behavior for the mains).
+ * L4 correction M3: with the roof toggled off, the spine duct assembly hovered unsupported over
+ * the open corridor trench. It follows the Techo toggle — the plates it serves leave, the plant
+ * leaves with them. (Limpieza fase 2, 2026-07-18: the engineering mode that kept it always-on
+ * was retired; the roof toggle is the only remaining input.)
  */
-export function resolveSpineAssemblyVisibility(visualMode = 'architectural', { roofVisible = true } = {}) {
-  return visualMode === 'engineering' || roofVisible !== false;
+export function resolveSpineAssemblyVisibility({ roofVisible = true } = {}) {
+  return roofVisible !== false;
 }
-
-/**
- * `visual_states.architecture` declares `labels: selective`: technical device labels are an
- * engineering artefact and must never leak into the architecture state by default.
- */
-export function resolveTechnicalLabelVisibility({
-  visualMode = 'architectural',
-  labels = true,
-  labelsExplicit = false,
-} = {}) {
-  if (!labels) return false;
-  return visualMode === 'engineering' || labelsExplicit === true;
-}
-
-const TECHNICAL_BILLBOARD_KINDS = Object.freeze([
-  'tc300', 'uc100', 'ug67', 'external', 'bus-group', 'bus-rollup',
-]);
 
 // SCALE: 1 world unit = 1 metre. Structural geometry stays finish-agnostic.
 export const ARCHITECTURE_ASSET_ID = 'shell-circulation-facade';
@@ -154,6 +113,13 @@ export const ROOF_ANTI_COPLANAR = deepFreeze({
   decalProtrusion: 0.04,
   fasciaProtrusion: 0.02,
 });
+
+/**
+ * Deferred S1 (correction round): the condensate drains rode the `rtu-dark` bucket (0x202832) and
+ * read as invisible near-black threads on the plates. One step lighter — decisively brighter than
+ * the dark trim family, still clearly darker than the galvanized ducts.
+ */
+export const DRAIN_PIPE_COLOR = 0x4b5661;
 
 export const RTU_PACKAGE = deepFreeze({
   size: [2.5, 1.2, 1.5], // rtu_package_length_m × height_m × width_m
@@ -405,35 +371,6 @@ function endpoint(id, kind, position, size, materialKey) {
   };
 }
 
-function billboard(
-  id,
-  kind,
-  text,
-  position,
-  scale,
-  layer,
-  accent,
-  visibilityScope = 'always',
-  metadataExtra = {},
-) {
-  return {
-    id,
-    kind,
-    text,
-    position,
-    scale,
-    layer,
-    accent,
-    billboard: true,
-    halo: true,
-    visibilityScope,
-    metadata: metadata(id, `${kind}-billboard`, ['CIN-ARCH-001', 'HVAC-IOT-003'], {
-      temporaryProxy: true,
-      ...metadataExtra,
-    }),
-  };
-}
-
 /** Pure, serializable authority consumed by tests and the Three.js adapter. */
 export function createArchitecturePlan() {
   const portals = [];
@@ -563,96 +500,6 @@ export function createArchitecturePlan() {
     metadata: metadata(`lorawan-${device.id}-UG67-01`, 'lorawan-link', ['HVAC-IOT-003']),
   }));
   const ipPoints = [GATEWAYS[0].position, ...external.slice(0, 3).map(({ position }) => position)];
-
-  const familyTag = { large: 'L', medium: 'M', small: 'S' };
-  const architectureBillboards = [
-    ...auditoriums.map((room, index) => billboard(
-      `room-family-label-${index + 1}`,
-      'room-family',
-      `${index + 1} · ${familyTag[room.family]}`,
-      [centre(room.bounds.x), room.height + 1.15, centre(room.bounds.z)],
-      [5.2, 1.45],
-      'labels',
-      '#e11d48',
-      'overview',
-    )),
-    billboard('foh-label-lobby-tickets', 'foh', 'LOBBY / TICKETS', [-10.5, 3.8, 19], [8.4, 1.2], 'labels', '#f59e0b', 'overview'),
-    billboard('foh-label-concessions', 'foh', 'CONCESSIONS', [0, 3.7, 16], [7.2, 1.2], 'labels', '#e11d48', 'overview'),
-    billboard('foh-label-kitchen', 'foh', 'KITCHEN', [-8.5, 3.7, 12.5], [5.3, 1.1], 'labels', '#94a3b8', 'overview'),
-    billboard('foh-label-checkpoint', 'foh', 'CHECKPOINT', [7.5, 3.5, 12], [6.4, 1.1], 'labels', '#16a34a', 'overview'),
-    billboard('rear-strip-label', 'rear-strip', 'REAR SERVICE', [0, 5.55, -20.5], [8.2, 1.25], 'labels', '#0ea5e9', 'overview'),
-  ];
-  const externalText = ['ROUTER / FIREWALL', 'INTERNET', 'NIAGARA', 'PC', 'TABLET', 'SMARTPHONE'];
-  const technicalBillboards = [
-    // The chip carries the canonical endpoint id: the first node of the chain must be nameable
-    // in the model, not only on the diagram board.
-    ...TC300_DEVICES.map((device) => billboard(
-      `tc-label-${device.id}`,
-      'tc300',
-      device.id,
-      [device.position[0], device.position[1] + 1.05, device.position[2]],
-      [2.1, 0.58],
-      'hvac',
-      '#38bdf8',
-      'always',
-      { devicePosition: [...device.position], zoneId: device.zoneId },
-    )),
-    ...UC100_DEVICES.map((device, index) => {
-      const anchorOffset = [
-        index % 2 === 0 ? 2.8 : -2.8,
-        1.25 + index * 0.18,
-        index < 2 ? 1.2 : -1.2,
-      ];
-      return billboard(
-        `uc-label-${device.id}`,
-        'uc100',
-        `UC-${device.id.at(-1)}`,
-        [
-          device.position[0] + anchorOffset[0],
-          device.position[1] + anchorOffset[1],
-          device.position[2] + anchorOffset[2],
-        ],
-        [2.5, 0.65],
-        'hvac',
-        '#f8fafc',
-        'always',
-        { anchorOffset },
-      );
-    }),
-    billboard('gateway-label', 'ug67', 'UG67', [4.1, 4.15, 1.4], [1.2, 0.3], 'hvac', '#38bdf8'),
-    ...external.map((node, index) => billboard(
-      `external-label-${node.id}`,
-      'external',
-      externalText[index],
-      [node.position[0], node.position[1] + node.size[1] / 2 + 1, node.position[2]],
-      [3.7, 0.75],
-      'internet',
-      '#2563eb',
-    )),
-    ...rs485Trunks.map((trunk) => billboard(
-      `bus-label-${trunk.groupId}`,
-      'bus-group',
-      `BUS ${trunk.groupId}`,
-      [(trunk.start[0] + trunk.end[0]) / 2, Math.max(trunk.start[1], trunk.end[1]) + 1.1, (trunk.start[2] + trunk.end[2]) / 2],
-      [2.8, 0.68],
-      'rs485',
-      '#22c55e',
-    )),
-    ...rs485Trunks.map((trunk, index) => billboard(
-      `network-rollup-${trunk.groupId}`,
-      'bus-rollup',
-      SURFACE_NETWORK_ROLLUPS[index].text,
-      [
-        (trunk.start[0] + trunk.end[0]) / 2,
-        Math.max(trunk.start[1], trunk.end[1]) + 2.0,
-        (trunk.start[2] + trunk.end[2]) / 2,
-      ],
-      [6.2, 0.72],
-      'rs485',
-      '#22c55e',
-      'always',
-    )),
-  ];
 
   const rearTechnical = {
     serviceCorridor: {
@@ -888,6 +735,7 @@ export function createArchitecturePlan() {
   const gatewayEthernetPort = [3.15, 3.46, 2.0505];
 
   const packagedUnits = createPackagedUnitPlan(auditoriums);
+
   const structural = {
     pass: 'structural',
     sections: {
@@ -1255,10 +1103,6 @@ export function createArchitecturePlan() {
         metadata: metadata('conceptual-ip-chain', 'ethernet-ip-chain', ['HVAC-IOT-003', 'HVAC-IOT-004']),
       },
     },
-    billboards: {
-      architecture: architectureBillboards,
-      technical: technicalBillboards,
-    },
   });
 }
 
@@ -1279,21 +1123,16 @@ function createFlatMaterials(THREE, materialRegistry) {
     metalness: 0,
     ...options,
   });
-  const zone = (color) => custom(color, {
-    transparent: true,
-    opacity: SURFACE_ENGINEERING_CONTRAST.zoneOpacity,
-    depthWrite: false,
-  });
   /**
    * A house-lighting emission channel. Its colour and its intensity both come from the lighting
    * pass's cinema hierarchy, so the facade/menus > commercial > corridor > auditorium ladder can
-   * never be broken by a stray literal, and `light_state=off` can switch exactly this set.
+   * never be broken by a stray literal.
    */
   const emissionChannel = (key, options = {}) => {
     const definition = LIGHTING_EMISSION_CHANNELS[key];
     return custom(definition.color, {
       emissive: definition.emissive,
-      emissiveIntensity: resolveEmissiveIntensity(definition, 'on'),
+      emissiveIntensity: resolveEmissiveIntensity(definition),
       ...options,
     });
   };
@@ -1333,13 +1172,6 @@ function createFlatMaterials(THREE, materialRegistry) {
     'small-roof': 'exteriorConcrete',
     'rear-roof': 'exteriorConcrete',
     'rear-strip-blue': 'exteriorConcrete',
-    // Zone volumes are wayfinding hints, not a wash over the network media they sit on top of.
-    'zone-public': zone(0xf59e0b),
-    'zone-corridor': zone(0x8b5cf6),
-    'zone-large': zone(0xdc2626),
-    'zone-medium': zone(0xf43f5e),
-    'zone-small': zone(0xfb7185),
-    'zone-service': zone(0x0ea5e9),
     'foh-lobby': 'lobbyGlossTile',
     'foh-ticket': 'offlineGray',
     'foh-waiting': 'offlineGray',
@@ -1380,8 +1212,7 @@ function createFlatMaterials(THREE, materialRegistry) {
     'surface-popcorn': emissionChannel('surface-popcorn', { roughness: 0.38 }),
     'surface-cooler-glass': emissionChannel('surface-cooler-glass', { roughness: 0.16 }),
     'surface-exit-green': emissionChannel('surface-exit-green', { roughness: 0.5 }),
-    // The CINEMEX word sign is the brightest thing on the site: it is the top rung of the cinema
-    // hierarchy and the one channel that must obviously go dark at `light_state=off`.
+    // The CINEMEX word sign is the brightest thing on the site: the top rung of the cinema hierarchy.
     'facade-sign-emissive': emissionChannel('facade-sign-emissive', { roughness: 0.4 }),
     /**
      * The red canopy, promoted from plain paint to a real emission channel. The whole point of the
@@ -1418,6 +1249,10 @@ function createFlatMaterials(THREE, materialRegistry) {
     // is added; both canonical materials already exist.
     'rtu-cabinet': 'ug67WhitePcAluminum',
     'rtu-dark': 'ug67DarkMountingShell',
+    // Deferred S1 (correction round): at 0x202832 the 0.04-0.06 m condensate pipes read as
+    // invisible dark threads on the plates. One step lighter — still clearly darker than the
+    // galvanized ducts, so the material hierarchy (duct > pipe > trim) survives.
+    'drain-pipe': custom(DRAIN_PIPE_COLOR, { roughness: 0.58 }),
     'surface-service': custom(0x64748b, { roughness: 0.6, metalness: 0.12 }),
     'direction-amber': custom(0xffd43b, {
       roughness: 0.34,
@@ -1522,22 +1357,14 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     materialsForKey,
     zoneLitMaterials,
   } = createFlatMaterials(THREE, materialRegistry);
-  // The live house state the zone-fill uniform is derived from: `light_state` and the visual mode
-  // both move the room bounce, and both arrive through their own setter.
-  const houseState = { lightState: 'on', visualMode: 'architectural', roofVisible: true };
-  const cutawayMaterialKeys = Object.keys(materials).filter((key) => ![
-    'tc-black', 'tc-blue', 'uc-white', 'gateway-dark',
-    'rs485-green', 'lorawan-blue', 'ethernet-blue',
-    SURFACE_DIRECTION_MARKER.materialKey,
-    // The RTU keys SHARE the gateway's canonical painted metals: registering them for the cutaway/
-    // engineering treatment would drag the gated opaque UG67 body into translucency with them.
-    // The units live on the `roof` layer, which every engineering capture hides outright.
-  ].includes(key) && !key.startsWith('endpoint-') && !key.startsWith('zone-') && !key.startsWith('rtu-'));
+  // The live house state the zone-fill uniform is derived from. The visual mode is pinned:
+  // limpieza fase 2 (2026-07-18) retired the engineering mode — only the roof toggle moves
+  // the room bounce now, and the lighting authority still reads both fields.
+  const houseState = { visualMode: 'architectural', roofVisible: true };
   const buckets = new Map();
   const directionMarkerBuckets = new Map();
   const directionMarkerMeshes = [];
   const meshes = [];
-  const billboardSprites = [];
   const surfaceMeshes = [];
   let surfaceAtlas = null;
   let surfaceAtlasMaterial = null;
@@ -1689,22 +1516,12 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     [59, 0.04, 11.5],
     structuralMetadata('front-public-material-floor', 'material-finish-plate'),
   );
-  addBox(
-    'architecture',
-    'auditorium-carpet',
-    [0, 0.02, -4],
-    [6.8, 0.04, 29],
-    structuralMetadata('central-corridor-material-floor', 'material-finish-plate'),
-  );
-  for (const room of plan.auditoriums) {
-    addBox(
-      'architecture',
-      'auditorium-carpet',
-      [centre(room.bounds.x), 0.02, centre(room.bounds.z)],
-      [extent(room.bounds.x) - 0.7, 0.04, extent(room.bounds.z) - 0.45],
-      structuralMetadata(`${room.id}-material-floor`, 'material-finish-plate'),
-    );
-  }
+  // Interior prune (2026-07-18): the corridor carpet finish plate is sealed under the corridor
+  // soffit + portal band from every reachable angle (17-view diff: 1 stray pixel) — not built.
+  // Interior prune (2026-07-18, maintainer-ordered): the per-auditorium carpet finish plates are
+  // sealed inside the always-on roof/walls of the single-view product — the 17-view capture diff
+  // (runs/2026-07-18-bfcache-and-prune.md) proves zero reachable pixels, so they are not built.
+  // The corridor finish plate above stays: its band is part of the live exterior read.
   const accessibleRoute = plan.structural.facade.accessibleRoute;
   addBox('architecture', 'accessible-yellow', accessibleRoute.position, accessibleRoute.size, accessibleRoute.metadata);
   addBox(
@@ -1734,11 +1551,6 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   // Finish-agnostic roof panels sit on their exact public/family/rear wall heights.
   addBox('roof', 'public-roof', [0, 4.61, 16.5], [60, 0.22, 12], structuralMetadata('front-public-roof', 'roof-panel'));
   for (const room of plan.auditoriums) {
-    const proxy = plan.blockoutProxies.auditoriums.find(({ auditoriumId }) => auditoriumId === room.id);
-    const side = room.bounds.x[1] < 0 ? 'west' : 'east';
-    const volumeX = side === 'west'
-      ? room.bounds.x[1] - proxy.proxyWidth / 2
-      : room.bounds.x[0] + proxy.proxyWidth / 2;
     addBox(
       'roof',
       `${room.family}-roof`,
@@ -1748,13 +1560,6 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
         auditoriumId: room.id,
         family: room.family,
       }),
-    );
-    addBox(
-      'zones',
-      `zone-${room.family}`,
-      [volumeX, proxy.volumeHeight / 2, centre(room.bounds.z)],
-      [proxy.proxyWidth, proxy.volumeHeight, proxy.proxyDepth],
-      room.metadata,
     );
   }
   addBox('roof', 'rear-roof', [0, 4.61, -20.5], [60, 0.22, 4], structuralMetadata('rear-service-roof', 'roof-panel'));
@@ -1859,7 +1664,8 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   }
 
   // Item 14 — `condensate_drains`: outlet riser, elbow, run along the plate to the drain lane,
-  // and a trap stub dropping through the plate. Dark painted family, `rtu-dark` bucket (0 draws).
+  // and a trap stub dropping through the plate. Deferred S1 (correction round): the pipes now ride
+  // their own `drain-pipe` bucket, one value step lighter than the near-invisible dark trim.
   for (const drain of plan.structural.roofService.condensateDrains) {
     const [sx, socketY, sz] = drain.socket;
     const pipe = 0.04;
@@ -1871,7 +1677,7 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     const riserBottom = drain.runLevel + 0.01;
     addBox(
       'roof',
-      'rtu-dark',
+      'drain-pipe',
       [sx, (riserBottom + socketY) / 2, sz],
       [fitting, socketY - riserBottom, fitting],
       drainPart('outlet-riser'),
@@ -1881,7 +1687,7 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     const runEnd = sz + 0.05;
     addBox(
       'roof',
-      'rtu-dark',
+      'drain-pipe',
       [sx, drain.runLevel, (runEnd + drain.laneZ) / 2],
       [pipe, pipe, Math.abs(runEnd - drain.laneZ)],
       drainPart('plate-run'),
@@ -1889,7 +1695,7 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     // Trap stub: through the plate at the drain lane (overlap ≥ the spec's 0.15).
     addBox(
       'roof',
-      'rtu-dark',
+      'drain-pipe',
       [sx, drain.plateTop - 0.1, drain.laneZ],
       [fitting, 0.3, fitting],
       drainPart('drain-trap'),
@@ -2006,60 +1812,19 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     }
   }
 
-  // Temporary family proxies make all three room types and the Sala 3 evidence countable.
-  for (const proxy of plan.blockoutProxies.auditoriums) {
-    const room = plan.auditoriums.find(({ id }) => id === proxy.auditoriumId);
-    const side = room.bounds.x[1] < 0 ? 'west' : 'east';
-    const direction = side === 'west' ? 1 : -1;
-    const screenX = side === 'west' ? room.bounds.x[0] + 0.55 : room.bounds.x[1] - 0.55;
-    const roomDepth = extent(room.bounds.z);
-    addBox('architecture', 'screen-emissive', [screenX, 0.3 + proxy.screenSize[1] / 2, centre(room.bounds.z)], proxy.screenSize, {
-      ...proxy.metadata,
-      component: 'screen-slab',
-    });
-    const tierSpan = proxy.proxyWidth * 0.4;
-    const baseX = side === 'west' ? room.bounds.x[1] - 2 : room.bounds.x[0] + 2;
-    for (let tier = 0; tier < proxy.tierCount; tier += 1) {
-      const progress = (tier + 0.5) / proxy.tierCount;
-      const x = baseX - direction * progress * tierSpan;
-      const tierHeight = 0.42 + tier * 0.28;
-      const halfDepth = (roomDepth - proxy.aisleGapWidth) / 2;
-      for (const zDirection of [-1, 1]) {
-        if (tier < proxy.wheelchairBay.clearTierCount && zDirection === 1) continue;
-        addBox(
-          'architecture',
-          'seating-burgundy',
-          [x, tierHeight / 2, centre(room.bounds.z) + zDirection * (proxy.aisleGapWidth / 2 + halfDepth / 2)],
-          [Math.max(1.2, tierSpan / proxy.tierCount * 0.88), tierHeight, halfDepth * 0.86],
-          { ...proxy.metadata, component: 'tier-mass', tier, side: zDirection },
-        );
-      }
-    }
-    addBox('architecture', 'aisle-dark', [centre(room.bounds.x), 0.08, centre(room.bounds.z)], [extent(room.bounds.x) - 2, 0.16, proxy.aisleGapWidth], {
-      ...proxy.metadata,
-      component: 'aisle-gap',
-    });
-    const bayProgress = proxy.wheelchairBay.clearTierCount / 2 / proxy.tierCount;
-    const bayX = baseX - direction * bayProgress * tierSpan;
-    const positiveHalfDepth = (roomDepth - proxy.aisleGapWidth) / 2;
-    const bayZ = centre(room.bounds.z) + proxy.aisleGapWidth / 2 + positiveHalfDepth / 2;
-    const outline = { ...proxy.metadata, component: 'wheelchair-bay-outline' };
-    for (const xOffset of [-proxy.wheelchairBay.width / 2, proxy.wheelchairBay.width / 2]) {
-      addBox('architecture', 'wheelchair-blue', [bayX + xOffset, 0.18, bayZ], [0.14, 0.36, proxy.wheelchairBay.depth], outline);
-    }
-    addBox(
-      'architecture',
-      'wheelchair-blue',
-      [bayX, 0.18, bayZ + proxy.wheelchairBay.depth / 2],
-      [proxy.wheelchairBay.width, 0.36, 0.14],
-      outline,
-    );
-  }
+  // Interior prune (2026-07-18, maintainer-ordered): the auditorium blockout PROXIES (screen
+  // slabs, seat tier masses, aisle gaps, wheelchair-bay outlines — 104 instances across four
+  // buckets) are never reachable by a shipped pixel: the rooms are sealed by the always-on
+  // roof/walls and, through the roof height-step bands, by the acoustic LININGS that stay below.
+  // Proven by the 17-view hide/capture/diff harness (runs/2026-07-18-bfcache-and-prune.md);
+  // `plan.blockoutProxies` keeps carrying the full proxy grammar for the plan-shape contracts.
 
   // Geometry-only family frames expose the 2/4/2 width, height and tier grammar without labels.
+  // The frame POSTS stay: their 0.28 m posts on the corridor edge (x = ±3.72) cross the 0.25 m
+  // corridor wall plane, so slivers of them are part of the live corridor-slot read (capture-diff
+  // proven) — removing them WOULD change shipped pixels.
   for (const shell of plan.structural.auditoriumShells) {
     const room = plan.auditoriums.find(({ id }) => id === shell.auditoriumId);
-    const proxy = plan.blockoutProxies.auditoriums.find(({ auditoriumId }) => auditoriumId === room.id);
     const west = room.bounds.x[1] < 0;
     const outward = west ? -1 : 1;
     const corridorEdge = west ? room.bounds.x[1] : room.bounds.x[0];
@@ -2100,136 +1865,11 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
       );
     }
 
-    // A comparable cinema master in every room: side/cross aisles, screen-wall frame,
-    // wheelchair void and a recessed projection niche. Labels remain supplementary.
-    const aisleLength = shell.visibleEnvelope.width - 1.2;
-    const aisleX = corridorEdge + outward * (shell.visibleEnvelope.width / 2 + 0.15);
-    for (const zDirection of [-1, 1]) {
-      addBox(
-        'architecture',
-        'aisle-dark',
-        [aisleX, 0.11, centre(room.bounds.z) + zDirection * (extent(room.bounds.z) / 2 - 0.48)],
-        [aisleLength, 0.22, 0.62],
-        { ...frameMetadata, component: 'family-side-aisle', side: zDirection },
-      );
-    }
-    const crossX = corridorEdge + outward * shell.visibleEnvelope.width * 0.43;
-    addBox(
-      'architecture',
-      'aisle-dark',
-      [crossX, 0.13, centre(room.bounds.z)],
-      [0.74, 0.26, Math.max(1.2, extent(room.bounds.z) - 0.65)],
-      { ...frameMetadata, component: 'family-cross-aisle' },
-    );
-
-    /**
-     * `aisle_step_leds` — the channel this pass OWNS, and the reason the auditorium can be a dark
-     * room at all. A low blue LED line runs along both side aisles and both flanks of the cross
-     * aisle: it is what grazes the stepped seat blocks and carves their silhouettes out of the
-     * dark, and it is one of the channels `light_state=off` switches.
-     */
-    for (const zDirection of [-1, 1]) {
-      addBox(
-        'architecture',
-        'aisle-step-led',
-        [
-          aisleX,
-          0.235,
-          centre(room.bounds.z) + zDirection * (extent(room.bounds.z) / 2 - 0.48 - 0.33),
-        ],
-        [aisleLength, 0.07, 0.06],
-        { ...frameMetadata, component: 'aisle-step-led', side: zDirection, lightingChannel: 'aisle_step_leds' },
-      );
-      addBox(
-        'architecture',
-        'aisle-step-led',
-        [crossX + zDirection * 0.4, 0.275, centre(room.bounds.z)],
-        [0.06, 0.07, Math.max(1.2, extent(room.bounds.z) - 0.65)],
-        { ...frameMetadata, component: 'cross-aisle-step-led', side: zDirection, lightingChannel: 'aisle_step_leds' },
-      );
-    }
-
-    /**
-     * The in-room exit signs, RE-ORIENTED. Review defect: "the in-room exit signs are reduced to
-     * 2-3 px green dashes and are not readable; eng-sala-3 shows the same signs rendering as crisp
-     * green EXIT plates, so the geometry and the emissive exist and are simply under-driven."
-     *
-     * They were never under-driven. They were EDGE-ON. The plate measured 0.62 m along x by 0.26 m
-     * in y by 0.05 m in z — and both cameras that are supposed to prove it, `sala-3` and
-     * `reference-match`, look due WEST, straight down the room's x axis. The face they presented to
-     * those cameras was the 0.05 x 0.26 m edge: a 1 px by 7 px green dash, exactly as reported. The
-     * emissive was doing its job on a surface nobody could see. (eng-sala-3 reads them because the
-     * engineering state makes the shell translucent and the sign is seen through the wall, from the
-     * side.)
-     *
-     * A sign is only readable if its face spans the two axes the camera does not look down. These
-     * are now blade-mounted plates — thin on x, 0.34 m tall and 0.9 m deep in z — hanging just
-     * inboard of each side wall above the exit, which is where a cinema puts them and which is the
-     * orientation an audience walking out along the row actually reads.
-     */
-    const exitSignX = room.bounds.x[west ? 0 : 1] - outward * shell.visibleEnvelope.width * 0.3;
-    const exitSignDepth = 0.9;
-    const exitSignInset = extent(room.bounds.z) / 2 - 0.16 - exitSignDepth / 2;
-    for (const zDirection of [-1, 1]) {
-      addBox(
-        'architecture',
-        'surface-exit-green',
-        [exitSignX, 2.45, centre(room.bounds.z) + zDirection * exitSignInset],
-        [0.05, 0.34, exitSignDepth],
-        metadata(
-          `${room.id}-exit-sign-${zDirection > 0 ? 'north' : 'south'}`,
-          'auditorium-exit-sign',
-          REQUIREMENT_ARCHITECTURE,
-          { auditoriumId: room.id, side: zDirection, lightingChannel: 'exit_signs' },
-        ),
-      );
-    }
-
-    const screenX = west ? room.bounds.x[0] + 0.48 : room.bounds.x[1] - 0.48;
-    const screenHeight = proxy.screenSize[1];
-    const screenWidth = proxy.screenSize[2];
-    for (const zDirection of [-1, 1]) {
-      addBox(
-        'architecture',
-        'structural-steel',
-        [screenX, 0.3 + screenHeight / 2, centre(room.bounds.z) + zDirection * (screenWidth / 2 + 0.14)],
-        [0.32, screenHeight + 0.55, 0.28],
-        { ...frameMetadata, component: 'screen-wall-jamb', side: zDirection },
-      );
-    }
-    addBox(
-      'architecture',
-      'structural-steel',
-      [screenX, 0.58 + screenHeight, centre(room.bounds.z)],
-      [0.32, 0.28, screenWidth + 0.55],
-      { ...frameMetadata, component: 'screen-wall-head' },
-    );
-
-    const nicheX = corridorEdge + outward * 1.15;
-    const nicheWidth = Math.min(2.5, Math.max(1.6, extent(room.bounds.z) * 0.32));
-    addBox(
-      'architecture',
-      'floor-charcoal',
-      [nicheX, 3.25, centre(room.bounds.z)],
-      [1.25, 1.85, nicheWidth],
-      { ...frameMetadata, component: 'projection-niche-recess' },
-    );
-    for (const zDirection of [-1, 1]) {
-      addBox(
-        'architecture',
-        'structural-steel',
-        [nicheX - outward * 0.68, 3.25, centre(room.bounds.z) + zDirection * (nicheWidth / 2 + 0.1)],
-        [0.26, 2.15, 0.2],
-        { ...frameMetadata, component: 'projection-niche-jamb', side: zDirection },
-      );
-    }
-    addBox(
-      'architecture',
-      'structural-steel',
-      [nicheX - outward * 0.68, 4.36, centre(room.bounds.z)],
-      [0.26, 0.2, nicheWidth + 0.4],
-      { ...frameMetadata, component: 'projection-niche-head' },
-    );
+    // Interior prune (2026-07-18, maintainer-ordered): the rest of the in-room cinema master —
+    // side/cross aisles, aisle step LEDs, in-room exit signs, screen-wall frame and the recessed
+    // projection niche (112 instances) — is sealed behind the always-on roof/walls and the
+    // acoustic linings from every reachable angle (17-view hide/capture diff: zero shipped
+    // pixels). Only the frame posts above remain, because they ARE part of the shipped read.
   }
 
   for (const proxy of plan.blockoutProxies.frontOfHouse) {
@@ -2321,8 +1961,7 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     metadata('entrance-apron', 'site', REQUIREMENT_FACADE),
   );
 
-  // Under-marquee downlights: this pass's `exterior_lights` channel, and the strongest proof in the
-  // facade pair that `light_state` reaches the exterior.
+  // Under-marquee downlights: this pass's `exterior_lights` channel.
   for (const [index, x] of [-13.6, -6.8, 0, 6.8, 13.6].entries()) {
     addBox(
       'architecture',
@@ -2429,20 +2068,6 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
       [side * 29.45, 4.4, -4],
       [0.12, 8.8, 28.8],
       metadata(`${side < 0 ? 'west' : 'east'}-auditorium-lining`, 'interior-lining'),
-    );
-  }
-
-  // Engineering volumes make the three plan bands and disjoint circulation explicit.
-  addBox('zones', 'zone-public', [0, 2.2, 16.5], [59, 4.4, 11.5], metadata('front-public-zone', 'plan-band'));
-  addBox('zones', 'zone-corridor', [0, 1.4, -4], [7, 2.8, 29], plan.centralCorridor.metadata);
-  addBox('zones', 'zone-service', [0, 1.1, -19.25], [58, 2.2, 1.5], plan.rearTechnical.serviceCorridor.metadata);
-  for (const room of plan.rearTechnical.rooms) {
-    addBox(
-      'zones',
-      'zone-service',
-      [centre(room.bounds.x), 1.1, centre(room.bounds.z)],
-      [extent(room.bounds.x), 2.2, extent(room.bounds.z)],
-      room.metadata,
     );
   }
 
@@ -2601,7 +2226,7 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   }
 
   // Façade structure: attached marquee/sign supports and five framed glazed entries.
-  // The canopy is an EMISSION CHANNEL, not paint: `light_state=off` must visibly put it out.
+  // The canopy is an EMISSION CHANNEL, not paint: its lit value is carried by emission.
   addBox('architecture', 'marquee-canopy', plan.facade.marquee.position, plan.facade.marquee.size, plan.facade.marquee.metadata);
   addBox('architecture', 'facade-sign-emissive', plan.facade.identity.position, plan.facade.identity.size, plan.facade.identity.metadata);
   for (const support of plan.structural.facade.marqueeSupports) {
@@ -2979,29 +2604,9 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     posterBank.backing.size,
     surfaceMetadata(posterBank.backing.id, 'poster-placeholder', REQUIREMENT_FACADE),
   );
-  for (const arrow of plan.wayfinding.evacuationArrows) {
-    for (const direction of [-1, 1]) {
-      addBox(
-        'architecture',
-        'surface-exit-green',
-        [
-          arrow.position[0] + direction * arrow.width * 0.26,
-          arrow.position[1],
-          arrow.position[2] - arrow.direction[2] * 0.18,
-        ],
-        [arrow.width * 0.62, 0.018, 0.1],
-        surfaceMetadata(`${arrow.id}-${direction > 0 ? 'right' : 'left'}`, 'wayfinding-marking'),
-        direction * arrow.direction[2] * Math.PI * 0.22,
-      );
-    }
-    addBox(
-      'architecture',
-      'surface-exit-green',
-      [arrow.position[0], arrow.position[1], arrow.position[2] + arrow.direction[2] * 0.5],
-      [0.12, 0.018, 0.9],
-      surfaceMetadata(`${arrow.id}-shaft`, 'wayfinding-marking'),
-    );
-  }
+  // Interior prune (2026-07-18): the corridor evacuation floor arrows are sealed under the
+  // corridor soffit from every reachable angle (17-view diff: zero pixels) — not built.
+  // `plan.wayfinding` keeps the arrow/sign data (surface-plan contracts + the atlas exit tiles).
   for (const lining of plan.auditoriumAcousticLinings) {
     addBox('architecture', lining.materialKey, lining.position, lining.size, lining.metadata);
   }
@@ -3062,64 +2667,14 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
       surfaceMetadata(`${door.id}-service-floor-mark`, 'service-sign'),
     );
   }
-  for (let index = 0; index < 12; index += 1) {
-    const z = 8.5 - index * 2.25;
-    for (const direction of [-1, 1]) {
-      addBox(
-        'architecture',
-        'surface-carpet',
-        [direction * 1.45, 0.052, z],
-        [2.25, 0.016, 0.085],
-        surfaceMetadata(`corridor-carpet-chevron-${index + 1}-${direction}`, 'carpet-pattern'),
-        direction * Math.PI * 0.18,
-      );
-    }
-  }
-  for (const room of plan.auditoriums) {
-    const panelHeight = Math.min(3.8, room.height - 0.8);
-    const minimumX = Math.min(...room.bounds.x) + 1.8;
-    const maximumX = Math.max(...room.bounds.x) - 1.8;
-    for (const [wallIndex, z] of [
-      Math.min(...room.bounds.z) + 0.14,
-      Math.max(...room.bounds.z) - 0.14,
-    ].entries()) {
-      for (let panelIndex = 0; panelIndex < 5; panelIndex += 1) {
-        const x = minimumX + (maximumX - minimumX) * (panelIndex / 4);
-        addBox(
-          'architecture',
-          panelIndex % 2 ? 'surface-seal' : 'surface-dark',
-          [x, panelHeight / 2 + 0.35, z],
-          [1.05, panelHeight, 0.09],
-          surfaceMetadata(`${room.id}-acoustic-panel-${wallIndex + 1}-${panelIndex + 1}`, 'acoustic-panel-rhythm'),
-        );
-      }
-    }
-    for (const zDirection of [-1, 1]) {
-      addBox(
-        'architecture',
-        'surface-marking',
-        [centre(room.bounds.x), 0.175, centre(room.bounds.z) + zDirection * 0.62],
-        [extent(room.bounds.x) - 2.6, 0.018, 0.055],
-        surfaceMetadata(`${room.id}-aisle-edge-${zDirection}`, 'aisle-marking'),
-      );
-    }
-    for (let markIndex = 0; markIndex < 6; markIndex += 1) {
-      const t = (markIndex + 1) / 7;
-      const west = room.bounds.x[1] < 0;
-      const x = west
-        ? room.bounds.x[1] - t * (extent(room.bounds.x) - 2.8)
-        : room.bounds.x[0] + t * (extent(room.bounds.x) - 2.8);
-      const z = centre(room.bounds.z) + ((markIndex % 3) - 1) * 1.15;
-      addBox(
-        'architecture',
-        'surface-carpet',
-        [x, 0.054, z],
-        [1.35 + (markIndex % 2) * 0.35, 0.016, 0.055],
-        surfaceMetadata(`${room.id}-carpet-breakup-${markIndex + 1}`, 'carpet-pattern'),
-        (markIndex % 2 ? 1 : -1) * Math.PI * (0.08 + markIndex * 0.006),
-      );
-    }
-  }
+  // Interior prune (2026-07-18): the corridor carpet chevrons left with the corridor carpet
+  // plate they decorated (sealed under the soffit; 17-view diff: zero pixels).
+  // Interior prune (2026-07-18, maintainer-ordered): the in-room surface details — the 5-panel
+  // acoustic RHYTHM on each room's side walls (80 instances; distinct from the full-height
+  // acoustic LININGS above, which stay because they are the dark surface read through every roof
+  // height-step band), the aisle-edge markings (16) and the in-room carpet breakup strokes (48)
+  // — are sealed from every reachable angle (17-view hide/capture diff: zero shipped pixels).
+  // `createSurfaceDetailPlan` keeps declaring the categories: the surface DESIGN plan is intact.
 
   // Own bucket: the public roof seams are clipped together with the public roof panel they belong
   // to. L3 item 11: every seam is a DECAL that crosses its plate's top plane — 0.02 embedded,
@@ -3198,7 +2753,11 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   }
 
   // Simple metre-scaled people make doors, counters and equipment readable without detail assets.
-  for (const person of plan.structural.humanReferences) {
+  // Interior prune (2026-07-18, maintainer-ordered): only the FORECOURT person is reachable by a
+  // shipped pixel (17-view hide/capture diff; the lobby/corridor/kitchen/technical/checkpoint
+  // references are sealed behind the always-on envelope — even through the entrance glazing the
+  // poster bank and checkpoint band occlude them). The plan keeps all six references.
+  for (const person of plan.structural.humanReferences.filter(({ id }) => id === 'human-forecourt')) {
     const [x, groundY, z] = person.position;
     const legHeight = person.height * 0.42;
     const torsoHeight = person.height * 0.38;
@@ -3546,18 +3105,12 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
       mesh.setMatrixAt(index, dummy.matrix);
     });
     mesh.instanceMatrix.needsUpdate = true;
-    mesh.castShadow = bucket.layer !== 'zones';
+    mesh.castShadow = true;
     mesh.receiveShadow = bucket.layer !== 'labels';
     mesh.userData.instances = bucket.instances;
     groups[bucket.layer].add(mesh);
     meshes.push(mesh);
   }
-
-  // Registered only now: the zone variants do not exist until the buckets have been emitted, and
-  // every one of them must still go translucent in the engineering state.
-  materialRegistry?.registerCutawayMaterials?.(
-    cutawayMaterialKeys.flatMap((key) => materialsForKey(key)),
-  );
 
   for (const [layer, instances] of directionMarkerBuckets) {
     const mesh = new THREE.InstancedMesh(
@@ -3739,68 +3292,14 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     frameMeshes.display[1] = createAtlasBatch('display-1', atlasBatchDefinitions.display1, 'architecture');
   }
 
-  // Screen-facing labels preserve true device geometry scale while making counts auditable.
-  if (canvasDocument && THREE.Sprite && THREE.SpriteMaterial && THREE.CanvasTexture) {
-    for (const label of [...plan.billboards.architecture, ...plan.billboards.technical]) {
-      const canvas = canvasDocument.createElement('canvas');
-      canvas.width = 768;
-      canvas.height = 192;
-      const context = canvas.getContext('2d');
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      context.shadowColor = label.accent;
-      context.shadowBlur = 28;
-      context.fillStyle = 'rgba(2, 6, 23, 0.92)';
-      context.strokeStyle = label.accent;
-      context.lineWidth = 12;
-      context.beginPath();
-      context.roundRect(18, 18, canvas.width - 36, canvas.height - 36, 34);
-      context.fill();
-      context.stroke();
-      context.shadowBlur = 0;
-      context.fillStyle = '#f8fafc';
-      context.font = `800 ${label.text.length > 12 ? 58 : 72}px system-ui, sans-serif`;
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.fillText(label.text, canvas.width / 2, canvas.height / 2 + 3);
+  // Client mandate (2026-07-15): the entire device-label billboard system was deleted. The only
+  // floating labels left in the scene are the temperature chips built below; the architectural
+  // wall signage (room numbers, exit/service signs, wayfinding) still rides the `labels` group.
 
-      const texture = new THREE.CanvasTexture(canvas);
-      if ('colorSpace' in texture && THREE.SRGBColorSpace) texture.colorSpace = THREE.SRGBColorSpace;
-      const material = new THREE.SpriteMaterial({
-        map: texture,
-        transparent: true,
-        depthTest: false,
-        depthWrite: false,
-        toneMapped: false,
-      });
-      const sprite = new THREE.Sprite(material);
-      sprite.name = `structural-billboard-${label.id}`;
-      sprite.position.set(...label.position);
-      sprite.scale.set(label.scale[0], label.scale[1], 1);
-      sprite.renderOrder = 1000;
-      sprite.frustumCulled = false;
-      sprite.userData = {
-        ...label.metadata,
-        billboardKind: label.kind,
-        text: label.text,
-        halo: label.halo,
-        visibilityScope: label.visibilityScope,
-        basePosition: [...label.position],
-        baseScale: [...label.scale],
-        baseRenderOrder: 1000,
-        activeScaleFactor: 1,
-      };
-      groups.labels.add(sprite);
-      billboardSprites.push(sprite);
-    }
-  }
-
-  const networkSchematic = createNetworkSchematicComposition({
-    THREE,
-    groups,
-    documentObject: canvasDocument,
-    appConfig: APP_CONFIG,
-    architecturePlan: plan,
-  });
+  // Limpieza fase 2 (2026-07-18): the network-schematic board composition (boot cut 1's lazy
+  // build) was REMOVED entirely. After the engineering mode and the QA evidence presets were
+  // retired, no code path could ever set its visibility true — the board, its canvas texture and
+  // its RF-detail composition were unreachable by construction, so the module left the tree.
 
   // L4 items 15/16 — the live temperature chips over the packaged units. The envelope the
   // exterior-only rule tests against derives from the building config and the emitted plates.
@@ -3826,7 +3325,7 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     return temperatureChips?.setCameraPosition(chipEnvelope, position) ?? false;
   }
 
-  /** The chips read the SAME model the alarm list reads — one source of truth for temperature. */
+  /** The chips read the SAME model the dashboard reads — one source of truth for temperature. */
   let chipReadingSample = null;
   function applyChipReadings(model) {
     if (!temperatureChips) return;
@@ -3840,10 +3339,7 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
       for (const unit of plan.structural.roofService.packagedUnits) {
         const telemetry = model.telemetry[unit.tc300Id];
         if (!telemetry) continue;
-        readings[unit.tc300Id] = {
-          temperature: telemetry.temperature,
-          alarm: model.deviceStatus[unit.tc300Id] === 'alarm',
-        };
+        readings[unit.tc300Id] = { temperature: telemetry.temperature };
       }
       temperatureChips.setReadings(readings);
     }
@@ -3852,20 +3348,12 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   // Zone variants split a bucket into several meshes, so these sets are resolved from the bucket's
   // own layer/material identity rather than from a name that a zone suffix can move.
   const denseNetworkMeshes = meshes.filter((mesh) => (
-    ['rs485', 'lorawan', 'internet', 'zones'].includes(mesh.userData.layer)
+    ['rs485', 'lorawan', 'internet'].includes(mesh.userData.layer)
       || /^surface-(?:rs485|lorawan|internet)-/.test(mesh.name)
   ));
   const networkMediaMeshes = meshes.filter((mesh) => (
     Array.isArray(mesh.userData.instances)
       && mesh.userData.instances.some(({ mediaWidth }) => mediaWidth > 0)
-  ));
-  const publicRoofMeshes = meshes.filter((mesh) => (
-    mesh.userData.layer === 'roof'
-      && ['public-roof', 'roof-seam-charcoal'].includes(mesh.userData.materialKey)
-  ));
-  /** The rear service roof, clipped for the technical preset the way the public roof is clipped. */
-  const rearRoofMeshes = meshes.filter((mesh) => (
-    mesh.userData.layer === 'roof' && mesh.userData.materialKey === 'rear-roof'
   ));
   /**
    * P6 correction P2: the external schematic endpoint proxies (router/internet/Niagara/PC/tablet/
@@ -3923,30 +3411,67 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
    * The widening is resolved PER MEDIUM: a dash that is widened like a continuous tube stops
    * being a dash and becomes a bead.
    */
-  function setNetworkMediaWidthScale(cameraName) {
-    if (cameraName === activeMediaWidthCamera) return activeMediaWidthCamera;
-    for (const mesh of networkMediaMeshes) {
-      mesh.userData.instances.forEach((instance, index) => {
-        writeInstanceMatrix(mesh, index, resolveInstanceTransform(instance, cameraName));
-      });
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.computeBoundingSphere?.();
+  /** True when no ancestor (semantic layer group included) hides this object. */
+  function isEffectivelyVisible(object) {
+    for (let node = object; node; node = node.parent) {
+      if (node.visible === false) return false;
     }
+    return true;
+  }
+
+  function writeMediaWidthMatrices(mesh, cameraName) {
+    mesh.userData.instances.forEach((instance, index) => {
+      writeInstanceMatrix(mesh, index, resolveInstanceTransform(instance, cameraName));
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere?.();
+    mesh.userData.appliedMediaWidthCamera = cameraName;
+  }
+
+  function setNetworkMediaWidthScale(cameraName) {
     activeMediaWidthCamera = cameraName;
+    for (const mesh of networkMediaMeshes) {
+      if (mesh.userData.appliedMediaWidthCamera === cameraName) continue;
+      // Boot cut 3a: the network layers ship default-off, so recomputing every instance matrix of
+      // a HIDDEN medium is pure boot cost. A hidden mesh stays stale (its applied camera lags) and
+      // `syncNetworkMediaWidths` writes it on the first frame it becomes visible.
+      if (!isEffectivelyVisible(mesh)) continue;
+      writeMediaWidthMatrices(mesh, cameraName);
+    }
     return cameraName;
   }
 
+  /**
+   * Boot cut 3a companion: recompute any media mesh whose width matrices went stale while it was
+   * hidden, the moment it shows again (layer toggles happen outside this asset, so the runtime
+   * loop polls this cheap check per frame). Re-derives the interaction pools afterwards, exactly
+   * like `setEvidenceCamera` does after a width change.
+   */
+  function syncNetworkMediaWidths() {
+    if (activeMediaWidthCamera === null) return false;
+    let updated = false;
+    for (const mesh of networkMediaMeshes) {
+      if (mesh.userData.appliedMediaWidthCamera === activeMediaWidthCamera) continue;
+      if (!isEffectivelyVisible(mesh)) continue;
+      writeMediaWidthMatrices(mesh, activeMediaWidthCamera);
+      updated = true;
+    }
+    if (updated) applyInteraction();
+    return updated;
+  }
+
   // -------------------------------------------------------------------------
-  // INTERACTION-UI: selection, fault colours, alarm halos and the fixed packet pool.
+  // INTERACTION-UI: selection and the fixed packet pool.
   //
-  // Nothing below invents a topology, a material colour or a route. The statuses come from
-  // `createInteractionModel` (which derives them from the one simulation/topology pair), the
-  // colours are the gated `alarm_red` / `offline_gray` palette entries and the media's own
-  // emissive channel, and every packet rides a route the structural pass already accepted.
+  // Nothing below invents a topology, a material colour or a route. The selection path comes from
+  // `createInteractionModel` (which derives it from the one simulation/topology pair), the
+  // highlight colours are the media's own emissive channel, and every packet rides a route the
+  // structural pass already accepted. The fault/alarm recolouring machinery was removed by the
+  // client simplification (2026-07-15): the simulation is always healthy.
   //
-  // A recoloured instance is REMOVED from its base mesh (zero scale) and re-emitted into a status
-  // overlay mesh at the same transform, so a fault can never double-draw or z-fight the healthy
-  // geometry it replaces, and a restore is exact.
+  // A highlighted media instance is REMOVED from its base mesh (zero scale) and re-emitted into a
+  // selected overlay mesh at the same transform, so a highlight can never double-draw or z-fight
+  // the healthy geometry it replaces, and a deselect is exact.
   // -------------------------------------------------------------------------
   const STATUS_LAYERS = Object.freeze(['hvac', 'rs485', 'lorawan', 'internet']);
   const MEDIA_SPEC_BY_KEY = Object.freeze({
@@ -4023,22 +3548,6 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   }
 
   const INTERACTION_HIGHLIGHT_GAIN = 3;
-  const alarmMaterial = statusMaterial('interaction:alarm', MATERIAL_SPECS.alarmRed);
-  const offlineMaterial = statusMaterial('interaction:offline', MATERIAL_SPECS.offlineGray);
-  const alarmHaloMaterial = statusMaterial('interaction:alarm-halo', {
-    ...MATERIAL_SPECS.alarmRed,
-    emissiveIntensity: 1.1,
-    transparent: true,
-    opacity: 0.8,
-    depthWrite: false,
-  });
-  const zoneHaloMaterial = statusMaterial('interaction:alarm-zone', {
-    ...MATERIAL_SPECS.alarmRed,
-    emissiveIntensity: 0.35,
-    transparent: true,
-    opacity: 0.16,
-    depthWrite: false,
-  });
   // The selection cue is the schematic's own cyan model-link colour, so a highlighted endpoint and
   // the board that names it read as the same system. It never replaces a media colour.
   const selectionHaloMaterial = statusMaterial('interaction:selection-halo', {
@@ -4088,17 +3597,13 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   const interactionMeshes = [];
   const overlayMeshes = new Map();
   for (const layer of STATUS_LAYERS) {
-    const capacity = statusRecords.filter((record) => record.layer === layer).length;
-    overlayMeshes.set(`${layer}:alarm`, createPool(`${layer}-alarm-overlay`, layer, sharedGeometry, alarmMaterial, capacity));
-    overlayMeshes.set(`${layer}:offline`, createPool(`${layer}-offline-overlay`, layer, sharedGeometry, offlineMaterial, capacity));
     if (layer === 'hvac') continue;
+    const capacity = statusRecords.filter((record) => record.layer === layer).length;
     const key = { rs485: 'rs485-green', lorawan: 'lorawan-blue', internet: 'ethernet-blue' }[layer];
     overlayMeshes.set(`${layer}:selected`, createPool(`${layer}-selected-overlay`, layer, sharedGeometry, highlightMaterials[key], capacity));
   }
 
-  const alarmHaloMesh = createPool('alarm-halo-pool', 'hvac', haloGeometry, alarmHaloMaterial, STATUS_DEVICE_IDS.size + 6);
   const selectionHaloMesh = createPool('selection-halo-pool', 'hvac', haloGeometry, selectionHaloMaterial, 16);
-  const zoneHaloMesh = createPool('alarm-zone-pool', 'zones', sharedGeometry, zoneHaloMaterial, APP_CONFIG.zones.length);
   const waveRingMesh = createPool('lorawan-wave-rings', 'lorawan', haloGeometry, highlightMaterials['lorawan-blue'], INTERACTION_WAVE_RINGS.count);
 
   /** Every device the halos and the picker can address, with the point they are anchored on. */
@@ -4158,16 +3663,15 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   ]));
 
   let interactionModel = createInteractionModel({ state: 'architecture', tick: 0, selection: 'none' });
-  let densePhysicalNetwork = true;
 
   let statusFingerprint = null;
-  let statusSummary = { alarm: 0, offline: 0, selected: 0, suppressed: 0 };
+  let statusSummary = { selected: 0, suppressed: 0 };
 
   function applyInteraction() {
     const model = interactionModel;
     // Statuses only move when the state, the selection or the media cross-section moves. The tick
     // moves every frame, so the per-instance status pass is fingerprinted out of the animation.
-    const fingerprint = `${model.state}|${model.selection}|${activeMediaWidthCamera}|${densePhysicalNetwork}`;
+    const fingerprint = `${model.state}|${model.selection}|${activeMediaWidthCamera}`;
     if (fingerprint !== statusFingerprint) {
       statusSummary = applyStatusOverlays(model);
       statusFingerprint = fingerprint;
@@ -4184,15 +3688,8 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     const suppressed = new Set();
 
     for (const record of statusRecords) {
-      const status = record.statusKind === 'device'
-        ? model.deviceStatus[record.statusOwner]
-        : model.routeStatus[record.statusOwner];
-      let bucket = null;
-      if (status === 'alarm') bucket = 'alarm';
-      else if (status === 'unreachable' || status === 'blocked') bucket = 'offline';
-      else if (record.media && model.selectionPath.routeIds.includes(record.statusOwner)) bucket = 'selected';
-      if (!bucket) continue;
-      const key = `${record.layer}:${bucket}`;
+      if (!record.media || !model.selectionPath.routeIds.includes(record.statusOwner)) continue;
+      const key = `${record.layer}:selected`;
       if (!overlayEntries.has(key)) continue;
       overlayEntries.get(key).push(record);
       suppressed.add(record);
@@ -4208,16 +3705,15 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
       record.mesh.instanceMatrix.needsUpdate = true;
     }
 
-    const counts = { alarm: 0, offline: 0, selected: 0 };
+    const counts = { selected: 0 };
     for (const [key, entries] of overlayEntries) {
       const mesh = overlayMeshes.get(key);
-      const status = key.split(':')[1];
-      counts[status] += entries.length;
+      counts.selected += entries.length;
       entries.forEach((record, index) => {
         writeInstanceMatrix(mesh, index, resolveInstanceTransform(record.instance));
       });
       mesh.count = entries.length;
-      mesh.visible = entries.length > 0 && densePhysicalNetwork;
+      mesh.visible = entries.length > 0;
       mesh.instanceMatrix.needsUpdate = true;
       mesh.userData.entries = entries.map(({ instance, materialKey, statusOwner }) => ({
         entityId: instance.metadata?.entityId,
@@ -4230,20 +3726,6 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   }
 
   function applyAnimationPools(model, summary) {
-    const pulse = resolveHaloPulse(model.tick);
-    const alarmDevices = [...devicePositions.keys()].filter((id) => model.deviceStatus[id] === 'alarm');
-    alarmDevices.forEach((id, index) => {
-      const position = devicePositions.get(id);
-      writeInstanceMatrix(alarmHaloMesh, index, {
-        position: [position[0], position[1], position[2]],
-        size: [pulse.scale, pulse.scale, pulse.scale],
-      });
-    });
-    alarmHaloMesh.count = alarmDevices.length;
-    alarmHaloMesh.visible = alarmDevices.length > 0;
-    alarmHaloMesh.material.opacity = pulse.opacity;
-    alarmHaloMesh.instanceMatrix.needsUpdate = true;
-
     const selectedDevices = model.selectionPath.nodeIds.filter((id) => devicePositions.has(id));
     selectedDevices.forEach((id, index) => {
       const position = devicePositions.get(id);
@@ -4256,20 +3738,8 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     selectionHaloMesh.visible = selectedDevices.length > 0;
     selectionHaloMesh.instanceMatrix.needsUpdate = true;
 
-    model.zoneHalos.forEach((halo, index) => {
-      writeInstanceMatrix(zoneHaloMesh, index, {
-        position: [centre(halo.bounds.x), halo.height / 2, centre(halo.bounds.z)],
-        size: [extent(halo.bounds.x), halo.height, extent(halo.bounds.z)].map((value) => value * pulse.scale),
-      });
-    });
-    zoneHaloMesh.count = model.zoneHalos.length;
-    zoneHaloMesh.visible = model.zoneHalos.length > 0;
-    zoneHaloMesh.material.opacity = 0.1 + pulse.opacity * 0.12;
-    zoneHaloMesh.instanceMatrix.needsUpdate = true;
-
     const packetCounts = { rs485: 0, lorawan: 0, ethernet: 0 };
     for (const packet of packetDefinitions) {
-      if (model.routeStatus[packet.routeId] !== 'normal') continue;
       const mesh = packetMeshes[packet.medium];
       const index = packetCounts[packet.medium];
       const widthScale = resolveNetworkMediaWidthScale(
@@ -4286,7 +3756,7 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     let activePackets = 0;
     for (const [medium, mesh] of Object.entries(packetMeshes)) {
       mesh.count = packetCounts[medium];
-      mesh.visible = packetCounts[medium] > 0 && densePhysicalNetwork;
+      mesh.visible = packetCounts[medium] > 0;
       mesh.instanceMatrix.needsUpdate = true;
       mesh.computeBoundingSphere?.();
       activePackets += packetCounts[medium];
@@ -4303,10 +3773,8 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
         size: [ring.scale, ring.scale, ring.scale],
       });
     });
-    const lorawanLive = model.routeStatus[routeIds.lorawan('UC100-A')] === 'normal'
-      || model.routeStatus[routeIds.lorawan('UC100-C')] === 'normal';
-    waveRingMesh.count = lorawanLive ? rings.length : 0;
-    waveRingMesh.visible = lorawanLive && densePhysicalNetwork;
+    waveRingMesh.count = rings.length;
+    waveRingMesh.visible = true;
     waveRingMesh.instanceMatrix.needsUpdate = true;
 
     return Object.freeze({
@@ -4315,13 +3783,9 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
       selection: model.selection,
       visualMode: model.visualMode,
       packets: Object.freeze({ pooled: packetDefinitions.length, active: activePackets }),
-      overlays: Object.freeze({
-        alarm: summary.alarm, offline: summary.offline, selected: summary.selected,
-      }),
-      halos: Object.freeze({ alarm: alarmDevices.length, selection: selectedDevices.length }),
-      zoneHalos: model.zoneHalos.length,
+      overlays: Object.freeze({ selected: summary.selected }),
+      halos: Object.freeze({ selection: selectedDevices.length }),
       suppressed: summary.suppressed,
-      niagaraDelivery: model.niagaraDelivery,
     });
   }
 
@@ -4353,29 +3817,9 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   });
 
   /**
-   * `light_state` — the lighting pass's two deterministic evidence states. It switches the house
-   * emission channels only: the network media, the TC300 status ring and the direction markers
-   * stay lit, so an engineering capture with the lights off still proves a live system.
-   */
-  function setLightState(lightState = 'on') {
-    for (const [key, definition] of Object.entries(LIGHTING_EMISSION_CHANNELS)) {
-      // Every zone variant of the channel, not just the canonical one: the corridor strips and the
-      // sala screens live in dimmed zones and would otherwise never have switched at all.
-      for (const material of materialsForKey(key)) {
-        material.emissiveIntensity = resolveEmissiveIntensity(definition, lightState);
-        material.needsUpdate = true;
-      }
-    }
-    houseState.lightState = lightState;
-    applyZoneFillGain();
-    return lightState;
-  }
-
-  /**
-   * The third half of `light_state`, and the one the engineering lift also moves: the ROOM BOUNCE.
-   * The emissives switch, the PointLights switch — and the fill, which is what actually carries the
-   * value of every surface no luminaire stands over, has to switch with them or a lights-off
-   * capture keeps a fully lit room. It is a uniform, so neither state change rebuilds a program.
+   * The ROOM BOUNCE, moved by the engineering lift and the roof toggle: the fill is what actually
+   * carries the value of every surface no luminaire stands over. It is a uniform, so neither
+   * state change rebuilds a program.
    */
   function applyZoneFillGain() {
     for (const material of zoneLitMaterials) setZoneFillGain(material, houseState);
@@ -4459,7 +3903,6 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     return true;
   }
 
-  const labelPolicy = { visualMode: 'architectural', labels: true, labelsExplicit: false };
   let activeEvidenceCamera = 'isometric';
   // The Techo layer toggle, mirrored into the asset so the interior ceilings can follow the roof
   // panels they are the underside of (UX item 7: hiding the roof used to reveal a "second roof").
@@ -4468,178 +3911,41 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
   function setEvidenceCamera(cameraName, viewContext) {
     activeEvidenceCamera = cameraName;
     updateDirectionMarkerView(viewContext);
-    const networkVisibility = resolveNetworkEvidenceVisibility(cameraName, {
-      visualMode: labelPolicy.visualMode,
-    });
-    const evidencePreset = CAMERA_PRESETS[cameraName] ?? QA_CAMERA_PRESETS[cameraName] ?? null;
+    // Limpieza fase 2 (2026-07-18): the schematic-board visibility rule and the per-camera roof
+    // clips left with the QA evidence presets — every live camera shows the dense physical
+    // network (layer toggles still gate it at the group level) and the full roof.
+    const evidencePreset = CAMERA_PRESETS[cameraName] ?? null;
     // Item 16: a preset change re-evaluates the exterior rule immediately (the runtime also feeds
     // the live camera position per frame, so free orbit crossing the envelope updates too).
     const chipCameraPreset = cameraName === 'isometric' ? ISOMETRIC_PRESET : evidencePreset;
     if (chipCameraPreset) setChipCameraPosition(chipCameraPreset.position);
-    networkSchematic.setVisibility(networkVisibility);
-    for (const mesh of denseNetworkMeshes) mesh.visible = networkVisibility.densePhysicalNetwork;
-    // The interaction pools ride the same evidence rule as the media they annotate: the schematic
-    // detail camera frames the board alone, and no packet or halo may float in front of it.
-    densePhysicalNetwork = networkVisibility.densePhysicalNetwork;
-    for (const mesh of publicRoofMeshes) mesh.visible = resolvePublicRoofVisibility(cameraName);
-    for (const mesh of rearRoofMeshes) mesh.visible = resolveRearRoofVisibility(cameraName);
-    // The external IP chain is engineering evidence; the architecture state shows only the building.
-    for (const mesh of externalProxyMeshes) mesh.visible = labelPolicy.visualMode === 'engineering';
-    // M3: the spine duct assembly follows the Techo toggle in architecture; engineering keeps it.
-    const spineVisible = resolveSpineAssemblyVisibility(labelPolicy.visualMode, {
-      roofVisible: roofLayerVisible,
-    });
+    for (const mesh of denseNetworkMeshes) mesh.visible = true;
+    // The external IP chain was engineering evidence; the shipped architectural state shows only
+    // the building, so the proxies stay hidden (limpieza fase 2: the engineering mode is retired,
+    // the geometry stays with the network machinery).
+    for (const mesh of externalProxyMeshes) mesh.visible = false;
+    // M3: the spine duct assembly follows the Techo toggle.
+    const spineVisible = resolveSpineAssemblyVisibility({ roofVisible: roofLayerVisible });
     for (const mesh of spineAssemblyMeshes) mesh.visible = spineVisible;
-    const ceilingVisible = resolveInteriorCeilingVisibility(labelPolicy.visualMode, {
+    const ceilingVisible = resolveInteriorCeilingVisibility('architectural', {
       roofVisible: roofLayerVisible,
     });
     for (const mesh of interiorCeilingMeshes) mesh.visible = ceilingVisible;
     setNetworkMediaWidthScale(cameraName);
     // The media cross-section the pools sit on just changed: re-derive them from the same model.
     applyInteraction();
-    const technicalLabelsAllowed = resolveTechnicalLabelVisibility(labelPolicy);
-    const surfaceCleanCameras = new Set([
-      'facade', 'grazing', 'lobby', 'concessions', 'corridor',
-    ]);
-    const kitchenLabelTransforms = {
-      'tc-label-TC300-05': { position: [-12.75, 2.0, 11.7], scale: [0.82, 0.22] },
-      'uc-label-UC100-D': { position: [-5.2, 2.0, 13.2], scale: [0.9, 0.24] },
-      'bus-label-D': { position: [-5.2, 2.34, 12.6], scale: [0.9, 0.24] },
-    };
-    const ug67LabelTransforms = {
-      'gateway-label': { position: [3.82, 4.35, 2], scale: [1.2, 0.3] },
-      'uc-label-UC100-A': { position: [4.65, 4.22, 1.35], scale: [0.82, 0.22] },
-      'uc-label-UC100-B': { position: [4.78, 3.84, 1.75], scale: [0.82, 0.22] },
-      'uc-label-UC100-C': { position: [4.78, 3.44, 2.18], scale: [0.82, 0.22] },
-      'uc-label-UC100-D': { position: [4.65, 3.06, 2.58], scale: [0.82, 0.22] },
-    };
-
-    const materialLookdevLabels = new Set([
-      'uc-label-UC100-A',
-      'uc-label-UC100-B',
-      'uc-label-UC100-C',
-      'uc-label-UC100-D',
-      'gateway-label',
-      'bus-label-A',
-      'bus-label-B',
-      'bus-label-C',
-      'bus-label-D',
-    ]);
-
-    for (const sprite of billboardSprites) {
-      const scope = sprite.userData.visibilityScope;
-      const kind = sprite.userData.billboardKind;
-      sprite.position.set(...sprite.userData.basePosition);
-      sprite.scale.set(sprite.userData.baseScale[0], sprite.userData.baseScale[1], 1);
-      sprite.renderOrder = sprite.userData.baseRenderOrder;
-      sprite.userData.activeScaleFactor = 1;
-      if (!networkVisibility.technicalLabels) sprite.visible = false;
-      else if (TECHNICAL_BILLBOARD_KINDS.includes(kind) && !technicalLabelsAllowed) sprite.visible = false;
-      else if (kind === 'tc300' && evidencePreset
-        && (SURFACE_TC300_LABEL_POLICY.cameras.includes(cameraName)
-          || LIGHTING_PRESET_ZONE_OWNER[cameraName] === sprite.userData.zoneId)) {
-        // The canonical chain must start somewhere visible: the ID chip names the thermostat
-        // wherever it survives its own projection, and is culled everywhere else. The one endpoint
-        // that OWNS the zone a preset frames is never culled by distance alone.
-        const placement = resolveTc300LabelPlacement({
-          cameraName,
-          preset: evidencePreset,
-          chipPosition: sprite.userData.basePosition,
-          chipWidthMetres: sprite.userData.baseScale[0],
-          zoneOwned: LIGHTING_PRESET_ZONE_OWNER[cameraName] === sprite.userData.zoneId,
-        });
-        sprite.visible = placement.visible;
-        if (placement.visible) {
-          sprite.scale.set(
-            sprite.userData.baseScale[0] * placement.scale,
-            sprite.userData.baseScale[1] * placement.scale,
-            1,
-          );
-          sprite.renderOrder = SURFACE_TC300_LABEL_POLICY.renderOrder;
-          sprite.userData.activeScaleFactor = placement.scale;
-        }
-      }
-      else if (cameraName === 'kitchen') {
-        const transform = kitchenLabelTransforms[sprite.userData.entityId];
-        sprite.visible = Boolean(transform);
-        if (transform) {
-          sprite.position.set(...transform.position);
-          sprite.scale.set(transform.scale[0], transform.scale[1], 1);
-        }
-      }
-      else if (surfaceCleanCameras.has(cameraName)) sprite.visible = false;
-      else if (cameraName === 'sala-3') {
-        sprite.visible = sprite.userData.entityId === 'sala-3-wheelchair-label';
-      }
-      else if (cameraName === 'neutral') {
-        sprite.visible = materialLookdevLabels.has(sprite.userData.entityId);
-      }
-      else if (cameraName === 'reference-match') {
-        sprite.visible = ['tc-label-TC300-07', 'tc-label-TC300-08'].includes(sprite.userData.entityId);
-      }
-      else if (cameraName === 'ug67') {
-        const transform = ug67LabelTransforms[sprite.userData.entityId];
-        sprite.visible = Boolean(transform);
-        if (transform) {
-          sprite.position.set(...transform.position);
-          sprite.scale.set(transform.scale[0], transform.scale[1], 1);
-          sprite.renderOrder = 1240;
-        }
-      }
-      else if (cameraName === SURFACE_NETWORK_LABEL_POLICY.camera) {
-        sprite.visible = SURFACE_NETWORK_LABEL_POLICY.visibleKinds.includes(kind);
-        if (sprite.visible) {
-          const scaleFactor = SURFACE_NETWORK_LABEL_POLICY.scaleByKind[kind] ?? 1;
-          sprite.scale.set(
-            sprite.userData.baseScale[0] * scaleFactor,
-            sprite.userData.baseScale[1] * scaleFactor,
-            1,
-          );
-          sprite.renderOrder = SURFACE_NETWORK_LABEL_POLICY.priorityByKind[kind] ?? 1200;
-          sprite.userData.activeScaleFactor = scaleFactor;
-        }
-      }
-      else if (scope === 'overview') {
-        // `checkpoint` joined this list with P6 correction P1 (the giant floating zone labels
-        // buried the checkpoint); `top` with L4 item 17 (the thermal roof plan belongs to the
-        // temperature chips, not to eight room banners).
-        if (['kitchen', 'checkpoint', 'top', 'family-master', 'roof-service'].includes(cameraName)) sprite.visible = false;
-        else sprite.visible = !['sala-3', 'technical', 'ug67', 'rs485-master'].includes(cameraName);
-      }
-      else if (scope === 'sala-3') sprite.visible = cameraName === 'sala-3';
-      else if (cameraName === 'technical') sprite.visible = [
-        'uc-label-UC100-B',
-        'uc-label-UC100-C',
-      ].includes(sprite.userData.entityId);
-      else if (cameraName === 'family-master' || cameraName === 'roof-service') sprite.visible = false;
-      else if (cameraName === SURFACE_RS485_EVIDENCE_POLICY.camera) {
-        sprite.visible = SURFACE_RS485_EVIDENCE_POLICY.visibleKinds.includes(kind);
-      }
-      else sprite.visible = true;
-    }
   }
-  /** Architecture state suppresses technical labels; engineering (or an explicit request) restores them. */
-  function setLabelPolicy(next = {}) {
-    if (next.visualMode === 'architectural' || next.visualMode === 'engineering') {
-      labelPolicy.visualMode = next.visualMode;
-      // `lighting_notes.engineering`: raise the neutral fill. Attempt 2 raised only the AmbientLight,
-      // which every interior surface rejects by its own zone dim, so eng-neutral stayed murky.
-      houseState.visualMode = next.visualMode;
-      applyZoneFillGain();
-    }
-    if ('labels' in next) labelPolicy.labels = Boolean(next.labels);
-    if ('labelsExplicit' in next) labelPolicy.labelsExplicit = Boolean(next.labelsExplicit);
-    setEvidenceCamera(activeEvidenceCamera);
-    return Object.freeze({ ...labelPolicy });
-  }
-
   /** UX item 7: the Techo checkbox drives the interior ceilings together with the roof panels. */
   function setRoofLayerVisible(visible) {
-    roofLayerVisible = Boolean(visible);
-    // M4: the roof-off architecture state lifts the room fill so the opened interiors stay legible.
-    houseState.roofVisible = roofLayerVisible;
-    applyZoneFillGain();
-    setEvidenceCamera(activeEvidenceCamera);
+    // Boot cut 3b: no-change guard — the boot hydrate re-asserts the default (roof on), and
+    // replaying the evidence pipeline for it was pure boot cost.
+    if (Boolean(visible) !== roofLayerVisible) {
+      roofLayerVisible = Boolean(visible);
+      // M4: the roof-off architecture state lifts the room fill so the opened interiors stay legible.
+      houseState.roofVisible = roofLayerVisible;
+      applyZoneFillGain();
+      setEvidenceCamera(activeEvidenceCamera);
+    }
     return roofLayerVisible;
   }
 
@@ -4647,18 +3953,12 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
 
   function dispose() {
     temperatureChips?.dispose();
-    networkSchematic.dispose();
     for (const mesh of interactionMeshes) mesh.parent?.remove(mesh);
     haloGeometry.dispose();
     for (const mesh of meshes) mesh.parent?.remove(mesh);
     for (const mesh of surfaceMeshes) {
       mesh.parent?.remove(mesh);
       mesh.geometry.dispose();
-    }
-    for (const sprite of billboardSprites) {
-      sprite.parent?.remove(sprite);
-      sprite.material.map?.dispose();
-      sprite.material.dispose();
     }
     surfaceAtlasMaterial?.dispose();
     surfaceAtlas?.dispose();
@@ -4675,13 +3975,10 @@ export function createArchitectureStructure({ THREE, groups, materialRegistry } 
     meshes,
     surfaceMeshes,
     surfacePlacements,
-    billboards: billboardSprites,
-    networkSchematic,
     interactionPools,
     setEvidenceCamera,
-    setLabelPolicy,
-    setLightState,
     setRoofLayerVisible,
+    syncNetworkMediaWidths,
     setChipCameraPosition,
     temperatureChips,
     chipEnvelope,

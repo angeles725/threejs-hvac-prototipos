@@ -6,7 +6,6 @@ import { BUILDING, TC300_DEVICES } from '../src/config.mjs';
 import {
   CAMERA_PRESETS,
   ISOMETRIC_PRESET,
-  QA_CAMERA_PRESETS,
 } from '../src/controllers/camera.js';
 import { DEFAULT_QUERY_STATE, parseQueryState, serializeQueryState } from '../src/controllers/query-state.js';
 import { createArchitectureStructure } from '../src/scene/architecture.js';
@@ -27,9 +26,7 @@ import {
   LIGHTING_INTERIOR_CEILING_COLOR,
   LIGHTING_INTERIOR_FIXTURES,
   LIGHTING_LADDER_NORMAL,
-  LIGHTING_LIGHT_STATE_INDIRECT,
   LIGHTING_MEDIA,
-  LIGHTING_PRESET_ZONE_OWNER,
   LIGHTING_RECIPROCAL_PI,
   LIGHTING_RIG,
   LIGHTING_SHELL_BREAKUP,
@@ -63,11 +60,9 @@ import {
   SURFACE_EVIDENCE_VIEWPORT,
   SURFACE_LORAWAN_DASH,
   SURFACE_NETWORK_MEDIA,
-  SURFACE_TC300_LABEL_POLICY,
   projectPointToNdc,
   projectedMetresToPixels,
   resolveNetworkMediaWidthScale,
-  resolveTc300LabelPlacement,
 } from '../src/scene/surfaces.js';
 
 // ---------------------------------------------------------------------------
@@ -301,7 +296,7 @@ function createThreeStub() {
   };
 }
 
-const LAYER_NAMES = ['architecture', 'roof', 'walls', 'hvac', 'rs485', 'lorawan', 'internet', 'zones', 'labels'];
+const LAYER_NAMES = ['architecture', 'roof', 'walls', 'hvac', 'rs485', 'lorawan', 'internet', 'labels'];
 
 function buildArchitecture({ withRegistry = false } = {}) {
   const previousDocument = globalThis.document;
@@ -340,9 +335,37 @@ function instancesOf(asset, predicate) {
   }))).filter(predicate);
 }
 
+/**
+ * Limpieza fase 2 (2026-07-18): the evidence/look-dev preset catalogue was pruned from the
+ * product (only the single `network` view ships). The framings below are TEST-OWNED viewpoint
+ * fixtures — the lighting contracts in this file measure the SHIPPED lighting design and scene
+ * geometry from these standpoints, which stays meaningful after the presets left the product.
+ */
+const fixture = (position, target, fov = null) => Object.freeze({
+  position: Object.freeze(position), target: Object.freeze(target), fov,
+});
+const VIEWPOINT_FIXTURES = Object.freeze({
+  facade: fixture([37, 12.5, 44], [12, 1, 18], 42),
+  lobby: fixture([6, 2.9, 21.7], [-14, 1.8, 17.8], 76),
+  concessions: fixture([-7.5, 2.5, 21.4], [2, 2.1, 16], 60),
+  kitchen: fixture([-17.5, 3.1, 17.8], [-9.6, 2.3, 12.4], 62),
+  checkpoint: fixture([0.6, 3.6, 4.6], [-0.1, 0.75, 12.2], 64),
+  corridor: fixture([0, 3.2, 9.5], [0, 1.35, -8], 65),
+  auditorium: fixture([-37, 13, 17], [-17, 2.5, 6]),
+  technical: fixture([0, 30, -23], [-9, 0, -20.3], 55),
+  ug67: fixture([2, 4.05, 3.55], [3.15, 3.45, 2], 55),
+  top: fixture([0, 57, 2.8], [0, 0, -2], 55),
+  neutral: fixture([54, 44, 58], [0, 1.5, -1], 52),
+  grazing: fixture([25, 7.5, 44], [0, 2.15, 21], 54),
+  'material-floor': fixture([25, 4.2, 16], [0, 0.1, 7], 52),
+  'complete-network': fixture([82, 49, 48], [10, 4.2, -2], 50),
+  'sala-3': fixture([-8.2, 5.8, -8.95], [-25.5, 1.7, -8.95], 70),
+  'reference-match': fixture([-7.5, 4.2, -8.9], [-27.5, 3, -8.9], 70),
+});
+
 const presetOf = (name) => (name === 'isometric'
   ? ISOMETRIC_PRESET
-  : CAMERA_PRESETS[name] ?? QA_CAMERA_PRESETS[name]);
+  : CAMERA_PRESETS[name] ?? VIEWPOINT_FIXTURES[name]);
 
 /** Axis-aligned slab test: how many translucent shell boxes a view ray actually crosses. */
 function rayCrossesBox(origin, direction, { position, size }) {
@@ -511,10 +534,13 @@ test('the cinema emission ladder falls strictly from facade to auditorium and ne
       `tier ${tiers[index].id} (${brightness[index].toFixed(3)}) must out-emit ${tiers[index + 1].id} (${brightness[index + 1].toFixed(3)})`,
     );
   }
-  // The dimmest rung is still readable: aisle and exit lights must not be swallowed by the fog colour.
+  // The dimmest rung is still readable: aisle and exit lights must not melt into the scene
+  // background. Client light restyle (2026-07-15): the ground flipped from dusk navy to a pale
+  // cool gray, so the fixtures now read DARKER than the sky — the guard is a theme-agnostic
+  // luminance separation floor instead of the dark-theme "3x brighter than the fog" form.
   const fogFloor = luminance(encode(decode(LIGHTING_FOG.color)));
   assert.ok(
-    brightness.at(-1) > fogFloor * 3,
+    Math.abs(brightness.at(-1) - fogFloor) >= 0.1,
     'the auditorium rung must still read against the scene background',
   );
 });
@@ -550,7 +576,7 @@ test('correction 1: no interior surface reflects the exterior rig at full streng
   }
   // The network and the devices are NEVER dimmed: `canonical-network-endpoints` passed at 0.85 and
   // must not be traded away for a cinema look.
-  for (const layer of ['rs485', 'lorawan', 'internet', 'hvac', 'zones']) {
+  for (const layer of ['rs485', 'lorawan', 'internet', 'hvac']) {
     for (const mesh of asset.meshes.filter((entry) => entry.userData.layer === layer)) {
       assert.equal(mesh.userData.lightingZone, 'exterior', `${mesh.name} would dim the technical read`);
       assert.equal(readZoneDim(mesh.material), 1);
@@ -653,20 +679,14 @@ test('correction 2: the four-tier luminance ladder is real in the pixels, not in
 test('correction 3: the auditorium is a dark room whose fixtures carve the seat blocks out', () => {
   const { asset } = buildArchitecture({ withRegistry: true });
 
-  // The room's ambient is near zero: a seat block, lit by nothing but the zone's residual rig,
-  // must be practically invisible against the dark carpet.
-  const unlitSeat = zoneLuminance(MATERIAL_SPECS.seatBurgundyFabric, 'auditorium', { lightState: 'off' });
-  assert.ok(unlitSeat < 0.06, `an unlit seat block still reads at luminance ${unlitSeat.toFixed(3)}`);
-
-  // What reveals it is the room's OWN light. The aisle step LEDs and the screen must exist in the
-  // built scene, and they must out-luminate the walls they are seen against by a wide margin.
+  // Interior prune (2026-07-18, maintainer-ordered): the step LEDs and screens are the room's own
+  // light in the DESIGN (the pure channel contracts below still measure them), but the sealed
+  // rooms are no longer BUILT with them — the 17-view capture diff proved zero shipped pixels.
+  // The build guard pins them out so a regression re-introducing the geometry is a red test.
   const ledInstances = instancesOf(asset, ({ materialKey }) => materialKey === 'aisle-step-led');
   const screenInstances = instancesOf(asset, ({ materialKey }) => materialKey === 'screen-emissive');
-  assert.equal(ledInstances.length, 32, 'every one of the eight rooms needs its four step-LED runs');
-  assert.equal(screenInstances.length, 8, 'every room needs its emissive screen');
-  for (const instance of [...ledInstances, ...screenInstances]) {
-    assert.equal(instance.zone, 'auditorium', 'a house fixture landed outside the room it lights');
-  }
+  assert.equal(ledInstances.length, 0, 'the pruned aisle step LEDs crept back into the build');
+  assert.equal(screenInstances.length, 0, 'the pruned emissive screens crept back into the build');
 
   const wall = zoneLuminance(MATERIAL_SPECS.shellWarmWhite, 'auditorium');
   for (const key of ['aisle-step-led', 'screen-emissive', 'surface-exit-green']) {
@@ -718,70 +738,58 @@ test('correction 3: the auditorium is a dark room whose fixtures carve the seat 
   );
 });
 
-// Correction 4 — light_state actually switches the channels this pass owns.
+// Correction 4 (superseded by the 2026-07-15 simplification) — the lights-off state is gone.
+// The channels this pass owns still exist, still emit, and are always on.
 
-test('correction 4: light_state=off darkens the corridor and the sala, not just a few strips', () => {
+test('correction 4: the house emission channels exist, emit and are always on', () => {
   const { asset } = buildArchitecture({ withRegistry: true });
 
-  // The two channels the DesignSpec names as this pass's own now exist and switch.
   for (const key of ['screen-emissive', 'aisle-step-led', 'lobby-ceiling-panel', 'corridor-ceiling-strip', 'marquee-downlight']) {
     const definition = LIGHTING_EMISSION_CHANNELS[key];
     assert.ok(definition, `${key} is not an emission channel at all`);
-    assert.ok(resolveEmissiveIntensity(definition, 'on') > 0);
-    // CONTRACT CHANGE (P6 correction P5): `off` is no longer identically zero for every channel.
-    // The sala aisle/step LEDs keep a declared floor so seating silhouettes stay legible; every
-    // channel must still drop hard so the on/off pair stays two unmistakable states.
-    if (key === 'aisle-step-led') {
-      const off = resolveEmissiveIntensity(definition, 'off');
-      assert.ok(off > 0, 'the aisle/step LEDs must keep a lights-off floor');
-      assert.ok(
-        off <= resolveEmissiveIntensity(definition, 'on') / 3,
-        'the lights-off floor must stay far below the ON value or the pair stops reading as two states',
-      );
-    } else assert.equal(resolveEmissiveIntensity(definition, 'off'), 0);
+    assert.ok(resolveEmissiveIntensity(definition) > 0);
+  }
+  // Interior prune (2026-07-18): only the channels a shipped pixel can carry are still BUILT —
+  // the sealed-room screen/aisle-LED geometry left the build (design contracts above unchanged).
+  for (const key of ['lobby-ceiling-panel', 'corridor-ceiling-strip', 'marquee-downlight']) {
     assert.ok(
       instancesOf(asset, (instance) => instance.materialKey === key).length > 0,
-      `${key} switches, but the builder never emits it: the capture pair cannot change`,
+      `${key} is declared, but the builder never emits it`,
+    );
+  }
+  for (const key of ['screen-emissive', 'aisle-step-led']) {
+    assert.equal(
+      instancesOf(asset, (instance) => instance.materialKey === key).length, 0,
+      `${key} is pruned interior geometry and crept back into the build`,
     );
   }
 
-  // And the ZONES change, not just the strips. The corridor and sala on/off pairs were byte-for-
-  // byte identical because the exterior rig, not the fixtures, was carrying the value.
+  // The ZONES carry real interior light: without fixtures the interiors would be rig-only dark.
   for (const zone of ['lobby', 'corridor', 'auditorium']) {
-    const on = resolveZoneIrradiance(zone, { lightState: 'on' });
-    const off = resolveZoneIrradiance(zone, { lightState: 'off' });
-    assert.ok(off < on, `${zone} does not change at all between light_state on and off`);
     assert.ok(
       resolveFixtureIrradiance(zone) > 0,
-      `${zone} has no interior fixture: switching the house lights cannot darken it`,
+      `${zone} has no interior fixture: the house light cannot carry it`,
     );
   }
-  const corridorDrop = 1 - resolveZoneIrradiance('corridor', { lightState: 'off' })
-    / resolveZoneIrradiance('corridor', { lightState: 'on' });
-  assert.ok(corridorDrop >= 0.2, `the corridor only loses ${(corridorDrop * 100).toFixed(0)}% of its light`);
 
-  // The runtime half of the switch: the PointLights must go with the emissives, or the pools of
-  // light survive a lights-off capture.
-  const asset2 = asset;
-  assert.equal(asset2.setLightState('off'), 'off');
+  // The light-state switch left the asset API with the lights toggle.
+  assert.equal('setLightState' in asset, false, 'the asset must not expose a light switch');
 
-  // Preserved, deliberately: an engineering capture with the house lights off still proves a live
-  // network and a live thermostat.
+  // The network media and the thermostat status ring were never house channels, and still are not.
   for (const reserved of ['rs485-green', 'lorawan-blue', 'ethernet-blue', 'tc-blue', 'direction-amber']) {
-    assert.ok(!(reserved in LIGHTING_EMISSION_CHANNELS), `${reserved} must never be switched off by light_state`);
+    assert.ok(!(reserved in LIGHTING_EMISSION_CHANNELS), `${reserved} is system evidence, not house lighting`);
   }
 });
 
-test('correction 4: the runtime switches its interior fixtures with the house lights', async () => {
+test('correction 4: the runtime instantiates its interior fixtures always lit', async () => {
   const source = await readFile(new URL('../src/scene/runtime.js', import.meta.url), 'utf8');
-  assert.match(source, /function setLightState/, 'the runtime owns the fixture half of light_state');
-  assert.match(source, /LIGHTING_HOUSE_FIXTURES/, 'the forecourt fixtures switch with the interior ones');
+  assert.doesNotMatch(source, /setLightState/, 'the light-state switch left the runtime');
+  assert.match(source, /LIGHTING_HOUSE_FIXTURES/, 'the forecourt fixtures ride with the interior ones');
   assert.match(source, /resolveFixtureIntensity/);
   assert.match(source, /light\.castShadow = false/, 'no fixture may cast a shadow');
 
   const main = await readFile(new URL('../main.js', import.meta.url), 'utf8');
-  assert.match(main, /runtime\.setLightState\(queryState\.lightState\)/);
-  assert.match(main, /runtime\.setLightState\(lightState\)/);
+  assert.doesNotMatch(main, /setLightState|lightState/, 'no lights toggle wiring survives in main.js');
 });
 
 // Correction 5 — the lobby has real fixture light, and its red accents sit ABOVE the wall.
@@ -1003,31 +1011,24 @@ test('correction 10: the interior presets are capped by a dark ceiling, except i
   );
 });
 
-// Correction 11 — no channel is darker with the lights ON.
+// Correction 11 — no channel is darker emitting than mute (the ACES inversion guard).
 
-test('correction 11: every emission channel is brighter with the lights on than with them off', () => {
+test('correction 11: every emission channel is brighter emitting than mute', () => {
   for (const [key, definition] of Object.entries(LIGHTING_EMISSION_CHANNELS)) {
     const zone = resolveChannelZone(definition);
     const on = zoneLuminance({
       color: definition.color,
       emissive: definition.emissive,
-      emissiveIntensity: resolveEmissiveIntensity(definition, 'on'),
-    }, zone, { lightState: 'on' });
-    const off = zoneLuminance({
+      emissiveIntensity: resolveEmissiveIntensity(definition),
+    }, zone);
+    const mute = zoneLuminance({
       color: definition.color,
       emissiveIntensity: 0,
-    }, zone, { lightState: 'off' });
+    }, zone);
     assert.ok(
-      on > off,
-      `${key} renders DARKER with the lights on (${on.toFixed(3)}) than off (${off.toFixed(3)})`,
+      on > mute,
+      `${key} renders DARKER emitting (${on.toFixed(3)}) than mute (${mute.toFixed(3)})`,
     );
-    // Inside the building the delta must also be OBVIOUS, or the on/off capture pair proves nothing.
-    if (zone !== 'exterior') {
-      assert.ok(
-        on >= off * 1.35,
-        `${key} only moves from ${off.toFixed(3)} to ${on.toFixed(3)}: the pair will read as identical`,
-      );
-    }
   }
 
   // The ticket-kiosk screen is the one the reviewer caught: maroon/dark-blue ON, bright blue OFF.
@@ -1038,13 +1039,12 @@ test('correction 11: every emission channel is brighter with the lights on than 
   const litScreen = screenColour({
     color: kiosk.color,
     emissive: kiosk.emissive,
-    emissiveIntensity: resolveEmissiveIntensity(kiosk, 'on'),
+    emissiveIntensity: resolveEmissiveIntensity(kiosk),
   }, LIGHTING_TONE_MAPPING.exposure, 'lobby');
   const darkScreen = screenColour(
     { color: kiosk.color },
     LIGHTING_TONE_MAPPING.exposure,
     'lobby',
-    { lightState: 'off' },
   );
   for (const index of [0, 1, 2]) {
     assert.ok(
@@ -1138,34 +1138,23 @@ test('the lighting zone of a surface is derived from the plan bands, never hand-
 });
 
 // ---------------------------------------------------------------------------
-// 4 — light_state (evidence_contract.lighting-camera requires on AND off)
+// 4 — light_state (REMOVED by the 2026-07-15 simplification: lights are always on)
 // ---------------------------------------------------------------------------
 
-test('light_state is a deterministic query state and only touches the emission channels', () => {
-  assert.equal(DEFAULT_QUERY_STATE.lightState, 'on');
-  assert.equal(parseQueryState('?state=architecture&light_state=off&tick=0').lightState, 'off');
-  assert.equal(parseQueryState('?state=architecture&light_state=on&tick=0').lightState, 'on');
-  assert.deepEqual(parseQueryState('?light_state=dim', () => {}), DEFAULT_QUERY_STATE);
-  assert.match(serializeQueryState(parseQueryState('?light_state=off')), /light_state=off/);
+test('light_state left the query contract; every emission channel is always on', () => {
+  assert.equal('lightState' in DEFAULT_QUERY_STATE, false, 'no lightState default survives');
+  // A URL carrying the dead token resets atomically, like any unknown known-key value would not:
+  // the key itself is unknown now, so it is simply ignored by the parser.
+  assert.doesNotMatch(serializeQueryState(parseQueryState('')), /light_state/);
 
   for (const [key, definition] of Object.entries(LIGHTING_EMISSION_CHANNELS)) {
-    assert.ok(resolveEmissiveIntensity(definition, 'on') > 0, `${key} must emit when the lights are on`);
-    // CONTRACT CHANGE (P6 correction P5): a channel may declare an explicit lights-off floor; only
-    // the sala aisle/step LEDs do, and their floor must stay far under the ON value. Every channel
-    // without a declared floor still goes fully dark.
-    const off = resolveEmissiveIntensity(definition, 'off');
-    if (definition.offIntensityScale > 0) {
-      assert.equal(key, 'aisle-step-led', `${key} must not silently gain a lights-off floor`);
-      assert.ok(off > 0 && off <= resolveEmissiveIntensity(definition, 'on') / 3);
-    } else {
-      assert.equal(off, 0, `${key} must go dark when the lights are off`);
-    }
+    assert.ok(resolveEmissiveIntensity(definition) > 0, `${key} must emit — the lights are always on`);
+    assert.equal('offIntensityScale' in definition, false, `${key} must not declare a lights-off residual`);
   }
 
-  // The network media and the device status ring are NOT house lighting: an engineering capture
-  // taken with the lights off must still show the RS-485 run and a live thermostat.
+  // The network media and the device status ring are NOT house lighting.
   for (const reserved of ['rs485-green', 'lorawan-blue', 'ethernet-blue', 'tc-blue', 'direction-amber']) {
-    assert.ok(!(reserved in LIGHTING_EMISSION_CHANNELS), `${reserved} must never be switched off by light_state`);
+    assert.ok(!(reserved in LIGHTING_EMISSION_CHANNELS), `${reserved} is system evidence, not house lighting`);
   }
 });
 
@@ -1228,18 +1217,26 @@ test('correction: LoRaWAN stays in the blue family and reads as a dash, never as
   assert.equal(resolveNetworkMediaWidthScale('ug67', 'lorawan-blue'), 1);
 });
 
-test('correction: the emissive media still out-luminates the translucent engineering shell', () => {
+test('correction: the emissive media still read against the translucent engineering shell', () => {
   const shell = MATERIAL_SPECS.shellWarmWhite;
   const shellOpacity = resolveShellLayerOpacity();
-  const background = luminance(encode(decode(LIGHTING_FOG.color)));
-  const shellOnScreen = shellOpacity * luminance(screenColour({ color: shell.color }))
-    + (1 - shellOpacity) * background;
+  const backgroundScreen = encode(decode(LIGHTING_FOG.color));
+  const shellScreen = screenColour({ color: shell.color });
+  const composite = [0, 1, 2].map((index) => (
+    shellOpacity * shellScreen[index] + (1 - shellOpacity) * backgroundScreen[index]
+  ));
 
+  // Client light restyle (2026-07-15): the sky behind the translucent shell is now near-white,
+  // so no medium can OUT-luminate the composite the way the dark-theme 3:1 gate demanded. The
+  // wash-out failure the gate guards against is now chromatic: each medium must keep a screen-
+  // space RGB distance from the near-neutral composite it draws over — a desaturated pale line
+  // fails, a saturated green/blue line clears it with ~2x margin (measured 0.94–1.13).
   for (const key of ['rs485Green', 'lorawanBlue', 'ethernetBlue']) {
-    const media = luminance(screenColour(MATERIAL_SPECS[key]));
+    const media = screenColour(MATERIAL_SPECS[key]);
+    const distance = Math.hypot(...media.map((channel, index) => channel - composite[index]));
     assert.ok(
-      media / shellOnScreen >= 3,
-      `${key} only beats the translucent shell ${(media / shellOnScreen).toFixed(1)}:1 — it will be washed out`,
+      distance >= 0.5,
+      `${key} sits ${distance.toFixed(2)} from the shell composite in screen RGB — it will be washed out`,
     );
   }
 });
@@ -1271,17 +1268,10 @@ test('correction: stacked translucent shell layers cannot accumulate into milky 
   assert.ok(applied <= LIGHTING_ENGINEERING_SHELL.specPerLayerOpacity);
 });
 
-test('correction: the material registry applies the derived shell opacity in engineering mode', () => {
-  const registry = createMaterialRegistry(createThreeStub());
-  registry.setEngineeringMode(true);
-
-  assert.equal(registry.materials.shellWarmWhite.opacity, resolveShellLayerOpacity());
-  assert.equal(registry.materials.shellWarmWhite.transparent, true);
-  assert.equal(registry.materials.shellWarmWhite.depthWrite, false);
-
-  registry.setEngineeringMode(false);
-  assert.equal(registry.materials.shellWarmWhite.opacity, 1);
-});
+// Limpieza fase 2 (2026-07-18): the material registry's engineering mode was retired with the
+// engineering visual state, and its derived-shell-opacity contract left with it. The lighting
+// authority (`resolveShellLayerOpacity` and the LIGHTING_ENGINEERING_SHELL derivation above)
+// keeps its own pure contracts.
 
 // ---------------------------------------------------------------------------
 // 7 — Surface correction 4: the TC300 status ring, and only the ring
@@ -1324,39 +1314,10 @@ test('correction: the TC300 status ring reads as a lit device without inflating 
 });
 
 // ---------------------------------------------------------------------------
-// 8 — Surface correction 5: the endpoint that owns the preset zone gets its chip
+// Surface correction 5 (camera composition): the reframed concessions preset
 // ---------------------------------------------------------------------------
 
-test('correction: the endpoint owning the active preset zone is labelled at that preset', () => {
-  const { asset } = buildArchitecture();
-  const chips = asset.plan.billboards.technical.filter(({ kind }) => kind === 'tc300');
-
-  for (const [cameraName, zoneId] of Object.entries(LIGHTING_PRESET_ZONE_OWNER)) {
-    const preset = presetOf(cameraName);
-    assert.ok(preset, `${cameraName} must be a real preset`);
-    const owners = TC300_DEVICES.filter((device) => device.zoneId === zoneId);
-    assert.ok(owners.length > 0, `${cameraName} claims to own zone ${zoneId}, which has no thermostat`);
-
-    for (const owner of owners) {
-      const chip = chips.find(({ text }) => text === owner.id);
-      assert.ok(chip, `${owner.id} has no ID chip`);
-      const placement = resolveTc300LabelPlacement({
-        cameraName,
-        preset,
-        chipPosition: chip.position,
-        chipWidthMetres: chip.scale[0],
-        zoneOwned: true,
-      });
-      assert.equal(
-        placement.visible,
-        true,
-        `${owner.id} owns the ${cameraName} zone but its chip is culled (${placement.reason})`,
-      );
-    }
-  }
-});
-
-test('correction: the reframed concessions preset holds both its service line and TC300-02', () => {
+test('correction: the reframed concessions preset keeps its service line framed', () => {
   const preset = presetOf('concessions');
 
   // The endpoint that owns the zone is in front of the camera and inside the frame.
@@ -1364,8 +1325,7 @@ test('correction: the reframed concessions preset holds both its service line an
   const ndc = projectPointToNdc(chip, preset);
   assert.ok(ndc, 'TC300-02 must not sit behind the concessions camera');
   assert.ok(
-    Math.abs(ndc.x) <= SURFACE_TC300_LABEL_POLICY.frameMargin
-      && Math.abs(ndc.y) <= SURFACE_TC300_LABEL_POLICY.frameMargin,
+    Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1,
     'TC300-02 must be inside the concessions frame',
   );
 
@@ -1471,6 +1431,22 @@ const zoneFloor = (zone, options = {}) => Math.min(
   ...zoneSamples(zone).map(({ id }) => perceived(id, options)),
 );
 
+/**
+ * Interior prune (2026-07-18, maintainer-ordered): these material:zone pairs are still the
+ * lighting DESIGN authority — the pure ladder above keeps measuring them — but they are no longer
+ * BUILT: the 17-view hide/capture diff (runs/2026-07-18-bfcache-and-prune.md) proved the always-on
+ * roof/walls + acoustic linings seal them from every reachable shipped pixel. The build guard now
+ * pins them OUT of the build so a regression re-introducing the geometry is a red test.
+ */
+const PRUNED_BUILD_SURFACES = new Set([
+  'seating-burgundy:auditorium',
+  'aisle-dark:auditorium',
+  'auditorium-carpet:auditorium',
+  // The corridor carpet plate is sealed under the corridor soffit (the soffit and the corridor
+  // WALLS remain built and sampled) — the corridor rung keeps its wall/ceiling/door samples.
+  'auditorium-carpet:corridor',
+]);
+
 test('attempt 3 — every sampled surface is a real box the builder emits in that zone', () => {
   const { asset } = buildArchitecture({ withRegistry: true });
   for (const sample of PERCEIVED_SURFACES) {
@@ -1478,6 +1454,10 @@ test('attempt 3 — every sampled surface is a real box the builder emits in tha
       asset,
       (instance) => instance.materialKey === sample.materialKey && instance.zone === sample.zone,
     );
+    if (PRUNED_BUILD_SURFACES.has(`${sample.materialKey}:${sample.zone}`)) {
+      assert.equal(emitted.length, 0, `${sample.id}: pruned interior surface crept back into the build`);
+      continue;
+    }
     assert.ok(
       emitted.length > 0,
       `${sample.id}: the builder emits no ${sample.materialKey} in the ${sample.zone} zone, `
@@ -1547,22 +1527,17 @@ test('attempt 3 correction 2: the auditorium seat blocks are CARVED OUT, not era
 test('attempt 3 correction 3: emissive exit signs exist INSIDE the auditoriums and are framed', () => {
   const { asset } = buildArchitecture({ withRegistry: true });
 
+  // Interior prune (2026-07-18, maintainer-ordered): the in-room exit signs are sealed behind the
+  // always-on roof/walls and acoustic linings (17-view capture diff: zero shipped pixels), so
+  // they left the build; the framing evidence retired with them. The emission-channel triad below
+  // is pure design authority and keeps its full contract.
   const salaExits = instancesOf(
     asset,
     (instance) => instance.materialKey === 'surface-exit-green'
       && instance.zone === 'auditorium'
       && instance.metadata?.kind === 'auditorium-exit-sign',
   );
-  assert.equal(salaExits.length, 16, 'every one of the eight rooms needs its two in-room exit signs');
-
-  // ...and at least one of sala-3's is inside BOTH mandated framings.
-  for (const preset of ['sala-3', 'reference-match']) {
-    const framed = salaExits
-      .filter(({ metadata }) => metadata.auditoriumId === 'auditorium-sala-3')
-      .map(({ position }) => projectPointToNdc(position, presetOf(preset)))
-      .filter((ndc) => ndc && Math.abs(ndc.x) <= 0.95 && Math.abs(ndc.y) <= 0.95);
-    assert.ok(framed.length >= 1, `no sala-3 exit sign is inside the ${preset} frame`);
-  }
+  assert.equal(salaExits.length, 0, 'the pruned in-room exit signs crept back into the build');
 
   // The aisle/exit/screen triad, all three above the room's own surfaces.
   const wall = perceived('sala divider side wall');
@@ -1580,32 +1555,29 @@ test('attempt 3 correction 3: emissive exit signs exist INSIDE the auditoriums a
   }
 });
 
-test('attempt 3 correction 4: the marquee is a REAL emission channel and its spill dies with it', () => {
+test('attempt 3 correction 4: the marquee is a REAL emission channel, not paint', () => {
   const { asset } = buildArchitecture({ withRegistry: true });
 
-  // The judge: "the red marquee canopy and the Cinemex sign render at identical brightness in
-  // lights-on and lights-off." An emissive whose ALBEDO already tone-maps to the same pixel is not
-  // a channel — so the switch is asserted in the PIXEL, not in `emissiveIntensity`.
+  // The judge's original finding was measured in the PIXEL: an emissive whose ALBEDO already
+  // tone-maps to the same value is not a channel. The lights-off state is gone, so the guard is
+  // now that the emission carries a real pixel delta over the unlit face it sits on.
   for (const key of ['marquee-canopy', 'facade-sign-emissive']) {
     const definition = LIGHTING_EMISSION_CHANNELS[key];
     assert.ok(definition, `${key} is not an emission channel at all`);
     assert.ok(
       instancesOf(asset, (instance) => instance.materialKey === key).length > 0,
-      `${key} switches, but the builder never emits it`,
+      `${key} is declared, but the builder never emits it`,
     );
     const sample = { zone: 'exterior', position: [0, 4.6, 22.9], normal: NORTH, color: definition.color, emissive: definition.emissive };
-    const on = surfaceLuminance({ ...sample, emissiveIntensity: resolveEmissiveIntensity(definition, 'on') });
-    const off = surfaceLuminance({ ...sample, emissiveIntensity: resolveEmissiveIntensity(definition, 'off') });
-    assert.ok(on - off >= 0.2, `${key} only moves ${(on - off).toFixed(3)} between light_state on and off: it is not a channel`);
+    const on = surfaceLuminance({ ...sample, emissiveIntensity: resolveEmissiveIntensity(definition) });
+    const mute = surfaceLuminance({ ...sample, emissiveIntensity: 0 });
+    assert.ok(on - mute >= 0.2, `${key} only moves ${(on - mute).toFixed(3)} over its unlit face: it is not a channel`);
   }
 
-  // Exterior fixture spill on the forecourt, and it goes with the lights.
+  // Exterior fixture spill on the forecourt still exists.
   const forecourt = LIGHTING_EXTERIOR_FIXTURES.forecourt;
   assert.ok(forecourt.positions.length >= 2, 'the forecourt has no fixture pool at all');
   assert.equal(forecourt.zone, 'exterior');
-  const pool = surfaceLuminance({ zone: 'exterior', position: [0, 0, 26], normal: UP, color: MATERIAL_SPECS.exteriorConcrete.color });
-  const dark = surfaceLuminance({ zone: 'exterior', position: [0, 0, 26], normal: UP, color: MATERIAL_SPECS.exteriorConcrete.color, lightState: 'off' });
-  assert.ok(pool - dark >= 0.05, `the forecourt pool only changes ${(pool - dark).toFixed(3)} with the house lights`);
 });
 
 test('attempt 3 correction 5 + 6: the facade fills the frame and the elevation has falloff', () => {
@@ -1881,6 +1853,12 @@ test('L2 — every sampled surface is a real box the builder emits in that zone'
       asset,
       (instance) => instance.materialKey === sample.materialKey && instance.zone === sample.zone,
     );
+    // Interior prune (2026-07-18): pruned pairs stay in the DESIGN authority but must stay out
+    // of the build — see PRUNED_BUILD_SURFACES above.
+    if (PRUNED_BUILD_SURFACES.has(`${sample.materialKey}:${sample.zone}`)) {
+      assert.equal(emitted.length, 0, `${sample.id}: pruned interior surface crept back into the build`);
+      continue;
+    }
     assert.ok(
       emitted.length > 0,
       `${sample.id}: the builder emits no ${sample.materialKey} in the ${sample.zone} zone, `
@@ -2058,37 +2036,18 @@ test('L2 CORRECTION 2 — the auditorium is CARVED by its aisle LEDs, exit signs
   );
 });
 
-test('L2 CORRECTION 3 — the in-room exit signs present a READABLE face to the sala cameras', () => {
+test('L2 CORRECTION 3 — the pruned in-room exit signs stay out of the build', () => {
+  // Interior prune (2026-07-18, maintainer-ordered): this contract used to prove the in-room
+  // signs presented a readable 0.34 x 0.9 m blade face to the sala framings (sizes, thin-axis and
+  // NDC framing asserts). The signs are sealed from every reachable shipped pixel (17-view
+  // capture diff), so the geometry left the build and the readable-face evidence retired with it.
   const { asset } = buildArchitecture({ withRegistry: true });
   const signs = instancesOf(asset, (i) => i.metadata?.kind === 'auditorium-exit-sign');
-  assert.equal(signs.length, 16, 'two exit signs per auditorium');
-
-  // The sala-3 and reference-match cameras both look WEST, down the room's long axis. A plate whose
-  // 0.62 m dimension lies ALONG that axis presents its 0.05 m edge to the camera — which is the
-  // "2-3 px green dash" the judge could not read. The readable face must span y and z.
-  for (const sign of signs) {
-    const [sx, sy, sz] = sign.size;
-    assert.ok(
-      sy * sz >= 0.22,
-      `an exit sign presenting a ${sy} x ${sz} m face (${(sy * sz).toFixed(3)} m2) to a camera `
-      + 'looking down the x axis is a dash, not a sign',
-    );
-    assert.ok(sx < sy && sx < sz, 'the exit sign plate must be THIN on the axis the camera looks down');
-  }
-
-  // ...and it must actually be inside the frames that are supposed to prove it.
-  for (const cameraName of ['sala-3', 'reference-match']) {
-    const preset = presetOf(cameraName);
-    const framed = signs.filter((sign) => {
-      const ndc = projectPointToNdc(sign.position, preset, LIGHTING_CAPTURE_VIEWPORT.aspect);
-      return ndc && Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1;
-    });
-    assert.ok(framed.length >= 1, `no in-room exit sign is inside the ${cameraName} frame`);
-  }
+  assert.equal(signs.length, 0, 'the pruned in-room exit signs crept back into the build');
 });
 
 test('L2 CORRECTION 4 — the facade FILLS the frame and the marquee is not clipped', () => {
-  const preset = CAMERA_PRESETS.facade;
+  const preset = presetOf('facade');
   const aspect = LIGHTING_CAPTURE_VIEWPORT.aspect;
   const at = (point) => projectPointToNdc(point, preset, aspect);
 
@@ -2120,28 +2079,9 @@ test('L2 CORRECTION 4 — the facade FILLS the frame and the marquee is not clip
   assert.ok(plaza >= 0.10, 'the forecourt spill needs ground in the frame to land on');
 });
 
-test('L2 CORRECTION 5 — the forecourt is a POOL that dies with the house lights', () => {
-  // "The plaza gray is pixel-for-pixel the same in lights-on and lights-off." The canopy soffit
-  // darkens, which proves the channel switches; the GROUND simply never received it.
-  const preset = CAMERA_PRESETS.facade;
-  // Sample the ground the facade camera actually looks at, not a convenient point under a flood.
-  const framedGround = [[0, 0, 26], [14, 0, 30], [26, 0, 38], [-8, 0, 28], [20, 0, 34]];
-  for (const point of framedGround) {
-    const ndc = projectPointToNdc(point, preset, LIGHTING_CAPTURE_VIEWPORT.aspect);
-    if (!ndc || Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue;
-    const on = surfaceLuminance({
-      zone: 'exterior', position: point, normal: L2_UP, color: MATERIAL_SPECS.exteriorConcrete.color,
-    });
-    const off = surfaceLuminance({
-      zone: 'exterior', position: point, normal: L2_UP, color: MATERIAL_SPECS.exteriorConcrete.color,
-    }, { lightState: 'off' });
-    assert.ok(
-      on - off >= 0.05,
-      `the framed plaza at [${point}] moves only ${(on - off).toFixed(3)} between lights-on `
-      + `(${on.toFixed(3)}) and lights-off (${off.toFixed(3)}): the marquee casts nothing on the ground`,
-    );
-  }
-  // A pool has an EDGE. Without falloff it is an ambient lift, not a luminaire.
+test('L2 CORRECTION 5 — the forecourt is a POOL with a real edge', () => {
+  // The lights-off half of this correction died with the light toggle; what must survive is the
+  // pool itself: a luminaire with falloff, not an ambient lift.
   const under = surfaceLuminance({
     zone: 'exterior', position: [0, 0, 26], normal: L2_UP, color: MATERIAL_SPECS.exteriorConcrete.color,
   });
@@ -2166,31 +2106,13 @@ test('L2 CORRECTION 6 — the shell and the plaza break their specular up across
   }
 });
 
-test('L2 CORRECTION 7 — the lobby FLOOR is gated on the house-light channel', () => {
-  // "The tile floor stays almost as bright in lights-off while the ceiling and the kiosk screens all
-  // correctly go dark. An ambient/hemi term is flooding the floor independently of the channel."
-  // It is the ENVIRONMENT: `scene.environment` is a RoomEnvironment PMREM probe, and the gloss tile
-  // carries envMapIntensity 2 with clearcoat 1. That indirect term never asked the house lights.
-  const ceilingOn = l2('lobby ceiling');
-  const ceilingOff = l2('lobby ceiling', { lightState: 'off' });
-  const floorOn = l2('lobby floor');
-  const floorOff = l2('lobby floor', { lightState: 'off' });
-  const ceilingDrop = 1 - ceilingOff / ceilingOn;
-  const floorDrop = 1 - floorOff / floorOn;
-  assert.ok(ceilingDrop >= 0.5, `the lobby ceiling must go dark with the house lights (dropped ${(ceilingDrop * 100).toFixed(0)}%)`);
-  assert.ok(
-    floorDrop >= ceilingDrop * 0.7,
-    `the lobby floor drops only ${(floorDrop * 100).toFixed(0)}% while its ceiling drops `
-    + `${(ceilingDrop * 100).toFixed(0)}%: an ambient term is holding the tile lit`,
-  );
-  // The environment probe must be a term the house-light channel can actually reach.
-  assert.ok(
-    LIGHTING_LIGHT_STATE_INDIRECT.off < 0.5 && LIGHTING_LIGHT_STATE_INDIRECT.on === 1,
-    'the indirect/environment term must be gated by light_state, or the gloss tile keeps its lit value',
-  );
+test('L2 CORRECTION 7 — the indirect/environment term stays a live shader uniform', () => {
+  // The lights-off half of this correction died with the light toggle. What must survive is the
+  // MECHANISM it forced into the shader: the indirect terms (ambient bounce + environment probe)
+  // ride a live per-zone uniform the engineering lift can move, never a hard-coded constant.
   assert.ok(
     createZoneShaderPatch('lobby').includes(LIGHTING_INDIRECT_GAIN_UNIFORM),
-    'the emitted GLSL must scale its indirect terms by the house-light gate, or the model is a fiction',
+    'the emitted GLSL must scale its indirect terms by the zone gain uniform, or the model is a fiction',
   );
 });
 

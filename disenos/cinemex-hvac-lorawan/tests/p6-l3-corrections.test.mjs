@@ -135,7 +135,7 @@ function createThreeStub() {
   };
 }
 
-const LAYER_NAMES = ['architecture', 'roof', 'walls', 'hvac', 'rs485', 'lorawan', 'internet', 'zones', 'labels'];
+const LAYER_NAMES = ['architecture', 'roof', 'walls', 'hvac', 'rs485', 'lorawan', 'internet', 'labels'];
 
 function buildArchitecture() {
   const previousDocument = globalThis.document;

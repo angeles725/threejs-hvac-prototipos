@@ -2,32 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { APP_CONFIG, TC300_DEVICES } from '../src/config.mjs';
-import { CAMERA_PRESETS, QA_CAMERA_PRESETS } from '../src/controllers/camera.js';
-import {
-  createArchitecturePlan,
-  createArchitectureStructure,
-  resolveTechnicalLabelVisibility,
-} from '../src/scene/architecture.js';
+import { createArchitectureStructure } from '../src/scene/architecture.js';
 import { MATERIAL_SPECS } from '../src/scene/materials.js';
 import {
-  NETWORK_SCHEMATIC_BOARD,
-  createNetworkSchematicLayout,
-  createNetworkSchematicModel,
-  createNetworkSchematicTexture,
-  resolveBoardNormal,
-  resolveBoardWorldCorners,
-  resolveNetworkEvidenceVisibility,
-} from '../src/scene/network-schematic.js';
-import {
-  SURFACE_EVIDENCE_VIEWPORT,
   SURFACE_LORAWAN_DASH,
   SURFACE_NETWORK_MEDIA,
-  SURFACE_TC300_LABEL_POLICY,
   isDirectionMarkerSampleVisibleOnDashedRoute,
-  isPointInsideProjectedQuad,
-  projectPointToNdc,
   resolveDashCount,
-  resolveTc300LabelPlacement,
   resolveTrayOffset,
 } from '../src/scene/surfaces.js';
 
@@ -158,7 +139,7 @@ function createThreeStub() {
   };
 }
 
-const LAYER_NAMES = ['architecture', 'roof', 'walls', 'hvac', 'rs485', 'lorawan', 'internet', 'zones', 'labels'];
+const LAYER_NAMES = ['architecture', 'roof', 'walls', 'hvac', 'rs485', 'lorawan', 'internet', 'labels'];
 
 function buildArchitecture() {
   const previousDocument = globalThis.document;
@@ -193,8 +174,6 @@ function contains(outer, inner) {
     outer.min[axis] <= inner.min[axis] + 1e-6 && outer.max[axis] >= inner.max[axis] - 1e-6
   ));
 }
-
-const BOARD_CAMERAS = ['complete-network', 'network-schematic-detail'];
 
 // ---------------------------------------------------------------------------
 // Correction 1 — the 14 TC300 endpoints are real surface devices.
@@ -239,69 +218,6 @@ test('correction 1: every TC300 is a surface device with a dark-glass face and a
 
   // Device bodies keep the accepted structural scale: no inflation anywhere.
   assert.deepEqual(bodies[0].size, [0.1, 0.1136, 0.026]);
-});
-
-test('correction 1: TC300 ID chips are readable and distance-culled at the five evidence presets', () => {
-  const plan = createArchitecturePlan();
-  const chips = plan.billboards.technical.filter(({ kind }) => kind === 'tc300');
-
-  assert.equal(chips.length, 14);
-  assert.deepEqual(
-    chips.map(({ text }) => text),
-    TC300_DEVICES.map(({ id }) => id),
-    'the chip must carry the canonical TC300-xx id, not a private abbreviation',
-  );
-
-  for (const cameraName of SURFACE_TC300_LABEL_POLICY.cameras) {
-    const preset = CAMERA_PRESETS[cameraName] ?? QA_CAMERA_PRESETS[cameraName];
-    assert.ok(preset, `${cameraName} must be a real preset`);
-
-    const placements = chips.map((chip) => resolveTc300LabelPlacement({
-      cameraName,
-      preset,
-      chipPosition: chip.position,
-      chipWidthMetres: chip.scale[0],
-    }));
-    const visible = placements.filter(({ visible: shown }) => shown);
-
-    assert.ok(visible.length >= 1, `${cameraName} must show at least one TC300 chip`);
-    for (const placement of visible) {
-      assert.ok(
-        placement.projectedWidthPx >= SURFACE_TC300_LABEL_POLICY.minimumProjectedChipPx,
-        `${cameraName} keeps an unreadable chip (${placement.projectedWidthPx.toFixed(1)} px)`,
-      );
-    }
-    // A chip is only ever culled for a derived reason: it left the frame, or it stopped being legible.
-    for (const placement of placements.filter(({ visible: shown }) => !shown)) {
-      assert.ok(
-        placement.reason === 'off-frame'
-          || placement.projectedWidthPx < SURFACE_TC300_LABEL_POLICY.minimumProjectedChipPx,
-        `${cameraName} culled a readable, in-frame chip`,
-      );
-    }
-  }
-
-  // The corridor, kitchen, lobby and sala-3 presets each name the device that owns their room.
-  for (const [cameraName, deviceId] of [
-    ['corridor', 'TC300-04'],
-    ['kitchen', 'TC300-05'],
-    ['lobby', 'TC300-01'],
-    ['sala-3', 'TC300-08'],
-  ]) {
-    const preset = CAMERA_PRESETS[cameraName] ?? QA_CAMERA_PRESETS[cameraName];
-    const chip = chips.find(({ text }) => text === deviceId);
-    const placement = resolveTc300LabelPlacement({
-      cameraName,
-      preset,
-      chipPosition: chip.position,
-      chipWidthMetres: chip.scale[0],
-    });
-    assert.equal(placement.visible, true, `${cameraName} must name ${deviceId}, its own thermostat`);
-  }
-
-  // The chips stay an engineering artefact: architecture without an explicit request shows none.
-  assert.equal(resolveTechnicalLabelVisibility({ visualMode: 'architectural', labels: true }), false);
-  assert.equal(resolveTechnicalLabelVisibility({ visualMode: 'engineering', labels: true }), true);
 });
 
 // ---------------------------------------------------------------------------
@@ -372,82 +288,9 @@ test('correction 2: every RS-485 drop terminates on the TC300 face behind a term
 // Correction 3 — the board leaves the UG67 -> router sightline.
 // ---------------------------------------------------------------------------
 
-test('correction 3: the diagram board occludes neither the shell nor the Ethernet run at complete-network', () => {
-  const plan = createArchitecturePlan();
-  const preset = QA_CAMERA_PRESETS['complete-network'];
-  const corners = resolveBoardWorldCorners();
-  const quad = corners.map((corner) => projectPointToNdc(corner, preset));
-  assert.ok(quad.every(Boolean), 'the board must stay in front of the complete-network camera');
-
-  // Moving the board out of the sightline may not move it out of the evidence frame.
-  for (const corner of quad) {
-    assert.ok(
-      Math.abs(corner.x) <= 0.98 && Math.abs(corner.y) <= 0.98,
-      `the board is cropped at complete-network (ndc ${corner.x.toFixed(2)}, ${corner.y.toFixed(2)})`,
-    );
-  }
-  const spanX = Math.max(...quad.map(({ x }) => x)) - Math.min(...quad.map(({ x }) => x));
-  assert.ok(spanX / 2 >= 0.2, 'the board must still read as the derived summary beside the model');
-
-  const shellPoints = plan.bands.flatMap(({ bounds, height }) => (
-    [bounds.x[0], bounds.x[1]].flatMap((x) => (
-      [bounds.z[0], bounds.z[1]].flatMap((z) => [0, height].map((y) => [x, y, z]))
-    ))
-  ));
-  const auditoriumPoints = plan.auditoriums.flatMap((room) => (
-    [room.bounds.x[0], room.bounds.x[1]].flatMap((x) => (
-      [room.bounds.z[0], room.bounds.z[1]].map((z) => [x, room.height, z])
-    ))
-  ));
-  const ethernetPoints = plan.structural.containment.ug67EthernetRoute.points;
-  const externalPoints = plan.topologyProxies.external.map(({ position }) => position);
-
-  for (const point of [...shellPoints, ...auditoriumPoints, ...ethernetPoints, ...externalPoints]) {
-    const projected = projectPointToNdc(point, preset);
-    if (!projected) continue;
-    assert.equal(
-      isPointInsideProjectedQuad(projected, quad),
-      false,
-      `the board slab covers [${point.map((value) => value.toFixed(1)).join(', ')}] at complete-network`,
-    );
-  }
-
-  // Both cameras still read the front face, never the mirrored back.
-  const normal = resolveBoardNormal();
-  for (const key of BOARD_CAMERAS) {
-    const camera = QA_CAMERA_PRESETS[key].position;
-    const toCamera = camera.map((value, axis) => value - NETWORK_SCHEMATIC_BOARD.position[axis]);
-    const facing = normal.reduce((sum, value, axis) => sum + value * toCamera[axis], 0);
-    assert.ok(facing > 0, `${key} sees the back of the board (facing=${facing.toFixed(2)})`);
-  }
-
-  // The detail camera still frames the whole board, measured along its real normal.
-  const detail = QA_CAMERA_PRESETS['network-schematic-detail'];
-  const offset = detail.position.map((value, axis) => value - NETWORK_SCHEMATIC_BOARD.position[axis]);
-  const distance = Math.hypot(...offset);
-  const alignment = normal.reduce((sum, value, axis) => sum + value * offset[axis], 0) / distance;
-  assert.ok(alignment > 0.98, 'the detail camera must stay on the board normal, not skew the diagram');
-  const visibleWidth = 2 * distance * Math.tan((detail.fov * Math.PI) / 360) * SURFACE_EVIDENCE_VIEWPORT.aspect;
-  assert.ok(
-    visibleWidth >= NETWORK_SCHEMATIC_BOARD.worldSize[0] * 1.08,
-    `detail camera frames only ${visibleWidth.toFixed(1)} m of a ${NETWORK_SCHEMATIC_BOARD.worldSize[0]} m board`,
-  );
-
-  // and its sightline clears the building instead of drilling through the auditoriums.
-  const roofTop = Math.max(...plan.auditoriums.map(({ height }) => height))
-    + plan.structural.sections.roofPanelThickness;
-  const samples = 40;
-  for (let step = 0; step <= samples; step += 1) {
-    const t = step / samples;
-    const point = detail.position.map((value, axis) => (
-      value + (NETWORK_SCHEMATIC_BOARD.position[axis] - value) * t
-    ));
-    const insideFootprint = point[0] >= plan.footprint.x[0] && point[0] <= plan.footprint.x[1]
-      && point[2] >= plan.footprint.z[0] && point[2] <= plan.footprint.z[1];
-    if (!insideFootprint) continue;
-    assert.ok(point[1] > roofTop, 'the detail sightline must pass above the building, not through it');
-  }
-});
+// Limpieza fase 2 (2026-07-18): correction 3 (the diagram board's occlusion evidence at the
+// complete-network camera) retired with the removed network-schematic board module and the
+// QA evidence presets.
 
 // ---------------------------------------------------------------------------
 // Correction 4 — LoRaWAN is not Ethernet.
@@ -584,132 +427,16 @@ test('correction 5: the RS-485 conductor is exposed beside its tray, at any evid
 // Correction 6 — no RF ticks in the architecture state.
 // ---------------------------------------------------------------------------
 
-test('correction 6: the UG67 RF tick marks belong to engineering only', () => {
-  assert.equal(
-    resolveNetworkEvidenceVisibility('ug67', { visualMode: 'engineering' }).ug67RfDetail,
-    true,
-  );
-  assert.equal(
-    resolveNetworkEvidenceVisibility('ug67', { visualMode: 'architectural' }).ug67RfDetail,
-    false,
-    'architecture declares the network hidden: no RF ticks may leak',
-  );
-
-  const { asset } = buildArchitecture();
-  asset.setLabelPolicy({ visualMode: 'architectural', labels: true, labelsExplicit: false });
-  asset.setEvidenceCamera('ug67');
-  assert.equal(asset.networkSchematic.rfDetailRoot.visible, false);
-
-  asset.setLabelPolicy({ visualMode: 'engineering' });
-  asset.setEvidenceCamera('ug67');
-  assert.equal(asset.networkSchematic.rfDetailRoot.visible, true);
-});
-
-// ---------------------------------------------------------------------------
-// Correction 7 — the GATEWAY subtitle stops touching the RF2 caption.
-// ---------------------------------------------------------------------------
-
-test('correction 7: the UG67 node captions and the RF port captions never overlap', () => {
-  const model = createNetworkSchematicModel({
-    appConfig: APP_CONFIG,
-    architecturePlan: createArchitecturePlan(),
-  });
-  const layout = createNetworkSchematicLayout(model);
-
-  const { ug67Title, ug67Subtitle } = layout;
-  assert.ok(ug67Title && ug67Subtitle, 'the node captions must be part of the layout, not loose paint calls');
-
-  const overlaps = (a, b) => (
-    a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
-  );
-  for (const caption of layout.ug67PortCaptions) {
-    assert.equal(overlaps(ug67Subtitle.box, caption.box), false, `GATEWAY overlaps ${caption.label}`);
-    assert.equal(overlaps(ug67Title.box, caption.box), false, `UG67-01 overlaps ${caption.label}`);
-  }
-  assert.equal(overlaps(ug67Title.box, ug67Subtitle.box), false);
-  for (const box of [ug67Title.box, ug67Subtitle.box]) {
-    assert.ok(box.y >= layout.ug67Box.y && box.y + box.height <= layout.ug67Box.y + layout.ug67Box.height);
-  }
-
-  // and the painter still draws them.
-  const rendered = [];
-  const documentObject = {
-    createElement: () => ({
-      width: 0,
-      height: 0,
-      getContext: () => new Proxy({
-        measureText: (value) => ({ width: String(value).length * 12 }),
-        fillText: (value) => rendered.push(value),
-      }, {
-        get(target, property) {
-          if (property in target) return target[property];
-          return () => undefined;
-        },
-        set(target, property, value) { target[property] = value; return true; },
-      }),
-    }),
-  };
-  createNetworkSchematicTexture({
-    THREE: { CanvasTexture: class { constructor(canvas) { this.image = canvas; } } },
-    documentObject,
-    model,
-    layout,
-  });
-  for (const value of ['UG67-01', 'GATEWAY', 'RF1', 'RF2', 'RF3', 'RF4']) {
-    assert.ok(rendered.includes(value), `missing ${value} on the board`);
-  }
-});
+// Limpieza fase 2 (2026-07-18): corrections 6 and 7 (the UG67 RF tick marks and the board
+// caption clearances) retired with the removed network-schematic board module — the RF detail
+// could only ever show in the retired engineering mode at the retired ug67 camera.
 
 // ---------------------------------------------------------------------------
 // Correction 8 — the whole poster bank is inside the facade frame.
 // ---------------------------------------------------------------------------
 
-test('correction 8: the facade preset frames the entire poster bank in both poster frames', () => {
-  const plan = createArchitecturePlan();
-  const preset = CAMERA_PRESETS.facade;
-  const bank = plan.facade.posterBank;
-
-  const bounds = [bank.backing, ...bank.panels].reduce((box, part) => {
-    const halfWidth = part.size[0] / 2;
-    const halfHeight = part.size[1] / 2;
-    return {
-      minX: Math.min(box.minX, part.position[0] - halfWidth),
-      maxX: Math.max(box.maxX, part.position[0] + halfWidth),
-      minY: Math.min(box.minY, part.position[1] - halfHeight),
-      maxY: Math.max(box.maxY, part.position[1] + halfHeight),
-      z: Math.max(box.z, part.position[2]),
-    };
-  }, { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, z: -Infinity });
-
-  // Derived: project the bank corners through the real preset; every corner must be inside frame.
-  for (const corner of [
-    [bounds.minX, bounds.minY, bounds.z],
-    [bounds.maxX, bounds.minY, bounds.z],
-    [bounds.maxX, bounds.maxY, bounds.z],
-    [bounds.minX, bounds.maxY, bounds.z],
-  ]) {
-    const projected = projectPointToNdc(corner, preset);
-    assert.ok(projected, 'the poster bank must stay in front of the facade camera');
-    assert.ok(
-      Math.abs(projected.x) <= 0.94 && Math.abs(projected.y) <= 0.94,
-      `poster bank corner projects to ndc (${projected.x.toFixed(2)}, ${projected.y.toFixed(2)}) and is cropped`,
-    );
-  }
-
-  // The bank sits clear of the entrance bank instead of covering a door.
-  for (const entrance of plan.facade.entrances) {
-    const entranceMax = entrance.position[0] + entrance.size[0] / 2;
-    const entranceMin = entrance.position[0] - entrance.size[0] / 2;
-    assert.ok(
-      bounds.minX > entranceMax || bounds.maxX < entranceMin,
-      `the poster bank overlaps ${entrance.id}`,
-    );
-  }
-
-  // Both frames use the same placement, so both are framed identically.
-  assert.equal(bank.panels.length, 4);
-  assert.equal(new Set(bank.panels.map(({ variant }) => variant)).size, 4);
-});
+// Limpieza fase 2 (2026-07-18): correction 8 (the facade preset's poster-bank framing) retired
+// with the pruned preset catalogue.
 
 // ---------------------------------------------------------------------------
 // Correction 9 — the concession bar sells something, and the lobby looks at its fit-out.
@@ -745,30 +472,5 @@ test('correction 9: the concession counter carries popcorn and refrigeration dis
   }
 });
 
-test('correction 9: the lobby preset centres the ticketing and kiosk cluster', () => {
-  const plan = createArchitecturePlan();
-  const preset = CAMERA_PRESETS.lobby;
-  const ticketing = plan.blockoutProxies.frontOfHouse.find(({ kind }) => kind === 'ticketing');
-
-  const projected = projectPointToNdc(ticketing.position, preset);
-  assert.ok(projected, 'the ticket counter must be in front of the lobby camera');
-  assert.ok(
-    Math.hypot(projected.x, projected.y) <= 0.35,
-    `the lobby preset still looks past the ticketing cluster (ndc ${projected.x.toFixed(2)}, ${projected.y.toFixed(2)})`,
-  );
-
-  // The whole counter, not just its centre, must be inside the frame.
-  for (const dx of [-ticketing.size[0] / 2, ticketing.size[0] / 2]) {
-    const corner = projectPointToNdc(
-      [ticketing.position[0] + dx, ticketing.position[1], ticketing.position[2]],
-      preset,
-    );
-    assert.ok(corner && Math.abs(corner.x) <= 0.95 && Math.abs(corner.y) <= 0.95, 'the ticket counter is cropped');
-  }
-
-  // and the camera still obeys the public-band contract it was given in attempt 2.
-  const band = plan.bands.find(({ id }) => id === 'front-public');
-  assert.ok(preset.position[1] > 0 && preset.position[1] < band.height);
-  assert.ok(preset.position[2] > band.bounds.z[0] && preset.position[2] < band.bounds.z[1]);
-  assert.ok(preset.target[2] > band.bounds.z[0] && preset.target[2] < band.bounds.z[1]);
-});
+// Limpieza fase 2 (2026-07-18): correction 9's lobby-preset framing retired with the pruned
+// preset catalogue; the concession-counter geometry contract above remains.

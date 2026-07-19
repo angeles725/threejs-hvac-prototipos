@@ -1,8 +1,13 @@
 /**
  * Cartelera dashboard renderers — pure HTML/SVG string builders over the derived view model.
- * B15 Dark Scientific Terminal, tokens only; hand-rolled SVG, no libraries, no icons.
- * Anything the operator reads is es-MX; identifiers stay technical.
+ * Light SaaS skin (client restyle 2026-07-15), tokens only; hand-rolled SVG, no libraries,
+ * no icons. Anything the operator reads is es-MX; identifiers stay technical.
+ *
+ * Client simplification (2026-07-15): the fault/alarm scenario machinery is gone. Every unit is
+ * live and delivering, so the status vocabulary collapsed to the one healthy pill; the deviation
+ * tag stays because a healthy reading can legitimately leave the comfort band.
  */
+import { buildEmbedUrl, buildViewerUrl } from './model.mjs';
 import { createUnitSeries } from './series.mjs';
 
 const escapeHtml = (value) => String(value)
@@ -11,14 +16,24 @@ const escapeHtml = (value) => String(value)
   .replaceAll('>', '&gt;')
   .replaceAll('"', '&quot;');
 
-/** STATUS pill (mandatory per B15): delivery truth per unit. */
-export function pillFor(unit) {
-  return unit.delivered
-    ? { className: 'pill pill-vivo', text: 'EN VIVO' }
-    : { className: 'pill pill-detenido', text: 'DETENIDO' };
+/** The one status pill left: live delivery is the healthy simulation's only state. */
+export const LIVE_PILL = Object.freeze({ className: 'pill pill-vivo', text: 'EN VIVO' });
+
+/**
+ * Correction item H — deviation vs consigna at a glance: a compact signed tag ("+1.2°"), marked
+ * `fuera` when the reading leaves the ±COMFORT_TOLERANCE_C band the model derived. KEPT after
+ * the simplification: the healthy series wanders past the band on its own.
+ */
+export function deviationTagFor(unit) {
+  const delta = unit.temperature - unit.setpoint;
+  const fuera = unit.temperature < unit.band[0] || unit.temperature > unit.band[1];
+  return {
+    className: fuera ? 'desvio fuera' : 'desvio',
+    text: `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}°`,
+  };
 }
 
-const CHART_SCALE = Object.freeze({ min: 17, max: 33 });
+export const CHART_SCALE = Object.freeze({ min: 17, max: 33 });
 const yOf = (value, height) => height - ((value - CHART_SCALE.min) / (CHART_SCALE.max - CHART_SCALE.min)) * height;
 
 function polylineOf(points, width, height) {
@@ -29,21 +44,24 @@ function polylineOf(points, width, height) {
 
 /**
  * Graft (a), from study-c: the compact 24 h sparkline per cartelera row. Subordinate by
- * construction — dim stroke, no axes, no dot; a flat line IS the healthy read. `tone` switches
- * the strokes to canvas ink inside a reverse-video alarm row (dim fails contrast on alarm red).
+ * construction — dim stroke, no axes, no dot; a flat line IS the healthy read.
+ *
+ * `hoverData` (viewer full-page round, default OFF): the half-hour points and their unit ride
+ * data attributes so the viewer's ONE delegated pointer handler can serve the Tendencias grid.
+ * The cartelera never asks for it — its fleet sparklines stay static, byte-identical.
  */
-export function sparklineSvg(unit, { width = 120, height = 26, tone = 'normal' } = {}) {
+export function sparklineSvg(unit, { width = 120, height = 26, hoverData = false } = {}) {
   const points = createUnitSeries(unit.seriesIndex, {
     setpoint: unit.setpoint,
     temperature: unit.temperature,
-    alarm: unit.alarm,
   });
-  const stroke = tone === 'inverse' ? 'var(--canvas)' : 'var(--dim)';
-  const band = tone === 'inverse' ? 'rgba(14,17,22,0.28)' : 'var(--rule)';
-  return `<svg class="chispa" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">`
+  const hoverAttrs = hoverData
+    ? ` data-points="${points.map((value) => Number(value.toFixed(2))).join(',')}" data-unit="°C"`
+    : '';
+  return `<svg class="chispa" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none"${hoverAttrs} aria-hidden="true">`
     + `<rect x="0" y="${yOf(unit.band[1], height).toFixed(1)}" width="${width}"`
-    + ` height="${(yOf(unit.band[0], height) - yOf(unit.band[1], height)).toFixed(1)}" fill="${band}" opacity="0.55"/>`
-    + `<polyline points="${polylineOf(points, width, height)}" fill="none" stroke="${stroke}"`
+    + ` height="${(yOf(unit.band[0], height) - yOf(unit.band[1], height)).toFixed(1)}" fill="var(--accent-soft)" opacity="0.55"/>`
+    + `<polyline points="${polylineOf(points, width, height)}" fill="none" stroke="var(--dim)"`
     + ' stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>';
 }
 
@@ -52,9 +70,7 @@ export function chartSvg(unit, { width = 900, height = 220 } = {}) {
   const points = createUnitSeries(unit.seriesIndex, {
     setpoint: unit.setpoint,
     temperature: unit.temperature,
-    alarm: unit.alarm,
   });
-  const stroke = unit.alarm ? 'var(--alarma)' : 'var(--ink)';
   let grid = '';
   for (let index = 0; index <= 4; index += 1) {
     const x = (index * width) / 4;
@@ -67,71 +83,43 @@ export function chartSvg(unit, { width = 900, height = 220 } = {}) {
   }
   return grid
     + `<rect x="0" y="${yOf(unit.band[1], height).toFixed(1)}" width="${width}"`
-    + ` height="${(yOf(unit.band[0], height) - yOf(unit.band[1], height)).toFixed(1)}" fill="var(--rule)" opacity="0.55"/>`
+    + ` height="${(yOf(unit.band[0], height) - yOf(unit.band[1], height)).toFixed(1)}" fill="var(--accent-soft)" opacity="0.7"/>`
     + `<text x="${width - 6}" y="${(yOf(unit.band[1], height) - 5).toFixed(1)}" text-anchor="end">`
     + `consigna ${unit.band[0].toFixed(1)} a ${unit.band[1].toFixed(1)} °C</text>`
-    + `<polyline points="${polylineOf(points, width, height)}" fill="none" stroke="${stroke}"`
+    + `<polyline points="${polylineOf(points, width, height)}" fill="none" stroke="var(--ink)"`
     + ' stroke-width="1.6" vector-effect="non-scaling-stroke"/>'
-    + `<circle cx="${width}" cy="${yOf(unit.temperature, height).toFixed(1)}" r="4" fill="${stroke}"/>`;
+    + `<circle cx="${width}" cy="${yOf(unit.temperature, height).toFixed(1)}" r="4" fill="var(--ink)"/>`;
 }
 
-/** One cartelera slot. Value + state dominate; the sparkline stays a quiet strip beside them. */
+/**
+ * One cartelera slot. Value + state dominate; the sparkline stays a quiet strip beside them.
+ * Item H: every slot declares its deviation vs consigna; the state pill is the one live state.
+ */
 export function slotHtml(unit) {
-  const inverse = unit.alarm;
-  const pill = unit.alarm
-    ? '<span class="pill pill-alarma">Alarma</span>'
-    : `<span class="${pillFor(unit).className}">${pillFor(unit).text}</span>`;
+  const deviation = deviationTagFor(unit);
   const number = unit.salaNumber !== null
     ? `${String(unit.salaNumber).padStart(2, '0')}<i>${unit.familyTag}</i>`
     : '··';
-  return `<button type="button" class="slot${inverse ? ' en-alarma' : ''}" data-unidad="${unit.unitId}"`
+  return `<button type="button" class="slot" data-unidad="${unit.unitId}"`
     + ` aria-label="Ver unidad ${unit.unitId}, ${escapeHtml(unit.zoneLabel)}">`
     + `<span class="num">${number}</span>`
     + `<span class="zona">${escapeHtml(unit.zoneLabel)}`
     + `<span class="sub">${unit.unitId} · ${unit.tc300Id} · bus ${unit.bus}</span></span>`
-    + sparklineSvg(unit, { tone: inverse ? 'inverse' : 'normal' })
-    + `<span class="temp">${unit.temperature.toFixed(1)} °C</span>${pill}</button>`;
+    + sparklineSvg(unit)
+    + `<span class="temp">${unit.temperature.toFixed(1)} °C`
+    + `<span class="${deviation.className}">${deviation.text} vs consigna</span></span>`
+    + `<span class="${LIVE_PILL.className}">OK</span></button>`;
 }
 
 export function boardHtml(model) {
   return model.boardUnits.map(slotHtml).join('');
 }
 
-/**
- * Graft (b), from study-b: the persistent alarm banner — reverse video, no glow, no pulse —
- * present on EVERY view, with the unambiguous operator action "VER UNIDAD".
- */
-export function bannerHtml(model) {
-  if (model.alarms.length === 0) return '';
-  const first = model.alarms[0];
-  const more = model.alarms.length > 1 ? ` · +${model.alarms.length - 1} evento(s) más` : '';
-  return '<span class="cond">Alarma activa</span>'
-    + `<span>${escapeHtml(first.zoneLabel)} · ${first.unitId} · ${escapeHtml(first.message)}${more}</span>`
-    + `<button type="button" class="cta cond" data-unidad="${first.unitId}">Ver unidad</button>`;
-}
-
 export function rollupHtml(model) {
   const { rollup } = model;
-  const alarma = rollup.alarma > 0
-    ? `<span class="r-alarma">Alarma: <b>${rollup.alarma}</b></span>`
-    : '<span>Alarma: <b>0</b></span>';
   return `<span>Flota: <b>${rollup.total} unidades</b></span>`
-    + `<span>Normal: <b>${rollup.normal}</b></span>${alarma}`
-    + `<span>Entrega Niagara: <b>${rollup.entregando}/${rollup.total}</b></span>`
+    + `<span>Entrega Niagara: <b>${rollup.total}/${rollup.total}</b></span>`
     + `<span class="estado-sistema">${escapeHtml(rollup.statusText)}</span>`;
-}
-
-/** The instrument line: the unit's canonical chain with per-hop state, value and freshness. */
-export function chainHtml(unit) {
-  return unit.chain.map((hop) => (
-    `<div class="nodo nodo-${hop.estado}">`
-    + '<div class="punto"></div>'
-    + `<div class="nombre">${escapeHtml(hop.label)}</div>`
-    + `<div class="medio">${escapeHtml(hop.medio)}</div>`
-    + `<div class="valor">${escapeHtml(hop.valor)}</div>`
-    + `<div class="hop-estado">${hop.estado === 'ok' ? 'OK' : hop.estado === 'falla' ? 'FALLA' : 'SIN DATO'}</div>`
-    + '</div>'
-  )).join('');
 }
 
 /** The band visualization scale (fixed 17–33 °C, shared with the charts). */
@@ -144,43 +132,56 @@ export function bandGeometry(unit) {
   };
 }
 
-export function unitViewHtml(unit) {
+/**
+ * The unit view. Correction round: the delivery-chain panel is gone (item F); a "Ver en el visor
+ * 3D" action joins the head (item C); the twin itself is embedded via the EMBED viewer URL
+ * (item E). `viewerHref`/`embedSrc` arrive from the caller so the render stays pure — the
+ * defaults derive from the unit alone, keeping the builder total. The `fuera` accents follow the
+ * comfort band, the only out-of-range fact the healthy model still produces.
+ */
+export function unitViewHtml(unit, { viewerHref = null, embedSrc = null } = {}) {
   const fuera = unit.temperature < unit.band[0] || unit.temperature > unit.band[1];
   const geometry = bandGeometry(unit);
-  const pill = pillFor(unit);
   const delta = unit.temperature - unit.setpoint;
+  const visorHref = viewerHref ?? buildViewerUrl({ unitId: unit.unitId });
+  const gemeloSrc = embedSrc ?? buildEmbedUrl({ unitId: unit.unitId });
   return `
   <div class="funcion-head">
     <span class="num">${unit.salaNumber !== null ? String(unit.salaNumber).padStart(2, '0') : '··'}</span>
     <h2 class="cond">${escapeHtml(unit.zoneLabel)}</h2>
     <span class="ids">${unit.unitId} · ${unit.tc300Id} · bus RS-485 ${unit.bus}</span>
+    <a class="visor-action cond" href="${escapeHtml(visorHref)}">Ver en el visor 3D</a>
   </div>
   <div class="paneles">
     <section class="panel">
       <h3 class="cond">Temperatura vs consigna</h3>
-      <div class="granvalor${unit.alarm ? ' fuera' : ''}">${unit.temperature.toFixed(1)} <span class="u">°C</span></div>
+      <div class="granvalor${fuera ? ' fuera' : ''}">${unit.temperature.toFixed(1)} <span class="u">°C</span></div>
       <div class="banda-viz" aria-hidden="true">
         <div class="zonaok" style="left:${geometry.bandLeft}%;width:${geometry.bandWidth}%"></div>
-        <div class="aguja${unit.alarm ? ' fuera' : ''}" style="left:${geometry.needleLeft}%"></div>
+        <div class="aguja${fuera ? ' fuera' : ''}" style="left:${geometry.needleLeft}%"></div>
       </div>
       <div class="banda">consigna ${unit.band[0].toFixed(1)} a ${unit.band[1].toFixed(1)} °C · ${
   fuera ? `desvío ${delta >= 0 ? '+' : ''}${delta.toFixed(1)} °C` : 'dentro de banda'}</div>
       <dl class="kv">
-        <div><dt>Estado</dt><dd>${unit.alarm ? 'ALARMA' : 'NORMAL'}</dd></div>
-        <div><dt>Entrega Niagara</dt><dd>${unit.delivered ? `normal · dato de las ${unit.readingTime}` : 'detenida'}</dd></div>
+        <div><dt>Entrega Niagara</dt><dd>normal · dato de las ${unit.readingTime}</dd></div>
         <div><dt>Sensor</dt><dd>${unit.tc300Id}</dd></div>
         <div><dt>Bus de campo</dt><dd>RS-485 ${unit.bus} · UC100-${unit.bus}</dd></div>
       </dl>
     </section>
     <section class="panel">
-      <h3 class="cond">Tendencia 24 h <span class="${pill.className}">${pill.text}</span></h3>
-      <svg viewBox="0 0 900 220" width="100%" role="img" preserveAspectRatio="none"
-           aria-label="Tendencia de temperatura de las últimas 24 horas">${chartSvg(unit)}</svg>
+      <h3 class="cond">Tendencia 24 h <span class="${LIVE_PILL.className}">${LIVE_PILL.text}</span></h3>
+      <div class="grafica">
+        <svg viewBox="0 0 900 220" width="100%" role="img" preserveAspectRatio="none"
+             aria-label="Tendencia de temperatura de las últimas 24 horas">${chartSvg(unit)}</svg>
+      </div>
     </section>
-    <section class="panel panel-cadena">
-      <h3 class="cond">Cadena de entrega · sensor a Niagara <span class="${pill.className}">${pill.text}</span></h3>
-      <div class="cadena">${chainHtml(unit)}</div>
-      <p class="veredicto veredicto-${unit.verdict.kind}">${escapeHtml(unit.verdict.text)}</p>
+    <section class="panel panel-gemelo">
+      <h3 class="cond">Unidad en el gemelo 3D <span class="ids">${unit.unitId}</span></h3>
+      <div class="gemelo">
+        <iframe src="${escapeHtml(gemeloSrc)}" loading="lazy"
+                title="Unidad ${unit.unitId} en el visor 3D"></iframe>
+      </div>
+      <a class="abrir-visor" href="${escapeHtml(visorHref)}">Abrir en el visor 3D →</a>
     </section>
   </div>`;
 }

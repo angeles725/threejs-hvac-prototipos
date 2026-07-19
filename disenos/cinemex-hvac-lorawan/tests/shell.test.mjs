@@ -12,13 +12,11 @@ import {
   createCameraController,
 } from '../src/controllers/camera.js';
 import { createLayerController } from '../src/controllers/layers.js';
-import { LIGHTING_RIG, LIGHTING_TONE_MAPPING } from '../src/scene/lighting.js';
+import { LIGHTING_RIG } from '../src/scene/lighting.js';
 import {
   createSemanticGroups,
   resolvePixelRatio,
 } from '../src/scene/runtime.js';
-import { createArchitecturePlan } from '../src/scene/architecture.js';
-import { NETWORK_SCHEMATIC_BOARD, resolveBoardNormal } from '../src/scene/network-schematic.js';
 
 const APP_ROOT = new URL('../', import.meta.url);
 
@@ -69,60 +67,67 @@ test('query state has a stable canonical default and serializes in contract orde
   assert.equal(warnings.length, 0);
   assert.equal(
     serializeQueryState(parsed),
-    'mode=architectural&state=architecture&camera=isometric&nav=orbit&material_state=neutral&light_state=on&roof=1&walls=1&cutaway=0&view=all&rs485=0&lorawan=0&internet=0&labels=1&selection=none&tick=0&poster_frame=0&display_frame=0',
+    // Client mandate (2026-07-15): the `labels` toggle left the canonical contract with the
+    // device-label billboard system it drove (alongside the earlier `light_state`/`places` removals).
+    // Client single-view correction (2026-07-18): `camera` left the URL contract entirely — the
+    // scene ships ONE fixed view (the whole-building `network` preset, pinned in the state), so
+    // no deep link can surface another view and the serialized URL never names one.
+    // Limpieza fase 2 (2026-07-18): `cutaway`, `mode` and `nav` left the contract with the
+    // retired cutaway feature, the retired engineering visual mode and the retired
+    // first-person navigation.
+    'state=architecture&material_state=neutral&roof=1&walls=1&view=all&rs485=0&lorawan=0&internet=0&selection=none&tick=0&poster_frame=0&display_frame=0',
   );
+  assert.equal(parsed.camera, 'network', 'the state pins the single fixed view');
 });
 
-test('query state accepts a complete engineering inspection state', () => {
+test('query state accepts a complete inspection state; retired tokens are inert', () => {
   const parsed = parseQueryState(
-    '?mode=engineering&camera=network&nav=first-person&roof=0&walls=0&cutaway=1&view=hvac&rs485=1&lorawan=1&internet=1&labels=0',
+    // Limpieza fase 2: `mode=engineering`, `nav=first-person` and `cutaway=1` are unknown tokens
+    // now — ignored like any other stranger, they neither apply nor trip the atomic reset of the
+    // live axes.
+    '?mode=engineering&nav=first-person&roof=0&walls=0&cutaway=1&view=hvac&rs485=1&lorawan=1&internet=1',
   );
 
   assert.deepEqual(parsed, {
-    visualMode: 'engineering',
-    // The INTERACTION-UI pass added the DesignSpec's scene/selection/tick axes to the same
-    // canonical state: `mode=engineering` with no `state` token still means the engineering state.
-    sceneState: 'engineering',
+    visualMode: 'architectural',
+    sceneState: 'architecture',
+    // Single-view correction (2026-07-18): camera is a pinned constant, never URL-driven.
     camera: 'network',
-    navigation: 'first-person',
     materialState: 'neutral',
-    lightState: 'on',
     roof: false,
     walls: false,
-    cutaway: true,
     view: 'hvac',
     rs485: true,
     lorawan: true,
     internet: true,
-    labels: false,
-    labelsExplicit: true,
     selection: 'none',
     tick: 0,
     tickExplicit: false,
     posterFrame: 0,
     displayFrame: 0,
+    // Correction item E: the cartelera's iframe embed mode joined the canonical state.
+    embed: false,
   });
-  // Derived: `labels` is only explicit when the URL actually carries the token.
-  assert.equal(parseQueryState('?mode=engineering').labelsExplicit, false);
-  assert.equal(parseQueryState('?labels=1').labelsExplicit, true);
 });
 
-test('query state accepts DesignSpec blockout camera and state vocabulary', () => {
+test('query state keeps the DesignSpec state vocabulary; camera tokens are inert', () => {
+  // Single-view correction (2026-07-18): `camera` is not part of the URL contract anymore. A
+  // `?camera=...` token is an UNKNOWN parameter — ignored like any other stranger, it neither
+  // moves the pinned view nor trips the atomic reset of the rest of the state.
   const architectural = parseQueryState(
     '?camera=neutral&state=architecture&roof=on&walls=on&tick=0',
   );
   assert.equal(architectural.visualMode, 'architectural');
-  assert.equal(architectural.camera, 'neutral');
+  assert.equal(architectural.camera, 'network', 'a camera token never moves the pinned view');
   assert.equal(architectural.roof, true);
   assert.equal(architectural.walls, true);
 
   const engineering = parseQueryState(
-    '?camera=engineering-section&state=engineering&roof=off&cutaway=on&links=all&tick=0',
+    '?camera=engineering-section&state=engineering&roof=off&links=all&tick=0',
   );
   assert.equal(engineering.visualMode, 'engineering');
-  assert.equal(engineering.camera, 'engineering-section');
+  assert.equal(engineering.camera, 'network', 'a camera token never moves the pinned view');
   assert.equal(engineering.roof, false);
-  assert.equal(engineering.cutaway, true);
   assert.deepEqual(
     [engineering.rs485, engineering.lorawan, engineering.internet],
     [true, true, true],
@@ -132,7 +137,7 @@ test('query state accepts DesignSpec blockout camera and state vocabulary', () =
 test('malformed query tokens fall back atomically and emit one warning', () => {
   const warnings = [];
   const parsed = parseQueryState(
-    '?mode=wireframe&camera=moon&nav=fly&roof=yes&walls=nope&cutaway=maybe&view=devices&rs485=x&lorawan=x&internet=x&labels=x',
+    '?camera=moon&roof=yes&walls=nope&view=devices&rs485=x&lorawan=x&internet=x&labels=x',
     (message) => warnings.push(message),
   );
 
@@ -141,124 +146,30 @@ test('malformed query tokens fall back atomically and emit one warning', () => {
   assert.match(warnings[0], /query state/i);
 });
 
-test('camera controller applies presets and bounds first-person movement', () => {
+test('camera controller applies presets and rejects unknown names', () => {
+  // Limpieza fase 2 (2026-07-18): first-person navigation was retired — the controller is
+  // orbit-only and its movement/bounds contract left with the feature.
   const { camera, orbitControls } = createCameraHarness();
   const controller = createCameraController({ camera, orbitControls });
 
-  // CONTRACT CHANGE (L4 item 17): `top` — the thermal roof plan — joined the preset family.
-  assert.equal(Object.keys(CAMERA_PRESETS).length, 11);
-  assert.equal(controller.applyPreset('lobby'), true);
+  assert.equal(controller.applyPreset('network'), true);
   assert.deepEqual(
     [camera.position.x, camera.position.y, camera.position.z],
-    CAMERA_PRESETS.lobby.position,
+    CAMERA_PRESETS.network.position,
   );
   assert.deepEqual(
     [orbitControls.target.x, orbitControls.target.y, orbitControls.target.z],
-    CAMERA_PRESETS.lobby.target,
+    CAMERA_PRESETS.network.target,
   );
   assert.equal(controller.applyPreset('not-a-preset'), false);
-  assert.equal(controller.applyPreset('engineering-section'), true);
-  assert.deepEqual(
-    [camera.position.x, camera.position.y, camera.position.z],
-    [46, 24, 42],
-  );
-
-  controller.setNavigationMode('first-person');
-  controller.setMovementIntent({ forward: 1, right: 1 });
-  controller.update(120);
-
-  assert.equal(controller.getState().navigation, 'first-person');
-  assert.equal(orbitControls.enabled, false);
-  assert.equal(camera.position.y, 1.7);
-  assert.ok(camera.position.x <= 29 && camera.position.x >= -29);
-  assert.ok(camera.position.z <= 21 && camera.position.z >= -21);
+  assert.equal(controller.applyPreset('lobby'), false, 'the retired evidence presets are gone');
   controller.dispose();
 });
 
-test('fixed evidence cameras frame targets tightly and apply their field of view', () => {
-  const { camera, orbitControls } = createCameraHarness();
-  const controller = createCameraController({ camera, orbitControls });
-  // The presets whose framing no later pass owns keep their literal contract.
-  // CONTRACT CHANGE (P6 lineage 2): `kitchen` and `technical` are now owned by the P6 correction
-  // round (1b and P6d ordered both reframes); the literals below are the corrected framings.
-  const expected = {
-    neutral: { position: [54, 44, 58], target: [0, 1.5, -1], fov: 52 },
-    kitchen: { position: [-17.5, 3.1, 17.8], target: [-9.6, 2.3, 12.4], fov: 62 },
-    corridor: { position: [0, 3.2, 9.5], target: [0, 1.35, -8], fov: 65 },
-    technical: { position: [0, 30, -23], target: [-9, 0, -20.3], fov: 55 },
-    ug67: { position: [2, 4.05, 3.55], target: [3.15, 3.45, 2], fov: 55 },
-  };
-
-  for (const [name, framing] of Object.entries(expected)) {
-    assert.equal(controller.applyPreset(name), true);
-    assert.deepEqual([camera.position.x, camera.position.y, camera.position.z], framing.position);
-    assert.deepEqual([orbitControls.target.x, orbitControls.target.y, orbitControls.target.z], framing.target);
-    assert.equal(camera.fov, framing.fov);
-  }
-
-  // `facade` and `lobby` are the LIGHTING-CAMERA pass's own compositions: pinning their numbers
-  // here would freeze the framing the pass was told to fix. What the CONTROLLER owes them is a
-  // faithful application of whatever the preset declares — that is what is asserted instead.
-  for (const name of ['facade', 'lobby']) {
-    const framing = CAMERA_PRESETS[name];
-    assert.equal(controller.applyPreset(name), true);
-    assert.deepEqual([camera.position.x, camera.position.y, camera.position.z], [...framing.position]);
-    assert.deepEqual(
-      [orbitControls.target.x, orbitControls.target.y, orbitControls.target.z],
-      [...framing.target],
-    );
-    assert.equal(camera.fov, framing.fov);
-  }
-  assert.equal(camera.projectionUpdates, 7);
-  // Derived: interior fit-out presets must stand under the 4.5 m public roof, not above it.
-  const plan = createArchitecturePlan();
-  const publicBand = plan.bands.find(({ id }) => id === 'front-public');
-  for (const name of ['lobby', 'concessions', 'kitchen']) {
-    const { position, target } = CAMERA_PRESETS[name];
-    assert.ok(position[1] < publicBand.height, `${name} camera must stay under the public roof`);
-    assert.ok(
-      position[2] > publicBand.bounds.z[0] && position[2] < publicBand.bounds.z[1],
-      `${name} camera must stand inside the public band`,
-    );
-    assert.ok(target[2] > publicBand.bounds.z[0] && target[2] < publicBand.bounds.z[1]);
-  }
-  controller.dispose();
-});
-
-test('structural evidence preserves grazing/network views and improves Sala 3 framing', () => {
-  const { camera, orbitControls } = createCameraHarness();
-  const controller = createCameraController({ camera, orbitControls });
-  const expected = {
-    grazing: { position: [25, 7.5, 44], target: [0, 2.15, 21], fov: 54 },
-    'sala-3': { position: [-8.2, 5.8, -8.95], target: [-25.5, 1.7, -8.95], fov: 70 },
-    'engineering-section': { position: [46, 24, 42], target: [6, 1, -1], fov: 55 },
-    'complete-network': { position: [82, 49, 48], target: [10, 4.2, -2], fov: 50 },
-  };
-
-  for (const [name, framing] of Object.entries(expected)) {
-    assert.equal(controller.applyPreset(name), true);
-    assert.deepEqual([camera.position.x, camera.position.y, camera.position.z], framing.position);
-    assert.deepEqual([orbitControls.target.x, orbitControls.target.y, orbitControls.target.z], framing.target);
-    assert.equal(camera.fov, framing.fov);
-  }
-
-  // Derived: the schematic detail preset is owned by the board it frames, never by a stale literal.
-  assert.equal(controller.applyPreset('network-schematic-detail'), true);
-  assert.deepEqual(
-    [orbitControls.target.x, orbitControls.target.y, orbitControls.target.z],
-    [...NETWORK_SCHEMATIC_BOARD.position],
-    'the detail camera must target the board centre',
-  );
-  const normal = resolveBoardNormal();
-  const offset = [camera.position.x, camera.position.y, camera.position.z]
-    .map((value, axis) => value - NETWORK_SCHEMATIC_BOARD.position[axis]);
-  const distance = Math.hypot(...offset);
-  assert.ok(
-    normal.reduce((sum, value, axis) => sum + value * offset[axis], 0) / distance > 0.98,
-    'the detail camera must stand on the board normal',
-  );
-  controller.dispose();
-});
+// Limpieza fase 2 (2026-07-18): the evidence/look-dev framing contracts ("fixed evidence
+// cameras frame targets tightly", the grazing/Sala-3/engineering-section/complete-network
+// framings and the derived schematic-detail camera) were retired with the pruned preset
+// catalogue and the removed network-schematic board module.
 
 // The structural and materials passes ran on a temporary look-dev rig (a bright hemisphere plus an
 // over-driven sun) whose only job was to raise neutral scene value before the lighting pass
@@ -290,21 +201,18 @@ test('materials realism reset adds a neutral PMREM response rig and restrained f
   assert.ok(LIGHTING_RIG.fill.intensity < LIGHTING_RIG.key.intensity / 3);
 });
 
-test('final materials attempt scopes exposure and key angle changes to the grazing look-dev camera', async () => {
+test('the grazing look-dev machinery left the runtime with the retired preset catalogue', async () => {
+  // Limpieza fase 2 (2026-07-18): `setLookdevCamera` (the per-camera exposure/key swing for the
+  // grazing look-dev view) was retired — the single shipped view runs the authority exposure set
+  // at construction. The lighting authority keeps its grazing DATA as historical look-dev record.
   const runtimeSource = await readFile(new URL('../src/scene/runtime.js', import.meta.url), 'utf8');
   const mainSource = await readFile(new URL('../main.js', import.meta.url), 'utf8');
-
-  assert.match(runtimeSource, /function setLookdevCamera\(cameraName\)/);
-  // Derived: grazing stops down and swings the key across the facade; both come from the authority.
-  assert.ok(LIGHTING_TONE_MAPPING.grazingExposure < LIGHTING_TONE_MAPPING.exposure);
-  assert.notDeepEqual([...LIGHTING_RIG.key.grazingPosition], [...LIGHTING_RIG.key.position]);
-  assert.ok(LIGHTING_RIG.key.grazingPosition[1] < LIGHTING_RIG.key.position[1], 'grazing light must be low');
-  assert.match(mainSource, /runtime\.setLookdevCamera\(queryState\.camera\)/);
-  assert.match(mainSource, /runtime\.setLookdevCamera\(button\.dataset\.camera\)/);
-});
-
-test('query state accepts the DesignSpec grazing evidence camera', () => {
-  assert.equal(parseQueryState('?camera=grazing').camera, 'grazing');
+  assert.doesNotMatch(runtimeSource, /setLookdevCamera/);
+  assert.doesNotMatch(mainSource, /setLookdevCamera/);
+  assert.doesNotMatch(mainSource, /cameraSelect/);
+  assert.match(runtimeSource, /toneMappingExposure = LIGHTING_TONE_MAPPING\.exposure/);
+  // A retired look-dev token stays inert in the URL, like every other stranger.
+  assert.equal(parseQueryState('?camera=grazing').camera, 'network');
 });
 
 test('surface evidence frames parse and serialize deterministically', () => {
@@ -319,115 +227,33 @@ test('surface evidence frames parse and serialize deterministically', () => {
   );
 });
 
-test('materials pass accepts deterministic material state and reference-match camera', () => {
+test('materials pass accepts deterministic material state; camera tokens stay inert', () => {
   const parsed = parseQueryState('?camera=reference-match&material_state=neutral');
-  assert.equal(parsed.camera, 'reference-match');
+  assert.equal(parsed.camera, 'network', 'single-view: no URL token moves the pinned view');
   assert.equal(parsed.materialState, 'neutral');
 });
 
-test('materials look-dev cameras match the DesignSpec neutral, grazing and reference views', () => {
-  const { camera, orbitControls } = createCameraHarness();
-  const controller = createCameraController({ camera, orbitControls });
-  const expected = {
-    neutral: { position: [54, 44, 58], target: [0, 1.5, -1], fov: 52 },
-    grazing: { position: [25, 7.5, 44], target: [0, 2.15, 21], fov: 54 },
-    'reference-match': { position: [-7.5, 4.2, -8.9], target: [-27.5, 3, -8.9], fov: 70 },
-    'family-master': { position: [8, 26, -1], target: [-17, 1.5, -4], fov: 60 },
-    // CONTRACT CHANGE (P6 lineage 2, correction P6d): the technical framing now looks through the
-    // clipped rear roof at the corridor/wall/doors/UC100-B instead of at the roof plane.
-    technical: { position: [0, 30, -23], target: [-9, 0, -20.3], fov: 55 },
-  };
-  for (const [name, framing] of Object.entries(expected)) {
-    assert.equal(controller.applyPreset(name), true);
-    assert.deepEqual([camera.position.x, camera.position.y, camera.position.z], framing.position);
-    assert.deepEqual([orbitControls.target.x, orbitControls.target.y, orbitControls.target.z], framing.target);
-    assert.equal(camera.fov, framing.fov);
-  }
-  controller.dispose();
-});
-
-test('structural attempt 3 accepts dedicated family, RS-485 and roof-service evidence cameras', () => {
-  for (const camera of ['family-master', 'rs485-master', 'roof-service']) {
-    assert.equal(parseQueryState(`?camera=${camera}`).camera, camera);
+// Limpieza fase 2 (2026-07-18): the look-dev / structural-evidence camera contracts
+// ("materials look-dev cameras", "structural attempt 3 evidence cameras", the grazing and
+// material-floor framings) were retired with the QA preset family. Retired camera tokens stay
+// inert in the URL, like every other stranger:
+test('retired evidence camera tokens are inert in the URL', () => {
+  for (const camera of ['family-master', 'rs485-master', 'roof-service', 'material-floor', 'neutral']) {
+    assert.equal(parseQueryState(`?camera=${camera}`).camera, 'network');
   }
 });
 
-test('structural attempt 3 evidence cameras compare family masters and roof containment', () => {
-  const { camera, orbitControls } = createCameraHarness();
-  const controller = createCameraController({ camera, orbitControls });
-  const expected = {
-    'family-master': { position: [8, 26, -1], target: [-17, 1.5, -4], fov: 60 },
-    'rs485-master': { position: [0, 48, 2], target: [0, 0.8, -3], fov: 56 },
-    'roof-service': { position: [9, 12, -4], target: [0, 8, -11], fov: 45 },
-  };
-
-  for (const [name, framing] of Object.entries(expected)) {
-    assert.equal(controller.applyPreset(name), true);
-    assert.deepEqual([camera.position.x, camera.position.y, camera.position.z], framing.position);
-    assert.deepEqual([orbitControls.target.x, orbitControls.target.y, orbitControls.target.z], framing.target);
-    assert.equal(camera.fov, framing.fov);
-  }
-  controller.dispose();
-});
-
-test('materials grazing camera is a low facade and circulation three-quarter', () => {
-  const { camera, orbitControls } = createCameraHarness();
-  const controller = createCameraController({ camera, orbitControls });
-
-  assert.equal(controller.applyPreset('grazing'), true);
-  assert.deepEqual([camera.position.x, camera.position.y, camera.position.z], [25, 7.5, 44]);
-  assert.deepEqual([orbitControls.target.x, orbitControls.target.y, orbitControls.target.z], [0, 2.15, 21]);
-  assert.equal(camera.fov, 54);
-  controller.dispose();
-});
-
-test('materials floor camera exposes public tile and corridor carpet in one finish comparison', () => {
-  const { camera, orbitControls } = createCameraHarness();
-  const controller = createCameraController({ camera, orbitControls });
-
-  assert.equal(parseQueryState('?camera=material-floor').camera, 'material-floor');
-  assert.equal(controller.applyPreset('material-floor'), true);
-  assert.deepEqual([camera.position.x, camera.position.y, camera.position.z], [25, 4.2, 16]);
-  assert.deepEqual([orbitControls.target.x, orbitControls.target.y, orbitControls.target.z], [0, 0.1, 7]);
-  assert.equal(camera.fov, 52);
-  controller.dispose();
-});
-
-test('layer controller switches modes, views and clipping without inventing assets', () => {
+test('layer controller switches views and layers without inventing assets', () => {
   const names = [
-    'architecture', 'roof', 'walls', 'hvac', 'zones',
+    'architecture', 'roof', 'walls', 'hvac',
     'rs485', 'lorawan', 'internet', 'labels',
   ];
   const groups = Object.fromEntries(names.map((name) => [name, { visible: true }]));
-  const renderer = { localClippingEnabled: false, clippingPlanes: [] };
-  const materialModes = [];
-  const cutawayModes = [];
-  const materials = {
-    setEngineeringMode(enabled) {
-      materialModes.push(enabled);
-    },
-    setCutaway(enabled, plane) {
-      cutawayModes.push([enabled, plane]);
-    },
-  };
-  const clippingPlane = { constant: 0 };
-  const controller = createLayerController({
-    groups,
-    renderer,
-    materials,
-    clippingPlane,
-  });
+  const controller = createLayerController({ groups });
 
-  controller.setVisualMode('engineering');
-  controller.setCutaway(true);
   controller.setView('architecture');
   assert.equal(groups.architecture.visible, true);
   assert.equal(groups.hvac.visible, false);
-  assert.equal(renderer.localClippingEnabled, true);
-  assert.deepEqual(renderer.clippingPlanes, []);
-  assert.deepEqual(materialModes, [true]);
-  assert.deepEqual(cutawayModes.at(-1), [true, clippingPlane]);
-  assert.ok(cutawayModes.every(([, plane]) => plane === clippingPlane));
 
   controller.setView('hvac');
   controller.setLayer('rs485', true);
@@ -451,7 +277,7 @@ test('runtime caps DPR and creates empty semantic layer groups', () => {
 
   const groups = createSemanticGroups({ Group });
   assert.deepEqual(Object.keys(groups), [
-    'architecture', 'roof', 'walls', 'hvac', 'zones',
+    'architecture', 'roof', 'walls', 'hvac',
     'rs485', 'lorawan', 'internet', 'labels',
   ]);
   assert.ok(Object.values(groups).every((group) => group.children.length === 0));
@@ -462,8 +288,10 @@ test('HTML shell exposes Spanish project identity and semantic controls', async 
 
   assert.match(html, /Cinemex – Integración HVAC LoRaWAN/);
   assert.match(html, /<main[^>]+id="app"/);
-  assert.match(html, /<button[^>]+data-camera="facade"/);
-  assert.match(html, /<button[^>]+id="navigation-toggle"/);
+  // Single-view correction (2026-07-18): the camera <select> died with every other view
+  // switcher — the shell carries no view list and no view label of any kind.
+  assert.doesNotMatch(html, /camera-select/);
+  assert.doesNotMatch(html, /<option/);
   assert.match(html, /<section[^>]+id="fatal-panel"[^>]+role="alert"/);
   assert.match(html, /<output[^>]+id="app-status"[^>]+aria-live="polite"/);
 });

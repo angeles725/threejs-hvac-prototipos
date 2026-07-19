@@ -136,8 +136,6 @@ export const APP_CONFIG = deepFreeze({
     rs485: '#22c55e',
     lorawan: '#38bdf8',
     ethernet: '#2563eb',
-    alarm: '#ef4444',
-    offline: '#94a3b8',
   },
   animation: { speed: 1, seed: 30067, stepSeconds: 5 },
 });
