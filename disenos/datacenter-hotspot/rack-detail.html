@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Detalle de Rack · Predicción de Hotspot</title>
+<style>
+  :root{
+    /* DHL centro de datos — paleta azul-grisácea clara (no blanco puro) */
+    --bg:#EDF0F6; --bg2:#F4F6FB; --card:#FFFFFF; --card2:#F1F4FA;
+    --edge:#E1E6EF; --edge2:#D3DAE7;
+    --tx:#1B2430; --mut:#5C6B84; --dim:#9BA6B8;
+    --teal:#3B6FF5; --cyan:#3B6FF5; --blue:#2E5FE0;
+    --hot:#F5883D; --red:#E5484D; --amber:#8A5A00; --green:#34C08B;
+    --primary:#3B6FF5; --primary-strong:#2E5FE0; --primary-soft:#DCE7FF; --primary-bg:#EAF0FF;
+    --surface-secondary:#F1F4FA; --background-secondary:#F4F6FB;
+    --border:#E1E6EF; --border-subtle:rgba(225,230,239,0.7);
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; }
+  body{ background:var(--bg); color:var(--tx); overflow:hidden;
+    font-family:'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif; font-size:13px; }
+  .mono{ font-family:'JetBrains Mono',ui-monospace,monospace; }
+  ::-webkit-scrollbar{ width:6px; height:6px; } ::-webkit-scrollbar-thumb{ background:var(--edge2); border-radius:3px; }
+  a{ color:inherit; text-decoration:none; }
+
+  .app{ display:grid; grid-template-columns:54px 1fr; grid-template-rows:52px 1fr; height:100vh; }
+  .sidebar{ grid-row:1/3; background:var(--bg2); border-right:1px solid var(--edge);
+    display:flex; flex-direction:column; align-items:center; padding-top:10px; gap:6px; }
+  .sidebar .logo{ width:34px; height:34px; border-radius:9px; margin-bottom:12px;
+    background:linear-gradient(135deg,var(--teal),var(--blue)); display:grid; place-items:center;
+    font-weight:800; color:#04121a; font-size:16px; }
+  .sidebar .nav{ width:36px; height:36px; border-radius:9px; display:grid; place-items:center;
+    color:var(--dim); cursor:pointer; transition:.15s; }
+  .sidebar .nav:hover{ color:var(--tx); background:#111a2b; }
+  .sidebar .nav.act{ color:var(--teal); background:#0d2a2a; }
+
+  .topbar{ grid-column:2; display:flex; align-items:center; gap:16px; padding:0 20px;
+    background:var(--bg2); border-bottom:1px solid var(--edge); }
+  .topbar .brand{ font-weight:700; letter-spacing:.02em; font-size:15px; }
+  .topbar .brand b{ color:var(--teal); }
+  .topbar .brand span{ color:var(--mut); font-weight:400; font-size:11px; letter-spacing:.14em; margin-left:8px; }
+  .topbar .crumb{ display:flex; align-items:center; gap:9px; color:var(--mut); font-size:12px; }
+  .topbar .crumb .cur{ color:var(--tx); font-weight:600; }
+  .topbar .crumb a:hover{ color:var(--cyan); }
+  .topbar .spacer{ flex:1; }
+  .topbar .drop{ display:flex; align-items:center; gap:8px; padding:7px 14px; border:1px solid var(--edge2);
+    border-radius:8px; color:var(--tx); font-size:12px; cursor:pointer; background:#0b1220; }
+  .topbar .ic{ width:34px; height:34px; border-radius:8px; display:grid; place-items:center;
+    color:var(--mut); background:#0b1220; border:1px solid var(--edge); cursor:pointer; position:relative; }
+  .topbar .ic .dot{ position:absolute; top:7px; right:8px; width:6px; height:6px; border-radius:50%; background:var(--cyan); }
+  .topbar .av{ width:34px; height:34px; border-radius:8px; display:grid; place-items:center; font-weight:700;
+    color:#04121a; background:linear-gradient(135deg,var(--cyan),var(--teal)); }
+
+  .main{ grid-column:2; display:grid; grid-template-rows:auto 1fr auto auto; gap:12px;
+    padding:12px; overflow:hidden; background:radial-gradient(1200px 600px at 55% 30%, #0a1220, var(--bg)); }
+
+  /* KPIs */
+  .kpis{ display:grid; grid-template-columns:repeat(7,1fr); gap:10px; }
+  .kpi{ background:var(--card); border:1px solid var(--edge); border-radius:12px; padding:11px 13px;
+    display:flex; flex-direction:column; gap:2px; }
+  .kpi .kt{ color:var(--mut); font-size:10.5px; display:flex; align-items:center; gap:6px; }
+  .kpi .kv{ font-size:21px; font-weight:700; }
+  .kpi .kv small{ font-size:11px; color:var(--mut); font-weight:500; }
+  .kpi .kd{ font-size:10px; color:var(--mut); }
+  .kpi .kd.up{ color:var(--amber); } .kpi .kd.dn{ color:var(--green); } .kpi .kd.bad{ color:var(--red); }
+  .kpi.state .kv{ font-size:17px; }
+
+  /* mid */
+  .mid{ display:grid; grid-template-columns:238px 1fr 316px; gap:12px; min-height:0; }
+  .card{ background:var(--card); border:1px solid var(--edge); border-radius:12px; }
+  .card .hd{ padding:10px 14px; border-bottom:1px solid var(--edge); display:flex; align-items:center;
+    justify-content:space-between; font-size:12px; font-weight:600; }
+  .card .hd .sub{ color:var(--mut); font-weight:400; font-size:10.5px; }
+
+  /* left metrics */
+  .metrics{ display:flex; flex-direction:column; overflow:hidden; }
+  .metrics .title{ padding:12px 14px 6px; font-size:16px; font-weight:700; letter-spacing:.03em; }
+  .metrics .body{ padding:4px 12px 12px; overflow:auto; display:flex; flex-direction:column; gap:8px; }
+  .mrow{ background:#0a1120; border:1px solid var(--edge); border-radius:9px; padding:9px 11px; display:flex;
+    align-items:center; gap:11px; }
+  .mrow .ico{ width:26px; height:26px; border-radius:7px; background:#111c2e; display:grid; place-items:center;
+    color:var(--cyan); font-size:13px; flex:none; }
+  .mrow .l{ color:var(--mut); font-size:10.5px; } .mrow .v{ font-size:15px; font-weight:700; margin-top:1px; }
+  .mrow .v small{ font-size:10px; color:var(--mut); font-weight:500; }
+  .loadbar{ height:7px; background:#0a1120; border-radius:4px; overflow:hidden; margin-top:6px; }
+  .loadbar i{ display:block; height:100%; border-radius:4px; background:linear-gradient(90deg,var(--teal),var(--amber),var(--hot)); }
+
+  /* center 3D */
+  .stage{ position:relative; border-radius:12px; overflow:hidden; border:1px solid var(--edge);
+    background:radial-gradient(700px 400px at 45% 45%, #0b1524, #060a11); min-height:0; }
+  #rk3d{ position:absolute; inset:0; width:100%; height:100%; }
+  .stage .stt{ position:absolute; top:12px; left:14px; font-size:11px; color:var(--mut); z-index:3; }
+  .stage .stt b{ color:var(--tx); font-size:13px; display:block; letter-spacing:.06em; }
+  .stage .scale{ position:absolute; right:12px; top:50%; transform:translateY(-50%); z-index:3;
+    display:flex; flex-direction:column; align-items:center; gap:4px; font-size:9px; color:var(--mut); }
+  .stage .scale .bar{ width:9px; height:150px; border-radius:3px;
+    background:linear-gradient(to top,#2b6fff,#00d4aa,#8bd44a,#ffd23e,#ff8a2c,#ff2233); }
+  .annos{ position:absolute; right:44px; top:16px; z-index:3; display:flex; flex-direction:column; gap:12px;
+    align-items:flex-end; pointer-events:none; }
+  .anno{ text-align:right; }
+  .anno .n{ font-size:10.5px; color:var(--tx); }
+  .anno .s{ font-size:10px; } .anno .s.ok{ color:var(--green); } .anno .s.warn{ color:var(--amber); } .anno .s.bad{ color:var(--red); }
+
+  /* right AI + component health */
+  .rcol{ display:flex; flex-direction:column; gap:12px; min-height:0; overflow:auto; }
+  .ai .body{ padding:12px 14px; display:flex; flex-direction:column; gap:11px; }
+  .ai .badge{ display:inline-block; background:#3a1420; color:var(--red); border:1px solid #5a2030;
+    font-size:9px; font-weight:700; letter-spacing:.1em; padding:3px 8px; border-radius:5px; }
+  .ai .ringrow{ display:flex; align-items:center; gap:14px; }
+  .ai .lead{ font-size:15px; line-height:1.45; } .ai .lead b{ color:var(--hot); } .ai .lead .g{ color:var(--red); font-weight:800; }
+  .ai .ring{ position:relative; width:64px; height:64px; flex:none; }
+  .ai .ring .num{ position:absolute; inset:0; display:grid; place-items:center; font-weight:800; font-size:14px; }
+  .ai .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .kv2 .l{ color:var(--mut); font-size:10px; } .kv2 .v{ font-weight:600; font-size:12px; } .kv2 .v.hi{ color:var(--red); }
+  .sec{ border-top:1px solid var(--edge); padding-top:9px; }
+  .sec .st{ color:var(--teal); font-size:9.5px; letter-spacing:.12em; font-weight:700; margin-bottom:5px; }
+  .sec p{ margin:0; font-size:11.5px; color:#c4d0de; line-height:1.5; }
+  .chrow{ display:flex; justify-content:space-between; align-items:center; margin:7px 0; font-size:11.5px; }
+  .chrow .s{ display:flex; align-items:center; gap:8px; color:#c4d0de; }
+  .chrow .s .i{ width:22px; height:22px; border-radius:6px; background:#111c2e; display:grid; place-items:center; color:var(--cyan); font-size:11px; }
+  .chrow .val{ font-weight:600; } .chrow .val.ok{ color:var(--green); } .chrow .val.warn{ color:var(--amber); }
+  .chrow .sub{ color:var(--mut); font-size:10px; }
+
+  /* bottom */
+  .b3{ display:grid; grid-template-columns:280px 1fr; gap:12px; height:172px; }
+  .b4{ display:grid; grid-template-columns:1.4fr 1fr 1fr 1fr; gap:12px; height:196px; }
+  .bcard{ background:var(--card); border:1px solid var(--edge); border-radius:12px; display:flex; flex-direction:column; overflow:hidden; }
+  .bcard .bh{ padding:9px 13px; border-bottom:1px solid var(--edge); display:flex; align-items:center; justify-content:space-between; font-size:11.5px; font-weight:600; }
+  .bcard .bh .sub{ color:var(--mut); font-weight:400; font-size:10px; }
+  .bcard .bh .tabs{ display:flex; gap:4px; }
+  .bcard .bh .tab{ font-size:10px; padding:3px 9px; border-radius:6px; color:var(--mut); cursor:pointer; border:1px solid transparent; }
+  .bcard .bh .tab.act{ color:var(--tx); background:#132033; border-color:var(--edge2); }
+  .bcard .bb{ flex:1; padding:10px 13px; min-height:0; position:relative; }
+
+  #heatcv{ width:100%; height:100%; display:block; border-radius:6px; }
+  .heatscale{ display:flex; justify-content:space-between; font-size:9px; color:var(--mut); margin-top:4px; }
+
+  .trends{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .trendblk .cl{ font-size:10px; color:var(--mut); margin-bottom:3px; }
+  .trendblk canvas{ width:100%; height:74px; display:block; }
+  .trendblk .ax{ display:flex; justify-content:space-between; font-size:8.5px; color:var(--dim); margin-top:2px; }
+
+  .tl{ display:flex; justify-content:space-between; position:relative; height:100%; }
+  .tl::before{ content:''; position:absolute; left:6%; right:6%; top:20px; height:2px; background:var(--edge2); }
+  .tl .step{ position:relative; width:23%; text-align:center; }
+  .tl .step .dot{ width:15px; height:15px; border-radius:50%; margin:13px auto 8px; border:2px solid var(--edge2);
+    background:var(--bg); display:grid; place-items:center; font-size:8px; }
+  .tl .step.done .dot{ border-color:var(--green); color:var(--green); background:#0c2418; }
+  .tl .step.live .dot{ border-color:var(--cyan); color:var(--cyan); background:#0a1f2e; box-shadow:0 0 10px #28c8ff66; }
+  .tl .step .tm{ font-size:9.5px; color:var(--teal); } .tl .step .tt{ font-size:10px; font-weight:600; margin:2px 0; }
+  .tl .step .td{ font-size:9px; color:var(--mut); line-height:1.3; }
+  .tl-foot{ display:flex; justify-content:space-between; font-size:10px; color:var(--mut); margin-top:4px; } .tl-foot b{ color:var(--tx); }
+
+  .schem{ width:100%; height:calc(100% - 16px); } .schem-lgd{ display:flex; gap:16px; font-size:9.5px; color:var(--mut); }
+  .schem-lgd i{ display:inline-block; width:16px; height:3px; border-radius:2px; vertical-align:middle; margin-right:5px; }
+
+  .asset .r{ display:flex; justify-content:space-between; font-size:11px; margin:6px 0; }
+  .asset .r .l{ color:var(--mut); } .asset .r .v{ color:var(--tx); font-weight:600; }
+  .asset .r .v.gold{ color:var(--amber); }
+
+  .sugg{ display:flex; flex-direction:column; gap:9px; }
+  .sugg .sg{ background:#0a1120; border:1px solid var(--edge); border-radius:9px; padding:9px 11px; }
+  .sugg .sg .t{ font-size:11px; } .sugg .sg .t b{ color:var(--teal); }
+  .sugg .sg .t small{ display:block; color:var(--mut); font-size:9.5px; margin-top:2px; }
+  .sugg .sg .v{ font-size:16px; font-weight:800; color:var(--teal); }
+
+  .live{ position:fixed; right:16px; bottom:8px; font-size:10px; color:var(--mut); display:flex; gap:6px; align-items:center; }
+  .live .d{ width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); }
+
+  /* ===== LIGHT LOGISTICS THEME — overrides (colores/fondos/sombras únicamente) ===== */
+  body{ background:
+    radial-gradient(circle at 100% 0%, rgba(59,111,245,0.08) 0%, transparent 42%),
+    linear-gradient(150deg,#EFF2F8 0%,#E7ECF4 55%,#DEE4EF 100%); color:var(--tx); }
+  ::-webkit-scrollbar-thumb{ background:#cdd6e4; }
+  .sidebar{ background:var(--background-secondary); border-right:1px solid var(--border); }
+  .sidebar .nav:hover{ color:var(--tx); background:var(--primary-bg); }
+  .sidebar .nav.act{ color:var(--primary); background:var(--primary-bg); }
+  .topbar{ background:rgba(255,255,255,0.72); border-bottom:1px solid var(--border); backdrop-filter:blur(12px); }
+  .topbar .drop{ background:rgba(255,255,255,0.82); border-color:var(--border); color:var(--tx); box-shadow:0 6px 16px rgba(70,90,125,0.06); }
+  .topbar .ic{ background:rgba(255,255,255,0.82); border-color:var(--border); box-shadow:0 6px 16px rgba(70,90,125,0.06); }
+  .topbar .ic:hover{ color:var(--primary); background:var(--primary-bg); }
+  .card,.bcard,.kpi{ background:linear-gradient(145deg,rgba(255,255,255,0.97),rgba(247,249,252,0.9));
+    border:1px solid var(--border-subtle); border-radius:16px;
+    box-shadow:0 16px 40px rgba(69,88,120,0.07),0 3px 12px rgba(69,88,120,0.04),inset 0 1px 0 rgba(255,255,255,0.9); }
+  .card .hd,.bcard .bh{ border-bottom:1px solid var(--border); }
+  .metrics .body .mrow{ background:var(--surface-secondary); border:1px solid var(--border); }
+  .mrow .ico{ background:var(--primary-bg); color:var(--primary); }
+  .loadbar{ background:#E5E9F0; } .loadbar i{ background:linear-gradient(90deg,#2474F2,#347FF5,#5D9BFA); box-shadow:0 3px 10px rgba(52,127,245,0.2); }
+  .stage{ background:radial-gradient(760px 480px at 47% 36%,#e6ebf4 0%,#d3dcea 70%,#c5cfe1 100%); border:1px solid var(--border); }
+  .stage .stt{ color:var(--mut); } .stage .stt b{ color:var(--tx); }
+  .anno .n{ color:var(--tx); }
+  .chrow .s .i{ background:var(--primary-bg); color:var(--primary); }
+  .bcard .bh .tab.act{ background:var(--primary-bg); color:var(--primary); border-color:var(--primary-soft); }
+  .sugg .sg{ background:var(--surface-secondary); border:1px solid var(--border); }
+  .ai .badge{ background:#FFE7E9; color:var(--red); border:1px solid #FAD1D5; }
+  .sec p{ color:#47536a; }              /* texto párrafo (era #c4d0de claro) */
+  .chrow .s{ color:#2f3a4f; }           /* etiquetas salud componentes */
+  .ai .lead{ color:var(--tx); } .kv2 .v{ color:var(--tx); } .kv2 .l{ color:var(--mut); }
+  .metrics .mrow .l{ color:var(--mut); } .metrics .mrow .v{ color:var(--tx); }
+  .tl::before{ background:var(--border); }
+  .tl .step .dot{ background:#fff; border-color:#D5DEEC; }
+  .tl .step.done .dot{ background:#E5F8EC; border-color:var(--green); color:var(--green); }
+  .tl .step.live .dot{ background:var(--primary-bg); border-color:var(--primary); color:var(--primary); box-shadow:0 0 10px rgba(52,127,245,0.25); }
+  .kpi .kd.up{ color:#C88B18; }
+  .asset .r .v.gold{ color:#C88B18; }
+  .live .d{ background:var(--green); box-shadow:0 0 8px rgba(67,199,111,0.5); }
+
+  /* ===== una sola vista / responsive por altura ===== */
+  .main{ gap:8px; padding:8px 12px; }
+  .kpis{ gap:8px; } .kpi{ padding:7px 12px; } .kpi .kv{ font-size:clamp(15px,2.1vh,21px); } .kpi .kt{ font-size:10px; } .kpi .kd{ font-size:9.5px; }
+  .mid{ min-height:0; }
+  .b3{ height:clamp(112px,17vh,150px); } .b4{ height:clamp(126px,20vh,176px); }
+  .trendblk canvas{ height:clamp(44px,8vh,72px); }
+  .metrics .title{ font-size:clamp(13px,2vh,16px); padding:9px 14px 3px; }
+  .metrics .body{ gap:5px; padding:2px 12px 10px; } .mrow{ padding:6px 11px; } .mrow .v{ font-size:clamp(12px,1.9vh,15px); }
+  .ai .body{ gap:8px; padding:10px 14px; } .sec{ padding-top:7px; }
+  .chrow{ margin:4px 0; } .asset .r{ margin:2px 0; font-size:10.5px; } .tl .step .td{ font-size:8.5px; } .sugg .sg{ padding:7px 10px; }
+  @media (max-height:680px){ .kpi .kd{ display:none; } .stage .stt{ display:none; } }
+  @media (max-width:1180px){ .mid{ grid-template-columns:200px 1fr 268px; } .kpis{ grid-template-columns:repeat(4,1fr); } }
+  @media (max-width:900px){ .kpis{ grid-template-columns:repeat(3,1fr); } .mid{ grid-template-columns:1fr; } .b3,.b4{ grid-template-columns:1fr 1fr; height:auto; } .main{ overflow:auto; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <div class="logo">◇</div>
+    <a class="nav" title="Inicio" href="dc-dashboard-v1.html">◱</a>
+    <div class="nav act" title="Salas">▦</div>
+    <div class="nav" title="Térmica">❄</div>
+    <div class="nav" title="Energía">⚡</div>
+    <div class="nav" title="Analítica">▤</div>
+    <div class="nav" title="Ajustes">⚙</div>
+    <div style="flex:1"></div>
+    <div class="nav" title="Seguridad">⛊</div>
+  </div>
+
+  <div class="topbar">
+    <div class="brand mono"><b>niagara</b> <span>OPERACIONES IA</span></div>
+    <div class="crumb mono"><a href="dc-dashboard-v1.html">Caso de uso #1: Predicción de Hotspot</a> › <span class="cur" id="crumbRack">Detalle Rack</span></div>
+    <div class="spacer"></div>
+    <div class="drop mono">Data Center 01 ▾</div>
+    <div class="ic">◔<div class="dot"></div></div>
+    <div class="ic">?</div>
+    <div class="av">AS</div>
+  </div>
+
+  <div class="main">
+    <!-- KPIs -->
+    <div class="kpis">
+      <div class="kpi"><div class="kt">🌡 Temp. del Rack</div><div class="kv mono"><span id="kTemp">61.3</span><small>°C</small></div><div class="kd bad" id="kTempD">▲ 9.8 °C vs ayer</div></div>
+      <div class="kpi"><div class="kt">⏱ Tiempo a Crítico</div><div class="kv mono"><span id="kTtc">43</span><small>min</small></div><div class="kd dn" id="kTtcD">▼ 12 min vs ayer</div></div>
+      <div class="kpi"><div class="kt">⚙ Utilización GPU</div><div class="kv mono"><span id="kGpu">81</span><small>%</small></div><div class="kd up">▲ 6% vs ayer</div></div>
+      <div class="kpi"><div class="kt">🌀 Eficiencia de Flujo</div><div class="kv mono"><span id="kAir">74</span><small>%</small></div><div class="kd bad">▼ 8% vs ayer</div></div>
+      <div class="kpi"><div class="kt">⚡ Consumo</div><div class="kv mono"><span id="kPow">1.92</span><small>MW</small></div><div class="kd up">▲ 120 kW vs ayer</div></div>
+      <div class="kpi state"><div class="kt">❄ Respuesta CRAH</div><div class="kv" id="kCrah">Activa</div><div class="kd dn">● Modo adaptativo</div></div>
+      <div class="kpi state"><div class="kt">🛡 Salud del Rack</div><div class="kv" id="kHealth" style="color:var(--red)">En riesgo</div><div class="kd bad">Monitoreo cercano</div></div>
+    </div>
+
+    <!-- MID -->
+    <div class="mid">
+      <!-- left metrics -->
+      <div class="card metrics">
+        <div class="title mono" id="rackTitle">RACK B23</div>
+        <div class="body">
+          <div class="mrow"><div class="ico">🌡</div><div><div class="l">Temp. aire de entrada</div><div class="v mono"><span id="mInlet">18.6</span> <small>°C</small></div></div></div>
+          <div class="mrow"><div class="ico">☀</div><div><div class="l">Temp. aire de salida</div><div class="v mono"><span id="mOutlet">61.3</span> <small>°C</small></div></div></div>
+          <div class="mrow"><div class="ico">Δ</div><div><div class="l">ΔT (entrada→salida)</div><div class="v mono"><span id="mDt">42.7</span> <small>°C</small></div></div></div>
+          <div class="mrow"><div class="ico">🌀</div><div><div class="l">Volumen de flujo</div><div class="v mono"><span id="mCfm">18,420</span> <small>CFM</small></div></div></div>
+          <div class="mrow"><div class="ico">≋</div><div><div class="l">Presión estática</div><div class="v mono"><span id="mPa">320</span> <small>Pa</small></div></div></div>
+          <div class="mrow" style="display:block"><div style="display:flex;align-items:center;gap:11px"><div class="ico">▦</div><div><div class="l">Carga del rack</div><div class="v mono"><span id="mLoad">92</span> <small>%</small></div></div></div>
+            <div class="loadbar"><i id="mLoadBar" style="width:92%"></i></div></div>
+        </div>
+      </div>
+
+      <!-- 3D stage -->
+      <div class="stage">
+        <canvas id="rk3d"></canvas>
+        <div class="stt"><b id="sttRack">RACK B23</b>Vista dedicada del equipo · corte térmico</div>
+        <div class="scale"><span>80°C</span><div class="bar"></div><span>20°C</span></div>
+        <div class="annos">
+          <div class="anno"><div class="n">Ventiladores superiores</div><div class="s ok">OK</div></div>
+          <div class="anno"><div class="n">GPU Blades (8)</div><div class="s warn" id="annGpu">Carga alta</div></div>
+          <div class="anno"><div class="n">Distribución de energía</div><div class="s ok">OK</div></div>
+          <div class="anno"><div class="n">PSU 1 &amp; 2</div><div class="s ok">OK</div></div>
+          <div class="anno"><div class="n">Ventiladores inferiores</div><div class="s ok">OK</div></div>
+          <div class="anno"><div class="n">Gestión de cables</div><div class="s ok">OK</div></div>
+        </div>
+      </div>
+
+      <!-- right column -->
+      <div class="rcol">
+        <div class="card ai">
+          <div class="hd">Motor IA Niagara <span class="badge">ALERTA PREDICTIVA</span></div>
+          <div class="body">
+            <div class="ringrow">
+              <div class="lead">El <b id="aiRack">Rack B23</b> alcanzará temperatura <span class="g">crítica</span> en <span class="g mono" id="aiMin">43 min</span></div>
+              <div class="ring"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="27" fill="none" stroke="#152033" stroke-width="6"/>
+                <circle id="ringArc" cx="32" cy="32" r="27" fill="none" stroke="var(--red)" stroke-width="6" stroke-linecap="round"
+                  stroke-dasharray="169.6" stroke-dashoffset="12" transform="rotate(-90 32 32)"/></svg>
+                <div class="num mono" id="ringNum">93%</div></div>
+            </div>
+            <div class="grid2">
+              <div class="kv2"><div class="l">Severidad</div><div class="v hi" id="aiSev">● Alta</div></div>
+              <div class="kv2"><div class="l">Sistemas afectados</div><div class="v mono">8 GPUs</div></div>
+            </div>
+            <div class="sec"><div class="st">CAUSA RAÍZ (DETECTADA POR IA)</div>
+              <p>Alta carga GPU + eficiencia de flujo reducida en pasillo B + temperatura ambiente elevada.</p></div>
+            <div class="sec"><div class="st">ACCIONES RECOMENDADAS</div>
+              <p>Incrementar flujo hacia pasillo B, ajustar setpoint CRAH y balancear la carga térmica.</p></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hd">Salud de Componentes</div>
+          <div style="padding:8px 14px 12px">
+            <div class="chrow"><div class="s"><span class="i">❄</span> Ventiladores</div><div><span class="sub">8 operativos</span> <span class="val ok">100%</span></div></div>
+            <div class="chrow"><div class="s"><span class="i">▤</span> GPUs</div><div><span class="sub">8 / 8</span> <span class="val warn">Carga alta</span></div></div>
+            <div class="chrow"><div class="s"><span class="i">⚡</span> PSUs</div><div><span class="sub">2 / 2</span> <span class="val ok">100%</span></div></div>
+            <div class="chrow"><div class="s"><span class="i">🌡</span> Sensores entrada</div><div><span class="sub">Normal</span> <span class="val ok" id="chInlet">18.6 °C</span></div></div>
+            <div class="chrow"><div class="s"><span class="i">☀</span> Sensores salida</div><div><span class="sub">Normal</span> <span class="val warn" id="chOutlet">61.3 °C</span></div></div>
+            <div class="chrow"><div class="s"><span class="i">◉</span> Sensores</div><div><span class="sub">Nominal</span> <span class="val ok">100%</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- bottom 1: thermal + trends -->
+    <div class="b3">
+      <div class="bcard">
+        <div class="bh">Mapa Térmico <span class="sub">Vista frontal</span></div>
+        <div class="bb"><canvas id="heatcv"></canvas>
+          <div class="heatscale mono"><span>20°C</span><span>80°C</span></div></div>
+      </div>
+      <div class="bcard">
+        <div class="bh">Tendencias Históricas <span class="sub">últimas 24 h</span></div>
+        <div class="bb"><div class="trends">
+          <div class="trendblk"><div class="cl">Temp. del Rack (°C)</div><canvas id="tTemp"></canvas><div class="ax mono"><span>-24h</span><span>-12h</span><span>ahora</span></div></div>
+          <div class="trendblk"><div class="cl">Utilización GPU (%)</div><canvas id="tGpu"></canvas><div class="ax mono"><span>-24h</span><span>-12h</span><span>ahora</span></div></div>
+          <div class="trendblk"><div class="cl">Consumo (MW)</div><canvas id="tPow"></canvas><div class="ax mono"><span>-24h</span><span>-12h</span><span>ahora</span></div></div>
+          <div class="trendblk"><div class="cl">Eficiencia de Flujo (%)</div><canvas id="tAir"></canvas><div class="ax mono"><span>-24h</span><span>-12h</span><span>ahora</span></div></div>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- bottom 2: timeline + schematic + asset + suggestions -->
+    <div class="b4">
+      <div class="bcard">
+        <div class="bh">Cronología de Acciones Automatizadas</div>
+        <div class="bb">
+          <div class="tl">
+            <div class="step done"><div class="dot">✓</div><div class="tm mono">12:41:02</div><div class="tt">Ajuste CRAH</div><div class="td">Setpoint 18°→16°C · Fila B</div></div>
+            <div class="step done"><div class="dot">✓</div><div class="tm mono">12:41:08</div><div class="tt">Incremento Flujo</div><div class="td">Ventilador 68%→85% · Pasillo B</div></div>
+            <div class="step done"><div class="dot">✓</div><div class="tm mono">12:41:15</div><div class="tt">Balanceo Térmico</div><div class="td">8 servidores redistribuidos</div></div>
+            <div class="step live"><div class="dot">●</div><div class="tm mono">12:41:22</div><div class="tt">Acción Preventiva</div><div class="td">Ejecutada con éxito</div></div>
+          </div>
+          <div class="tl-foot"><span>Tiempo total: <b class="mono">20s</b></span><span>Temp. prevista tras acciones: <b class="mono" style="color:var(--teal)">31.2°C</b></span></div>
+        </div>
+      </div>
+      <div class="bcard">
+        <div class="bh">Esquema de Flujo <div class="tabs"><span class="tab" data-sc="before">Antes</span><span class="tab act" data-sc="after">Después</span></div></div>
+        <div class="bb"><svg class="schem" id="schem" viewBox="0 0 300 120" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="schem-lgd"><span><i style="background:var(--cyan)"></i>Aire frío</span><span><i style="background:var(--hot)"></i>Aire caliente</span></div></div>
+      </div>
+      <div class="bcard">
+        <div class="bh">Información del Activo</div>
+        <div class="bb asset">
+          <div class="r"><span class="l">ID de Rack</span><span class="v mono" id="aRack">B23</span></div>
+          <div class="r"><span class="l">Pasillo / Fila</span><span class="v mono">B / 2</span></div>
+          <div class="r"><span class="l">Total GPUs</span><span class="v mono">8</span></div>
+          <div class="r"><span class="l">Clase de carga</span><span class="v">IA Inferencia / Entrenamiento</span></div>
+          <div class="r"><span class="l">Capacidad</span><span class="v mono">3.0 MW</span></div>
+          <div class="r"><span class="l">Estado SLA</span><span class="v gold">● Gold (99.99%)</span></div>
+          <div class="r"><span class="l">Último mantenimiento</span><span class="v mono">10 May 2024</span></div>
+          <div class="r"><span class="l">Etiqueta de activo</span><span class="v mono" id="aTag">DC01-B-02-B23</span></div>
+        </div>
+      </div>
+      <div class="bcard">
+        <div class="bh">Sugerencias IA <span class="mono" style="color:var(--teal)">2</span></div>
+        <div class="bb"><div class="sugg">
+          <div class="sg" style="display:flex;justify-content:space-between;align-items:center"><div class="t"><b>Reducir probabilidad de hotspot</b><small>Continuando las acciones automáticas</small></div><div class="v">68%</div></div>
+          <div class="sg" style="display:flex;justify-content:space-between;align-items:center"><div class="t"><b>Reserva de enfriamiento</b><small>Margen extra para aumento de carga</small></div><div class="v">14%</div></div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="live">● Modelo actualizado: <span class="mono" id="liveClock">12:41:20</span> · EN VIVO</div>
+
+<!-- importmap vía fromCharCode (evita mangling de Cloudflare en package@version) -->
+<script>
+(function(){ var AT=String.fromCharCode(64); var im=document.createElement('script'); im.type='importmap';
+  im.textContent=JSON.stringify({imports:{
+    "three":"https://unpkg.com/three"+AT+"0.160.0/build/three.module.js",
+    "three/addons/":"https://unpkg.com/three"+AT+"0.160.0/examples/jsm/"}});
+  document.currentScript.after(im); })();
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ===== datos por rack (desde ?rack=) =====
+const params=new URLSearchParams(location.search);
+const RACK=(params.get('rack')||'B23').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6) || 'B23';
+const HOT = RACK==='B23';
+let _seed=0; for(let i=0;i<RACK.length;i++) _seed=(_seed*31+RACK.charCodeAt(i))>>>0;
+const ttcNom=180+(_seed%240), ttcDelta=20+(_seed%45);   // tiempo-a-crítico determinista por rack (nominal)
+const D = HOT
+  ? {temp:'61.3',ttc:'43',ttcD:'▼ 12 min vs ayer',ttcDcls:'bad',gpu:'81',air:'74',pow:'1.92',crah:'Activa',health:'En riesgo',hcol:'var(--red)',
+     inlet:'18.6',outlet:'61.3',dt:'42.7',cfm:'18,420',pa:'320',load:92,conf:93,sev:'● Alta',aiMin:'43 min',gpuStat:'Carga alta'}
+  : {temp:'29.8',ttc:String(ttcNom),ttcD:'▲ '+ttcDelta+' min de margen',ttcDcls:'dn',gpu:'47',air:'88',pow:'1.21',crah:'Adaptativa',health:'Saludable',hcol:'var(--green)',
+     inlet:'18.2',outlet:'31.4',dt:'13.2',cfm:'16,900',pa:'245',load:58,conf:24,sev:'● Baja',aiMin:ttcNom+' min',gpuStat:'Nominal'};
+
+const $=id=>document.getElementById(id);
+$('crumbRack').textContent='Detalle '+RACK;
+$('rackTitle').textContent='RACK '+RACK;
+$('sttRack').textContent='RACK '+RACK;
+$('aiRack').textContent='Rack '+RACK;
+$('aRack').textContent=RACK;
+$('aTag').textContent='DC01-B-02-'+RACK;
+$('kTemp').textContent=D.temp; $('kTtc').textContent=D.ttc; $('kGpu').textContent=D.gpu; $('kAir').textContent=D.air; $('kPow').textContent=D.pow;
+$('kTtcD').textContent=D.ttcD; $('kTtcD').className='kd '+D.ttcDcls;
+$('kCrah').textContent=D.crah; $('kHealth').textContent=D.health; $('kHealth').style.color=D.hcol;
+$('mInlet').textContent=D.inlet; $('mOutlet').textContent=D.outlet; $('mDt').textContent=D.dt; $('mCfm').textContent=D.cfm; $('mPa').textContent=D.pa;
+$('mLoad').textContent=D.load; $('mLoadBar').style.width=D.load+'%';
+$('chInlet').textContent=D.inlet+' °C'; $('chOutlet').textContent=D.outlet+' °C';
+$('aiMin').textContent=D.aiMin; $('ringNum').textContent=D.conf+'%'; $('aiSev').textContent=D.sev; $('annGpu').textContent=D.gpuStat;
+$('ringArc').setAttribute('stroke-dashoffset',(169.6*(1-D.conf/100)).toFixed(1));
+if(!HOT){ $('ringArc').setAttribute('stroke','var(--teal)'); $('aiSev').classList.remove('hi'); $('annGpu').className='s ok'; $('chOutlet').className='val ok'; }
+
+// ============================================================
+//  ESCENA 3D — rack 42U realista (server-rack/rack-42u-realistic-v1.html)
+//  PUERTA ABIERTA · SIN controles · SIN sombras
+// ============================================================
+const canvas=$('rk3d'); const stage=canvas.parentElement;
+const scene=new THREE.Scene();
+scene.fog=new THREE.Fog(0xdde4ef,6,24);
+const camera=new THREE.PerspectiveCamera(42,1,0.02,100);
+camera.position.set(1.75,1.5,2.6);                 // cámara FIJA (sin OrbitControls)
+
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=false;                  // SIN sombras
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+const pmrem=new THREE.PMREMGenerator(renderer);
+scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
+
+scene.add(new THREE.AmbientLight(0xffffff,0.55));
+const sun=new THREE.DirectionalLight(0xffffff,1.5); sun.position.set(2.6,3.6,2.4); scene.add(sun);
+const fill=new THREE.DirectionalLight(0x88aaff,0.4); fill.position.set(-2.2,2.0,-1.6); scene.add(fill);
+const rim=new THREE.DirectionalLight(0x3b6ff5,0.28); rim.position.set(0.6,1.2,2.6); scene.add(rim);
+
+// ---- texturas procedurales (del archivo original) ----
+function canvasTex(w,h,draw){ const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); draw(g,w,h);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return t; }
+function serverFrontTex(is2U){ const w=512,h=is2U?128:64;
+  return canvasTex(w,h,(g)=>{ g.fillStyle='#16161e'; g.fillRect(0,0,w,h); g.fillStyle='#0f0f16'; g.fillRect(3,3,w-6,h-6);
+    const by=h*0.18,bh=h*0.64,bw=20,gap=6;
+    for(let i=0;i<6;i++){ const x=14+i*(bw+gap); g.fillStyle='#24242f'; g.fillRect(x,by,bw,bh);
+      g.fillStyle='#3a3a46'; g.fillRect(x+2,by+4,bw-4,3); g.fillStyle='#0c0c12'; g.fillRect(x+bw-7,by+bh-9,4,4); }
+    const gx0=180,gx1=356,gy0=h*0.13,gy1=h*0.87; g.fillStyle='#0a0a10'; g.fillRect(gx0,gy0,gx1-gx0,gy1-gy0); g.fillStyle='#20202c';
+    for(let yy=gy0+5;yy<gy1-2;yy+=6) for(let xx=gx0+5;xx<gx1-2;xx+=6){ g.beginPath(); g.arc(xx,yy,1.7,0,6.283); g.fill(); }
+    g.fillStyle='#3d3d4d'; g.font='bold '+((h*0.17)|0)+'px monospace'; g.textAlign='left'; g.fillText('NODE',376,h*0.40);
+    g.fillStyle='#20202c'; for(let i=0;i<4;i++) g.fillRect(376,h*0.52+i*6,100,3); }); }
+function switchFrontTex(){ return canvasTex(512,64,(g,w,h)=>{ g.fillStyle='#14141c'; g.fillRect(0,0,w,h);
+  g.fillStyle='#0a0a12'; for(let i=0;i<24;i++){ const x=20+i*17; g.fillRect(x,22,13,20); }
+  g.fillStyle='#30303e'; g.fillRect(444,22,22,20); g.fillRect(470,22,22,20);
+  g.fillStyle='#3d3d4d'; g.font='bold 16px monospace'; g.fillText('SW',6,16); }); }
+
+const M={
+  FRAME:new THREE.MeshStandardMaterial({color:0x2d2d3a,roughness:0.55,metalness:0}),
+  FRAME_D:new THREE.MeshStandardMaterial({color:0x232330,roughness:0.6,metalness:0}),
+  PANEL:new THREE.MeshStandardMaterial({color:0x26262f,roughness:0.55,metalness:0}),
+  RAIL:new THREE.MeshStandardMaterial({color:0x1f1f2a,roughness:0.5,metalness:0}),
+  CHASSIS_D:new THREE.MeshStandardMaterial({color:0x2a2a33,roughness:0.6,metalness:0}),
+  BLANK:new THREE.MeshStandardMaterial({color:0x2a2a36,roughness:0.55,metalness:0}),
+  PDU:new THREE.MeshStandardMaterial({color:0x1c1c26,roughness:0.6,metalness:0}),
+  COPPER:new THREE.MeshStandardMaterial({color:0xb87333,roughness:0.35,metalness:1}),
+  HANDLE:new THREE.MeshStandardMaterial({color:0x9aa0a8,roughness:0.35,metalness:1}),
+  HINGE:new THREE.MeshStandardMaterial({color:0x7d858e,roughness:0.4,metalness:1}),
+  FAN_HUB:new THREE.MeshStandardMaterial({color:0x30323e,roughness:0.45,metalness:0}),
+  FAN_BLADE:new THREE.MeshStandardMaterial({color:0x14151c,roughness:0.5,metalness:0}),
+  DOOR:new THREE.MeshStandardMaterial({roughness:0.55,metalness:0})
+};
+const front1Mat=new THREE.MeshStandardMaterial({map:serverFrontTex(false),roughness:0.6,metalness:0});
+const front2Mat=new THREE.MeshStandardMaterial({map:serverFrontTex(true),roughness:0.6,metalness:0});
+const swMat=new THREE.MeshStandardMaterial({map:switchFrontTex(),roughness:0.6,metalness:0});
+const LEDC={GREEN:0x4caf50,CYAN:0x00bcd4,AMBER:0xff8f00,RED:0xf44336}, LEDD=0x0f1a12;
+const ledGeo=new THREE.CircleGeometry(0.006,12);
+
+const HW=0.30,HD=0.425,RH=2.0,U=0.04445,BASE_Y=0.11,RAIL_X=0.232,SRV_W=0.462,SRV_D=0.62;
+const FRONT=HD, FRONT_FACE=FRONT-0.02, PANEL_Z=FRONT_FACE+0.004, LED_Z=PANEL_Z+0.003;
+
+const rackGroup=new THREE.Group(); scene.add(rackGroup);
+function mesh(geo,mat,x,y,z,parent){ const m=new THREE.Mesh(geo,mat); m.position.set(x,y,z); (parent||rackGroup).add(m); return m; }
+function box(w,h,d,mat,x,y,z,parent){ return mesh(new THREE.BoxGeometry(w,h,d),mat,x,y,z,parent); }
+
+// gabinete
+box(2*HW,0.09,2*HD,M.FRAME_D,0,0.06,0);
+box(2*HW+0.02,0.05,2*HD+0.02,M.FRAME,0,RH-0.025,0);
+for(const sx of [-HW+0.015,HW-0.015]) for(const sz of [-HD+0.015,HD-0.015]) box(0.03,RH-0.14,0.03,M.FRAME,sx,0.11+(RH-0.14)/2,sz);
+box(0.012,RH-0.16,2*HD-0.06,M.PANEL,-HW+0.006,0.11+(RH-0.16)/2,0);
+box(0.012,RH-0.16,2*HD-0.06,M.PANEL,HW-0.006,0.11+(RH-0.16)/2,0);
+box(2*HW-0.03,RH-0.16,0.012,M.PANEL,0,0.11+(RH-0.16)/2,-HD+0.006);
+for(const rx of [-RAIL_X,RAIL_X]) for(const rz of [FRONT_FACE-0.005,-HD+0.06]) box(0.018,RH-0.22,0.02,M.RAIL,rx,0.13+(RH-0.22)/2,rz);
+box(2*HW-0.05,0.06,0.014,M.FRAME_D,0,RH-0.12,FRONT-0.005);
+
+// stack 42U (servidores 1U/2U con frente texturizado, switches, blanking panels)
+const STACK=[['s2',2],['s2',2],['s1',1],['s1',1],['bl',1],['s2',2],['s1',1],['sw',1],['sw',1],['bl',1],
+  ['s2',2],['s1',1],['s1',1],['bl',1],['s2',2],['s1',1],['bl',1],['s2',2],['s1',1],['s1',1],
+  ['bl',1],['s2',2],['s1',1],['bl',1],['s2',2],['s1',1],['s1',1],['bl',1],['s2',2],['bl',1]];
+const srvLeds=[], fanGroups=[];
+function addLed(x,y,z,base){ const mat=new THREE.MeshBasicMaterial({color:LEDC[base]}); const m=new THREE.Mesh(ledGeo,mat); m.position.set(x,y,z); rackGroup.add(m); srvLeds.push({mesh:m,base}); }
+function makeFan(x,y,z){ const g=new THREE.Group(); g.position.set(x,y,z);
+  mesh(new THREE.TorusGeometry(0.019,0.003,8,20),M.FAN_HUB,0,0,0,g);
+  const hub=mesh(new THREE.CylinderGeometry(0.006,0.006,0.012,12),M.FAN_HUB,0,0,0,g); hub.rotation.x=Math.PI/2;
+  for(let b=0;b<6;b++){ const bl=mesh(new THREE.BoxGeometry(0.016,0.006,0.003),M.FAN_BLADE,0,0,0,g); bl.rotation.z=b*Math.PI/3; bl.position.set(Math.cos(b*Math.PI/3)*0.011,Math.sin(b*Math.PI/3)*0.011,0); }
+  rackGroup.add(g); fanGroups.push(g); return g; }
+let cumU=0;
+const srv1Geo=new THREE.BoxGeometry(SRV_W,U*0.92,SRV_D), srv2Geo=new THREE.BoxGeometry(SRV_W,U*2*0.94,SRV_D);
+for(const [type,uh] of STACK){ const y0=BASE_Y+cumU*U, yc=y0+uh*U/2, chZ=FRONT_FACE-SRV_D/2;
+  if(type==='s1'||type==='s2'){ const is2=type==='s2';
+    mesh(is2?srv2Geo:srv1Geo, M.CHASSIS_D, 0,yc,chZ);
+    mesh(new THREE.PlaneGeometry(SRV_W,uh*U*0.9), is2?front2Mat:front1Mat, 0,yc,PANEL_Z);
+    addLed(0.14,yc+(is2?0.018:0),LED_Z,'GREEN'); addLed(0.165,yc,LED_Z,'CYAN'); addLed(0.19,yc-(is2?0.018:0),LED_Z, HOT&&is2?'RED':'AMBER');
+    if(is2){ makeFan(-0.11,yc,-HD+0.10); makeFan(0.11,yc,-HD+0.10); }
+  } else if(type==='sw'){ box(SRV_W,uh*U*0.9,0.28,M.CHASSIS_D,0,yc,FRONT_FACE-0.14);
+    mesh(new THREE.PlaneGeometry(SRV_W,uh*U*0.9),swMat,0,yc,PANEL_Z);
+  } else { box(SRV_W,uh*U*0.9,0.016,M.BLANK,0,yc,PANEL_Z-0.004); }
+  cumU+=uh; }
+
+// PDUs verticales + salidas de cobre
+for(const px of [-HW+0.025,HW-0.025]){ const pz=-HD+0.10; box(0.03,RH-0.4,0.05,M.PDU,px,RH/2-0.05,pz);
+  for(let y=0.25;y<RH-0.25;y+=0.09){ mesh(new THREE.CylinderGeometry(0.008,0.008,0.02,10),M.COPPER,px,y,pz+0.03).rotation.x=Math.PI/2; } }
+
+// PUERTA ABIERTA (bisagra izquierda, ~109°) — vidrio perforado
+M.DOOR.map=canvasTex(512,1024,(g,w,h)=>{ g.fillStyle='#1a1a28'; g.fillRect(0,0,w,h); g.fillStyle='#0e0e16';
+  for(let yy=60;yy<h-60;yy+=12) for(let xx=44;xx<w-44;xx+=12){ const off=(Math.floor(yy/12)%2)*6; g.beginPath(); g.arc(xx+off,yy,3.4,0,6.283); g.fill(); }
+  g.strokeStyle='#101018'; g.lineWidth=36; g.strokeRect(18,18,w-36,h-36); g.strokeStyle='#2b2b3a'; g.lineWidth=3; g.strokeRect(40,40,w-80,h-80); });
+const doorGroup=new THREE.Group(); doorGroup.position.set(-HW,1.05,FRONT+0.002); doorGroup.rotation.y=1.9;   // ABIERTA
+{ const dH=RH-0.16, dW=2*HW-0.01;
+  mesh(new THREE.PlaneGeometry(dW,dH),M.DOOR,dW/2,0,0,doorGroup);
+  box(dW,0.02,0.02,M.FRAME,dW/2,dH/2,-0.008,doorGroup); box(dW,0.02,0.02,M.FRAME,dW/2,-dH/2,-0.008,doorGroup);
+  box(0.02,dH,0.02,M.FRAME,0.008,0,-0.008,doorGroup); box(0.02,dH,0.02,M.FRAME,dW-0.008,0,-0.008,doorGroup);
+  box(0.018,0.13,0.03,M.HANDLE,dW-0.03,0,0.02,doorGroup);
+  for(const hy of [-dH/2+0.15,0,dH/2-0.15]) mesh(new THREE.CylinderGeometry(0.008,0.008,0.05,10),M.HINGE,0.006,hy,-0.006,doorGroup); }
+rackGroup.add(doorGroup);
+
+// etiqueta del rack
+(function(){ const c=document.createElement('canvas'); c.width=256; c.height=96; const g=c.getContext('2d');
+  g.fillStyle=HOT?'#e5484d':'#3b6ff5'; g.fillRect(64,20,128,56); g.fillStyle='#fff';
+  g.font='bold 42px JetBrains Mono, monospace'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(RACK,128,49);
+  const t=new THREE.CanvasTexture(c); t.anisotropy=4; const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthTest:false}));
+  s.scale.set(0.34,0.13,1); s.position.set(0,RH+0.08,0.1); scene.add(s); })();
+
+// glow caliente si es el rack en riesgo
+if(HOT){ const hl=new THREE.PointLight(0xff5a20,1.4,1.6,2); hl.position.set(0,1.05,0.18); scene.add(hl); }
+
+function resize(){ const w=stage.clientWidth,h=stage.clientHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); camera.lookAt(0,0.98,0); drawHeat(); }
+addEventListener('resize',resize);
+
+const clock=new THREE.Clock(); let sim=0;
+function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); sim+=dt;
+  for(const g of fanGroups) g.rotation.z += dt*(HOT?15:7);
+  // parpadeo de LEDs = dato "vivo"
+  if((sim*60|0)%9===0){ for(let i=0;i<6;i++){ const L=srvLeds[(Math.random()*srvLeds.length)|0]; if(L) L.mesh.material.color.setHex(Math.random()<0.6?LEDC[L.base]:LEDD); } }
+  camera.lookAt(0,0.98,0);
+  renderer.render(scene,camera);
+}
+
+// ============================================================
+//  MAPA TÉRMICO (canvas) — colormap turbo
+// ============================================================
+const heatcv=$('heatcv'), hctx=heatcv.getContext('2d');
+function turbo(t){ t=Math.max(0,Math.min(1,t));
+  const r=Math.max(0,Math.min(255,255*(1.2*t-0.1)));
+  const g=Math.max(0,Math.min(255,255*Math.sin(t*Math.PI)*1.1));
+  const b=Math.max(0,Math.min(255,255*(1-t)*(1-t)*1.4+80*Math.max(0,1-t*2)));
+  return [r,g,b]; }
+function drawHeat(){ const w=heatcv.clientWidth,h=heatcv.clientHeight; if(!w||!h)return; heatcv.width=w; heatcv.height=h;
+  const img=hctx.createImageData(w,h); const peak=HOT?0.92:0.4;
+  for(let py=0;py<h;py++) for(let px=0;px<w;px++){ const u=px/w,v=py/h; let temp=0.15;
+    const dx=u-0.5,dy=v-0.48; temp+=peak*Math.exp(-(dx*dx*1.4+dy*dy)/0.05);
+    temp=Math.min(1,temp); const [r,g,b]=turbo(temp); const idx=(py*w+px)*4;
+    img.data[idx]=r; img.data[idx+1]=g; img.data[idx+2]=b; img.data[idx+3]=255; }
+  hctx.putImageData(img,0,0); }
+
+// ============================================================
+//  TENDENCIAS (sparklines)
+// ============================================================
+function spark(id,color,seed,vmin,vmax,trend){ const cv=$(id); if(!cv)return; const w=cv.clientWidth,h=cv.clientHeight; cv.width=w; cv.height=h; const g=cv.getContext('2d');
+  const Np=54; let val=(vmin+vmax)/2; const pts=[]; let r=seed; const rnd=()=>{ r=(r*9301+49297)%233280; return r/233280; };
+  for(let i=0;i<Np;i++){ val+=(rnd()-0.5)*(vmax-vmin)*0.16+trend*(vmax-vmin)/Np*(i>Np*0.65?2.2:0.4); val=Math.max(vmin,Math.min(vmax,val)); pts.push(val); }
+  const X=i=>i/(Np-1)*w, Y=v=>h-((v-vmin)/(vmax-vmin))*(h-8)-4;
+  g.beginPath(); g.moveTo(0,h); pts.forEach((v,i)=>g.lineTo(X(i),Y(v))); g.lineTo(w,h); g.closePath();
+  const grad=g.createLinearGradient(0,0,0,h); grad.addColorStop(0,color+'55'); grad.addColorStop(1,color+'00'); g.fillStyle=grad; g.fill();
+  g.beginPath(); pts.forEach((v,i)=>i?g.lineTo(X(i),Y(v)):g.moveTo(X(i),Y(v))); g.strokeStyle=color; g.lineWidth=1.6; g.stroke(); }
+function drawTrends(){ spark('tTemp','#F5883D',12345,20,80,HOT?0.7:0.2); spark('tGpu','#347FF5',54321,45,95,0.4);
+  spark('tPow','#2474F2',99887,1.1,2.2,0.4); spark('tAir','#5D9BFA',44556,60,95,HOT?-0.5:0.1); }
+drawTrends(); addEventListener('resize',drawTrends);
+
+// ============================================================
+//  ESQUEMA DE FLUJO (SVG) — Antes / Después
+// ============================================================
+const schem=$('schem'); let scMode='after';
+function drawSchem(){ const cool='#347FF5', hot='#F5883D';
+  const box=(x,y,w,h)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#F4F6FA" stroke="#E4E9F2"/>`;
+  const flow=(x1,y1,x2,y2,col)=>`<path d="M${x1} ${y1} L${x2} ${y2}" stroke="${col}" stroke-width="2.4" fill="none" stroke-dasharray="6 5" class="fl" marker-end="url(#ah_${col===cool?'c':'h'})"/>`;
+  const defs=`<defs><marker id="ah_c" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="${cool}"/></marker>
+    <marker id="ah_h" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="${hot}"/></marker>
+    <style>.fl{animation:dash 1s linear infinite}@keyframes dash{to{stroke-dashoffset:-22}}</style></defs>`;
+  const racks=box(120,34,26,52)+box(154,34,26,52);
+  let arrows = scMode==='after'
+    ? flow(45,50,118,50,cool)+flow(255,50,182,50,cool)+flow(133,32,133,10,hot)+flow(167,32,167,10,hot)
+    : flow(45,58,110,68,cool)+flow(133,36,150,24,hot)+flow(190,66,150,56,hot)+flow(255,62,185,70,cool);
+  schem.innerHTML=defs+racks+arrows; }
+document.querySelectorAll('[data-sc]').forEach(t=>t.onclick=()=>{ document.querySelectorAll('[data-sc]').forEach(x=>x.classList.remove('act')); t.classList.add('act'); scMode=t.dataset.sc; drawSchem(); });
+drawSchem();
+
+resize(); animate();   // arranca 3D + heatmap una vez que TODO esta definido (evita TDZ de heatcv)
+
+// ===== simulación de datos en vivo (jitter alrededor de la base del rack) =====
+const BASE = HOT
+  ? {temp:61.3,gpu:81,air:74,pow:1.92,inlet:18.6,outlet:61.3,load:92,conf:93}
+  : {temp:29.8,gpu:47,air:88,pow:1.21,inlet:18.2,outlet:31.4,load:58,conf:24};
+const jig=(v,a)=>v+(Math.random()-0.5)*a;
+function simTick(){
+  const temp=jig(BASE.temp,0.5), gpu=Math.round(jig(BASE.gpu,1.3)), air=Math.round(jig(BASE.air,1.1)),
+        pow=jig(BASE.pow,0.035), inlet=jig(BASE.inlet,0.18), outlet=jig(BASE.outlet,0.5),
+        load=Math.round(jig(BASE.load,1.2)), conf=Math.round(jig(BASE.conf,1.4));
+  $('kTemp').textContent=temp.toFixed(1); $('kGpu').textContent=gpu; $('kAir').textContent=air; $('kPow').textContent=pow.toFixed(2);
+  $('mInlet').textContent=inlet.toFixed(1); $('mOutlet').textContent=outlet.toFixed(1); $('mDt').textContent=(outlet-inlet).toFixed(1);
+  $('mLoad').textContent=load; $('mLoadBar').style.width=load+'%';
+  $('chInlet').textContent=inlet.toFixed(1)+' °C'; $('chOutlet').textContent=outlet.toFixed(1)+' °C';
+  $('ringNum').textContent=conf+'%'; $('ringArc').setAttribute('stroke-dashoffset',(169.6*(1-conf/100)).toFixed(1));
+}
+setInterval(simTick,1600); simTick();
+
+setInterval(()=>{ const d=new Date(); $('liveClock').textContent=[d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':'); },1000);
+</script>
+</body>
+</html>
