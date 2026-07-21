@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Operaciones IA · Predicción de Hotspot</title>
+<style>
+  :root{
+    /* DHL centro de datos — paleta azul-grisácea clara (no blanco puro) */
+    --bg:#EDF0F6; --bg2:#F4F6FB; --card:#FFFFFF; --card2:#F1F4FA;
+    --edge:#E1E6EF; --edge2:#D3DAE7;
+    --tx:#1B2430; --mut:#5C6B84; --dim:#9BA6B8;
+    --teal:#3B6FF5; --cyan:#3B6FF5; --blue:#2E5FE0;
+    --hot:#F5883D; --red:#E5484D; --amber:#8A5A00; --green:#34C08B;
+    --primary:#3B6FF5; --primary-strong:#2E5FE0; --primary-soft:#DCE7FF; --primary-bg:#EAF0FF;
+    --surface-secondary:#F1F4FA; --background-secondary:#F4F6FB;
+    --border:#E1E6EF; --border-subtle:rgba(225,230,239,0.7);
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; }
+  body{ background:var(--bg); color:var(--tx); overflow:hidden;
+    font-family:'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif; font-size:13px; }
+  .mono{ font-family:'JetBrains Mono',ui-monospace,monospace; }
+  ::-webkit-scrollbar{ width:6px; height:6px; } ::-webkit-scrollbar-thumb{ background:var(--edge2); border-radius:3px; }
+
+  /* ---------- estructura ---------- */
+  .app{ display:grid; grid-template-columns:54px 1fr; grid-template-rows:52px 1fr; height:100vh; }
+  .sidebar{ grid-row:1/3; background:var(--bg2); border-right:1px solid var(--edge);
+    display:flex; flex-direction:column; align-items:center; padding-top:10px; gap:6px; }
+  .sidebar .logo{ width:34px; height:34px; border-radius:9px; margin-bottom:12px;
+    background:linear-gradient(135deg,var(--teal),var(--blue)); display:grid; place-items:center;
+    font-weight:800; color:#04121a; font-size:16px; }
+  .sidebar .nav{ width:36px; height:36px; border-radius:9px; display:grid; place-items:center;
+    color:var(--dim); cursor:pointer; transition:.15s; }
+  .sidebar .nav:hover{ color:var(--tx); background:#111a2b; }
+  .sidebar .nav.act{ color:var(--teal); background:#0d2a2a; }
+  .sidebar .nav svg{ width:19px; height:19px; }
+
+  .topbar{ grid-column:2; display:flex; align-items:center; gap:18px; padding:0 20px;
+    background:var(--bg2); border-bottom:1px solid var(--edge); }
+  .topbar .brand{ font-weight:700; letter-spacing:.02em; font-size:15px; }
+  .topbar .brand b{ color:var(--teal); }
+  .topbar .brand span{ color:var(--mut); font-weight:400; font-size:11px; letter-spacing:.14em; margin-left:8px; }
+  .topbar .drop{ display:flex; align-items:center; gap:8px; padding:7px 14px; border:1px solid var(--edge2);
+    border-radius:8px; color:var(--tx); font-size:12px; cursor:pointer; background:#0b1220; }
+  .topbar .drop small{ color:var(--mut); }
+  .topbar .spacer{ flex:1; }
+  .topbar .ic{ width:34px; height:34px; border-radius:8px; display:grid; place-items:center;
+    color:var(--mut); background:#0b1220; border:1px solid var(--edge); cursor:pointer; position:relative; }
+  .topbar .ic .dot{ position:absolute; top:7px; right:8px; width:6px; height:6px; border-radius:50%; background:var(--cyan); }
+  .topbar .av{ width:34px; height:34px; border-radius:8px; display:grid; place-items:center; font-weight:700;
+    color:#04121a; background:linear-gradient(135deg,var(--cyan),var(--teal)); }
+
+  .main{ grid-column:2; display:grid; grid-template-rows:auto 1fr auto; gap:12px;
+    padding:12px; overflow:hidden; background:radial-gradient(1200px 600px at 55% 30%, #0a1220, var(--bg)); }
+
+  /* ---------- KPI row ---------- */
+  .kpis{ display:grid; grid-template-columns:repeat(6,1fr); gap:12px; }
+  .kpi{ background:var(--card); border:1px solid var(--edge); border-radius:12px; padding:12px 14px;
+    display:flex; flex-direction:column; gap:2px; position:relative; overflow:hidden; }
+  .kpi .kt{ color:var(--mut); font-size:11px; display:flex; align-items:center; gap:7px; }
+  .kpi .kt svg{ width:15px; height:15px; opacity:.85; }
+  .kpi .kv{ font-size:23px; font-weight:700; letter-spacing:.01em; }
+  .kpi .kv small{ font-size:12px; color:var(--mut); font-weight:500; }
+  .kpi .kd{ font-size:10.5px; color:var(--mut); }
+  .kpi .kd.up{ color:var(--amber); } .kpi .kd.ok{ color:var(--green); }
+  .kpi.state .kv{ font-size:19px; }
+
+  /* ---------- mid row ---------- */
+  .mid{ display:grid; grid-template-columns:266px 1fr 322px; gap:12px; min-height:0; }
+  .card{ background:var(--card); border:1px solid var(--edge); border-radius:12px; }
+  .card .hd{ padding:10px 14px; border-bottom:1px solid var(--edge); display:flex; align-items:center;
+    justify-content:space-between; font-size:12px; color:var(--tx); font-weight:600; }
+  .card .hd .sub{ color:var(--mut); font-weight:400; font-size:10.5px; }
+
+  .analytics{ display:flex; flex-direction:column; overflow:hidden; }
+  .analytics .body{ padding:10px 12px; overflow:auto; display:flex; flex-direction:column; gap:12px; }
+  .chartblk .cl{ display:flex; justify-content:space-between; font-size:10.5px; color:var(--mut); margin-bottom:3px; }
+  .chartblk canvas{ width:100%; height:52px; display:block; }
+  .chartblk .ax{ display:flex; justify-content:space-between; font-size:9px; color:var(--dim); margin-top:2px; }
+  .aisle .ar{ display:flex; align-items:center; gap:8px; margin:6px 0; font-size:11px; }
+  .aisle .ar .nm{ width:44px; color:var(--mut); }
+  .aisle .ar .bar{ flex:1; height:7px; background:#0a1120; border-radius:4px; overflow:hidden; }
+  .aisle .ar .bar i{ display:block; height:100%; border-radius:4px;
+    background:linear-gradient(90deg,var(--teal),var(--cyan)); }
+  .aisle .ar .pc{ width:34px; text-align:right; color:var(--tx); }
+
+  /* ---------- centro 3D ---------- */
+  .stage{ position:relative; border-radius:12px; overflow:hidden; border:1px solid var(--edge);
+    background:radial-gradient(700px 380px at 50% 40%, #0b1524, #070b13); min-height:0; }
+  #glcanvas{ position:absolute; inset:0; width:100%; height:100%; }
+  .stage .stt{ position:absolute; top:12px; left:14px; font-size:11px; color:var(--mut); z-index:3; }
+  .stage .stt b{ color:var(--tx); font-size:12px; display:block; }
+  .stage .scale{ position:absolute; right:14px; top:50%; transform:translateY(-50%); z-index:3;
+    display:flex; flex-direction:column; align-items:center; gap:4px; font-size:9px; color:var(--mut); }
+  .stage .scale .bar{ width:9px; height:150px; border-radius:3px;
+    background:linear-gradient(to top,#2b6fff,#00d4aa,#8bd44a,#ffd23e,#ff8a2c,#ff2233); }
+  .callout{ position:absolute; z-index:4; transform:translate(-50%,-100%); pointer-events:none;
+    background:rgba(12,8,6,.94); border:1px solid var(--hot); border-radius:9px; padding:9px 12px;
+    box-shadow:0 0 26px #ff6a3d44; opacity:0; transition:opacity .5s; white-space:nowrap; }
+  .callout .ct{ color:var(--amber); font-size:9.5px; font-weight:700; letter-spacing:.1em; }
+  .callout .cb{ color:var(--hot); font-size:20px; font-weight:800; line-height:1.1; }
+  .callout .cb span{ font-size:10px; color:var(--mut); font-weight:500; }
+  .callout::after{ content:''; position:absolute; left:50%; bottom:-7px; transform:translateX(-50%);
+    border-left:7px solid transparent; border-right:7px solid transparent; border-top:7px solid var(--hot); }
+  .stage .demopill{ position:absolute; left:14px; bottom:12px; z-index:3; display:flex; gap:6px;
+    align-items:center; font-size:10px; color:var(--mut); background:rgba(7,11,19,.7); padding:5px 10px;
+    border:1px solid var(--edge); border-radius:20px; }
+  .stage .demopill .d{ width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); }
+
+  /* ---------- panel AI ---------- */
+  .ai{ display:flex; flex-direction:column; overflow:hidden; }
+  .ai .body{ padding:12px 14px; overflow:auto; display:flex; flex-direction:column; gap:12px; }
+  .ai .badge{ display:inline-block; background:#3a1420; color:var(--red); border:1px solid #5a2030;
+    font-size:9px; font-weight:700; letter-spacing:.1em; padding:3px 8px; border-radius:5px; }
+  .ai .lead{ font-size:15px; line-height:1.45; }
+  .ai .lead b{ color:var(--hot); } .ai .lead .g{ color:var(--red); font-weight:800; }
+  .ai .ringrow{ display:flex; align-items:center; gap:14px; }
+  .ai .ring{ position:relative; width:66px; height:66px; flex:none; }
+  .ai .ring .num{ position:absolute; inset:0; display:grid; place-items:center; font-weight:800; font-size:15px; }
+  .ai .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .ai .kv2 .l{ color:var(--mut); font-size:10px; } .ai .kv2 .v{ font-weight:600; font-size:12px; }
+  .ai .kv2 .v.hi{ color:var(--red); }
+  .ai .sec{ border-top:1px solid var(--edge); padding-top:10px; }
+  .ai .sec .st{ color:var(--teal); font-size:9.5px; letter-spacing:.12em; font-weight:700; margin-bottom:5px; }
+  .ai .sec p{ margin:0; font-size:11.5px; color:#c4d0de; line-height:1.5; }
+  .ai .resp{ display:flex; justify-content:space-between; align-items:center; margin:6px 0; font-size:11px; }
+  .ai .resp .s{ display:flex; align-items:center; gap:7px; color:#c4d0de; }
+  .ai .resp .s .ck{ width:14px; height:14px; border-radius:50%; border:1.5px solid var(--dim); display:grid; place-items:center; font-size:9px; }
+  .ai .resp .s.done .ck{ border-color:var(--green); color:var(--green); }
+  .ai .resp .s.prog .ck{ border-color:var(--cyan); color:var(--cyan); }
+  .ai .resp .rs{ font-size:10px; color:var(--mut); }
+  .ai .resp .rs.prog{ color:var(--cyan); } .ai .resp .rs.pend{ color:var(--mut); }
+  .ai .tti{ display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--edge);
+    padding-top:10px; font-size:11px; color:var(--mut); } .ai .tti b{ color:var(--amber); font-size:15px; }
+
+  /* ---------- bottom row ---------- */
+  .bottom{ display:grid; grid-template-columns:1.5fr 1fr 1fr 1fr; gap:12px; height:196px; }
+  .bcard{ background:var(--card); border:1px solid var(--edge); border-radius:12px; display:flex;
+    flex-direction:column; overflow:hidden; }
+  .bcard .bh{ padding:9px 13px; border-bottom:1px solid var(--edge); display:flex; align-items:center;
+    justify-content:space-between; font-size:11.5px; font-weight:600; }
+  .bcard .bh .tabs{ display:flex; gap:4px; }
+  .bcard .bh .tab{ font-size:10px; padding:3px 9px; border-radius:6px; color:var(--mut); cursor:pointer; border:1px solid transparent; }
+  .bcard .bh .tab.act{ color:var(--tx); background:#132033; border-color:var(--edge2); }
+  .bcard .bb{ flex:1; padding:11px 13px; min-height:0; position:relative; }
+
+  /* timeline */
+  .tl{ display:flex; justify-content:space-between; position:relative; height:100%; }
+  .tl::before{ content:''; position:absolute; left:6%; right:6%; top:20px; height:2px; background:var(--edge2); }
+  .tl .step{ position:relative; width:23%; text-align:center; }
+  .tl .step .dot{ width:15px; height:15px; border-radius:50%; margin:13px auto 8px; border:2px solid var(--edge2);
+    background:var(--bg); display:grid; place-items:center; font-size:8px; }
+  .tl .step.done .dot{ border-color:var(--green); color:var(--green); background:#0c2418; }
+  .tl .step.live .dot{ border-color:var(--cyan); color:var(--cyan); background:#0a1f2e; box-shadow:0 0 10px #28c8ff66; }
+  .tl .step .tm{ font-size:9.5px; color:var(--teal); } .tl .step .tt{ font-size:10px; font-weight:600; margin:2px 0; }
+  .tl .step .td{ font-size:9px; color:var(--mut); line-height:1.3; }
+  .tl-foot{ display:flex; justify-content:space-between; font-size:10px; color:var(--mut); margin-top:4px; }
+  .tl-foot b{ color:var(--tx); }
+
+  #heatcv{ width:100%; height:100%; display:block; border-radius:6px; }
+  .heatscale{ display:flex; justify-content:space-between; font-size:9px; color:var(--mut); margin-top:4px; }
+
+  .schem{ width:100%; height:100%; }
+  .schem .lgd{ display:flex; gap:16px; font-size:9.5px; color:var(--mut); margin-top:4px; }
+  .schem .lgd i{ display:inline-block; width:16px; height:3px; border-radius:2px; vertical-align:middle; margin-right:5px; }
+
+  .sugg{ display:flex; flex-direction:column; gap:9px; }
+  .sugg .sg{ background:#0a1120; border:1px solid var(--edge); border-radius:9px; padding:9px 11px; display:flex;
+    justify-content:space-between; align-items:center; }
+  .sugg .sg .t{ font-size:11px; } .sugg .sg .t b{ color:var(--teal); }
+  .sugg .sg .t small{ display:block; color:var(--mut); font-size:9.5px; margin-top:2px; }
+  .sugg .sg .v{ font-size:17px; font-weight:800; color:var(--teal); }
+
+  .live{ position:fixed; right:16px; bottom:8px; font-size:10px; color:var(--mut); display:flex; gap:6px; align-items:center; }
+  .live .d{ width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); }
+
+  /* ===== LIGHT LOGISTICS / DHL — overrides (colores/fondos/sombras) ===== */
+  body{ background:
+    radial-gradient(circle at 100% 0%, rgba(59,111,245,0.08) 0%, transparent 42%),
+    linear-gradient(150deg,#EFF2F8 0%,#E7ECF4 55%,#DEE4EF 100%); color:var(--tx); }
+  ::-webkit-scrollbar-thumb{ background:#cdd6e4; }
+  .sidebar{ background:var(--background-secondary); border-right:1px solid var(--border); }
+  .sidebar .nav:hover{ color:var(--tx); background:var(--primary-bg); }
+  .sidebar .nav.act{ color:var(--primary); background:var(--primary-bg); }
+  .topbar{ background:rgba(255,255,255,0.72); border-bottom:1px solid var(--border); backdrop-filter:blur(12px); }
+  .topbar .drop{ background:rgba(255,255,255,0.82); border-color:var(--border); color:var(--tx); box-shadow:0 6px 16px rgba(70,90,125,0.06); }
+  .topbar .ic{ background:rgba(255,255,255,0.82); border-color:var(--border); box-shadow:0 6px 16px rgba(70,90,125,0.06); }
+  .card,.bcard,.kpi{ background:linear-gradient(145deg,rgba(255,255,255,0.97),rgba(247,249,252,0.9));
+    border:1px solid var(--border-subtle); border-radius:16px;
+    box-shadow:0 16px 40px rgba(69,88,120,0.07),0 3px 12px rgba(69,88,120,0.04),inset 0 1px 0 rgba(255,255,255,0.9); }
+  .card .hd,.bcard .bh{ border-bottom:1px solid var(--border); }
+  .main{ background:transparent; }
+  .stage{ background:radial-gradient(760px 480px at 47% 36%,#e6ebf4 0%,#d3dcea 70%,#c5cfe1 100%); border:1px solid var(--border); }
+  .aisle .ar .bar{ background:#E5E9F0; } .analytics .chartblk canvas,.stage .stt{ color:var(--mut); }
+  .callout{ background:rgba(255,255,255,0.96); border-color:var(--hot); box-shadow:0 8px 26px rgba(245,136,61,0.28); }
+  .callout .cb{ color:var(--hot); } .callout .cb span{ color:var(--mut); }
+  .demopill{ background:rgba(255,255,255,0.8); border:1px solid var(--border); color:var(--mut); }
+  .ai .badge{ background:#FFE7E9; color:var(--red); border:1px solid #FAD1D5; }
+  .ai .sec p{ color:#47536a; } .ai .resp .s{ color:#2f3a4f; } .ai .resp .s .ck{ border-color:#c3ccdb; }
+  .bcard .bh .tab.act{ background:var(--primary-bg); color:var(--primary); border-color:var(--primary-soft); }
+  .tl .step .dot{ background:#fff; border-color:#D5DEEC; }
+  .tl .step.done .dot{ background:#E5F8EC; border-color:var(--green); color:var(--green); }
+  .tl .step.live .dot{ background:var(--primary-bg); border-color:var(--primary); color:var(--primary); box-shadow:0 0 10px rgba(59,111,245,0.25); }
+  .sugg .sg{ background:var(--surface-secondary); border:1px solid var(--border); }
+  .kpi .kd.up{ color:#8A5A00; }
+  .live .d{ background:var(--green); box-shadow:0 0 8px rgba(52,192,139,0.5); }
+
+  /* ===== responsive / una sola vista ===== */
+  .main{ gap:10px; padding:10px 12px; }
+  @media (max-width:1200px){ .mid{ grid-template-columns:230px 1fr 288px; } .kpis{ grid-template-columns:repeat(3,1fr); } }
+  @media (max-width:920px){ .mid{ grid-template-columns:1fr; } .kpis{ grid-template-columns:repeat(2,1fr); } .bottom{ grid-template-columns:1fr 1fr; height:auto; } .main{ overflow:auto; } }
+  @media (max-height:720px){ .kpi .kd{ display:none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="logo">◇</div>
+    <div class="nav act" title="Inicio">◱</div>
+    <div class="nav" title="Salas">▦</div>
+    <div class="nav" title="Térmica">❄</div>
+    <div class="nav" title="Energía">⚡</div>
+    <div class="nav" title="Analítica">▤</div>
+    <div class="nav" title="Ajustes">⚙</div>
+    <div style="flex:1"></div>
+    <div class="nav" title="Seguridad">⛊</div>
+  </div>
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="brand mono"><b>niagara</b> <span>OPERACIONES IA</span></div>
+    <div class="drop mono"><small>Caso de uso #1:</small> Predicción de Hotspot ▾</div>
+    <div class="spacer"></div>
+    <div class="drop mono">Data Center 01 ▾</div>
+    <div class="ic">◔<div class="dot"></div></div>
+    <div class="ic">?</div>
+    <div class="av">AS</div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- KPIs -->
+    <div class="kpis">
+      <div class="kpi"><div class="kt">🌡 Temp. Promedio</div><div class="kv mono" id="kTemp">27.4<small>°C</small></div><div class="kd up" id="kTempD">▲ 2.1°C vs ayer</div></div>
+      <div class="kpi"><div class="kt">⚙ Utilización GPU</div><div class="kv mono" id="kGpu">81<small>%</small></div><div class="kd up">▲ 6% vs ayer</div></div>
+      <div class="kpi"><div class="kt">🌀 Flujo de Aire</div><div class="kv mono" id="kAir">74<small>%</small></div><div class="kd up">▲ 5% vs ayer</div></div>
+      <div class="kpi"><div class="kt">⚡ Consumo</div><div class="kv mono" id="kPow">1.92<small>MW</small></div><div class="kd up">▲ 120 kW vs ayer</div></div>
+      <div class="kpi state"><div class="kt">❄ Estado CRAH</div><div class="kv" id="kCrah">Adaptativo</div><div class="kd ok">● Optimización IA activa</div></div>
+      <div class="kpi state"><div class="kt">🛡 Salud Sistema</div><div class="kv" id="kHealth" style="color:var(--green)">Saludable</div><div class="kd ok">Todos los sistemas OK</div></div>
+    </div>
+
+    <!-- MID -->
+    <div class="mid">
+      <!-- Analytics -->
+      <div class="card analytics">
+        <div class="hd">Analítica Histórica y en Vivo <span class="sub">−24h → ahora</span></div>
+        <div class="body">
+          <div class="chartblk"><div class="cl"><span>Tendencia de Temperatura</span><span class="mono">°C</span></div>
+            <canvas id="cTemp"></canvas><div class="ax mono"><span>-24h</span><span>-12h</span><span>ahora</span></div></div>
+          <div class="chartblk"><div class="cl"><span>Utilización GPU</span><span class="mono">%</span></div>
+            <canvas id="cGpu"></canvas><div class="ax mono"><span>-24h</span><span>-12h</span><span>ahora</span></div></div>
+          <div class="chartblk"><div class="cl"><span>Energía Consumida</span><span class="mono">MW</span></div>
+            <canvas id="cPow"></canvas><div class="ax mono"><span>-24h</span><span>-12h</span><span>ahora</span></div></div>
+          <div class="aisle">
+            <div class="cl" style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut);margin-bottom:4px"><span>Distribución de Flujo</span><span class="mono">%</span></div>
+            <div class="ar"><span class="nm">Pasillo A</span><span class="bar"><i style="width:72%"></i></span><span class="pc mono">72%</span></div>
+            <div class="ar"><span class="nm">Pasillo B</span><span class="bar"><i id="aisleB" style="width:74%;background:linear-gradient(90deg,var(--amber),var(--hot))"></i></span><span class="pc mono" id="aisleBp">74%</span></div>
+            <div class="ar"><span class="nm">Pasillo C</span><span class="bar"><i style="width:68%"></i></span><span class="pc mono">68%</span></div>
+            <div class="ar"><span class="nm">Pasillo D</span><span class="bar"><i style="width:75%"></i></span><span class="pc mono">75%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3D stage -->
+      <div class="stage">
+        <canvas id="glcanvas"></canvas>
+        <div class="stt"><b>SALA B · Pasillo Frío/Caliente</b>Racks B19 – B26 · vista isométrica</div>
+        <div class="scale"><span>70°C</span><div class="bar"></div><span>20°C</span></div>
+        <div class="callout" id="callout"><div class="ct">RACK B23 · HOTSPOT PREDICHO</div>
+          <div class="cb"><span id="coMin">43</span> <span>min a temp. crítica</span></div></div>
+        <div class="demopill"><span class="d"></span> DEMO · <span id="phaseName" class="mono">NORMAL</span></div>
+      </div>
+
+      <!-- AI Engine -->
+      <div class="card ai">
+        <div class="hd">Motor IA Niagara <span class="badge">ALERTA PREDICTIVA</span></div>
+        <div class="body">
+          <div class="ringrow">
+            <div class="lead">El <b>Rack B23</b> alcanzará temperatura <span class="g">crítica</span> en <span class="g mono" id="aiMin">43 min</span></div>
+            <div class="ring"><svg viewBox="0 0 66 66"><circle cx="33" cy="33" r="28" fill="none" stroke="#152033" stroke-width="6"/>
+              <circle id="ringArc" cx="33" cy="33" r="28" fill="none" stroke="var(--teal)" stroke-width="6" stroke-linecap="round"
+                stroke-dasharray="175.9" stroke-dashoffset="14" transform="rotate(-90 33 33)"/></svg>
+              <div class="num mono" id="ringNum">92%</div></div>
+          </div>
+          <div class="grid2">
+            <div class="kv2"><div class="l">Severidad</div><div class="v hi" id="aiSev">● Alta</div></div>
+            <div class="kv2"><div class="l">Sistemas afectados</div><div class="v mono">8 GPUs</div></div>
+          </div>
+          <div class="sec"><div class="st">CAUSA RAÍZ (DETECTADA POR IA)</div>
+            <p>Alta carga GPU + eficiencia de flujo reducida en pasillo B + temperatura ambiente elevada.</p></div>
+          <div class="sec"><div class="st">ACCIÓN RECOMENDADA</div>
+            <p>Incrementar flujo hacia pasillo B, ajustar setpoint CRAH y balancear la carga térmica.</p></div>
+          <div class="sec"><div class="st">RESPUESTA AUTOMATIZADA</div>
+            <div class="resp" id="r0"><span class="s"><span class="ck">✓</span> Ajuste CRAH</span><span class="rs">—</span></div>
+            <div class="resp" id="r1"><span class="s"><span class="ck">✓</span> Incremento de flujo</span><span class="rs">—</span></div>
+            <div class="resp" id="r2"><span class="s"><span class="ck">✓</span> Balanceo térmico</span><span class="rs">—</span></div>
+          </div>
+          <div class="tti">Tiempo a impacto (sin acción)<b class="mono" id="aiTti">43 min</b></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM -->
+    <div class="bottom">
+      <div class="bcard">
+        <div class="bh">Cronología de Respuesta Automatizada</div>
+        <div class="bb">
+          <div class="tl">
+            <div class="step done"><div class="dot">✓</div><div class="tm mono">12:41:02</div><div class="tt">Ajuste CRAH</div><div class="td">Setpoint 18°→16°C · Fila B</div></div>
+            <div class="step done"><div class="dot">✓</div><div class="tm mono">12:41:08</div><div class="tt">Incremento Flujo</div><div class="td">Ventilador 68%→85% · Pasillo B</div></div>
+            <div class="step done"><div class="dot">✓</div><div class="tm mono">12:41:15</div><div class="tt">Balanceo Térmico</div><div class="td">8 servidores redistribuidos</div></div>
+            <div class="step live"><div class="dot">●</div><div class="tm mono">12:41:22</div><div class="tt">Acción Preventiva</div><div class="td">Ejecutada con éxito</div></div>
+          </div>
+          <div class="tl-foot"><span>Tiempo total de respuesta: <b class="mono">20s</b></span><span>Temp. prevista tras acciones: <b class="mono" style="color:var(--teal)" id="tlTemp">31.2°C</b></span></div>
+        </div>
+      </div>
+
+      <div class="bcard">
+        <div class="bh">Mapa Térmico<div class="tabs"><span class="tab act" data-hv="front">Frontal</span><span class="tab" data-hv="top">Superior</span></div></div>
+        <div class="bb"><canvas id="heatcv"></canvas>
+          <div class="heatscale mono"><span>20°C</span><span>70°C</span></div></div>
+      </div>
+
+      <div class="bcard">
+        <div class="bh">Esquema de Flujo<div class="tabs"><span class="tab" data-sc="before">Antes</span><span class="tab act" data-sc="after">Después</span></div></div>
+        <div class="bb"><svg class="schem" id="schem" viewBox="0 0 300 130" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="lgd"><span><i style="background:var(--cyan)"></i>Aire frío</span><span><i style="background:var(--hot)"></i>Aire caliente</span></div></div>
+      </div>
+
+      <div class="bcard">
+        <div class="bh">Sugerencias IA <span class="mono" style="color:var(--teal)">2</span></div>
+        <div class="bb"><div class="sugg">
+          <div class="sg"><div class="t"><b>Reducir probabilidad de hotspot</b><small>Continuando las acciones automáticas</small></div><div class="v">68%</div></div>
+          <div class="sg"><div class="t"><b>Reserva de enfriamiento</b><small>Margen extra para aumento de carga</small></div><div class="v">14%</div></div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="live">● Modelo actualizado: <span class="mono" id="liveClock">12:41:20</span> · EN VIVO</div>
+
+<!-- importmap vía fromCharCode (evita mangling de Cloudflare en package@version) -->
+<script>
+(function(){ var AT=String.fromCharCode(64); var im=document.createElement('script'); im.type='importmap';
+  im.textContent=JSON.stringify({imports:{
+    "three":"https://unpkg.com/three"+AT+"0.160.0/build/three.module.js",
+    "three/addons/":"https://unpkg.com/three"+AT+"0.160.0/examples/jsm/"}});
+  document.currentScript.after(im); })();
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ===== estado global compartido por todo el dashboard =====
+const PHASES=[
+  {name:'NORMAL',dur:7,heatTo:0.05,min:'--'},
+  {name:'PREDICCIÓN',dur:6,heatTo:0.55,min:'43'},
+  {name:'CRÍTICO',dur:6.5,heatTo:1.0,min:'12'},
+  {name:'MITIGANDO',dur:8,heatTo:0.08,min:'∞'},
+];
+const S={phaseIdx:0,tPhase:0,heat:0.05};
+
+// ============================================================
+//  ESCENA 3D (embebida en .stage) — geometría lisa, ~0.05 m/u
+// ============================================================
+const canvas=document.getElementById('glcanvas');
+const stage=canvas.parentElement;
+const scene=new THREE.Scene();
+scene.fog=new THREE.Fog(0xdde4ef,9,32);
+
+const camera=new THREE.PerspectiveCamera(33,1,0.02,200);
+camera.position.set(4.7,3.5,5.6);
+
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=false;                 // sin sombras (pedido) -> mejor rendimiento
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.02;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+
+const pmrem=new THREE.PMREMGenerator(renderer);
+scene.environment=pmrem.fromScene(new RoomEnvironment(),0.03).texture;
+
+const controls=new OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true; controls.dampingFactor=0.08;
+controls.target.set(0,0.95,0.35); controls.autoRotate=false;
+controls.maxPolarAngle=Math.PI*0.49; controls.minDistance=3.2; controls.maxDistance=15;
+controls.enablePan=false;
+
+scene.add(new THREE.AmbientLight(0xdae2ee,0.95));
+const key=new THREE.DirectionalLight(0xffffff,1.3); key.position.set(3.5,6,3.5); scene.add(key);
+const fill=new THREE.DirectionalLight(0x9db8e6,0.4); fill.position.set(-4,3,-2.5); scene.add(fill);
+const rim=new THREE.DirectionalLight(0x3b6ff5,0.25); rim.position.set(0,2.4,-5); scene.add(rim);
+
+const COL={frame:0x2a2d38,frameD:0x16181f,side:0x0c0e14,glass:0xdfe7f2,led:0x3b6ff5,cold:0x3b6ff5,hot:0xf5883d,floor:0xd3dbe8};
+const WH=2.7;                                      // altura de contencion / techo
+const P=0.72, X0=-2.52, ZFRONT=0.475;              // paso entre racks, origen X, Z del frente de la fila
+const RNAMES=['B19','B20','B21','B22','B23','B24','B25','B26'];
+const HOTNAME='B23';
+
+// ===PURE-GEN-START===
+function makeLabel(text,hot){
+  const c=document.createElement('canvas'); c.width=256; c.height=128; const g=c.getContext('2d');
+  if(hot){ g.fillStyle='#ff6a2a'; g.fillRect(38,26,180,76); g.fillStyle='#170a04'; }
+  else { g.fillStyle='#d8e6f2'; }
+  g.font='bold 60px JetBrains Mono, monospace'; g.textAlign='center'; g.textBaseline='middle';
+  g.fillText(text,128,66);
+  const tex=new THREE.CanvasTexture(c); tex.anisotropy=4;
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
+  s.scale.set(0.62,0.31,1); return s;
+}
+// ---- rack 42U realista (puerta abierta) — dimensiones en metros (1 unidad = 1 m) ----
+function rackCanvasTex(w,h,draw){
+  const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); draw(g,w,h);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return t;
+}
+function serverFrontTex(is2U){ const w=512,h=is2U?128:64;
+  return rackCanvasTex(w,h,(g)=>{
+    g.fillStyle='#14151d'; g.fillRect(0,0,w,h); g.fillStyle='#0c0d14'; g.fillRect(3,3,w-6,h-6);
+    const by=h*0.20,bh=h*0.60,bw=18,gap=6;                                   // bahias de disco
+    for(let i=0;i<7;i++){ const x=12+i*(bw+gap); g.fillStyle='#22242f'; g.fillRect(x,by,bw,bh);
+      g.fillStyle='#343643'; g.fillRect(x+2,by+4,bw-4,3); g.fillStyle='#0b0b11'; g.fillRect(x+bw-7,by+bh-9,4,4); }
+    const gx0=176,gx1=352,gy0=h*0.13,gy1=h*0.87;                             // rejilla perforada
+    g.fillStyle='#090a10'; g.fillRect(gx0,gy0,gx1-gx0,gy1-gy0); g.fillStyle='#1c1e28';
+    for(let yy=gy0+5;yy<gy1-2;yy+=6) for(let xx=gx0+5;xx<gx1-2;xx+=6){ g.beginPath(); g.arc(xx,yy,1.6,0,6.283); g.fill(); }
+    g.fillStyle='#39566a'; g.font='bold '+((h*0.17)|0)+'px monospace'; g.textAlign='left'; g.fillText('NODE',372,h*0.40);
+    g.fillStyle='#1c1e28'; for(let i=0;i<4;i++) g.fillRect(372,h*0.52+i*6,104,3);
+  });
+}
+const RMAT={
+  FRAME:  new THREE.MeshStandardMaterial({color:0x2b2b36,roughness:0.5, metalness:0.15}),
+  FRAME_D:new THREE.MeshStandardMaterial({color:0x141620,roughness:0.6, metalness:0.1}),
+  SIDE:   new THREE.MeshStandardMaterial({color:0x0d1016,roughness:0.2, metalness:0.25,transparent:true,opacity:0.5,side:THREE.DoubleSide}),
+  PDU:    new THREE.MeshStandardMaterial({color:0x101018,roughness:0.6, metalness:0}),
+  DOOR:   new THREE.MeshStandardMaterial({color:0x16303f,roughness:0.12,metalness:0.35,transparent:true,opacity:0.16,side:THREE.DoubleSide}),
+  FRONT1: new THREE.MeshStandardMaterial({map:serverFrontTex(false),roughness:0.6,metalness:0}),
+  FRONT2: new THREE.MeshStandardMaterial({map:serverFrontTex(true), roughness:0.6,metalness:0})
+};
+const HW=0.30,HD=0.425,RH=2.0,U=0.04445,BASE=0.10,FRONT=0.425,PANEL=0.409,LEDZ=0.416,SRVW=0.462;
+const chGeo=new THREE.BoxGeometry(SRVW,U*0.9,0.34);
+const f1Geo=new THREE.PlaneGeometry(SRVW,U*0.9);
+const f2Geo=new THREE.PlaneGeometry(SRVW,U*2*0.9);
+const ledBGeo=new THREE.BoxGeometry(0.14,0.016,0.006);
+const STACK=[2,2,2,1,2,2,2,1,2,2,2,1,2,2,2,1,2,2,2,1];   // ~35U de abajo->arriba
+
+function buildRack(name,x,z,hot,label){
+  const g=new THREE.Group(); g.position.set(x,0,z); scene.add(g);
+  const add=(geo,mat,px,py,pz,parent)=>{ const m=new THREE.Mesh(geo,mat); m.position.set(px,py,pz);
+    m.castShadow=false; m.receiveShadow=false; (parent||g).add(m); return m; };   // SIN sombras
+  // carcasa (objetivo del glow termico) — material unico por rack
+  const bodyMat=new THREE.MeshStandardMaterial({color:0x141019,roughness:0.5,metalness:0.15,emissive:0x000000});
+  const body=add(new THREE.BoxGeometry(2*HW*0.98,RH*0.98,2*HD*0.9),bodyMat,0,RH/2,-0.03);
+  // gabinete: base, techo, postes, laterales (vidrio), fondo
+  add(new THREE.BoxGeometry(2*HW,0.05,2*HD),RMAT.FRAME_D,0,0.045,0);
+  add(new THREE.BoxGeometry(2*HW+0.02,0.04,2*HD+0.02),RMAT.FRAME,0,RH-0.02,0);
+  for(const sx of [-HW+0.014,HW-0.014]) for(const sz of [-HD+0.014,HD-0.014])
+    add(new THREE.BoxGeometry(0.026,RH-0.09,0.026),RMAT.FRAME,sx,RH/2,sz);
+  add(new THREE.BoxGeometry(0.01,RH-0.13,2*HD-0.05),RMAT.SIDE,-HW+0.006,RH/2,0);
+  add(new THREE.BoxGeometry(0.01,RH-0.13,2*HD-0.05),RMAT.SIDE, HW-0.006,RH/2,0);
+  add(new THREE.BoxGeometry(2*HW-0.03,RH-0.13,0.01),RMAT.FRAME_D,0,RH/2,-HD+0.006);
+  // stack: chasis + frente texturizado + barra LED (material unico -> el calor tinta B23)
+  const leds=[]; let cum=0;
+  for(const uh of STACK){ const yc=BASE+cum*U+uh*U/2; if(yc>RH-0.1)break;
+    add(chGeo,RMAT.FRAME_D,0,yc,FRONT-0.19);
+    add(uh>=2?f2Geo:f1Geo, uh>=2?RMAT.FRONT2:RMAT.FRONT1,0,yc,PANEL);
+    const lm=new THREE.MeshStandardMaterial({color:COL.led,emissive:COL.led,emissiveIntensity:1.3,roughness:0.5});
+    const led=new THREE.Mesh(ledBGeo,lm); led.position.set(0.08,yc,LEDZ); g.add(led); leds.push(led);
+    cum+=uh; }
+  // PDUs verticales (2)
+  for(const sx of [-HW+0.02,HW-0.02]) add(new THREE.BoxGeometry(0.028,RH-0.4,0.045),RMAT.PDU,sx,RH/2,-HD+0.08);
+  // PUERTA ABIERTA (vidrio, bisagra izquierda, ~86 grados hacia el pasillo)
+  const door=new THREE.Group(); door.position.set(-HW,RH/2,FRONT+0.01); door.rotation.y=-1.5; g.add(door);
+  const dW=2*HW-0.01, dH=RH-0.14;
+  add(new THREE.PlaneGeometry(dW,dH),RMAT.DOOR,dW/2,0,0,door);
+  add(new THREE.BoxGeometry(0.014,dH,0.014),RMAT.FRAME,0.006,0,0,door);
+  add(new THREE.BoxGeometry(0.014,dH,0.014),RMAT.FRAME,dW-0.006,0,0,door);
+  add(new THREE.BoxGeometry(0.02,0.09,0.03),RMAT.FRAME,dW-0.03,0,0.02,door);        // manija
+  // jaula de alerta (solo B23 la enciende)
+  const cage=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(2*HW*1.07,RH*1.03,2*HD*1.12)),
+    new THREE.LineBasicMaterial({color:COL.hot,transparent:true,opacity:0}));
+  cage.position.set(0,RH/2,0); g.add(cage);
+  if(label!==false){ const lbl=makeLabel(name,hot); lbl.position.set(0,RH+0.26,0.12); g.add(lbl); }
+  return {name,group:g,body,leds,cage,top:new THREE.Vector3(x,RH,z)};
+}
+function buildBackRack(x,z){                          // fila trasera tenue (profundidad)
+  const g=new THREE.Group(); g.position.set(x,0,z); scene.add(g);
+  const b=new THREE.Mesh(new THREE.BoxGeometry(2*HW,RH,2*HD),
+    new THREE.MeshStandardMaterial({color:0x0c0e15,roughness:0.6,metalness:0.2}));
+  b.position.y=RH/2; g.add(b);
+  const strip=new THREE.Mesh(new THREE.PlaneGeometry(0.32,RH-0.34),
+    new THREE.MeshBasicMaterial({color:0x0a3348})); strip.position.set(0,RH/2,HD+0.006); g.add(strip);
+  return g;
+}
+function buildRacks(){
+  const map={};
+  RNAMES.forEach((nm,i)=>{ map[nm]=buildRack(nm, X0+i*P, ZFRONT, nm===HOTNAME, true); });
+  for(let i=0;i<7;i++) buildBackRack(X0+0.36+i*P, -1.15);   // segunda fila (tenue)
+  return map;
+}
+function buildRoom(){
+  const g=new THREE.Group(); scene.add(g);
+  const FX=4.2, FZ=3.0;
+  const floor=new THREE.Mesh(new THREE.BoxGeometry(2*FX,0.22,2*FZ),
+    new THREE.MeshStandardMaterial({color:COL.floor,roughness:0.9,metalness:0.15}));
+  floor.position.set(0,-0.11,0); g.add(floor);
+  const tiles=new THREE.GridHelper(2*Math.max(FX,FZ),28,0xa6b4ca,0xccd5e2); tiles.position.set(0,0.006,0); g.add(tiles);
+  // losetas perforadas del pasillo frio (frente a la fila)
+  for(let i=0;i<8;i++){ const t=new THREE.Mesh(new THREE.PlaneGeometry(0.44,0.5),
+    new THREE.MeshStandardMaterial({color:0x0a2434,emissive:0x0b3a54,emissiveIntensity:0.7,roughness:0.6}));
+    t.rotation.x=-Math.PI/2; t.position.set(X0+i*P,0.012,1.35); g.add(t); }
+  // paredes de contencion (vidrio)
+  const glass=new THREE.MeshStandardMaterial({color:COL.glass,roughness:0.1,metalness:0.2,transparent:true,opacity:0.09,side:THREE.DoubleSide});
+  const mkwall=(w,h,d,px,py,pz)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),glass); m.position.set(px,py,pz); g.add(m);
+    const e=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w,h,d)),
+      new THREE.LineBasicMaterial({color:0x9fb2cc,transparent:true,opacity:0.3})); e.position.set(px,py,pz); g.add(e); };
+  mkwall(2*FX,WH,0.03,0,WH/2,-FZ);        // fondo
+  mkwall(0.03,WH,2*FZ,-FX,WH/2,0);        // izq
+  mkwall(0.03,WH,2*FZ, FX,WH/2,0);        // der
+  // vigas de techo
+  const beam=new THREE.MeshStandardMaterial({color:0xb2bccd,roughness:0.7,metalness:0.2});
+  for(let i=-3;i<=3;i++){ const b=new THREE.Mesh(new THREE.BoxGeometry(2*FX,0.05,0.05),beam); b.position.set(0,WH,i*0.85); g.add(b); }
+  // plenum superior + difusores frios
+  const plenum=new THREE.Mesh(new THREE.BoxGeometry(5.8,0.16,0.7),
+    new THREE.MeshStandardMaterial({color:0xc2ccdd,roughness:0.5,metalness:0.2}));
+  plenum.position.set(0,WH-0.22,0.55); g.add(plenum);
+  for(let i=0;i<8;i++){ const df=new THREE.Mesh(new THREE.PlaneGeometry(0.46,0.5),
+    new THREE.MeshStandardMaterial({color:COL.cold,emissive:COL.cold,emissiveIntensity:0.85,roughness:0.5}));
+    df.rotation.x=Math.PI/2; df.position.set(X0+i*P,WH-0.31,0.55); g.add(df); }
+  scene.add(g); return {bounds:{FX,FZ}};
+}
+
+// --- ribbons de flujo: tubos con textura desplazada (glow) ---
+function flowTexture(){
+  const c=document.createElement('canvas'); c.width=64; c.height=1; const g=c.getContext('2d');
+  for(let x=0;x<64;x++){ const a=Math.pow(Math.max(0,Math.sin(x/64*Math.PI*2)),2);
+    g.fillStyle='rgba(255,255,255,'+a+')'; g.fillRect(x,0,1,1); }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; return t;
+}
+function makeRibbon(pts,color,rad,reps){
+  const curve=new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p)));
+  const geo=new THREE.TubeGeometry(curve,40,rad,8,false);
+  const tex=flowTexture(); tex.repeat.set(reps||3,1);
+  const mat=new THREE.MeshBasicMaterial({color,map:tex,transparent:true,opacity:0.0,
+    blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
+  const m=new THREE.Mesh(geo,mat); m.userData={tex,speed:0.4+Math.random()*0.3,base:color}; scene.add(m); return m;
+}
+function buildFlows(){
+  const cool=[], hot=[];
+  // grandes barridos de aire frio desde el piso frontal subiendo sobre la fila
+  cool.push(makeRibbon([[-3.0,0.08,2.1],[-2.2,0.5,1.5],[-1.5,1.3,0.85],[-1.1,2.1,0.25],[-0.5,2.35,-0.2]],COL.cold,0.05,5));
+  cool.push(makeRibbon([[-2.5,0.08,2.4],[-1.7,0.45,1.8],[-0.9,1.1,1.05],[-0.3,1.9,0.45],[0.3,2.3,0.0]],COL.cold,0.045,5));
+  cool.push(makeRibbon([[2.9,0.08,2.1],[2.1,0.5,1.5],[1.3,1.2,0.85],[0.8,2.0,0.25],[0.3,2.35,-0.1]],COL.cold,0.05,5));
+  cool.push(makeRibbon([[2.4,0.08,2.4],[1.6,0.45,1.85],[0.8,1.05,1.05],[0.2,1.9,0.4],[-0.3,2.3,0.0]],COL.cold,0.045,5));
+  // descenso desde el plenum hacia el pasillo frio (por rack)
+  for(let i=0;i<8;i++){ const x=X0+i*P;
+    cool.push(makeRibbon([[x,WH-0.35,0.55],[x,1.5,0.72],[x,0.7,1.05],[x,0.28,1.35]],COL.cold,0.028,4)); }
+  // exhausto caliente sobre B23
+  const xb=X0+4*P;
+  hot.push(makeRibbon([[xb,1.3,-0.05],[xb,1.9,-0.55],[xb,2.4,-0.95]],COL.hot,0.05,3));
+  hot.push(makeRibbon([[xb-0.12,1.0,0.15],[xb-0.06,1.8,-0.1],[xb,2.5,-0.4]],COL.hot,0.04,3));
+  return {cool,hot};
+}
+// ===PURE-GEN-END===
+
+buildRoom();
+const racks=buildRacks();
+const flows=buildFlows();
+
+// penacho critico sobre B23 (particulas simples)
+const plume=[]; const pgeo=new THREE.SphereGeometry(0.045,6,6);
+for(let i=0;i<26;i++){ const m=new THREE.Mesh(pgeo,new THREE.MeshBasicMaterial({color:0xff3320,
+  transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
+  m.userData={t:Math.random(),seed:Math.random()*6.28}; scene.add(m); plume.push(m); }
+
+// charco de calor en el piso bajo B23
+const hotPool=new THREE.Mesh(new THREE.CircleGeometry(0.72,32),
+  new THREE.MeshBasicMaterial({color:0xff5a1e,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
+hotPool.rotation.x=-Math.PI/2; hotPool.position.set(racks[HOTNAME].top.x,0.02,ZFRONT); scene.add(hotPool);
+
+const hotLight=new THREE.PointLight(0xff4a20,0,3.4,2);
+hotLight.position.copy(racks[HOTNAME].top).add(new THREE.Vector3(0,-0.5,0)); scene.add(hotLight);
+
+// ===== termica B23 =====
+const cCold=new THREE.Color(COL.led),cWarm=new THREE.Color(0xff9a1e),cCrit=new THREE.Color(0xff2233),_t=new THREE.Color();
+function heatColor(h,o){ if(h<0.5)o.copy(cCold).lerp(cWarm,h/0.5); else o.copy(cWarm).lerp(cCrit,(h-0.5)/0.5); return o; }
+function applyHeat(h){
+  const b=racks[HOTNAME]; heatColor(h,_t);
+  b.body.material.emissive.copy(_t); b.body.material.emissiveIntensity=0.12+h*1.0;
+  b.leds.forEach(l=>{ l.material.color.copy(_t); l.material.emissive.copy(_t); l.material.emissiveIntensity=0.9+h*1.7; });
+  b.cage.material.opacity=h*0.85; hotLight.intensity=h*2.6;
+  hotPool.material.opacity=h*0.55; hotPool.scale.setScalar(0.8+h*0.5);
+}
+
+// ============================================================
+//  INTERACCION: hover (cursor pointer) + click -> vista de detalle del rack
+// ============================================================
+const raycaster=new THREE.Raycaster(); const ndc=new THREE.Vector2();
+Object.entries(racks).forEach(([nm,r])=>{ r.group.userData.rackName=nm; });   // etiqueta cada rack pickeable
+const pickables=Object.values(racks).map(r=>r.group);
+const hoverBox=new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(2*HW*1.1,RH*1.02,2*HD*1.14)),
+  new THREE.LineBasicMaterial({color:0x28c8ff,transparent:true,opacity:0.9}));
+hoverBox.visible=false; scene.add(hoverBox);
+let hoverName=null;
+function pickRack(ev){
+  const r=canvas.getBoundingClientRect();
+  ndc.x=((ev.clientX-r.left)/r.width)*2-1; ndc.y=-((ev.clientY-r.top)/r.height)*2+1;
+  raycaster.setFromCamera(ndc,camera);
+  const hits=raycaster.intersectObjects(pickables,true);
+  for(const hit of hits){ let o=hit.object; while(o){ if(o.userData&&o.userData.rackName) return o.userData.rackName; o=o.parent; } }
+  return null;
+}
+canvas.addEventListener('pointermove',ev=>{
+  hoverName=pickRack(ev);
+  canvas.style.cursor=hoverName?'pointer':'default';
+  if(hoverName){ const rk=racks[hoverName]; hoverBox.position.set(rk.top.x,RH/2,rk.group.position.z); hoverBox.visible=true; }
+  else hoverBox.visible=false;
+});
+let _dx=0,_dy=0;
+canvas.addEventListener('pointerdown',ev=>{ _dx=ev.clientX; _dy=ev.clientY; });
+canvas.addEventListener('pointerup',ev=>{
+  if(Math.abs(ev.clientX-_dx)>5||Math.abs(ev.clientY-_dy)>5) return;   // fue rotacion de camara, no click
+  const nm=pickRack(ev);
+  if(nm) window.location.href='rack-detail.html?rack='+encodeURIComponent(nm);
+});
+
+// ============================================================
+//  MAPA TÉRMICO (canvas) — campo gaussiano + colormap turbo
+// ============================================================
+const heatcv=document.getElementById('heatcv'); const hctx=heatcv.getContext('2d');
+let heatView='front';
+function turbo(t){ // aproximación turbo 20..70°C
+  t=Math.max(0,Math.min(1,t));
+  const r=Math.max(0,Math.min(255, 255*(1.2*t-0.1)));
+  const g=Math.max(0,Math.min(255, 255*Math.sin(t*Math.PI)*1.1));
+  const b=Math.max(0,Math.min(255, 255*(1-t)*(1-t)*1.4 + 80*Math.max(0,1-t*2)));
+  return [r,g,b];
+}
+function drawHeat(){
+  const w=heatcv.clientWidth, h=heatcv.clientHeight; if(!w||!h)return;
+  heatcv.width=w; heatcv.height=h;
+  const gw=48, gh=Math.round(48*h/w); const img=hctx.createImageData(w,h);
+  const hot=S.heat;
+  // centro caliente (desplazado como B23) + base tibia
+  const centers = heatView==='front'
+    ? [[0.60,0.5,0.30+hot*0.55],[0.30,0.55,0.12],[0.80,0.5,0.14]]
+    : [[0.62,0.45,0.28+hot*0.5],[0.35,0.6,0.12],[0.5,0.3,0.1]];
+  for(let py=0;py<h;py++) for(let px=0;px<w;px++){
+    const u=px/w,v=py/h; let temp=0.12;
+    for(const [cx,cy,amp] of centers){ const dx=(u-cx),dy=(v-cy); temp+=amp*Math.exp(-(dx*dx+dy*dy)/0.045); }
+    temp=Math.min(1,temp); const [r,g,b]=turbo(temp); const idx=(py*w+px)*4;
+    img.data[idx]=r; img.data[idx+1]=g; img.data[idx+2]=b; img.data[idx+3]=255;
+  }
+  hctx.putImageData(img,0,0);
+}
+
+// ============================================================
+//  ESQUEMA DE FLUJO (SVG) — Antes / Después
+// ============================================================
+const schem=document.getElementById('schem'); let scMode='after';
+function drawSchem(){
+  const cool='#28c8ff', hot='#ff6a3d';
+  const box=(x,y,w,h)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#0e1524" stroke="#22314a"/>`;
+  const crah=(x)=>`<rect x="${x}" y="18" width="20" height="94" rx="3" fill="#0c1a24" stroke="#28c8ff66"/>
+    <text x="${x+10}" y="68" fill="#28c8ff" font-size="7" text-anchor="middle" font-family="monospace">CRAH</text>`;
+  const flow=(x1,y1,x2,y2,col,cls)=>`<path d="M${x1} ${y1} L${x2} ${y2}" stroke="${col}" stroke-width="2.4"
+    fill="none" stroke-dasharray="6 5" class="${cls}" marker-end="url(#ah_${col===cool?'c':'h'})"/>`;
+  const defs=`<defs>
+    <marker id="ah_c" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="${cool}"/></marker>
+    <marker id="ah_h" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="${hot}"/></marker>
+    <style>.fl{animation:dash 1s linear infinite}@keyframes dash{to{stroke-dashoffset:-22}}</style></defs>`;
+  // dos racks centrales
+  const racksSvg=box(120,40,26,52)+box(154,40,26,52);
+  let arrows;
+  if(scMode==='after'){ // optimizado: frío entra ordenado a pasillo central, caliente sale limpio
+    arrows=flow(45,50,118,50,cool,'fl')+flow(255,50,182,50,cool,'fl')
+          +flow(133,38,133,14,hot,'fl')+flow(167,38,167,14,hot,'fl');
+  } else { // antes: recirculación, frío se mezcla con caliente
+    arrows=flow(45,60,110,72,cool,'fl')+flow(133,40,150,28,hot,'fl')
+          +flow(190,70,150,60,hot,'fl')+flow(255,66,185,74,cool,'fl');
+  }
+  schem.innerHTML=defs+crah(20)+crah(260)+racksSvg+arrows;
+}
+
+// ============================================================
+//  UI wiring
+// ============================================================
+document.querySelectorAll('[data-hv]').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('[data-hv]').forEach(x=>x.classList.remove('act')); t.classList.add('act');
+  heatView=t.dataset.hv; drawHeat();
+});
+document.querySelectorAll('[data-sc]').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('[data-sc]').forEach(x=>x.classList.remove('act')); t.classList.add('act');
+  scMode=t.dataset.sc; drawSchem();
+});
+
+const $=id=>document.getElementById(id);
+const respEls=[$('r0'),$('r1'),$('r2')];
+function setPhase(i){ S.phaseIdx=((i%PHASES.length)+PHASES.length)%PHASES.length; S.tPhase=0;
+  $('phaseName').textContent=PHASES[S.phaseIdx].name; }
+
+// KPIs / paneles reaccionan al calor
+function updatePanels(){
+  const h=S.heat, p=PHASES[S.phaseIdx];
+  $('kTemp').innerHTML=(26.5+h*9.5).toFixed(1)+'<small>°C</small>';
+  $('kGpu').innerHTML=(78+Math.round(h*16))+'<small>%</small>';
+  $('kAir').innerHTML=(74+Math.round(h*14))+'<small>%</small>';
+  $('kPow').innerHTML=(1.90+h*0.22).toFixed(2)+'<small>MW</small>';
+  const crit=h>0.6;
+  $('kCrah').textContent = h>0.35?'Refuerzo':'Adaptativo';
+  $('kHealth').textContent = crit?'En riesgo':'Saludable';
+  $('kHealth').style.color = crit?'var(--red)':'var(--green)';
+  // aire pasillo B
+  const bp=68+Math.round(h*24); $('aisleB').style.width=bp+'%'; $('aisleBp').textContent=bp+'%';
+  // AI engine
+  const mins = p.min;
+  $('aiMin').textContent = mins+(mins==='∞'||mins==='--'?'':' min');
+  $('coMin').textContent = mins;
+  $('aiTti').textContent = mins+(mins==='∞'||mins==='--'?'':' min');
+  const conf = Math.round(70+h*28); $('ringNum').textContent=conf+'%';
+  $('ringArc').setAttribute('stroke-dashoffset', (175.9*(1-conf/100)).toFixed(1));
+  const arcCol = h>0.6?'var(--red)':h>0.3?'var(--amber)':'var(--teal)';
+  $('ringArc').setAttribute('stroke',arcCol);
+  $('aiSev').textContent = h>0.6?'● Alta':h>0.3?'● Media':'● Baja';
+  $('aiSev').className = 'v '+(h>0.3?'hi':'');
+  $('tlTemp').textContent=(30.5+h*3).toFixed(1)+'°C';
+  // respuesta automatizada: se activa por fases
+  const st=[['done','—'],['done','—'],['done','—']];
+  if(S.phaseIdx===1){ st[0]=['prog','En progreso']; st[1]=['pend','Pendiente']; st[2]=['pend','Pendiente']; }
+  else if(S.phaseIdx===2){ st[0]=['done','Listo']; st[1]=['prog','En progreso']; st[2]=['pend','Pendiente']; }
+  else if(S.phaseIdx===3){ st[0]=['done','Listo']; st[1]=['done','Listo']; st[2]=['prog','En progreso']; }
+  respEls.forEach((el,i)=>{ const [cls,txt]=st[i]; const s=el.querySelector('.s'), r=el.querySelector('.rs');
+    s.className='s '+(cls==='prog'?'prog':cls==='done'?'done':''); r.textContent=txt; r.className='rs '+(cls==='prog'?'prog':'pend'); });
+  // callout
+  $('callout').style.opacity = h>0.25?1:0;
+}
+
+// ============================================================
+//  RESIZE (mide el contenedor .stage)
+// ============================================================
+function resize(){
+  const w=stage.clientWidth,h=stage.clientHeight;
+  renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
+  drawHeat();
+}
+addEventListener('resize',resize);
+
+// ============================================================
+//  LOOP
+// ============================================================
+const clock=new THREE.Clock(); let sim=0; const _v=new THREE.Vector3();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05); sim+=dt;
+
+  // máquina de estados
+  S.tPhase+=dt; const p=PHASES[S.phaseIdx]; const u=Math.min(S.tPhase/p.dur,1);
+  const prev=S.phaseIdx===0?PHASES[3].heatTo:PHASES[S.phaseIdx-1].heatTo;
+  S.heat=prev+(p.heatTo-prev)*(u*u*(3-2*u));
+  if(S.tPhase>=p.dur){ setPhase(S.phaseIdx+1); }
+  applyHeat(S.heat);
+
+  // LEDs nominales pulsando
+  const pulse=1.2+Math.sin(sim*3)*0.22;
+  for(const k in racks){ if(k==='B23')continue; racks[k].leds.forEach((l,i)=>l.material.emissiveIntensity=pulse-(i%3)*0.14); }
+
+  // ribbons de flujo
+  flows.cool.forEach(m=>{ m.userData.tex.offset.x-=dt*m.userData.speed; m.material.opacity=0.55; });
+  flows.hot.forEach(m=>{ m.userData.tex.offset.x-=dt*m.userData.speed*0.8; m.material.opacity=0.28+S.heat*0.4; });
+
+  // penacho
+  const b23=racks['B23'].top;
+  plume.forEach(pt=>{ if(S.heat<0.35){pt.material.opacity=0;return;}
+    pt.userData.t+=dt*0.3; if(pt.userData.t>1)pt.userData.t=0; const t=pt.userData.t,s=pt.userData.seed;
+    pt.position.set(b23.x+Math.sin(t*5+s)*0.12*t, b23.y+t*1.1, b23.z+Math.cos(t*5+s)*0.12*t);
+    pt.material.opacity=Math.sin(t*Math.PI)*S.heat*0.85; });
+
+  // callout tracking
+  if(S.heat>0.25){ _v.copy(b23).add(new THREE.Vector3(0,0.55,0)).project(camera);
+    const r=stage.getBoundingClientRect();
+    $('callout').style.left=((_v.x*0.5+0.5)*r.width)+'px';
+    $('callout').style.top=((-_v.y*0.5+0.5)*r.height)+'px'; }
+
+  // paneles + heatmap animado (cada ~0.5s)
+  updatePanels();
+  if((sim|0)!==(window.__lastHeat|0)){ window.__lastHeat=sim; drawHeat(); }
+
+  controls.update();
+  renderer.render(scene,camera);
+}
+setPhase(0); resize(); drawSchem(); drawHeat();
+animate();
+
+// ============================================================
+//  SPARKLINES (canvas) del panel de analítica
+// ============================================================
+function spark(id,color,seed,vmin,vmax,trend){
+  const cv=$(id); const w=cv.clientWidth,h=cv.clientHeight; cv.width=w; cv.height=h; const g=cv.getContext('2d');
+  const N=48; let val=(vmin+vmax)/2; const pts=[]; let r=seed;
+  const rnd=()=>{ r=(r*9301+49297)%233280; return r/233280; };
+  for(let i=0;i<N;i++){ val+=(rnd()-0.5)*(vmax-vmin)*0.18 + trend*(vmax-vmin)/N*(i>N*0.7?2.2:0.4);
+    val=Math.max(vmin,Math.min(vmax,val)); pts.push(val); }
+  const X=i=>i/(N-1)*w, Y=v=>h-((v-vmin)/(vmax-vmin))*(h-6)-3;
+  // área
+  g.beginPath(); g.moveTo(0,h); pts.forEach((v,i)=>g.lineTo(X(i),Y(v))); g.lineTo(w,h); g.closePath();
+  const grad=g.createLinearGradient(0,0,0,h); grad.addColorStop(0,color+'55'); grad.addColorStop(1,color+'00');
+  g.fillStyle=grad; g.fill();
+  // línea
+  g.beginPath(); pts.forEach((v,i)=>i?g.lineTo(X(i),Y(v)):g.moveTo(X(i),Y(v))); g.strokeStyle=color; g.lineWidth=1.6; g.stroke();
+}
+function drawCharts(){
+  spark('cTemp','#ff6a3d',12345,22,38,0.6);
+  spark('cGpu','#28c8ff',54321,55,95,0.4);
+  spark('cPow','#00d4aa',99887,1.4,2.2,0.5);
+}
+drawCharts(); addEventListener('resize',drawCharts);
+
+// hook de integración
+window.__APP={scene,camera,renderer,racks,state:S,PHASES,setPhase,applyHeat,setHeat:h=>{S.heat=Math.max(0,Math.min(1,h));},version:'dc-dashboard-v1'};
+
+// reloj "vivo"
+setInterval(()=>{ const d=new Date(); $('liveClock').textContent=
+  [d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':'); },1000);
+</script>
+</body>
+</html>
