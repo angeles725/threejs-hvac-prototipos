@@ -13,8 +13,9 @@
  *   index.html inline module + src/**  ->  p/dhl/main.js     (one bundle, obfuscated)
  *   index.html                         ->  p/dhl/index.html  (module extracted to <script src>)
  *   styles.css                         ->  p/dhl/styles.css  (verbatim)
- *   ../cinemex-hvac-lorawan/protection.js -> p/dhl/protection.js (SOURCE reused, bundled +
- *       obfuscated FRESH for this project — never a copy of cinemex's obfuscated bytes)
+ *   ../cinemex-hvac-lorawan/protection.js -> p/dhl/protection.<hash>.js (SOURCE reused, bundled +
+ *       obfuscated FRESH for this project — never a copy of cinemex's obfuscated bytes; the guard
+ *       filename is content-hashed so it cache-busts like the bundle)
  *   ../<kind>/<detail>.html + its nested realistic model -> p/dhl/equipos/<kind>/…
  *       (minified, NOT obfuscated — see the DETAIL VIEWS note below)
  *
@@ -50,11 +51,17 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { contentHash, hashedName, rewriteRefs } from './publish-hash.mjs';
+import { injectGate, loadGateConfig } from './gate.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DESIGNS = dirname(ROOT);                                   // disenos/
 const CINEMEX = join(DESIGNS, 'cinemex-hvac-lorawan');
 const OUT = join(CINEMEX, 'publish', 'p', 'dhl');
+
+// Per-project shared-key access gate (see gate.mjs). gate-keys.json is owned by the cinemex dir
+// (read cross-root, exactly like protection.js below); keygen.mjs generates/rotates it. Injected
+// into the top index only — the equipos/** detail views render inside its already-gated iframe.
+const GATE = loadGateConfig(join(CINEMEX, 'gate-keys.json'), 'dhl');
 
 const OWNER = 'Cristian Angeles';
 const YEAR = '2026';
@@ -267,7 +274,13 @@ const protectionOut = obfuscate(
   ], 'protection.js'),
   'protection.js',
 );
-writeFileSync(join(OUT, 'protection.js'), protectionOut);
+// Content-hash the per-project guard so it cache-busts like main.js. Set BEFORE index.html is
+// written so rewriteRefs repoints the injected `./protection.js` tag at its hashed twin — immune to
+// the angeles-group.org zone's Browser Cache TTL, which rewrites the origin no-cache header on the
+// custom domain and would otherwise pin a fixed-name guard in the browser cache. The immutable rule
+// for /p/dhl/protection.*.js lives in the cinemex build's HEADERS generator.
+hashMap['protection.js'] = hashedName('protection', 'js', contentHash(protectionOut));
+writeFileSync(join(OUT, hashMap['protection.js']), protectionOut);
 
 // 4. index.html — the inline module becomes <script type="module" src="./main.js">; the
 //    dynamic-importmap bootstrap and all markup stay verbatim; protection.js is injected.
@@ -275,13 +288,16 @@ writeFileSync(join(OUT, 'protection.js'), protectionOut);
 //    stale `?v=` query); the dynamically-built importmap and detail routes stay untouched.
 writeFileSync(
   join(OUT, 'index.html'),
-  rewriteRefs(
-    injectProtection(
-      sourceHtml.slice(0, inline.openIdx) +
-        '<script type="module" src="./main.js"></script>' +
-        sourceHtml.slice(inline.endIdx),
+  injectGate(
+    rewriteRefs(
+      injectProtection(
+        sourceHtml.slice(0, inline.openIdx) +
+          '<script type="module" src="./main.js"></script>' +
+          sourceHtml.slice(inline.endIdx),
+      ),
+      hashMap,
     ),
-    hashMap,
+    GATE, 'index.html',
   ),
 );
 
@@ -309,5 +325,5 @@ if (existsSync(join(OUT, 'src'))) throw new Error('publish/p/dhl/src/ exists —
 
 console.log(`built ${OUT}`);
 console.log(`  ${hashMap['main.js']}  ${kb(Buffer.byteLength(inline.code))} inline (+ src/**) -> ${kb(statSync(join(OUT, hashMap['main.js'])).size)} bundled+obfuscated`);
-console.log(`  index.html, ${hashMap['styles.css']}, protection.js emitted; src/ not published; three stays external`);
+console.log(`  index.html, ${hashMap['styles.css']}, ${hashMap['protection.js']} emitted; src/ not published; three stays external`);
 for (const line of detailReport) console.log(line);
