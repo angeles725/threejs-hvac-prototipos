@@ -176,8 +176,15 @@
   .legend{ display:flex; flex-wrap:wrap; gap:13px; margin-left:auto; }
   .legend span{ display:flex; align-items:center; gap:5px; font-size:9.5px; color:var(--dim); white-space:nowrap; }
   .legend i{ width:13px; height:2.5px; border-radius:2px; }
-  .trend-wrap{ padding:12px 14px 10px; }
+  .trend-wrap{ padding:12px 14px 10px; position:relative; }
   .trend-wrap svg{ width:100%; height:174px; display:block; }
+  .trend-tip{ position:absolute; z-index:6; pointer-events:none; opacity:0; transition:opacity .1s ease;
+    background:rgba(11,16,23,.96); border:1px solid var(--rule); border-radius:8px; padding:7px 9px;
+    font-size:11px; line-height:1.55; color:var(--ink); box-shadow:0 8px 22px rgba(0,0,0,.55); white-space:nowrap; }
+  .trend-tip time{ display:block; font-weight:600; color:var(--dim); margin-bottom:3px; font-size:10.5px; letter-spacing:.02em; font-family:var(--mono); }
+  .trend-tip .r{ display:flex; align-items:center; gap:6px; }
+  .trend-tip i{ width:8px; height:8px; border-radius:2px; flex:0 0 auto; }
+  .trend-tip b{ font-variant-numeric:tabular-nums; margin-left:auto; padding-left:14px; }
   .ax{ font-family:var(--mono); font-size:8.5px; fill:var(--dim); }
 
   .log{ padding:5px 8px; max-height:196px; overflow:auto; }
@@ -693,7 +700,8 @@
   var TOTCAP = CFG.reduce(function(s,c){ return s+c.fad; },0);
   var TARIFF = 2.5;               // MXN por kWh (tarifa demo)
   var SERVICE_H = 4000;           // meta de horas hasta servicio
-  var pressHist=[], kwHist=[], demandHist=[], HN=110;
+  var pressHist=[], kwHist=[], demandHist=[], timeHist=[], HN=110;
+  var warming=true;   // durante el warm-up se suprimen los eventos del log (ver logEvent)
   // potencia electrica instantanea de un compresor (misma formula que render/control)
   function compKw(o){ var s=o.state;
     if(o.cfg.reserve) return 0;
@@ -834,7 +842,7 @@
   function pad(n){ return (n<10?'0':'')+n; }
   function nowStr(){ var d=new Date(); return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
   var alarmSeen=false;
-  function logEvent(kind,html){ var e=document.createElement('div'); e.className='ev';
+  function logEvent(kind,html){ if(warming) return; var e=document.createElement('div'); e.className='ev';
     e.innerHTML='<span class="dot '+kind+'"></span><time>'+nowStr()+'</time><p>'+html+'</p>';
     logEl.insertBefore(e,logEl.firstChild); while(logEl.children.length>14){ logEl.removeChild(logEl.lastChild); }
     if(kind==='a'||kind==='w'){ var al=$('#alarmLog'); if(al){ if(!alarmSeen){ al.innerHTML=''; alarmSeen=true; }
@@ -1093,6 +1101,39 @@
   var ctaBtn=$('#ctaBtn'); if(ctaBtn) ctaBtn.addEventListener('click',function(){ window.scrollTo({ top:0, behavior:'smooth' }); });
   window.GOB.openDrawer=openDrawer;   // el visor 3D abre el mismo drawer al clickear una etiqueta
 
+  // ---- tooltip de la tendencia: fecha, hora y valor por serie al pasar el cursor ----
+  (function trendTip(){
+    var svg=$('#trendSvg'), wrap=svg&&svg.parentNode; if(!svg||!wrap) return;
+    var tip=document.createElement('div'); tip.className='trend-tip'; wrap.appendChild(tip);
+    var guide=document.createElementNS(svgNS,'line');
+    guide.setAttribute('y1','0'); guide.setAttribute('y2','174');
+    guide.setAttribute('stroke','var(--dim)'); guide.setAttribute('stroke-width','1');
+    guide.setAttribute('stroke-dasharray','3 3'); guide.setAttribute('vector-effect','non-scaling-stroke');
+    guide.style.opacity='0'; svg.appendChild(guide);
+    var MON=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    function fmtTs(ms){ var d=new Date(ms);
+      return pad(d.getDate())+' '+MON[d.getMonth()]+' · '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
+    function row(c,label,val,unit){ return '<div class="r"><i style="background:'+c+'"></i>'+label+
+      '<b>'+val+' '+unit+'</b></div>'; }
+    function hide(){ tip.style.opacity='0'; guide.style.opacity='0'; }
+    svg.addEventListener('mousemove',function(ev){
+      var n=pressHist.length; if(!n){ hide(); return; }
+      var r=svg.getBoundingClientRect(); if(!r.width){ hide(); return; }
+      var frac=clamp((ev.clientX-r.left)/r.width,0,1);
+      var i=Math.round(frac*(n-1));
+      var x=(i/(HN-1))*600; guide.setAttribute('x1',x); guide.setAttribute('x2',x); guide.style.opacity='1';
+      tip.innerHTML='<time>'+fmtTs(timeHist[i]||Date.now())+'</time>'+
+        row('var(--accent)','Presión',fmt(pressHist[i],2),'bar')+
+        row('var(--green)','Potencia',Math.round(kwHist[i]),'kW')+
+        row('var(--cyan)','Demanda',fmt(demandHist[i],1),'m³/min');
+      tip.style.opacity='1';
+      var xpx=frac*r.width, tw=tip.offsetWidth, th=tip.offsetHeight;
+      tip.style.left=clamp(xpx+14,6,Math.max(6,r.width-tw-6))+'px';
+      tip.style.top=clamp((ev.clientY-r.top)-th-10,6,Math.max(6,r.height-th-6))+'px';
+    });
+    svg.addEventListener('mouseleave',hide);
+  })();
+
   function tickClock(){ var d=new Date(); $('#clock').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
 
   // historial de KPIs (una muestra por tick de historia)
@@ -1107,6 +1148,17 @@
       kpiHist[k].push(vals[k]); if(kpiHist[k].length>HN) kpiHist[k].shift(); }
   }
 
+  // una muestra de historial (valores + timestamp real). Compartida por el warm-up y el loop vivo.
+  function pushHistSample(ts){
+    pressHist.push(S.p); kwHist.push(S.kw); demandHist.push(S.demand); timeHist.push(ts);
+    C.forEach(function(o){ o.kwHist.push(compKw(o)); if(o.kwHist.length>HN) o.kwHist.shift(); });
+    if(pressHist.length>HN) pressHist.shift();
+    if(kwHist.length>HN) kwHist.shift();
+    if(demandHist.length>HN) demandHist.shift();
+    if(timeHist.length>HN) timeHist.shift();
+    pushKpiHist();
+  }
+
   var last=null, ctrlAcc=0, renderAcc=0, histAcc=0;
   function loop(ts){
     if(last==null) last=ts;
@@ -1114,14 +1166,26 @@
     var sdt=dt*3; S.t+=sdt; ctrlAcc+=sdt;
     while(ctrlAcc>=0.4){ control(0.4); ctrlAcc-=0.4; }
     renderAcc+=dt; if(renderAcc>=0.2){ render(); renderAcc=0; }
-    histAcc+=sdt; if(histAcc>=2){ histAcc=0; pressHist.push(S.p); kwHist.push(S.kw); demandHist.push(S.demand);
-      C.forEach(function(o){ o.kwHist.push(compKw(o)); if(o.kwHist.length>HN) o.kwHist.shift(); });
-      if(pressHist.length>HN) pressHist.shift(); if(kwHist.length>HN) kwHist.shift(); if(demandHist.length>HN) demandHist.shift();
-      pushKpiHist(); }
+    histAcc+=sdt; if(histAcc>=2){ histAcc=0; pushHistSample(Date.now()); }
     requestAnimationFrame(loop);
   }
-  for(var i=0;i<HN;i++){ pressHist.push(7.1); kwHist.push(120); demandHist.push(30);
-    C.forEach(function(o){ o.kwHist.push(compKw(o)); }); pushKpiHist(); }
+
+  // ---- warm-up: abrir la simulación YA en régimen, no arrancando desde cero ----
+  // Corre el control REAL en tiempo simulado y va muestreando el historial, de modo que al primer
+  // frame los compresores ya están escalonados, la presión en banda y las gráficas llenas con la
+  // trayectoria real (no una línea plana). Los eventos se suprimen mientras warming===true.
+  (function warmUp(){
+    var SAMPLE_DT=2, REAL_MS=(SAMPLE_DT/3)*1000;      // cadencia real por muestra (sdt = dt*3 en el loop)
+    var SAMPLES=Math.round(HN*2.4);                   // corre de más y descarta el arranque frío
+    var t0=Date.now()-SAMPLES*REAL_MS, k=0, acc=0;
+    var steps=SAMPLES*Math.round(SAMPLE_DT/0.4);
+    for(var w=0; w<steps; w++){
+      S.t+=0.4; control(0.4); acc+=0.4;
+      if(acc>=SAMPLE_DT-1e-9){ acc-=SAMPLE_DT; pushHistSample(t0 + (k++)*REAL_MS); }
+    }
+  })();
+  warming=false;
+  logEvent('i','Sistema <b>Gobernador</b> en línea · modo AUTO');
   tickClock(); setInterval(tickClock,1000); render(); requestAnimationFrame(loop);
 })();
 </script>
