@@ -9,15 +9,15 @@
  *                      to the browser anyway). Read at build time by every project's build-publish.
  *   gate-secret.txt  — the CLEARTEXT keys, one per project, for the owner to share. GITIGNORED.
  *
- * Running it again ROTATES every key at once (new key + new salt + new hash for all projects) — the
- * "cambio una y se cambian todas" requirement. After running, rebuild + redeploy so the new hashes
- * ship: old keys stop working the moment the new build is live, and a visitor's stored unlock
- * self-expires because the localStorage token no longer equals the new hash.
+ * ADDITIVE: existing entries in gate-keys.json are preserved. Only project ids NOT already present
+ * get a fresh key + salt + hash, so adding a project never invalidates the passcodes already handed
+ * to existing clients. To deliberately ROTATE one key, delete its entry from gate-keys.json first,
+ * then re-run. After running, rebuild + redeploy so the new hashes ship.
  *
  * FRICTION, NOT SECURITY — see gate.mjs's header for what this does and does not buy.
  */
 import { createHash, randomBytes, randomInt } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -29,6 +29,7 @@ const PROJECTS = [
   { id: 'cinemex', title: 'Cinemex · HVAC LoRaWAN' },
   { id: 'dhl', title: 'DHL · Datacenter Operations' },
   { id: 'hotspot', title: 'Datacenter · Hotspot Prediction' },
+  { id: 'gobernador', title: 'KALTE · Gobernador de Aire' },
 ];
 
 // Unambiguous alphabet: no 0/O/1/I/L, so a key read aloud or copied by hand is never ambiguous.
@@ -44,27 +45,49 @@ function makeKey(id) {
 }
 const sha256hex = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 
-const projects = {};
+const KEYS_PATH = join(ROOT, 'gate-keys.json');
+const SECRET_PATH = join(ROOT, 'gate-secret.txt');
+
+// Preserve existing entries — only NEW ids get a fresh key. See the header: adding a project must
+// never rotate the passcodes already in clients' hands.
+const existing = existsSync(KEYS_PATH)
+  ? (JSON.parse(readFileSync(KEYS_PATH, 'utf8')).projects || {})
+  : {};
+
+const projects = { ...existing };
 const generated = [];
 for (const { id, title } of PROJECTS) {
+  if (projects[id]) continue;                          // keep the existing key/salt/hash untouched
   const key = makeKey(id);
   const salt = randomBytes(16).toString('hex');
   projects[id] = { salt, hash: sha256hex(key + salt), title };
   generated.push({ id, key });
 }
 
-const secret = [
-  '# Claves de acceso del visor — CONFIDENCIAL. No commitear. Compartir solo con cada cliente.',
-  `# Generado: ${new Date().toISOString()}`,
-  '',
+if (!generated.length) {
+  console.log('gate-keys.json already covers every project — nothing new to issue.');
+  process.exit(0);
+}
+
+const stampedLines = [
+  `# Añadido: ${new Date().toISOString()}`,
   ...generated.map(({ id, key }) => `${id.padEnd(9)} ${key}`),
   '',
-].join('\n');
+];
 
-writeFileSync(join(ROOT, 'gate-keys.json'), JSON.stringify({ projects }, null, 2) + '\n');
-writeFileSync(join(ROOT, 'gate-secret.txt'), secret);
+// Append to gate-secret.txt — existing cleartext (unrecoverable from hashes) is never clobbered.
+const secret = existsSync(SECRET_PATH)
+  ? readFileSync(SECRET_PATH, 'utf8').replace(/\n*$/, '\n') + '\n' + stampedLines.join('\n')
+  : [
+      '# Claves de acceso del visor — CONFIDENCIAL. No commitear. Compartir solo con cada cliente.',
+      '',
+      ...stampedLines,
+    ].join('\n');
 
-console.log('gate-keys.json written (publishable: salt + hash) · gate-secret.txt written (cleartext, gitignored)');
-console.log('\nClaves generadas — compartí cada una con su cliente, rebuild + redeploy para activarlas:\n');
+writeFileSync(KEYS_PATH, JSON.stringify({ projects }, null, 2) + '\n');
+writeFileSync(SECRET_PATH, secret);
+
+console.log('gate-keys.json updated (existing keys preserved) · gate-secret.txt appended (cleartext, gitignored)');
+console.log('\nClaves NUEVAS — compartí cada una con su cliente, rebuild + redeploy para activarlas:\n');
 for (const { id, key } of generated) console.log(`  ${id.padEnd(9)} ${key}`);
 console.log('');

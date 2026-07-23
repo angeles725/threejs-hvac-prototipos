@@ -1,0 +1,240 @@
+#!/usr/bin/env node
+/**
+ * build-publish.mjs — bundled + obfuscated PUBLISH build for the KALTE air-governor dashboard.
+ * Single-page port of disenos/datacenter-hotspot/build-publish.mjs (same profile, same asserts,
+ * same three-externalisation deviation), trimmed to ONE standalone page.
+ *
+ *   node disenos/gobernador-aire/build-publish.mjs  ->  ../cinemex-hvac-lorawan/publish/p/gobernador/
+ *
+ * The dev SOURCE (gobernador-dashboard.html) stays readable. Only publish/ ships hardened.
+ *
+ *   gobernador-dashboard.html  inline module          ->  p/gobernador/main.<hash>.js  (bundled, obfuscated)
+ *   gobernador-dashboard.html                          ->  p/gobernador/index.html      (module -> <script src>)
+ *   ../cinemex-hvac-lorawan/protection.js              ->  p/gobernador/protection.<hash>.js (SOURCE reused,
+ *       obfuscated FRESH for this project — never a copy of cinemex's obfuscated bytes)
+ *
+ * DEVIATION vs cinemex (same as hotspot/DHL, justified): the page imports three STATICALLY. esbuild
+ * cannot keep a static import external inside an IIFE bundle, so the build rewrites the three imports
+ * to `await import(...)` first, bundles as ESM (no import/export left behind), then wraps in ONE async
+ * IIFE. With `renameGlobals: false` the obfuscator renames only function-local declarations — inside
+ * the IIFE everything is local, so obfuscation is effective.
+ *
+ * The dynamic `<script>…importmap via String.fromCharCode…</script>` bootstrap that resolves three is
+ * a CLASSIC script preceding the module; it is copied through VERBATIM and must never be rewritten.
+ *
+ * SCOPE: this script owns publish/p/gobernador/ ONLY. The portal (publish/index.html), publish/_headers
+ * and the sibling p/* trees belong to their own builders. The gobernador cache rules live in the
+ * cinemex build's HEADERS generator (it owns publish/_headers).
+ *
+ * RULE: never edit publish/ by hand. It is generated. Edit the source, rebuild.
+ */
+import JavaScriptObfuscator from 'javascript-obfuscator';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { contentHash, hashedName, rewriteRefs } from './publish-hash.mjs';
+import { injectGate, loadGateConfig } from './gate.mjs';
+
+const ROOT = dirname(fileURLToPath(import.meta.url));
+const DESIGNS = dirname(ROOT);                                   // disenos/
+const CINEMEX = join(DESIGNS, 'cinemex-hvac-lorawan');
+const OUT = join(CINEMEX, 'publish', 'p', 'gobernador');
+
+// Per-project shared-key access gate (see gate.mjs). gate-keys.json is owned by the cinemex dir;
+// keygen.mjs generates/rotates it. Injected into the page so a direct link opens the passcode
+// overlay before the viewer boots.
+const GATE = loadGateConfig(join(CINEMEX, 'gate-keys.json'), 'gobernador');
+
+const OWNER = 'Cristian Angeles';
+const YEAR = '2026';
+const BANNER = `/* (c) ${YEAR} ${OWNER}. All rights reserved. Proprietary build — do not redistribute. */`;
+
+/** three stays external + CDN-resolved via the page importmap, exactly as in cinemex/dhl/hotspot. */
+const THREE_EXTERNALS = ['three', 'three/*'];
+
+/** Obfuscation profile — identical to cinemex/dhl/hotspot. See the cinemex build header for rationale. */
+const OBFUSCATOR_OPTIONS = {
+  compact: true,
+  stringArray: true,
+  stringArrayEncoding: ['base64'],
+  splitStrings: true,
+  identifierNamesGenerator: 'hexadecimal',
+  numbersToExpressions: true,
+  simplify: true,
+  renameGlobals: false,
+  sourceMap: false,
+  reservedStrings: ['^three(/|$)'],
+  // PERFORMANCE — deliberately OFF. Do not enable without a new client OK.
+  controlFlowFlattening: false,
+  deadCodeInjection: false,
+  debugProtection: false,
+  selfDefending: false,
+};
+
+function esbuild(code, args, label) {
+  try {
+    return execFileSync('npx', ['--yes', 'esbuild', ...args], {
+      input: code, cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch (error) {
+    throw new Error(`${label}: esbuild failed\n${error.stderr || error.message}`);
+  }
+}
+
+/** Bundle module code into ESM, then wrap in one async IIFE (see header for why ESM-then-wrap). */
+function bundleAsAsyncIife(code, label) {
+  const bundled = esbuild(code, [
+    '--bundle',
+    '--format=esm',
+    '--platform=browser',
+    '--loader=js',
+    '--drop:console',
+    '--drop:debugger',
+    '--minify-syntax',
+    ...THREE_EXTERNALS.map((specifier) => `--external:${specifier}`),
+  ], label);
+  if (/^\s*(import\s|import["'{*]|export[\s{])/m.test(bundled)) {
+    throw new Error(`${label}: static import/export survived into the ESM bundle — the async IIFE wrap would break it`);
+  }
+  return `(async () => {\n${bundled}\n})();\n`;
+}
+
+function obfuscate(code, label) {
+  const obfuscated = JavaScriptObfuscator.obfuscate(code, OBFUSCATOR_OPTIONS).getObfuscatedCode();
+  if (!obfuscated.trim()) throw new Error(`${label}: obfuscator returned empty output`);
+  return `${BANNER}\n${obfuscated}\n`;
+}
+
+/** Fail loudly if an artifact is not actually hardened. A readable bundle is worse than a broken build. */
+function assertHardened(code, label, forbiddenIdentifiers) {
+  const leaked = forbiddenIdentifiers.filter((identifier) => code.includes(identifier));
+  if (leaked.length) throw new Error(`${label}: source identifiers survived obfuscation: ${leaked.join(', ')}`);
+  if (/\/\/# sourceMappingURL/.test(code)) throw new Error(`${label}: a source map leaked into the bundle`);
+}
+
+/** three must stay external: prove the bare specifiers are still in the emitted bundle. */
+function assertThreeIsExternal(code, label) {
+  for (const specifier of ['three', 'three/addons/controls/OrbitControls.js', 'three/addons/environments/RoomEnvironment.js']) {
+    if (!code.includes(`import('${specifier}')`) && !code.includes(`import("${specifier}")`)) {
+      throw new Error(`${label}: bare '${specifier}' import is gone — the importmap can no longer resolve three`);
+    }
+  }
+  if (/three\.module\.js|THREE\.WebGLRenderer\s*=/.test(code)) {
+    throw new Error(`${label}: three.js looks bundled into the artifact — it must stay external`);
+  }
+}
+
+/** Extract the single `<script type="module">…</script>` block from an HTML page. */
+function extractInlineModule(html, label) {
+  const OPEN = '<script type="module">';
+  const openIdx = html.indexOf(OPEN);
+  if (openIdx === -1) throw new Error(`${label}: <script type="module"> not found`);
+  const bodyStart = openIdx + OPEN.length;
+  const closeIdx = html.indexOf('</script>', bodyStart);
+  if (closeIdx === -1) throw new Error(`${label}: module </script> not found`);
+  return { code: html.slice(bodyStart, closeIdx), openIdx, endIdx: closeIdx + '</script>'.length };
+}
+
+/** Replace an exact substring, asserting it occurs exactly once — a silent 0 or 2 is a build lie. */
+function replaceOnce(code, from, to, label) {
+  const first = code.indexOf(from);
+  if (first === -1) throw new Error(`${label}: expected exactly one occurrence of ${JSON.stringify(from)}, found none`);
+  if (code.indexOf(from, first + from.length) !== -1) throw new Error(`${label}: ${JSON.stringify(from)} occurs more than once`);
+  return code.slice(0, first) + to + code.slice(first + from.length);
+}
+
+const PROTECTION_TAG = '<script src="./protection.js"></script>';
+// The content-hashed protection.js filename, computed before the page is built so rewriteRefs can
+// repoint the injected guard tag at its hashed twin.
+let PROTECTION_HASHED;
+function injectProtection(html) {
+  if (html.includes('./protection.js')) return html;
+  return html.replace('</body>', `  ${PROTECTION_TAG}\n</body>`);
+}
+
+function kb(bytes) {
+  return `${(bytes / 1024).toFixed(1)} kB`;
+}
+
+/** Rewrite the three static imports to dynamic `await import(...)` (the ESM-then-wrap contract). */
+function dynamizeThreeImports(moduleCode, label) {
+  let out = replaceOnce(moduleCode,
+    "import * as THREE from 'three';",
+    "const THREE = await import('three');", label);
+  out = replaceOnce(out,
+    "import { OrbitControls } from 'three/addons/controls/OrbitControls.js';",
+    "const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');", label);
+  out = replaceOnce(out,
+    "import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';",
+    "const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');", label);
+  return out;
+}
+
+/**
+ * Build one page: extract its inline module, harden it into `<base>.<hash>.js`, and emit the HTML
+ * with the module swapped for a `<script src>` (repointed at the hashed twin), protection injected,
+ * and the gate wrapped outermost. Returns the hashed bundle name for the report.
+ */
+function buildPage({ source, htmlOut, base, forbidden }) {
+  const sourceHtml = readFileSync(join(ROOT, source), 'utf8');
+  const inline = extractInlineModule(sourceHtml, source);
+
+  const bundle = obfuscate(bundleAsAsyncIife(dynamizeThreeImports(inline.code, base), base), base);
+  assertHardened(bundle, base, forbidden);
+  assertThreeIsExternal(bundle, base);
+
+  const hashMap = {};
+  hashMap[`${base}.js`] = hashedName(base, 'js', contentHash(bundle));
+  writeFileSync(join(OUT, hashMap[`${base}.js`]), bundle);
+  hashMap['protection.js'] = PROTECTION_HASHED;
+
+  let html = sourceHtml.slice(0, inline.openIdx) +
+    `<script type="module" src="./${base}.js"></script>` +
+    sourceHtml.slice(inline.endIdx);
+  html = injectGate(rewriteRefs(injectProtection(html), hashMap), GATE, htmlOut);
+  writeFileSync(join(OUT, htmlOut), html);
+
+  return { hashed: hashMap[`${base}.js`], inlineBytes: Buffer.byteLength(inline.code) };
+}
+
+// ---- build ----------------------------------------------------------------------------------
+// Idempotent by construction: p/gobernador is rebuilt from scratch every run. Scoped so the sibling
+// p/* trees, the portal shell and publish/assets/ are never at risk.
+rmSync(OUT, { recursive: true, force: true });
+mkdirSync(OUT, { recursive: true });
+
+// 1. protection.js — REUSED from the cinemex SOURCE and hardened fresh for this project. Generated
+//    FIRST so its content-hashed filename is known when the page below is rewritten.
+const protectionOut = obfuscate(
+  esbuild(readFileSync(join(CINEMEX, 'protection.js'), 'utf8'), [
+    '--bundle', '--format=iife', '--platform=browser', '--loader=js',
+    '--drop:debugger', '--minify-syntax',
+  ], 'protection.js'),
+  'protection.js',
+);
+PROTECTION_HASHED = hashedName('protection', 'js', contentHash(protectionOut));
+writeFileSync(join(OUT, PROTECTION_HASHED), protectionOut);
+
+// 2. index.html — the KALTE air-governor dashboard (single page). forbidden identifiers are
+//    distinctive source function names — their survival would prove the module was not obfuscated.
+const dashboard = buildPage({
+  source: 'gobernador-dashboard.html',
+  htmlOut: 'index.html',
+  base: 'main',
+  // Distinctive LOCAL-only function names — their survival would prove the module was not obfuscated.
+  // (stateKey is deliberately excluded: it is also exposed as a window.GOB property, which the
+  // obfuscator does not rename, so it would be a false positive.)
+  forbidden: [
+    'compKw', 'fixedSupply', 'stageUp', 'stageDown', 'maybeFault', 'drainStep',
+    'bandCheck', 'drawKpiSpark', 'drawSparkW', 'renderDrawer', 'buildUnitTemplate', 'instanceRow',
+    'updateTags', 'applyState',
+  ],
+});
+
+// 3. Final gate: no readable module tree must ship (there is none in source, but assert anyway).
+if (existsSync(join(OUT, 'src'))) throw new Error('publish/p/gobernador/src/ exists — the readable module tree must not ship');
+
+console.log(`built ${OUT}`);
+console.log(`  ${dashboard.hashed}  ${kb(dashboard.inlineBytes)} inline -> ${kb(statSync(join(OUT, dashboard.hashed)).size)} bundled+obfuscated`);
+console.log(`  index.html, ${PROTECTION_HASHED} emitted; three stays external`);
