@@ -8,8 +8,9 @@
  *
  * The dev SOURCE (gobernador-dashboard.html) stays readable. Only publish/ ships hardened.
  *
+ *   gobernador-dashboard.html  classic sim <script>    ->  p/gobernador/sim.<hash>.js   (obfuscated)
  *   gobernador-dashboard.html  inline module          ->  p/gobernador/main.<hash>.js  (bundled, obfuscated)
- *   gobernador-dashboard.html                          ->  p/gobernador/index.html      (module -> <script src>)
+ *   gobernador-dashboard.html                          ->  p/gobernador/index.html      (both -> <script src>)
  *   ../cinemex-hvac-lorawan/protection.js              ->  p/gobernador/protection.<hash>.js (SOURCE reused,
  *       obfuscated FRESH for this project — never a copy of cinemex's obfuscated bytes)
  *
@@ -125,6 +126,24 @@ function assertThreeIsExternal(code, label) {
   }
 }
 
+/**
+ * Extract the classic simulation `<script>` — the dashboard logic (control loop, sequencing, ROI
+ * formulas, compressor catalogue). Anchored on its section-marker comment so it is never confused
+ * with the earlier importmap-bootstrap `<script>` or the later `<script type="module">` viewer.
+ */
+function extractSimScript(html, label) {
+  const MARK = 'SIMULACIÓN + TABLERO';
+  const markIdx = html.indexOf(MARK);
+  if (markIdx === -1) throw new Error(`${label}: sim section marker (${MARK}) not found`);
+  const OPEN = '<script>';                       // attribute-less tag: never matches <script type="module">
+  const openIdx = html.indexOf(OPEN, markIdx);
+  if (openIdx === -1) throw new Error(`${label}: classic sim <script> not found after marker`);
+  const bodyStart = openIdx + OPEN.length;
+  const closeIdx = html.indexOf('</script>', bodyStart);
+  if (closeIdx === -1) throw new Error(`${label}: sim </script> not found`);
+  return { code: html.slice(bodyStart, closeIdx), openIdx, endIdx: closeIdx + '</script>'.length };
+}
+
 /** Extract the single `<script type="module">…</script>` block from an HTML page. */
 function extractInlineModule(html, label) {
   const OPEN = '<script type="module">';
@@ -172,30 +191,49 @@ function dynamizeThreeImports(moduleCode, label) {
 }
 
 /**
- * Build one page: extract its inline module, harden it into `<base>.<hash>.js`, and emit the HTML
- * with the module swapped for a `<script src>` (repointed at the hashed twin), protection injected,
- * and the gate wrapped outermost. Returns the hashed bundle name for the report.
+ * Build one page: harden BOTH inline scripts — the classic simulation `<script>` into
+ * `sim.<hash>.js` and the 3D viewer module into `<base>.<hash>.js` — swap each for a hashed
+ * `<script src>`, inject protection, wrap the gate outermost. The sim stays a CLASSIC external
+ * script so it still executes (and sets `window.GOB`) before the deferred viewer module. Returns
+ * the hashed names + source sizes for the report.
  */
-function buildPage({ source, htmlOut, base, forbidden }) {
+function buildPage({ source, htmlOut, base, forbidden, simForbidden }) {
   const sourceHtml = readFileSync(join(ROOT, source), 'utf8');
+  const sim = extractSimScript(sourceHtml, source);
   const inline = extractInlineModule(sourceHtml, source);
+  if (sim.openIdx > inline.openIdx) throw new Error(`${source}: the sim <script> must precede the module <script>`);
 
+  // 1. classic simulation script — no imports, so harden it like protection.js (esbuild iife + obfuscate).
+  const simBundle = obfuscate(
+    esbuild(sim.code, ['--bundle', '--format=iife', '--platform=browser', '--loader=js',
+      '--drop:debugger', '--minify-syntax'], `${base}-sim`),
+    `${base}-sim`);
+  assertHardened(simBundle, `${base}-sim`, simForbidden);
+
+  // 2. 3D viewer module — three stays external (ESM-then-wrap, see header).
   const bundle = obfuscate(bundleAsAsyncIife(dynamizeThreeImports(inline.code, base), base), base);
   assertHardened(bundle, base, forbidden);
   assertThreeIsExternal(bundle, base);
 
   const hashMap = {};
+  hashMap['sim.js'] = hashedName('sim', 'js', contentHash(simBundle));
   hashMap[`${base}.js`] = hashedName(base, 'js', contentHash(bundle));
-  writeFileSync(join(OUT, hashMap[`${base}.js`]), bundle);
   hashMap['protection.js'] = PROTECTION_HASHED;
+  writeFileSync(join(OUT, hashMap['sim.js']), simBundle);
+  writeFileSync(join(OUT, hashMap[`${base}.js`]), bundle);
 
-  let html = sourceHtml.slice(0, inline.openIdx) +
+  // Splice BOTH inline scripts out (sim precedes module). Unhashed `./sim.js` / `./main.js` refs are
+  // repointed at their hashed twins by rewriteRefs below.
+  let html = sourceHtml.slice(0, sim.openIdx) +
+    '<script src="./sim.js"></script>' +
+    sourceHtml.slice(sim.endIdx, inline.openIdx) +
     `<script type="module" src="./${base}.js"></script>` +
     sourceHtml.slice(inline.endIdx);
   html = injectGate(rewriteRefs(injectProtection(html), hashMap), GATE, htmlOut);
   writeFileSync(join(OUT, htmlOut), html);
 
-  return { hashed: hashMap[`${base}.js`], inlineBytes: Buffer.byteLength(inline.code) };
+  return { hashed: hashMap[`${base}.js`], sim: hashMap['sim.js'],
+           inlineBytes: Buffer.byteLength(inline.code), simBytes: Buffer.byteLength(sim.code) };
 }
 
 // ---- build ----------------------------------------------------------------------------------
@@ -230,11 +268,18 @@ const dashboard = buildPage({
     'bandCheck', 'drawKpiSpark', 'drawSparkW', 'renderDrawer', 'buildUnitTemplate', 'instanceRow',
     'updateTags', 'applyState',
   ],
+  // Distinctive LOCAL-only names in the CLASSIC sim script. Excludes anything exposed on window.GOB
+  // (stateKey, openDrawer) — the obfuscator keeps property keys, so those would false-positive.
+  simForbidden: [
+    'stageUp', 'stageDown', 'maybeFault', 'drainStep', 'bandCheck', 'pushHistSample', 'warmUp',
+    'fixedSupply', 'buildUnitTemplate', 'instanceRow', 'drawKpiSpark', 'renderDrawer',
+  ],
 });
 
 // 3. Final gate: no readable module tree must ship (there is none in source, but assert anyway).
 if (existsSync(join(OUT, 'src'))) throw new Error('publish/p/gobernador/src/ exists — the readable module tree must not ship');
 
 console.log(`built ${OUT}`);
-console.log(`  ${dashboard.hashed}  ${kb(dashboard.inlineBytes)} inline -> ${kb(statSync(join(OUT, dashboard.hashed)).size)} bundled+obfuscated`);
+console.log(`  ${dashboard.sim}  ${kb(dashboard.simBytes)} inline -> ${kb(statSync(join(OUT, dashboard.sim)).size)} obfuscated (dashboard sim)`);
+console.log(`  ${dashboard.hashed}  ${kb(dashboard.inlineBytes)} inline -> ${kb(statSync(join(OUT, dashboard.hashed)).size)} bundled+obfuscated (3D viewer)`);
 console.log(`  index.html, ${PROTECTION_HASHED} emitted; three stays external`);
