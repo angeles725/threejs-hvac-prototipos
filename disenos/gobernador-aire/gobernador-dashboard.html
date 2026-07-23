@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#f2f4f8">
+<link rel="icon" href="data:,">
 <title>Sistema Gobernador · Aire Comprimido · KALTE</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -240,9 +241,9 @@
       </div>
       <div class="viewer">
         <canvas id="c3d"></canvas>
-        <div class="v3-badge"><div class="mk">K</div><div><b>Sala de compresión</b><span>gobernada por KALTE</span></div></div>
+        <div class="v3-badge"><div class="mk">K</div><div><b>Sala de compresión</b><span>modelo procedural (Three.js)</span></div></div>
         <div class="v3-btn"><button id="btnRot" class="on">Auto-giro</button></div>
-        <div class="v3-hint">ARRASTRAR: rotar · RUEDA: zoom · los compresores se pintan por estado en vivo</div>
+        <div class="v3-hint">ARRASTRAR: rotar · RUEDA: zoom · modelo procedural (Three.js) · halos por estado en vivo</div>
         <div class="v3-fallback" id="v3fb">No se pudo cargar el visor 3D (sin conexión a unpkg). El resto del tablero funciona.</div>
       </div>
     </section>
@@ -636,189 +637,227 @@ try {
   var pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-  var camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
-  camera.position.set(5.6, 3.4, 6.4);
+  var camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
+  camera.position.set(7.8, 4.4, 8.8);
 
   var controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, 0.9, -0.4);
+  controls.target.set(0, 1.0, -0.2);
   controls.enableDamping = true; controls.dampingFactor = 0.08; controls.enablePan = false;
-  controls.minDistance = 4; controls.maxDistance = 13; controls.maxPolarAngle = Math.PI*0.5;
+  controls.minDistance = 5; controls.maxDistance = 24; controls.maxPolarAngle = Math.PI*0.5;
   controls.autoRotate = true; controls.autoRotateSpeed = 0.6;
 
-  // luces
+  // luces (mismo rig que la versión GLB; direccionales con sombra suave, sin luz-área — captura headless estable)
   var hemi = new THREE.HemisphereLight(0xffffff, 0xb9c0cc, 0.5); scene.add(hemi);
   var key = new THREE.DirectionalLight(0xffffff, 2.0);
-  key.position.set(5, 9, 6); key.castShadow = true;
-  key.shadow.mapSize.set(2048,2048); key.shadow.camera.near=1; key.shadow.camera.far=40;
-  key.shadow.camera.left=-9; key.shadow.camera.right=9; key.shadow.camera.top=9; key.shadow.camera.bottom=-3;
+  key.position.set(6, 11, 7); key.castShadow = true;
+  key.shadow.mapSize.set(2048,2048); key.shadow.camera.near=1; key.shadow.camera.far=50;
+  key.shadow.camera.left=-11; key.shadow.camera.right=11; key.shadow.camera.top=11; key.shadow.camera.bottom=-4;
   key.shadow.bias=-0.0003; scene.add(key);
-  var fill = new THREE.DirectionalLight(0xdbe6ff, 0.45); fill.position.set(-6,3,-4); scene.add(fill);
+  var fill = new THREE.DirectionalLight(0xdbe6ff, 0.45); fill.position.set(-7,3,-4); scene.add(fill);
 
   // piso
-  var floor = new THREE.Mesh(new THREE.PlaneGeometry(60,60),
+  var floor = new THREE.Mesh(new THREE.PlaneGeometry(80,80),
     new THREE.MeshStandardMaterial({ color:0xE7ECF4, roughness:1, metalness:0 }));
   floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
 
-  // materiales (reutilizados del RTU Trane del repo)
-  var M = {
-    black:      new THREE.MeshStandardMaterial({ color:0x1e1e22, roughness:0.38, metalness:0.85 }),
-    blackMatte: new THREE.MeshStandardMaterial({ color:0x15151a, roughness:0.75, metalness:0.30 }),
-    rubber:     new THREE.MeshStandardMaterial({ color:0x18181c, roughness:0.90, metalness:0.05 }),
-    galv:       new THREE.MeshStandardMaterial({ color:0x9aa0aa, roughness:0.50, metalness:0.70 }),
-    steel:      new THREE.MeshStandardMaterial({ color:0x8b93a2, roughness:0.35, metalness:0.85 }),
-    bolt:       new THREE.MeshStandardMaterial({ color:0x40444a, roughness:0.40, metalness:0.85 }),
-    tank:       new THREE.MeshStandardMaterial({ color:0x2E5FE0, roughness:0.35, metalness:0.55 }),
-    tankCap:    new THREE.MeshStandardMaterial({ color:0x2653C8, roughness:0.35, metalness:0.55 }),
-    pipe:       new THREE.MeshStandardMaterial({ color:0x9aa6b6, roughness:0.30, metalness:0.85 }),
-    cab:        new THREE.MeshStandardMaterial({ color:0xD4D7D2, roughness:0.5, metalness:0.35 })
+  // ---------- CanvasTextures del compresor (reutilizadas del realistic-v1) ----------
+  function ctex(w,h,draw){ var c=document.createElement('canvas'); c.width=w; c.height=h; draw(c.getContext('2d'),w,h);
+    var t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return t; }
+  var letterTex=ctex(320,400,function(g,w,h){ g.fillStyle='#54585c'; g.fillRect(0,0,w,h);
+    g.fillStyle='#5e6266'; g.font='bold 300px Arial, sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('A',w/2,h/2+10);
+    g.strokeStyle='#484c50'; g.lineWidth=4; g.strokeRect(3,3,w-6,h-6); });
+  var screenTex=ctex(256,160,function(g,w,h){ g.fillStyle='#04120c'; g.fillRect(0,0,w,h);
+    g.fillStyle='#0affc0'; g.font='bold 26px monospace'; g.fillText('7.4 bar',18,42);
+    g.font='16px monospace'; g.fillStyle='#0ad0a0'; g.fillText('T 78°C',18,74); g.fillText('LOAD 86%',18,100);
+    g.fillStyle='#0affc0'; g.fillText('h 12480',18,128);
+    for(var i=0;i<8;i++){ g.fillStyle=i<6?'#0affc0':'#0a4030'; g.fillRect(150+i*11,46,8,60-((i*7)%30)); } });
+  var plateTex=ctex(256,150,function(g,w,h){ g.fillStyle='#c9c4b2'; g.fillRect(0,0,w,h);
+    g.strokeStyle='#5a5648'; g.lineWidth=6; g.strokeRect(6,6,w-12,h-12);
+    g.fillStyle='#1a1a1e'; g.font='bold 40px monospace'; g.textAlign='center'; g.fillText('AIRTECH',w/2,58);
+    g.font='15px monospace'; g.fillStyle='#333'; g.fillText('ROTARY SCREW · 45 kW',w/2,92); g.fillText('S/N  AT-45-0917',w/2,118); });
+  var warnTex=ctex(200,150,function(g,w,h){ g.fillStyle='#e8c020'; g.fillRect(4,4,w-8,h-8); g.strokeStyle='#141414'; g.lineWidth=6; g.strokeRect(4,4,w-8,h-8);
+    g.fillStyle='#141414'; g.beginPath(); g.moveTo(w/2,18); g.lineTo(w/2-30,70); g.lineTo(w/2+30,70); g.closePath(); g.fill();
+    g.fillStyle='#e8c020'; g.font='bold 42px monospace'; g.textAlign='center'; g.fillText('!',w/2,66);
+    g.fillStyle='#141414'; g.font='bold 22px monospace'; g.fillText('PELIGRO',w/2,102); g.font='13px monospace'; g.fillText('AIRE COMPRIMIDO 7 bar',w/2,128); });
+  function texLabel(text,col){ return ctex(128,72,function(x,w,h){ x.clearRect(0,0,w,h); x.fillStyle=col||'#1b2430';
+    x.font='700 46px "IBM Plex Mono",monospace'; x.textAlign='center'; x.textBaseline='middle'; x.fillText(text,64,40); }); }
+
+  // ---------- paleta PBR del compresor (MeshStandard; canopy gris Atlas, sin Physical) ----------
+  var MAT = {
+    canopy:    new THREE.MeshStandardMaterial({ color:0x54585c, roughness:0.52, metalness:0.0 }),
+    canopyDk:  new THREE.MeshStandardMaterial({ color:0x33373b, roughness:0.6,  metalness:0.0 }),
+    skid:      new THREE.MeshStandardMaterial({ color:0x15151a, roughness:0.7,  metalness:0.2 }),
+    steel:     new THREE.MeshStandardMaterial({ color:0x8a949c, roughness:0.35, metalness:1.0 }),
+    hmi:       new THREE.MeshStandardMaterial({ color:0x1c1d20, roughness:0.42, metalness:0.0 }),
+    estop:     new THREE.MeshStandardMaterial({ color:0xcc2222, roughness:0.5,  metalness:0.0 }),
+    safety:    new THREE.MeshStandardMaterial({ color:0xd8a12a, roughness:0.5,  metalness:0.2 }),
+    airend:    new THREE.MeshStandardMaterial({ color:0x8f9aa2, roughness:0.42, metalness:0.9 }),
+    motor:     new THREE.MeshStandardMaterial({ color:0x2c2c32, roughness:0.55, metalness:0.0 }),
+    separator: new THREE.MeshStandardMaterial({ color:0xa8623f, roughness:0.58, metalness:0.0 }),
+    cooler:    new THREE.MeshStandardMaterial({ color:0xc0c4c8, roughness:0.35, metalness:0.9 }),
+    grille:    new THREE.MeshStandardMaterial({ color:0x0d0f12, roughness:0.85, metalness:0.0 }),
+    door:      new THREE.MeshStandardMaterial({ map:letterTex, roughness:0.52, metalness:0.0 }),
+    screen:    new THREE.MeshStandardMaterial({ map:screenTex, emissive:0xffffff, emissiveMap:screenTex, emissiveIntensity:0.9, roughness:0.28, metalness:0.0 }),
+    plate:     new THREE.MeshBasicMaterial({ map:plateTex, transparent:true }),
+    warn:      new THREE.MeshBasicMaterial({ map:warnTex, transparent:true }),
+    // materiales de la sala (tanque/tuberías/gabinete)
+    blackMatte:new THREE.MeshStandardMaterial({ color:0x15151a, roughness:0.75, metalness:0.30 }),
+    galv:      new THREE.MeshStandardMaterial({ color:0x9aa0aa, roughness:0.50, metalness:0.70 }),
+    tank:      new THREE.MeshStandardMaterial({ color:0x2E5FE0, roughness:0.35, metalness:0.55 }),
+    tankCap:   new THREE.MeshStandardMaterial({ color:0x2653C8, roughness:0.35, metalness:0.55 }),
+    pipe:      new THREE.MeshStandardMaterial({ color:0x9aa6b6, roughness:0.30, metalness:0.85 }),
+    cab:       new THREE.MeshStandardMaterial({ color:0xD4D7D2, roughness:0.5, metalness:0.35 })
   };
   function box(w,h,d,m,x,y,z){ var b=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m); b.position.set(x,y,z); b.castShadow=true; b.receiveShadow=true; return b; }
-  function texLabel(text, col){
-    var c=document.createElement('canvas'); c.width=128; c.height=72; var x=c.getContext('2d');
-    x.clearRect(0,0,128,72); x.fillStyle=col||'#1b2430'; x.font='700 46px "IBM Plex Mono",monospace';
-    x.textAlign='center'; x.textBaseline='middle'; x.fillText(text,64,40);
-    var t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return t;
-  }
 
   var root = new THREE.Group(); scene.add(root);
-  var XS = [-2.5,-1.5,-0.5,0.5,1.5,2.5], Z = 0.2, MANY = 1.9;
 
-  // ---------- compresor scroll (adaptado de buildCompressor, escala metros) ----------
-  var comps = [];
-  function buildCompressor(cx, idx){
-    var bodyR=0.4, bodyH=1.25, y0=0;
-    root.add(box(0.95,0.1,0.95, M.blackMatte, cx, y0+0.05, Z));             // pad
-    [-0.33,0.33].forEach(function(ox){ [-0.33,0.33].forEach(function(oz){    // aisladores
-      var iso=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.07,0.12,10), M.rubber);
-      iso.position.set(cx+ox, y0+0.16, Z+oz); iso.castShadow=true; root.add(iso);
-    });});
-    var flange=new THREE.Mesh(new THREE.CylinderGeometry(bodyR+0.07,bodyR+0.07,0.08,28), M.black);
-    flange.position.set(cx, y0+0.24, Z); root.add(flange);
-    var body=new THREE.Mesh(new THREE.CylinderGeometry(bodyR,bodyR,bodyH,28), M.black);
-    body.position.set(cx, y0+0.24+bodyH/2, Z); body.castShadow=true; root.add(body);
-    var dome=new THREE.Mesh(new THREE.SphereGeometry(bodyR,24,12,0,Math.PI*2,0,Math.PI/2), M.black);
-    dome.position.set(cx, y0+0.24+bodyH, Z); dome.castShadow=true; root.add(dome);
-    root.add(box(0.22,0.3,0.14, M.galv, cx, y0+0.24+bodyH*0.5, Z-bodyR-0.08)); // caja de bornes
-    // banda / anillo / franja / base emisivos (estado)
-    var labelMat=new THREE.MeshStandardMaterial({ color:0x3aa6ff, emissive:0x3aa6ff, emissiveIntensity:0.9, roughness:0.35, metalness:0.4 });
-    var label=new THREE.Mesh(new THREE.CylinderGeometry(bodyR+0.004,bodyR+0.004,0.2,28,1,true), labelMat);
-    label.position.set(cx, y0+0.24+bodyH*0.34, Z); root.add(label);
-    var glowMat=new THREE.MeshStandardMaterial({ color:0x3aa6ff, emissive:0x3aa6ff, emissiveIntensity:1.4, roughness:0.35, metalness:0.3 });
-    var glow=new THREE.Mesh(new THREE.CylinderGeometry(bodyR+0.01,bodyR+0.01,0.06,28,1,true), glowMat);
-    glow.position.set(cx, y0+0.24+bodyH*0.8, Z); root.add(glow);
-    var stripeMat=new THREE.MeshStandardMaterial({ color:0x3aa6ff, emissive:0x3aa6ff, emissiveIntensity:1.6, roughness:0.3 });
-    var stripe=new THREE.Mesh(new THREE.BoxGeometry(0.03,bodyH-0.3,0.02), stripeMat);
-    stripe.position.set(cx, y0+0.24+bodyH/2, Z-bodyR-0.02); root.add(stripe);
-    var baseGlowMat=new THREE.MeshStandardMaterial({ color:0x3aa6ff, emissive:0x3aa6ff, emissiveIntensity:1.0, roughness:0.4 });
-    var baseGlow=new THREE.Mesh(new THREE.TorusGeometry(bodyR+0.06,0.02,8,32), baseGlowMat);
-    baseGlow.rotation.x=Math.PI/2; baseGlow.position.set(cx, y0+0.3, Z); root.add(baseGlow);
-    var light=new THREE.PointLight(0x3aa6ff, 0.5, 3); light.position.set(cx, y0+0.24+bodyH*0.6, Z); root.add(light);
-    // pernos superiores (grupo → vibración)
-    var top=new THREE.Group(); top.position.set(cx, y0+0.24+bodyH+0.02, Z);
-    for(var i=0;i<8;i++){ var a=(i/8)*Math.PI*2; var b=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,0.05,6), M.bolt);
-      b.position.set(Math.cos(a)*(bodyR-0.06),0,Math.sin(a)*(bodyR-0.06)); top.add(b); }
-    root.add(top);
-    // riser de descarga → cabezal
-    var domeY=y0+0.24+bodyH, rh=MANY-domeY;
-    var riser=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,rh,14), M.pipe);
-    riser.position.set(cx+bodyR*0.45, domeY+rh/2, Z); root.add(riser);
-    // etiqueta Cn
-    var lab=new THREE.Mesh(new THREE.PlaneGeometry(0.24,0.135), new THREE.MeshBasicMaterial({ map:texLabel('C'+(idx+1)), transparent:true }));
-    lab.position.set(cx, y0+0.24+bodyH*0.34, Z+bodyR+0.02); root.add(lab);
-    comps.push({ idx:idx, cx:cx, labelMat:labelMat, glowMat:glowMat, stripeMat:stripeMat, baseGlowMat:baseGlowMat, light:light, top:top });
+  // ============================================================
+  // COMPRESOR DE TORNILLO ATLAS GA — construido UNA vez (plain meshes)
+  // Reutiliza la geometría/paleta de compresor-tornillo-aire-realistic-v1.html.
+  // Se instancia 4x (InstancedMesh por geometría) -> draws ~= n.º de piezas, no x4.
+  // ============================================================
+  function buildUnitTemplate(){
+    var u=new THREE.Group();
+    function m(geo,mat,x,y,z,rx,ry,rz){ var e=new THREE.Mesh(geo,mat); e.position.set(x,y,z);
+      if(rx)e.rotation.x=rx; if(ry)e.rotation.y=ry; if(rz)e.rotation.z=rz; u.add(e); return e; }
+    // --- skid negro ---
+    m(new THREE.BoxGeometry(2.02,0.12,1.18), MAT.skid, 0,0.06,0);
+    // --- canopy (gris Atlas): techo, trasera, extremos ---
+    m(new THREE.BoxGeometry(2.0,0.05,1.2),  MAT.canopy, 0,1.67,0);
+    m(new THREE.BoxGeometry(2.0,1.55,0.04), MAT.canopy, 0,0.9,-0.58);
+    m(new THREE.BoxGeometry(0.04,1.55,1.2), MAT.canopy, 0.98,0.9,0);
+    m(new THREE.BoxGeometry(0.04,1.55,1.2), MAT.canopy, -0.98,0.9,0);
+    m(new THREE.CircleGeometry(0.42,28),    MAT.grille, -0.999,0.85,0, 0,-Math.PI/2,0);   // rejilla escape aftercooler (-X)
+    // --- frente (+Z): cabezal + receso oscuro (juntas) + 2 paneles + puerta con letra + vent ---
+    m(new THREE.BoxGeometry(2.0,0.16,0.04), MAT.canopy,   0,1.6,0.585);
+    m(new THREE.BoxGeometry(1.12,1.4,0.03), MAT.canopyDk, 0.46,0.8,0.55);
+    m(new THREE.BoxGeometry(0.44,1.26,0.04),MAT.canopy,   0.28,0.83,0.585);
+    m(new THREE.BoxGeometry(0.42,1.26,0.04),MAT.canopy,   0.73,0.83,0.585);
+    m(new THREE.BoxGeometry(0.86,1.26,0.05),MAT.door,    -0.45,0.85,0.6);                 // panel de acceso con "A" estampada
+    m(new THREE.BoxGeometry(0.5,0.14,0.04), MAT.grille,   0.28,0.30,0.585);               // rejilla de ventilación baja
+    // --- HMI: bisel + pantalla emisiva + e-stop con collar amarillo + nameplate + warn ---
+    m(new THREE.BoxGeometry(0.34,0.30,0.03),MAT.hmi,      0.28,1.20,0.585);
+    m(new THREE.PlaneGeometry(0.24,0.19),   MAT.screen,   0.24,1.24,0.605);
+    m(new THREE.CylinderGeometry(0.045,0.045,0.02,18), MAT.safety, 0.46,1.06,0.6, Math.PI/2,0,0);
+    var es=m(new THREE.SphereGeometry(0.032,14,10), MAT.estop, 0.46,1.06,0.625); es.scale.z=0.6;
+    m(new THREE.PlaneGeometry(0.30,0.17),   MAT.plate,    0.73,0.5,0.606);
+    m(new THREE.PlaneGeometry(0.15,0.112),  MAT.warn,     0.86,0.95,0.606);
+    // --- tobera de descarga superior ---
+    m(new THREE.CylinderGeometry(0.04,0.04,0.5,12), MAT.steel, 0.5,1.85,0.1);
+    // --- interior (simplificado; oculto por el canopy pero presente para "mismo modelo") ---
+    m(new THREE.CylinderGeometry(0.16,0.16,0.62,18), MAT.airend, 0.2,0.58,0.15, 0,0,Math.PI/2);   // airend cuerpo
+    m(new THREE.CylinderGeometry(0.10,0.10,0.5,14),  MAT.airend, 0.2,0.43,0.15, 0,0,Math.PI/2);   // 2do lóbulo (twin-screw)
+    m(new THREE.CylinderGeometry(0.085,0.085,0.05,14), MAT.steel, -0.12,0.58,0.15, 0,0,Math.PI/2);// brida succión
+    m(new THREE.CylinderGeometry(0.16,0.16,0.42,20), MAT.motor,  0.83,0.55,0.1, 0,0,Math.PI/2);   // motor TEFC
+    m(new THREE.BoxGeometry(0.16,0.10,0.14),         MAT.motor,  0.81,0.77,0.1);                  // caja de bornes
+    m(new THREE.CylinderGeometry(0.2,0.2,0.9,20),    MAT.separator, -0.55,0.7,-0.35);             // separador
+    var dm=m(new THREE.SphereGeometry(0.2,18,9,0,Math.PI*2,0,Math.PI/2), MAT.separator, -0.55,1.15,-0.35);  // domo
+    m(new THREE.BoxGeometry(0.12,0.92,0.86),         MAT.steel,  -0.75,0.85,0);                   // aftercooler bloque
+    m(new THREE.CircleGeometry(0.4,20),              MAT.cooler, -0.82,0.85,0, 0,-Math.PI/2,0);   // cara radiador
+    m(new THREE.CylinderGeometry(0.03,0.03,0.6,10),  MAT.steel,  -0.1,1.0,-0.1, 0,0,Math.PI/2);   // tubería
+    return u;
   }
-  for(var ci=0; ci<5; ci++){ buildCompressor(XS[ci], ci); }
 
-  // ---------- slot de reserva (C6 · futuro crecimiento) ----------
-  (function(){
-    var cx=XS[5];
-    root.add(box(0.95,0.1,0.95, M.blackMatte, cx, 0.05, Z));
-    [-0.33,0.33].forEach(function(ox){ [-0.33,0.33].forEach(function(oz){
-      var an=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,0.1,8), M.steel);
-      an.position.set(cx+ox,0.14,Z+oz); root.add(an);
-    });});
-    var post=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,1.1,10), M.galv);
-    post.position.set(cx,0.65,Z); root.add(post);
-    var sign=new THREE.Mesh(new THREE.PlaneGeometry(0.8,0.4),
-      new THREE.MeshBasicMaterial({ map:(function(){
-        var c=document.createElement('canvas'); c.width=256; c.height=128; var x=c.getContext('2d');
-        x.fillStyle='#EAF0FF'; x.fillRect(0,0,256,128); x.strokeStyle='#3B6FF5'; x.lineWidth=4; x.setLineDash([10,7]); x.strokeRect(6,6,244,116);
-        x.fillStyle='#2E5FE0'; x.font='700 30px "IBM Plex Sans",sans-serif'; x.textAlign='center'; x.fillText('RESERVA', 128, 54);
-        x.fillStyle='#5C6B84'; x.font='500 18px "IBM Plex Sans",sans-serif'; x.fillText('C6 · futuro 20%', 128, 88);
-        var t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return t;
-      })(), transparent:true }));
-    sign.position.set(cx,1.25,Z+0.02); root.add(sign);
-  })();
+  // Instancia un template (plain meshes) en X: 1 InstancedMesh por pieza -> comparte geometría
+  function instanceRow(template, xs){
+    template.updateMatrixWorld(true);
+    var g=new THREE.Group();
+    template.traverse(function(o){
+      if(o.isMesh){
+        var im=new THREE.InstancedMesh(o.geometry, o.material, xs.length);
+        var transp = !!o.material.transparent;
+        im.castShadow=!transp; im.receiveShadow=true;
+        var mm=new THREE.Matrix4(), tt=new THREE.Matrix4();
+        for(var i=0;i<xs.length;i++){ mm.copy(o.matrixWorld); tt.makeTranslation(xs[i],0,0); mm.premultiply(tt); im.setMatrixAt(i,mm); }
+        im.instanceMatrix.needsUpdate=true; g.add(im);
+      }
+    });
+    return g;
+  }
 
-  // ---------- cabezal común + bajante ----------
-  var header=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,4.4,16), M.pipe);
-  header.rotation.z=Math.PI/2; header.position.set(-0.4, MANY, Z); root.add(header);
-  var tankX=2.4, tankZ=-1.9;
-  var toTank=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,(tankZ-Z)-0.0,16), M.pipe);
-  toTank.rotation.x=Math.PI/2; toTank.position.set(1.8, MANY, (Z+tankZ)/2); root.add(toTank);
-  var elbow=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,1.0,16), M.pipe);
-  elbow.rotation.z=Math.PI/2; elbow.position.set(1.3, MANY, Z); root.add(elbow);
+  // ---------- fila de 4 compresores (misma disposición/encuadre que la versión GLB) ----------
+  var NUNITS=4, SP=2.6, SCL=0.9, HEADER_Y=2.15, ROWZ=0.0, TOPY=1.70*SCL;
+  var X0=-(NUNITS-1)/2*SP, XS=[];
+  for(var q=0;q<NUNITS;q++) XS.push(X0+q*SP);
 
-  // ---------- tanque pulmón ----------
-  (function(){
-    var R=0.55, Hh=2.0, by=0.35;
-    var shell=new THREE.Mesh(new THREE.CylinderGeometry(R,R,Hh,32), M.tank);
-    shell.position.set(tankX, by+Hh/2, tankZ); shell.castShadow=true; root.add(shell);
-    var capT=new THREE.Mesh(new THREE.SphereGeometry(R,32,16,0,Math.PI*2,0,Math.PI/2), M.tankCap);
-    capT.position.set(tankX, by+Hh, tankZ); root.add(capT);
-    var capB=new THREE.Mesh(new THREE.SphereGeometry(R,32,16,0,Math.PI*2,0,Math.PI/2), M.tankCap);
-    capB.position.set(tankX, by, tankZ); capB.rotation.x=Math.PI; root.add(capB);
-    // patas
-    for(var i=0;i<3;i++){ var a=(i/3)*Math.PI*2; var leg=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,by,8), M.steel);
-      leg.position.set(tankX+Math.cos(a)*R*0.7, by/2, tankZ+Math.sin(a)*R*0.7); root.add(leg); }
-    // manómetro (disco) + entrada
-    var man=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,0.04,20), M.steel);
-    man.rotation.x=Math.PI/2; man.position.set(tankX, by+Hh*0.8, tankZ+R+0.02); root.add(man);
-    // dren automático bajo el tanque
-    var dren=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.12,0.12), M.galv);
-    dren.position.set(tankX, by-0.02, tankZ); root.add(dren);
-    // etiqueta
-    var lab=new THREE.Mesh(new THREE.PlaneGeometry(0.9,0.22), new THREE.MeshBasicMaterial({ map:texLabel('T-01','#ffffff'), transparent:true }));
-    lab.position.set(tankX, by+Hh*0.5, tankZ+R+0.01); root.add(lab);
-  })();
+  var tmpl=buildUnitTemplate(); tmpl.scale.setScalar(SCL);
+  root.add(instanceRow(tmpl, XS));
 
-  // ---------- gabinete gobernador (cameo, el "cerebro") ----------
-  (function(){
-    var gx=-3.7, gz=-0.2, W=0.7, Hh=1.6, D=0.4, by=0.0;
-    root.add(box(W,Hh,D, M.cab, gx, by+Hh/2, gz));
-    root.add(box(W*1.04,0.1,D*1.04, M.blackMatte, gx, 0.05, gz));
-    var scr=new THREE.Mesh(new THREE.PlaneGeometry(0.42,0.3),
-      new THREE.MeshBasicMaterial({ map:(function(){
-        var c=document.createElement('canvas'); c.width=256; c.height=180; var x=c.getContext('2d');
-        x.fillStyle='#0d1726'; x.fillRect(0,0,256,180); x.fillStyle='#16A6E0'; x.font='700 24px "IBM Plex Sans",sans-serif';
-        x.textAlign='center'; x.fillText('KALTE', 128, 70); x.fillStyle='#8fa6c4'; x.font='600 16px "IBM Plex Mono",monospace';
-        x.fillText('GOBERNADOR', 128, 100); x.fillStyle='#34C08B'; x.font='700 18px "IBM Plex Mono",monospace'; x.fillText('AUTO', 128, 135);
-        var t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return t;
-      })() }));
-    scr.position.set(gx, by+Hh*0.72, gz+D/2+0.001); root.add(scr);
-    var lg=new THREE.Mesh(new THREE.SphereGeometry(0.03,12,10), new THREE.MeshStandardMaterial({ color:0x2ee06a, emissive:0x2ee06a, emissiveIntensity:1.4 }));
-    lg.position.set(gx-0.12, by+Hh*0.42, gz+D/2+0.01); root.add(lg);
-  })();
-
-  // ---------- estado en vivo ----------
+  // ---------- halos de estado en vivo + etiqueta por unidad ----------
   var STCOL = {
     carga:    { c:0x22c07a, e:1.6, li:0.7 },
     descarga: { c:0xE8A33D, e:1.1, li:0.5 },
     falla:    { c:0xff3535, e:2.0, li:0.9 },
     stop:     { c:0x3aa6ff, e:0.25, li:0.12 }
   };
+  var comps=[];
+  for(var i=0;i<NUNITS;i++){
+    var cx=XS[i];
+    var haloMat=new THREE.MeshStandardMaterial({ color:0x3aa6ff, emissive:0x3aa6ff, emissiveIntensity:1.4, roughness:0.4, metalness:0.2 });
+    var halo=new THREE.Mesh(new THREE.TorusGeometry(0.42,0.045,12,36), haloMat);
+    halo.rotation.x=Math.PI/2; halo.position.set(cx, TOPY+0.16, ROWZ); root.add(halo);
+    var beaconMat=new THREE.MeshStandardMaterial({ color:0x3aa6ff, emissive:0x3aa6ff, emissiveIntensity:1.8, roughness:0.3, metalness:0.2 });
+    var beacon=new THREE.Mesh(new THREE.SphereGeometry(0.085,16,12), beaconMat);
+    beacon.position.set(cx, TOPY+0.34, ROWZ); root.add(beacon);
+    var light=new THREE.PointLight(0x3aa6ff, 0.5, 3.2); light.position.set(cx, TOPY+0.1, ROWZ+0.5); root.add(light);
+    var lab=new THREE.Mesh(new THREE.PlaneGeometry(0.34,0.19), new THREE.MeshBasicMaterial({ map:texLabel('C'+(i+1)), transparent:true }));
+    lab.position.set(cx, TOPY+0.02, ROWZ+0.62*SCL+0.04); root.add(lab);
+    comps.push({ idx:i, cx:cx, mats:[haloMat,beaconMat], light:light });
+  }
+
+  // ---------- cabezal común + risers + bajante ----------
+  var span=(NUNITS-1)*SP+1.6;
+  var header=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,span,16), MAT.pipe);
+  header.rotation.z=Math.PI/2; header.position.set(0, HEADER_Y, ROWZ-0.1); root.add(header);
+  for(var j=0;j<NUNITS;j++){ var rx=XS[j], rh=HEADER_Y-TOPY;
+    var riser=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,rh,12), MAT.pipe);
+    riser.position.set(rx+0.3, TOPY+rh/2, ROWZ-0.1); root.add(riser); }
+  var toTank=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,3.0,16), MAT.pipe);
+  toTank.rotation.x=Math.PI/2; toTank.position.set(XS[NUNITS-1], HEADER_Y, ROWZ-1.6); root.add(toTank);
+
+  // ---------- tanque pulmón ----------
+  var tankX=XS[NUNITS-1]+0.2, tankZ=-2.4;
+  (function(){
+    var R=0.6, Hh=2.2, by=0.4;
+    var shell=new THREE.Mesh(new THREE.CylinderGeometry(R,R,Hh,32), MAT.tank);
+    shell.position.set(tankX, by+Hh/2, tankZ); shell.castShadow=true; root.add(shell);
+    var capT=new THREE.Mesh(new THREE.SphereGeometry(R,32,16,0,Math.PI*2,0,Math.PI/2), MAT.tankCap);
+    capT.position.set(tankX, by+Hh, tankZ); root.add(capT);
+    var capB=new THREE.Mesh(new THREE.SphereGeometry(R,32,16,0,Math.PI*2,0,Math.PI/2), MAT.tankCap);
+    capB.position.set(tankX, by, tankZ); capB.rotation.x=Math.PI; root.add(capB);
+    for(var i=0;i<3;i++){ var a=(i/3)*Math.PI*2; var leg=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,by,8), MAT.steel);
+      leg.position.set(tankX+Math.cos(a)*R*0.7, by/2, tankZ+Math.sin(a)*R*0.7); root.add(leg); }
+    var man=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,0.04,20), MAT.steel);
+    man.rotation.x=Math.PI/2; man.position.set(tankX, by+Hh*0.8, tankZ+R+0.02); root.add(man);
+    root.add(box(0.12,0.12,0.12, MAT.galv, tankX, by-0.02, tankZ));
+    var lab=new THREE.Mesh(new THREE.PlaneGeometry(0.9,0.22), new THREE.MeshBasicMaterial({ map:texLabel('T-01','#ffffff'), transparent:true }));
+    lab.position.set(tankX, by+Hh*0.5, tankZ+R+0.01); root.add(lab);
+  })();
+
+  // ---------- gabinete gobernador (cameo) ----------
+  (function(){
+    var gx=X0-1.6, gz=-0.2, W=0.7, Hh=1.6, D=0.4, by=0.0;
+    root.add(box(W,Hh,D, MAT.cab, gx, by+Hh/2, gz));
+    root.add(box(W*1.04,0.1,D*1.04, MAT.blackMatte, gx, 0.05, gz));
+    var scr=new THREE.Mesh(new THREE.PlaneGeometry(0.42,0.3), new THREE.MeshBasicMaterial({ map:ctex(256,180,function(x,w,h){
+      x.fillStyle='#0d1726'; x.fillRect(0,0,256,180); x.fillStyle='#16A6E0'; x.font='700 24px "IBM Plex Sans",sans-serif'; x.textAlign='center'; x.fillText('KALTE',128,70);
+      x.fillStyle='#8fa6c4'; x.font='600 16px "IBM Plex Mono",monospace'; x.fillText('GOBERNADOR',128,100);
+      x.fillStyle='#34C08B'; x.font='700 18px "IBM Plex Mono",monospace'; x.fillText('AUTO',128,135); }) }));
+    scr.position.set(gx, by+Hh*0.72, gz+D/2+0.001); root.add(scr);
+    var lg=new THREE.Mesh(new THREE.SphereGeometry(0.03,12,10), new THREE.MeshStandardMaterial({ color:0x2ee06a, emissive:0x2ee06a, emissiveIntensity:1.4 }));
+    lg.position.set(gx-0.12, by+Hh*0.42, gz+D/2+0.01); root.add(lg);
+  })();
+
+  // ---------- estado en vivo: pinta halos/balizas por window.GOB.C[i].state ----------
   function applyState(t){
     var G=window.GOB; if(!G) return;
     for(var k=0;k<comps.length;k++){
-      var C=comps[k], o=G.C[C.idx], s=o.state, def=STCOL[s]||STCOL.stop;
+      var C=comps[k], o=G.C[C.idx]; if(!o) continue;
+      var s=o.state, def=STCOL[s]||STCOL.stop;
       var blink=(s==='falla')?(0.45+0.55*Math.sin(t*11)):1;
-      [C.labelMat,C.glowMat,C.stripeMat,C.baseGlowMat].forEach(function(m){
-        m.color.setHex(def.c); m.emissive.setHex(def.c); m.emissiveIntensity=def.e*blink;
-      });
+      C.mats.forEach(function(m){ m.color.setHex(def.c); m.emissive.setHex(def.c); m.emissiveIntensity=def.e*blink; });
       C.light.color.setHex(def.c); C.light.intensity=def.li*blink;
-      var on=(s==='carga'||s==='descarga');
-      var amp=on?(s==='carga'?0.006:0.003):0;
-      C.top.position.x = C.cx + (on?Math.sin(t*(s==='carga'?46:30))*amp:0);
     }
   }
 
