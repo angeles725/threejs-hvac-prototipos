@@ -1,0 +1,426 @@
+design: compresor-tornillo-aire
+track: threejs
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.1 m"
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 19 -> complex (15-24).
+  scores: {silhouette: 2, components: 3, hierarchy: 2, repetition: 2,
+           material_layers: 3, detail: 2, occlusion: 3, action_readiness: 2}
+  tier: complex
+  notes: >
+    Boxy acoustic canopy silhouette is only moderately distinctive (2), but it hides a full internal
+    air train (airend->separator->aftercooler->outlet) that must read through an open access door /
+    cutaway (occlusion 3, components 3). Material stack is wide: painted enclosure, bare/cast airend,
+    copper oil lines, rubber hose, plastic HMI, emissive display, glass sight-glass (3). Motion is the
+    aftercooler fan (continuous) plus optional door-open and internal rotor spin (action 2).
+
+environment:
+  overlays:
+    handbook: /home/cristian/prototipos/three.js/research/HANDBOOK.md
+    house_rules: "/home/cristian/prototipos/three.js/EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    qa_tools: /home/cristian/prototipos/three.js/research/tools
+    design_dir_root: /home/cristian/prototipos/three.js/disenos
+    learnings_ledger: /home/cristian/.claude/skills/design3d/LEARNINGS.md
+  reuse_pointers:
+    airend_and_skid: "disenos/chiller/chiller-tornillo-agua-realistic-v1.html:534-565 (Lathe screw-body + torus ribs + brass/glass oil sight)"
+    motor_coupling_fins_pipes: "disenos/bomba-centrifuga/bomba-centrifuga-realistic-v1.html:501-611 (coupling hubs+sleeve, torus cooling fins, terminal box, makePipe)"
+    copper_and_fin_materials: "disenos/trane/trane-rtu-realistic-v10.html:187-200 (copper 0xb87333/0.92, aluminum fin 0xc0c4c8/0.9)"
+
+references:
+  # Brand-neutral. Dimensions synthesized from the published envelope of the 45-90 kW lubricated
+  # rotary-screw canopy class; refine against a single named datasheet at P4 (see risks).
+  - source: "Atlas Copco GA 37-90 datasheet class (canopy envelope, generic, brand-neutral use only)"
+    evidences: "canopy L ~1.9-2.4 m, W ~1.1-1.5 m, H ~1.6-1.9 m for the 45-75 kW band"
+  - source: "Kaeser CSD/SK series + Ingersoll Rand RS 37-75 datasheet class (envelope cross-check)"
+    evidences: "packaged canopy footprint and height band corroborate the above; separator vessel + aftercooler + airend layout inside one acoustic enclosure"
+  - source: "General rotary-screw compressor engineering references (air-end -> oil separator -> aftercooler -> outlet flow order)"
+    evidences: "component train order and presence of oil sight glass, oil/air separator tank, thermostatic oil path, aftercooler fan"
+  - source: "HANDBOOK.md §3.0 scale table + §3.1 PBR palette"
+    evidences: "1 unit = 1 m world scale; near-binary metalness; painted-metal 0.0 / bare-metal 0.9-1.0"
+  - source: "Client reference photos (2026-07-22) — Atlas Copco GA22 / GA110 screw compressor + plant system"
+    images: [refs/ref-atlas-ga22.png, refs/ref-atlas-ga110.png, refs/ref-sala-sistema-1.png, refs/ref-sala-sistema-2.png]
+    verdict: pass
+    evidences: "closed grey canopy box with LARGE access-panel doors (not a dominant louver bank), front-face HMI screen, mushroom e-stop, large stamped brand letter, low ventilation grilles, black skid; SYSTEM = compressor + separator/dryer/receiver tanks + piping"
+    note: "use as reference-match in P6 (design is now reference-backed, not spec-only). Canopy colour -> grey (materials pass). Front face -> access panels (structural)."
+
+dimensions_real:
+  # Canopy (acoustic enclosure) outer envelope. Length along X, depth along Z, height along Y.
+  length_m: {value: 2.00, confidence: med}    # +X motor end .. -X aftercooler end
+  width_m:  {value: 1.20, confidence: med}    # depth (fondo), front face at +Z
+  height_m: {value: 1.70, confidence: med}    # canopy top; a 1.8 m person reads slightly taller — coherent
+  # Key internal parts (drive spec depth for the air train):
+  airend_body_len_m:   {value: 0.55, confidence: low}   # machined screw block, minus flanges
+  airend_body_dia_m:   {value: 0.34, confidence: low}
+  motor_body_len_m:    {value: 0.50, confidence: low}
+  motor_body_dia_m:    {value: 0.32, confidence: low}
+  separator_dia_m:     {value: 0.36, confidence: low}   # vertical air/oil separator vessel
+  separator_height_m:  {value: 1.05, confidence: low}
+  cooler_face_m:       {value: 0.85, confidence: low}   # aftercooler/oil-cooler radiator face (square-ish)
+  cooler_fan_dia_m:    {value: 0.62, confidence: low}
+
+hierarchy:
+  # Animation-ready BEFORE geometry. Build root->tip; every appendage carries an attachment contract.
+  # Frame: canopy footprint centered on origin; base at y=0; length X (-1.0..1.0), depth Z (-0.6..0.6).
+  - name: root
+    children:
+      - name: baseframe                  # welded steel skid + anti-vibration feet
+        pivot: [0, 0, 0]
+        animation: none
+
+      - name: canopy                     # acoustic sheet-metal enclosure (painted) — the outer read
+        pivot: [0, 0, 0]
+        animation: none
+        children:
+          - name: louver_panels          # ventilation louver banks (intake side + cooler exhaust grille)
+            pivot: [0, 0.9, 0]
+            animation: none               # slat array = repetition; part of canopy, not moving
+          - name: access_door            # hinged front service door on left edge
+            pivot: [-0.75, 0.85, 0.6]     # hinge axis (left vertical edge, front face) = local_start
+            animation: "open_hinge: rotate 0..105deg about Y"
+            attachment:
+              parent_socket: canopy_front_left_edge
+              local_start: [-0.75, 0.85, 0.6]
+              local_end: [-0.05, 0.85, 0.6]   # free (latch) edge in closed pose
+              length_confidence: med
+              contact_type: hinge
+              embed_depth: 0.0
+              gap_tolerance: 0.003
+            children:
+              - name: door_handle
+                pivot: [-0.12, 0.85, 0.62]
+                animation: "open_hinge"       # rides the door 1:1
+                attachment:
+                  parent_socket: access_door_latch_edge
+                  local_start: [-0.12, 0.85, 0.61]
+                  local_end: [-0.12, 0.85, 0.66]
+                  length_confidence: med
+                  contact_type: surface-contact
+                  embed_depth: 0.008
+                  gap_tolerance: 0.0
+          - name: hmi_panel              # front control panel: display + e-stop, on the +Z face
+            pivot: [0.35, 1.12, 0.60]
+            animation: none
+            attachment:
+              parent_socket: canopy_front_face
+              local_start: [0.35, 1.12, 0.60]
+              local_end: [0.35, 1.12, 0.615]
+              length_confidence: high
+              contact_type: surface-contact
+              embed_depth: 0.006
+              gap_tolerance: 0.0
+            children:
+              - name: hmi_display        # emissive LCD (CanvasTexture), pressure/temp/hours readout
+                pivot: [0.35, 1.16, 0.616]
+                animation: none
+              - name: estop_button       # red mushroom e-stop on yellow base
+                pivot: [0.30, 1.05, 0.616]
+                animation: none
+
+      - name: airend                     # LUBRICATED SCREW BLOCK — cast/machined body, ribs, flanges
+        pivot: [0.15, 0.50, 0.10]        # long axis along X
+        animation: none
+        children:
+          - name: airend_rotors          # meshing male/female screw rotors (cutaway-only spin)
+            pivot: [0.15, 0.55, 0.10]     # rotor axis, X
+            animation: "custom:spin about X (visible only when door open / cutaway)"
+          - name: oil_sight_glass        # brass ring + glass, on the airend body
+            pivot: [0.30, 0.42, 0.30]
+            animation: none
+            attachment:
+              parent_socket: airend_body_front
+              local_start: [0.30, 0.42, 0.30]
+              local_end: [0.30, 0.42, 0.33]
+              length_confidence: med
+              contact_type: embedded
+              embed_depth: 0.02
+              gap_tolerance: 0.0
+
+      - name: drive_motor                # TEFC electric motor, painted, finned
+        pivot: [0.80, 0.55, 0.10]        # axis X, coupled to airend at -X end
+        animation: none
+        children:
+          - name: motor_fan              # rear cowl cooling fan behind grille
+            pivot: [1.05, 0.55, 0.10]
+            animation: "custom:spin about X (motor cooling fan)"
+          - name: terminal_box           # connection box on motor top
+            pivot: [0.80, 0.74, 0.10]
+            animation: none
+            attachment:
+              parent_socket: motor_body_top
+              local_start: [0.80, 0.72, 0.10]
+              local_end: [0.80, 0.82, 0.10]
+              length_confidence: med
+              contact_type: surface-contact
+              embed_depth: 0.01
+              gap_tolerance: 0.0
+
+      - name: coupling_guard             # guard shell over the motor<->airend coupling
+        pivot: [0.48, 0.55, 0.10]
+        animation: none
+        attachment:
+          parent_socket: airend_drive_flange
+          local_start: [0.40, 0.55, 0.10]
+          local_end: [0.56, 0.55, 0.10]
+          length_confidence: med
+          contact_type: overlap
+          overlap: 0.03
+          gap_tolerance: 0.0
+
+      - name: separator_tank            # vertical air/oil separator pressure vessel
+        pivot: [-0.55, 0.20, -0.35]      # base of vessel; extends +Y
+        animation: none
+        children:
+          - name: oil_return_hose        # scavenge line separator -> airend (rubber)
+            pivot: [-0.55, 0.35, -0.30]
+            animation: none
+            attachment:
+              parent_socket: separator_bottom_port
+              local_start: [-0.55, 0.35, -0.30]
+              local_end: [0.10, 0.48, 0.05]
+              length_confidence: low
+              contact_type: embedded
+              embed_depth: 0.03
+              gap_tolerance: 0.0
+
+      - name: aftercooler               # combined aftercooler + oil-cooler radiator block, -X end
+        pivot: [-0.85, 0.85, 0.0]
+        animation: none
+        children:
+          - name: cooler_fan            # axial fan, CONTINUOUS rotation — pulls air through the block
+            pivot: [-0.98, 0.85, 0.0]    # fan axis = X (blows out the -X end panel)
+            animation: "custom:spin about X (aftercooler fan, continuous)"
+          - name: cooler_guard          # wire/finger guard grille over the fan
+            pivot: [-1.00, 0.85, 0.0]
+            animation: none
+            attachment:
+              parent_socket: cooler_end_face
+              local_start: [-0.99, 0.85, 0.0]
+              local_end: [-1.01, 0.85, 0.0]
+              length_confidence: high
+              contact_type: surface-contact
+              embed_depth: 0.005
+              gap_tolerance: 0.0
+
+      - name: pipe_airend_to_separator  # discharge: airend -> separator (hot, insulated/steel)
+        pivot: [0.05, 0.60, 0.10]
+        animation: none
+        attachment:
+          parent_socket: airend_discharge_port
+          local_start: [0.05, 0.60, 0.10]
+          local_end: [-0.55, 0.95, -0.35]
+          length_confidence: low
+          contact_type: embedded
+          embed_depth: 0.03
+          gap_tolerance: 0.0
+
+      - name: pipe_separator_to_cooler  # separator top -> aftercooler inlet manifold
+        pivot: [-0.55, 1.10, -0.35]
+        animation: none
+        attachment:
+          parent_socket: separator_top_port
+          local_start: [-0.55, 1.10, -0.35]
+          local_end: [-0.80, 1.05, 0.0]
+          length_confidence: low
+          contact_type: embedded
+          embed_depth: 0.03
+          gap_tolerance: 0.0
+
+      - name: outlet_pipe               # cooler outlet -> service valve, exits low front
+        pivot: [-0.80, 0.55, 0.15]
+        animation: none
+        attachment:
+          parent_socket: cooler_outlet_port
+          local_start: [-0.80, 0.55, 0.15]
+          local_end: [-0.80, 0.30, 0.60]
+          length_confidence: med
+          contact_type: embedded
+          embed_depth: 0.03
+          gap_tolerance: 0.0
+        children:
+          - name: outlet_valve          # ball/gate outlet valve at the pipe tip
+            pivot: [-0.80, 0.30, 0.55]
+            animation: none
+            attachment:
+              parent_socket: outlet_pipe_tip
+              local_start: [-0.80, 0.30, 0.52]
+              local_end: [-0.80, 0.30, 0.62]
+              length_confidence: med
+              contact_type: socket
+              embed_depth: 0.02
+              gap_tolerance: 0.0
+
+      - name: nameplate                 # neutral "AIRTECH" data plate (CanvasTexture)
+        pivot: [0.55, 1.30, 0.60]
+        animation: none
+        attachment:
+          parent_socket: canopy_front_face
+          local_start: [0.55, 1.30, 0.60]
+          local_end: [0.55, 1.30, 0.606]
+          length_confidence: high
+          contact_type: surface-contact
+          embed_depth: 0.003
+          gap_tolerance: 0.0
+
+materials:
+  # Near-binary metalness: dielectrics 0.0-0.05, bare metal 0.9-1.0. Nothing intermediate.
+  - id: canopy_paint
+    family: painted-metal
+    color: "#33506e"               # neutral industrial blue-grey enclosure (brand-neutral)
+    metalness: 0.0
+    roughness: 0.52
+    evidence: "HANDBOOK §3.1 compBody/panelBox painted -> dielectric 0.0-0.05; roughness 0.5-0.6 (REGLAS DE CASA pase-2)"
+    source: table
+    confidence: 0.82
+  - id: canopy_dark
+    family: painted-metal
+    color: "#22303f"               # trim, base, louver frames, door gaps
+    metalness: 0.0
+    roughness: 0.60
+    evidence: "HANDBOOK §3.1 panelDk painted dielectric"
+    source: table
+    confidence: 0.82
+  - id: airend_cast
+    family: bare-metal
+    color: "#8f9aa2"               # machined/cast screw block
+    metalness: 0.95
+    roughness: 0.42
+    evidence: "chiller STEEL (compresor de tornillo) color 0x9aa8b0 rough 0.38 metal 1 :221"
+    source: extracted
+    confidence: 0.86
+  - id: motor_paint
+    family: painted-metal
+    color: "#2c2c32"               # TEFC motor housing (painted)
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "bomba MOTOR_D 0x2c2c32 rough 0.6 metal 0 :283 (painted motor dielectric)"
+    source: extracted
+    confidence: 0.86
+  - id: fin_alu
+    family: bare-metal
+    color: "#c0c4c8"               # cooler radiator fins + motor cooling fins
+    metalness: 0.90
+    roughness: 0.35
+    evidence: "trane aluminum 0xc0c4c8 rough 0.35 metal 0.9 :194"
+    source: extracted
+    confidence: 0.86
+  - id: copper
+    family: copper
+    color: "#b87333"               # oil/air fine lines, thermostatic oil path
+    metalness: 0.92
+    roughness: 0.32
+    evidence: "trane copper 0xb87333 rough 0.32 metal 0.92 :187; HANDBOOK §3.1 copper F0 note"
+    source: extracted
+    confidence: 0.86
+  - id: rubber_hose
+    family: rubber
+    color: "#15181c"               # oil scavenge / flexible hoses
+    metalness: 0.0
+    roughness: 0.90
+    evidence: "HANDBOOK §3.1 hose -> rubber dielectric 0.0; chiller BLACK 0x15181c :228"
+    source: table
+    confidence: 0.85
+  - id: steel_bare
+    family: bare-metal
+    color: "#8a949c"               # flanges, bolts, skid rails, valve stems
+    metalness: 1.0
+    roughness: 0.35
+    evidence: "chiller FLANGE 0x8a949c rough 0.35 metal 1 :223; HANDBOOK §3.1 skid galvanized"
+    source: extracted
+    confidence: 0.86
+  - id: separator_paint
+    family: painted-metal
+    color: "#c0552e"               # air/oil separator pressure vessel (safety orange-red, reads as vessel)
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1 painted vessel dielectric; ISA/industry pressure-vessel colour convention"
+    source: estimated
+    confidence: 0.72
+  - id: hmi_bezel
+    family: plastic
+    color: "#1c1d20"               # HMI housing + e-stop base ring
+    metalness: 0.0
+    roughness: 0.42
+    evidence: "HANDBOOK §3.1 hmi -> plastic/glass bezel metalness 0.0"
+    source: table
+    confidence: 0.84
+  - id: hmi_screen
+    family: plastic
+    color: "#0a1a14"               # emissive display (emissiveMap CanvasTexture)
+    metalness: 0.0
+    roughness: 0.25
+    evidence: "chiller screenMat emissive display rough 0.25 metal 0 :761"
+    source: extracted
+    confidence: 0.85
+  - id: estop_red
+    family: plastic
+    color: "#cc2222"               # e-stop mushroom (dielectric red)
+    metalness: 0.0
+    roughness: 0.50
+    evidence: "HANDBOOK §3.4 ISA alarm red reserved for actionable; plastic dielectric"
+    source: table
+    confidence: 0.82
+  - id: glass_sight
+    family: glass
+    color: "#d8f0e8"               # oil sight-glass (MeshPhysical transmission, opacity 1)
+    metalness: 0.0
+    roughness: 0.08
+    evidence: "chiller GLASS MeshPhysicalMaterial :236; HANDBOOK §6 transmission with opacity 1"
+    source: extracted
+    confidence: 0.85
+  - id: grille_dark
+    family: painted-metal
+    color: "#0d0f12"               # louver/guard mesh, dark recessed
+    metalness: 0.0
+    roughness: 0.85
+    evidence: "chiller GRILLE 0x0d0f12 rough 0.85 metal 0 :235"
+    source: extracted
+    confidence: 0.85
+
+critical_features:
+  # 3-5, hard max 5. Each judged INDEPENDENTLY. Chosen adversarially (what a lazy model would skip).
+  - id: airend-screw-block
+    desc: "recognizable lubricated SCREW AIREND: a machined/cast finned block with suction+discharge flanges and an oil sight glass — not a bare smooth cylinder or a generic pump body"
+    threshold: 0.78            # FINAL gate (structural onward): flanges + oil sight + rotor profile, achievable with parametric geometry
+    blockout_threshold: 0.72   # MASSING gate (voxel 0.1 m): a correctly-proportioned block, clearly differentiated from the motor and in the right position — fine screw identity is validated at structural, not at voxel resolution (per-pass calibration, refine-spec 2026-07-22, user-authorized)
+  - id: acoustic-canopy
+    desc: "sheet-metal acoustic canopy with real ventilation LOUVER banks + a hinged access door with visible panel gaps — reads as an enclosed compressor cabinet, not a plain painted box"
+    threshold: 0.75
+  - id: air-train-coherence
+    desc: "coherent air path airend -> air/oil SEPARATOR vessel -> AFTERCOOLER -> outlet valve, connected by piping that actually joins the ports in the right order"
+    threshold: 0.75
+  - id: aftercooler-fan
+    desc: "aftercooler/oil-cooler radiator block with a visibly SPINNING axial fan behind a guard grille at the end panel"
+    threshold: 0.75
+  - id: hmi-control-panel
+    desc: "front HMI panel with a readable emissive display and a red mushroom E-STOP button on the canopy face"
+    threshold: 0.75
+
+important_features:
+  # optional, max 3 — reviewed AVERAGE must be >= 0.65
+  - id: electric-motor
+    desc: "finned TEFC electric motor with a terminal box, coupled to the airend through a guarded coupling"
+  - id: oil-copper-lines
+    desc: "copper/rubber oil + air lines routed root->tip between airend, separator and cooler (no floating stubs)"
+  - id: neutral-nameplate
+    desc: "brand-neutral 'AIRTECH' data plate (CanvasTexture) reads as printed spec text — no real-brand logo"
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:                     # threejs realistic single-equipment hero, desktop integrated-GPU band (HANDBOOK §3.2)
+    draws: 500
+    tris: 1500000
+
+camera:
+  azimuth_deg: 42                  # diagonal grammar 40-45
+  elevation_deg: 24                # 20-28
+  fov: 36                          # equipment hero 32-42
+
+lighting: house-rig               # sun key 1.5 + blue fill 0.4 + teal rim 0.2 + ambient 0.25 + RoomEnvironment IBL
+
+ui_controls:
+  - "COMPRESOR ON-OFF (arranca/detiene ventilador aftercooler + vibración sutil + LEDs HMI)"
+  - "ABRIR CANOPY (puerta de acceso -> revela tren de aire: airend/motor/separador/cooler)"
+  - "VER TREN DE AIRE (resalta el path airend->separador->cooler->salida)"
+  - "AUTO-ROTATE"

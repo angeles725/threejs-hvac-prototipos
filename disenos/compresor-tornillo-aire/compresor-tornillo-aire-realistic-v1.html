@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Compresor de Tornillo · Aire — Structural</title>
+<style>
+  body { margin:0; background:#06080d; font-family:'JetBrains Mono',ui-monospace,monospace; color:#00d4aa; overflow:hidden; }
+  #info { position:fixed; top:14px; left:14px; font-size:11px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; letter-spacing:0.05em; backdrop-filter: blur(6px); }
+  #info b { color:#fff; font-size:13px; letter-spacing:0.1em; }
+  #info span { color:#7a8a98; }
+  #info .pass { color:#ffb454; letter-spacing:0.12em; }
+  #ctl { position:fixed; bottom:14px; left:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:8px 12px; border:1px solid #00d4aa44; color:#7a8a98; backdrop-filter: blur(6px); }
+  #legend { position:fixed; top:14px; right:14px; font-size:10px; background:rgba(6,8,13,0.78); padding:10px 14px; border:1px solid #00d4aa44; backdrop-filter: blur(6px); }
+  #legend div { display:flex; align-items:center; gap:8px; margin:3px 0; color:#c8d2da; }
+  #legend i { width:10px; height:10px; display:inline-block; border:1px solid #ffffff22; }
+  #panel { position:fixed; bottom:14px; right:14px; background:rgba(6,8,13,0.85); border:1px solid #00d4aa44; padding:12px 14px; min-width:240px; font-size:11px; backdrop-filter: blur(6px); }
+  #panel .ph { color:#fff; font-size:11px; letter-spacing:0.15em; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #00d4aa33; }
+  #panel .row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; }
+  #panel label { color:#7a8a98; letter-spacing:0.06em; }
+  #panel button { font-family:inherit; font-size:10px; letter-spacing:0.08em; padding:5px 12px; border:1px solid; background:transparent; cursor:pointer; min-width:58px; transition:all 0.2s; }
+  #panel button.off { color:#ff4455; border-color:#ff4455; }
+  #panel button.on  { color:#06080d; border-color:#00ff66; background:#00ff66; box-shadow:0 0 12px #00ff6655; }
+  #tooltip { position:fixed; z-index:20; pointer-events:none; display:none; font-size:10px; letter-spacing:0.04em;
+    background:rgba(6,8,13,0.92); color:#cfe9e0; border:1px solid #00d4aa88; padding:4px 8px; white-space:nowrap;
+    box-shadow:0 0 10px #00d4aa33; transform:translateY(-2px); }
+  #hotspot { position:fixed; z-index:19; top:50%; left:22px; transform:translateY(-50%); display:none; min-width:210px;
+    max-width:min(280px,60vw); background:rgba(6,8,13,0.9); border:1px solid #00d4aa55; padding:13px 15px; backdrop-filter:blur(6px); }
+  #hotspot .hn { color:#fff; font-size:12px; letter-spacing:0.09em; margin-bottom:7px; padding-bottom:7px; border-bottom:1px solid #00d4aa33; }
+  #hotspot .hs { color:#9fb0bc; font-size:11px; line-height:1.5; }
+  #hotspot .hk { color:#00d4aa; }
+  #hotspot .hx { position:absolute; top:8px; right:10px; color:#7a8a98; font-size:11px; cursor:pointer; }
+  #hotspot .hhint { color:#5a6a76; font-size:9px; margin-top:9px; letter-spacing:0.05em; }
+</style>
+</head>
+<body>
+<div id="info">
+  <b>COMPRESOR DE TORNILLO · AIRE</b><br>
+  <span>AIRTECH · <span class="pass">Pase OPTIMIZATION</span></span><br>
+  <span>Optimización + coherencia · 2.0 × 1.20 × 1.70 m · 1 unit = 1 m</span>
+</div>
+<div id="tooltip"></div>
+<div id="hotspot">
+  <span class="hx" id="hsClose">✕</span>
+  <div class="hn" id="hsName"></div>
+  <div class="hs" id="hsSpec"></div>
+  <div class="hhint">ESC / clic vacío cierra</div>
+</div>
+<div id="legend">
+  <div><i style="background:#6f7377"></i> Canopy (gris Atlas)</div>
+  <div><i style="background:#8f9aa2"></i> Airend (tornillo)</div>
+  <div><i style="background:#2c2c32"></i> Motor eléctrico</div>
+  <div><i style="background:#c0552e"></i> Separador aire/aceite</div>
+  <div><i style="background:#c0c4c8"></i> Aftercooler</div>
+  <div><i style="background:#b87333"></i> Tuberías / aceite</div>
+  <div><i style="background:#1c1d20;box-shadow:0 0 5px #00d4aa"></i> HMI (display)</div>
+</div>
+<div id="ctl">DRAG: Rotar &nbsp;·&nbsp; WHEEL: Zoom &nbsp;·&nbsp; RIGHT-DRAG: Pan</div>
+<div id="panel">
+  <div class="ph">CONTROL DE EQUIPO</div>
+  <div class="row"><label>COMPRESOR</label><button id="bRun" class="off">OFF</button></div>
+  <div class="row"><label>ABRIR CANOPY</label><button id="bDoor" class="off">OFF</button></div>
+  <div class="row"><label>VER TREN DE AIRE</label><button id="bTrain" class="off">OFF</button></div>
+  <div class="row"><label>AUTO-ROTATE</label><button id="bRot" class="on">ON</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// SCALE: 1 unit = 1 m  (layout/proporciones heredados del pase voxel validado)
+// Canopy 2.0(X) × 1.20(Z) × 1.70(Y) m. Frente = +Z. Aftercooler = -X. Motor = +X.
+
+// ===================== SCENE / RENDERER =====================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 9, 34);
+
+const camera = new THREE.PerspectiveCamera(36, innerWidth/innerHeight, 0.05, 200);
+const TARGET = new THREE.Vector3(0, 0.85, 0);
+(function placeCam(){
+  const r=3.95, az=42*Math.PI/180, el=24*Math.PI/180;   // llena el frame sin cortar bordes
+  camera.position.set(
+    TARGET.x + r*Math.cos(el)*Math.sin(az),
+    TARGET.y + r*Math.sin(el),
+    TARGET.z + r*Math.cos(el)*Math.cos(az)
+  );
+})();
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.06;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.copy(TARGET);
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.55;
+controls.minDistance = 1.8;
+controls.maxDistance = 12;
+
+// ===================== LIGHT RIG (casa, afinado para look de producto) =====================
+scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+// KEY: sol con sombras suaves (PCFSoft) — da volumen al gris grafito
+const sun = new THREE.DirectionalLight(0xffffff, 1.35);
+sun.position.set(2.6, 5.0, 2.2);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left=-2.4; sc.right=2.4; sc.top=2.4; sc.bottom=-2.4; sc.near=0.5; sc.far=16;
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02; sun.shadow.radius = 3;
+sun.target.position.copy(TARGET);
+scene.add(sun); scene.add(sun.target);
+// SOFTBOX de estudio (DirectionalLight barato en SwiftShader, SIN sombra para no encarecer)
+// — luz-área de estudio sustituida por direccional; revela la curvatura del metal binario
+const softbox = new THREE.DirectionalLight(0xf2f6ff, 1.8);
+softbox.position.set(-1.7, 2.6, 2.2);      // cámara-izquierda, en alto
+softbox.target.position.copy(TARGET);
+scene.add(softbox); scene.add(softbox.target);
+// FILL azul frío: abre las sombras sin aplanar
+const fill = new THREE.DirectionalLight(0x88aaff, 0.35);
+fill.position.set(-2.4, 2.6, -2.0);
+scene.add(fill);
+// RIM teal sutil: separa del fondo
+const rim = new THREE.DirectionalLight(0x00d4aa, 0.22);
+rim.position.set(0, 1.8, -4.0);
+scene.add(rim);
+// DC-7: relleno dedicado hacia la cara -X / core del aftercooler (resuelve subiluminación).
+// Reangulado a incidir de frente sobre la cara -X + intensidad subida -> aluminio claro en ?view=cooler.
+const coolerFill = new THREE.DirectionalLight(0xdbe8f2, 1.7);
+coolerFill.position.set(-2.8, 1.0, 0.25);
+coolerFill.target.position.set(-0.82, 0.85, 0.0);
+scene.add(coolerFill); scene.add(coolerFill.target);
+
+// ===================== GROUND =====================
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(40, 40),
+  new THREE.MeshStandardMaterial({ color:0x0a0e16, roughness:0.92, metalness:0.05 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(40, 80, 0x00d4aa, 0x142028);
+grid.material.opacity = 0.10; grid.material.transparent = true; grid.position.y = 0.001;
+scene.add(grid);
+
+// ===================== PALETA PBR NOMBRADA (spec materials[], metalness near-binary) =====================
+// dieléctricos (pintura/plástico/hule/vidrio) 0.0-0.05 · metales 0.9-1.0. Roughness por material del spec.
+const M = {
+  // canopy_paint -> GRIS GRAFITO MEDIO tipo Atlas GA (DC-6): albedo bajo porque ACESFilmic+exposure
+  // aclaran el render; #54585c cae en ~#6f7377 en pantalla. MeshStandard (mate, performante en captura headless).
+  canopy:   new THREE.MeshStandardMaterial({ color:0x54585c, roughness:0.52, metalness:0.0 }),
+  canopyDk: new THREE.MeshStandardMaterial({ color:0x33373b, roughness:0.6,  metalness:0.0 }),   // trim oscuro (juntas/recesos)
+  airend:   new THREE.MeshStandardMaterial({ color:0x8f9aa2, roughness:0.42, metalness:0.95 }),  // airend_cast (bare-metal)
+  airendDk: new THREE.MeshStandardMaterial({ color:0x6b7683, roughness:0.5,  metalness:0.9 }),
+  motor:    new THREE.MeshStandardMaterial({ color:0x2c2c32, roughness:0.55, metalness:0.0 }),    // motor_paint (painted)
+  motorDk:  new THREE.MeshStandardMaterial({ color:0x1e1e22, roughness:0.5,  metalness:0.2 }),
+  separator:new THREE.MeshStandardMaterial({ color:0xa8623f, roughness:0.58, metalness:0.0 }),    // separator_paint (naranja desaturado = acero pintado)
+  cooler:   new THREE.MeshStandardMaterial({ color:0xc0c4c8, roughness:0.35, metalness:0.9, side:THREE.DoubleSide }), // fin_alu (DC-7: aluminio desnudo; la rejilla-guarda es la única capa oscura al frente)
+  copper:   new THREE.MeshStandardMaterial({ color:0xb87333, roughness:0.32, metalness:0.92 }),   // copper
+  steel:    new THREE.MeshStandardMaterial({ color:0x8a949c, roughness:0.35, metalness:1.0 }),    // steel_bare
+  flange:   new THREE.MeshStandardMaterial({ color:0x74747c, roughness:0.4,  metalness:0.9 }),
+  grille:   new THREE.MeshStandardMaterial({ color:0x0d0f12, roughness:0.85, metalness:0.0 }),    // grille_dark
+  hmi:      new THREE.MeshStandardMaterial({ color:0x1c1d20, roughness:0.42, metalness:0.0 }),    // hmi_bezel (plastic)
+  estop:    new THREE.MeshStandardMaterial({ color:0xcc2222, roughness:0.5,  metalness:0.0 }),    // estop_red (dielectric)
+  brass:    new THREE.MeshStandardMaterial({ color:0xb8862f, roughness:0.32, metalness:0.85 }),
+  // glass_sight -> MeshPhysicalMaterial con transmisión (mirilla de aceite, DC-3)
+  glass:    new THREE.MeshPhysicalMaterial({ color:0xd8f0e8, roughness:0.08, metalness:0.0, transmission:0.9, ior:1.5, thickness:0.04, transparent:true }),
+  rubber:   new THREE.MeshStandardMaterial({ color:0x15181c, roughness:0.9,  metalness:0.0 }),    // rubber_hose
+  dark:     new THREE.MeshStandardMaterial({ color:0x15151a, roughness:0.7,  metalness:0.2 }),    // skid/base negro
+  safety:   new THREE.MeshStandardMaterial({ color:0xd8a12a, roughness:0.5,  metalness:0.2 }),
+};
+
+// ===================== HELPERS (adaptados de chiller-tornillo) =====================
+function mesh(geo, mat, x=0, y=0, z=0, parent){
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x,y,z); m.castShadow = true; m.receiveShadow = true;
+  (parent||scene).add(m); return m;
+}
+function cylX(r, len, mat, x, y, z, parent, seg=24){ const m=mesh(new THREE.CylinderGeometry(r,r,len,seg),mat,x,y,z,parent); m.rotation.z=Math.PI/2; return m; }
+function cylY(r, len, mat, x, y, z, parent, seg=24){ return mesh(new THREE.CylinderGeometry(r,r,len,seg),mat,x,y,z,parent); }
+function cylZ(r, len, mat, x, y, z, parent, seg=24){ const m=mesh(new THREE.CylinderGeometry(r,r,len,seg),mat,x,y,z,parent); m.rotation.x=Math.PI/2; return m; }
+function bevelBox(w, h, d, mat, x, y, z, parent, bevel=0.008){
+  const s=new THREE.Shape(); const hw=w/2-bevel, hh=h/2-bevel;
+  s.moveTo(-hw,-h/2); s.lineTo(hw,-h/2); s.lineTo(w/2,-hh); s.lineTo(w/2,hh);
+  s.lineTo(hw,h/2); s.lineTo(-hw,h/2); s.lineTo(-w/2,hh); s.lineTo(-w/2,-hh); s.closePath();
+  const g=new THREE.ExtrudeGeometry(s,{ depth:d-bevel*2, bevelEnabled:true, bevelThickness:bevel, bevelSize:bevel, bevelSegments:1 });
+  g.translate(0,0,-(d-bevel*2)/2);
+  return mesh(g, mat, x, y, z, parent);
+}
+// casquete elipsoidal (domo) via Lathe, apunta +Y (sign 1) o -Y (sign -1)
+function dome(R, depth, mat, x, y, z, sign, parent, seg=28){
+  const pts=[]; for(let i=0;i<=10;i++){ const a=i/10*Math.PI/2; pts.push(new THREE.Vector2(R*Math.cos(a), sign*depth*Math.sin(a))); }
+  return mesh(new THREE.LatheGeometry(pts, seg), mat, x, y, z, parent);
+}
+function makePipe(points, r, mat, parent, bend=0.06, seg=12){
+  const path=new THREE.CurvePath(); const P=points.map(p=>new THREE.Vector3(...p)); let prev=P[0];
+  for(let i=1;i<P.length-1;i++){
+    const a=P[i], b=P[i+1];
+    const dIn=a.clone().sub(prev).normalize(), dOut=b.clone().sub(a).normalize();
+    const tIn=a.clone().sub(dIn.clone().multiplyScalar(bend)), tOut=a.clone().add(dOut.clone().multiplyScalar(bend));
+    path.add(new THREE.LineCurve3(prev,tIn)); path.add(new THREE.QuadraticBezierCurve3(tIn,a,tOut)); prev=tOut;
+  }
+  path.add(new THREE.LineCurve3(prev, P[P.length-1]));
+  const len=path.getLength();
+  const g=new THREE.TubeGeometry(path, Math.max(16,Math.round(len*26)), r, seg, false);
+  return mesh(g, mat, 0,0,0, parent);
+}
+const _m4=new THREE.Matrix4(), _s1=new THREE.Vector3(1,1,1);
+// anillo de pernos (InstancedMesh) sobre una brida, eje 'x'|'y'|'z'
+function boltRing(parent, cx, cy, cz, axis, radius, n, mat, boltR=0.012, boltL=0.02){
+  const q = axis==='x'? new THREE.Quaternion().setFromEuler(new THREE.Euler(0,0,Math.PI/2))
+          : axis==='z'? new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2,0,0))
+          : new THREE.Quaternion();
+  const im=new THREE.InstancedMesh(new THREE.CylinderGeometry(boltR,boltR,boltL,6), mat, n);
+  for(let i=0;i<n;i++){ const a=i/n*Math.PI*2, u=Math.cos(a)*radius, v=Math.sin(a)*radius;
+    let px=cx,py=cy,pz=cz; if(axis==='x'){py+=u;pz+=v;} else if(axis==='y'){px+=u;pz+=v;} else {px+=u;py+=v;}
+    _m4.compose(new THREE.Vector3(px,py,pz), q, _s1); im.setMatrixAt(i,_m4);
+  }
+  im.castShadow=true; im.receiveShadow=true; (parent||scene).add(im); return im;
+}
+
+// ===================== GRUPOS =====================
+const model   = new THREE.Group();  scene.add(model);       // raíz
+const canopyG = new THREE.Group();  model.add(canopyG);     // se oculta en cutaway
+const trainG  = new THREE.Group();  model.add(trainG);      // interior (tren de aire)
+// animados
+const coolerFan = new THREE.Group(); model.add(coolerFan);
+const motorFan  = new THREE.Group(); model.add(motorFan);
+const rotorsG   = new THREE.Group(); model.add(rotorsG);
+const doorPivot = new THREE.Group(); canopyG.add(doorPivot);
+
+// ===================== CANVAS TEXTURES (branding neutral / HMI) =====================
+function makeCanvasTex(draw, w=256, h=160){
+  const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); draw(g,w,h);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return t;
+}
+// pantalla HMI (readout emisivo REDIBUJABLE: refleja RUN/STANDBY -> LOAD)
+const hmiCanvas=document.createElement('canvas'); hmiCanvas.width=256; hmiCanvas.height=160;
+const hmiCtx=hmiCanvas.getContext('2d');
+const screenTex=new THREE.CanvasTexture(hmiCanvas); screenTex.colorSpace=THREE.SRGBColorSpace; screenTex.anisotropy=4;
+function drawHMIScreen(on){
+  const g=hmiCtx, W=256, H=160;
+  g.fillStyle='#04120c'; g.fillRect(0,0,W,H);
+  g.fillStyle= on?'#0affc0':'#0a5040'; g.font='bold 26px monospace'; g.fillText(on?'7.4 bar':'0.0 bar',18,42);
+  g.font='16px monospace'; g.fillStyle= on?'#0ad0a0':'#2a6050';
+  g.fillText(on?'T 78°C':'STANDBY',18,74); g.fillText(on?'LOAD 86%':'LOAD 0%',18,100);
+  g.fillStyle= on?'#0affc0':'#0a5040'; g.fillText('h 12480',18,128);
+  for(let i=0;i<8;i++){ g.fillStyle=(on&&i<6)?'#0affc0':'#0a4030'; g.fillRect(150+i*11, 46, 8, 60-((i*7)%30)); }
+  screenTex.needsUpdate=true;
+}
+drawHMIScreen(false);
+// placa de datos AIRTECH (marca-neutral)
+const plateTex=makeCanvasTex((g,w,h)=>{
+  g.fillStyle='#c9c4b2'; g.fillRect(0,0,w,h);
+  g.strokeStyle='#5a5648'; g.lineWidth=6; g.strokeRect(6,6,w-12,h-12);
+  g.fillStyle='#1a1a1e'; g.font='bold 40px monospace'; g.textAlign='center'; g.fillText('AIRTECH',w/2,58);
+  g.font='15px monospace'; g.fillStyle='#333'; g.fillText('ROTARY SCREW · 45 kW',w/2,92); g.fillText('S/N  AT-45-0917',w/2,118);
+}, 256, 150);
+// letra grande estampada en el panel de la puerta (relieve sutil gris-sobre-gris, marca-neutral)
+const letterTex=makeCanvasTex((g,w,h)=>{
+  g.fillStyle='#54585c'; g.fillRect(0,0,w,h);                 // gris grafito (canopy, mismo albedo)
+  g.fillStyle='#5e6266';                                       // "A" apenas más clara (relieve sutil)
+  g.font='bold 300px Arial, sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+  g.fillText('A', w/2, h/2+10);
+  g.strokeStyle='#484c50'; g.lineWidth=4; g.strokeRect(3,3,w-6,h-6);   // borde fino del panel
+}, 320, 400);
+
+// ---- ROUGHNESS PROCEDURAL (patrón paint-roughness-canvas-tex): pintura "sand", no perfectamente lisa
+function dataTex(w,h,draw){ const c=document.createElement('canvas'); c.width=w; c.height=h; draw(c.getContext('2d'),w,h);
+  const t=new THREE.CanvasTexture(c); t.anisotropy=4; return t; }
+const paintRoughTex=dataTex(256,256,(g)=>{
+  g.fillStyle='#8c8c8c'; g.fillRect(0,0,256,256);
+  for(let i=0;i<2600;i++){ const v=110+Math.floor(Math.random()*70); g.fillStyle='rgba('+v+','+v+','+v+',0.16)'; g.fillRect(Math.random()*256,Math.random()*256,1+Math.random()*3,1+Math.random()*3); }
+});
+paintRoughTex.wrapS=paintRoughTex.wrapT=THREE.RepeatWrapping; paintRoughTex.repeat.set(3,3);
+M.canopy.roughnessMap=paintRoughTex;   M.canopy.needsUpdate=true;    // pintura del canopy
+M.canopyDk.roughnessMap=paintRoughTex; M.canopyDk.needsUpdate=true;  // trim
+M.motor.roughnessMap=paintRoughTex;    M.motor.needsUpdate=true;     // pintura del motor
+// líneas verticales de aletas de radiador (cara del aftercooler)
+const finLineTex=dataTex(256,128,(g,w,h)=>{ g.fillStyle='#e8ebee'; g.fillRect(0,0,w,h);
+  g.strokeStyle='rgba(74,84,92,0.55)'; g.lineWidth=1; for(let x=0;x<w;x+=4){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,h); g.stroke(); } });
+finLineTex.wrapS=finLineTex.wrapT=THREE.RepeatWrapping; finLineTex.repeat.set(5,1);
+
+// ---- DECALS / SERIGRAFÍA (transparentes, marca-neutral) ----
+const warnTex=makeCanvasTex((g,w,h)=>{
+  g.fillStyle='#e8c020'; g.fillRect(4,4,w-8,h-8); g.strokeStyle='#141414'; g.lineWidth=6; g.strokeRect(4,4,w-8,h-8);
+  g.fillStyle='#141414'; g.beginPath(); g.moveTo(w/2,18); g.lineTo(w/2-30,70); g.lineTo(w/2+30,70); g.closePath(); g.fill();
+  g.fillStyle='#e8c020'; g.font='bold 42px monospace'; g.textAlign='center'; g.fillText('!',w/2,66);
+  g.fillStyle='#141414'; g.font='bold 22px monospace'; g.fillText('PELIGRO',w/2,102);
+  g.font='13px monospace'; g.fillText('AIRE COMPRIMIDO 7 bar',w/2,128);
+}, 200, 150);
+const arrowTex=makeCanvasTex((g,w,h)=>{ g.clearRect(0,0,w,h);
+  g.strokeStyle='#1c2026'; g.fillStyle='#1c2026'; g.lineWidth=13;
+  g.beginPath(); g.moveTo(16,h/2); g.lineTo(w-42,h/2); g.stroke();
+  g.beginPath(); g.moveTo(w-42,h/2-24); g.lineTo(w-8,h/2); g.lineTo(w-42,h/2+24); g.closePath(); g.fill();
+}, 160, 80);
+const serviceTex=makeCanvasTex((g,w,h)=>{ g.clearRect(0,0,w,h); g.fillStyle='#1c2026';
+  for(let i=0;i<8;i++){ const a=i/8*Math.PI*2; g.save(); g.translate(w/2+Math.cos(a)*(w/2-11), h/2+Math.sin(a)*(w/2-11)); g.rotate(a); g.fillRect(-5,-6,10,12); g.restore(); }
+  g.beginPath(); g.arc(w/2,h/2,w/2-14,0,Math.PI*2); g.fill();
+  g.globalCompositeOperation='destination-out'; g.beginPath(); g.arc(w/2,h/2,10,0,Math.PI*2); g.fill(); g.globalCompositeOperation='source-over';
+}, 64,64);
+const gaugeTex=makeCanvasTex((g,w,h)=>{
+  g.clearRect(0,0,w,h);
+  g.fillStyle='#141414'; g.beginPath(); g.arc(w/2,h/2,w/2-3,0,Math.PI*2); g.fill();
+  g.fillStyle='#e9e6dc'; g.beginPath(); g.arc(w/2,h/2,w/2-12,0,Math.PI*2); g.fill();
+  g.strokeStyle='#222'; g.lineWidth=2;
+  for(let i=0;i<11;i++){ const a=Math.PI*0.75+i/10*Math.PI*1.5; g.beginPath();
+    g.moveTo(w/2+Math.cos(a)*(w/2-16), h/2+Math.sin(a)*(w/2-16)); g.lineTo(w/2+Math.cos(a)*(w/2-24), h/2+Math.sin(a)*(w/2-24)); g.stroke(); }
+  const na=Math.PI*0.75+0.7*Math.PI*1.5; g.strokeStyle='#c22'; g.lineWidth=3;
+  g.beginPath(); g.moveTo(w/2,h/2); g.lineTo(w/2+Math.cos(na)*(w/2-22), h/2+Math.sin(na)*(w/2-22)); g.stroke();
+  g.fillStyle='#c22'; g.beginPath(); g.arc(w/2,h/2,4,0,Math.PI*2); g.fill();
+  g.fillStyle='#333'; g.font='bold 16px monospace'; g.textAlign='center'; g.fillText('bar',w/2,h*0.72);
+}, 128,128);
+// helper de decal: plano con map transparente, sin sombra, apenas proud
+function decal(map, w, h, x, y, z, parent){
+  const m=mesh(new THREE.PlaneGeometry(w,h), new THREE.MeshStandardMaterial({ map, transparent:true, depthWrite:false, roughness:0.6, metalness:0.0 }), x,y,z, parent);
+  m.castShadow=false; return m;
+}
+
+// ============================================================
+// AIREND — cuerpo de tornillo (Lathe + costillas torus + bridas + mirilla)
+//   Layout voxel: cuerpo horizontal a lo largo de X, ~x[-0.1..0.5], y~0.58, z~0.15
+//   adaptado de chiller-tornillo-agua-realistic-v1.html:534-565
+// ============================================================
+const AE = { x0:-0.10, x1:0.52, y:0.58, z:0.15, r:0.155 };
+(function buildAirend(){
+  const cx=(AE.x0+AE.x1)/2, L=AE.x1-AE.x0;
+  // cuerpo principal (barril mecanizado con extremos redondeados) — Lathe apuntando a +X
+  const pts=[new THREE.Vector2(0.0001,0)];
+  for(let i=0;i<=6;i++){ const a=i/6*Math.PI/2; pts.push(new THREE.Vector2(AE.r*Math.sin(a), 0.06*(1-Math.cos(a)))); }
+  pts.push(new THREE.Vector2(AE.r, L-0.06));
+  for(let i=6;i>=0;i--){ const a=i/6*Math.PI/2; pts.push(new THREE.Vector2(AE.r*Math.sin(a), L-0.06*(1-Math.cos(a)))); }
+  pts.push(new THREE.Vector2(0.0001, L));
+  const body=mesh(new THREE.LatheGeometry(pts,30), M.airend, AE.x0, AE.y, AE.z, trainG);
+  body.rotation.z=-Math.PI/2;   // Lathe Y -> apunta a +X
+  // SEGUNDO LÓBULO menor (casing de doble rotor -> perfil figura-8, lo distingue de un cilindro liso)
+  const lobe=cylX(0.10, L-0.10, M.airendDk, cx, AE.y-0.155, AE.z, trainG, 24);
+  cylX(0.10, 0.01, M.flange, AE.x0+0.05, AE.y-0.155, AE.z, trainG, 24);
+  cylX(0.10, 0.01, M.flange, AE.x1-0.05, AE.y-0.155, AE.z, trainG, 24);
+  // costillas de fundición (torus instanciado)
+  const ribGeo=new THREE.TorusGeometry(AE.r+0.006, 0.012, 8, 28);
+  const ribIM=new THREE.InstancedMesh(ribGeo, M.airendDk, 4);
+  const rq=new THREE.Quaternion().setFromEuler(new THREE.Euler(0,Math.PI/2,0));
+  [0.10,0.24,0.38,0.50].forEach((dx,i)=>{ _m4.compose(new THREE.Vector3(AE.x0+dx,AE.y,AE.z),rq,_s1); ribIM.setMatrixAt(i,_m4); });
+  ribIM.castShadow=false; ribIM.receiveShadow=true; trainG.add(ribIM);
+  // tapa/alojamiento de baleros en cada extremo
+  cylX(0.085, 0.05, M.steel, AE.x0-0.02, AE.y, AE.z, trainG, 20);   // extremo succión (-X)
+  cylX(0.085, 0.05, M.steel, AE.x1+0.02, AE.y, AE.z, trainG, 20);   // extremo acople (+X)
+  // BRIDA de succión (arriba, entrada de aire) — torus + cuello + tapa
+  cylY(0.075, 0.10, M.airend, AE.x0+0.10, AE.y+0.20, AE.z, trainG, 20);
+  mesh(new THREE.TorusGeometry(0.085,0.014,8,20), M.flange, AE.x0+0.10, AE.y+0.25, AE.z, trainG).rotation.x=Math.PI/2;
+  boltRing(trainG, AE.x0+0.10, AE.y+0.255, AE.z, 'y', 0.075, 6, M.flange, 0.008, 0.014);
+  // BRIDA/tobera de DESCARGA (arriba hacia +X, va a la tubería)
+  cylY(0.055, 0.14, M.airend, AE.x1-0.06, AE.y+0.22, AE.z, trainG, 18);
+  mesh(new THREE.TorusGeometry(0.062,0.012,8,18), M.flange, AE.x1-0.06, AE.y+0.29, AE.z, trainG).rotation.x=Math.PI/2;
+  // brida de acople al motor (cara +X)
+  cylX(0.10, 0.03, M.flange, AE.x1+0.06, AE.y, AE.z, trainG, 24);
+  boltRing(trainG, AE.x1+0.08, AE.y, AE.z, 'x', 0.075, 6, M.flange, 0.008, 0.02);
+  // MIRILLA de nivel de aceite (aro de latón + disco de vidrio) al costado +Z
+  const oil=cylZ(0.032, 0.03, M.brass, cx-0.05, AE.y-0.06, AE.z+0.16, trainG, 16); oil.castShadow=false;
+  const oilG=cylZ(0.022, 0.034, M.glass, cx-0.05, AE.y-0.06, AE.z+0.165, trainG, 16); oilG.castShadow=false;
+  // válvula deslizante (unloader) arriba
+  bevelBox(0.10,0.07,0.10, M.dark, cx, AE.y+0.19, AE.z-0.02, trainG);
+})();
+// ROTORES (animados, visibles solo en cutaway) — dos ejes que engranan
+(function buildRotors(){
+  rotorsG.position.set((AE.x0+AE.x1)/2, AE.y, AE.z);
+  const male=cylX(0.055, AE.x1-AE.x0-0.02, M.steel, 0, 0.05, 0, rotorsG, 12);
+  const female=cylX(0.045, AE.x1-AE.x0-0.02, M.steel, 0, -0.05, 0.03, rotorsG, 12);
+  // crestas helicoidales (torus sesgados) para que el giro LEA
+  const cg=new THREE.TorusGeometry(0.055,0.012,6,10);
+  const cim=new THREE.InstancedMesh(cg, M.steel, 5);
+  for(let i=0;i<5;i++){ const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(0,Math.PI/2,i*0.6));
+    _m4.compose(new THREE.Vector3(-0.22+i*0.11,0.05,0),q,_s1); cim.setMatrixAt(i,_m4); }
+  rotorsG.add(cim);
+  rotorsG.visible=false;
+})();
+
+// ============================================================
+// MOTOR TEFC — cuerpo + aletas longitudinales + caja de bornes + cowl + fan
+//   Layout voxel: x~[0.62..1.05], y~0.55, z~0.10 · adaptado de bomba:501-611
+// ============================================================
+const MO = { x:0.83, y:0.55, z:0.10, r:0.16, L:0.42 };
+(function buildMotor(){
+  cylX(MO.r, MO.L, M.motor, MO.x, MO.y, MO.z, trainG, 32);          // carcasa
+  // ALETAS LONGITUDINALES (TEFC) — cajas finas radiales, InstancedMesh
+  const finGeo=new THREE.BoxGeometry(MO.L-0.03, 0.04, 0.02);
+  const nF=16; const finIM=new THREE.InstancedMesh(finGeo, M.motor, nF);
+  for(let i=0;i<nF;i++){ const a=i/nF*Math.PI*2; const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(a,0,0));
+    _m4.compose(new THREE.Vector3(MO.x, MO.y+Math.cos(a)*(MO.r+0.015), MO.z+Math.sin(a)*(MO.r+0.015)), q, _s1); finIM.setMatrixAt(i,_m4); }
+  finIM.castShadow=false; finIM.receiveShadow=true; trainG.add(finIM);
+  // campana delantera (lado acople)
+  cylX(0.15, 0.05, M.motorDk, MO.x-MO.L/2-0.02, MO.y, MO.z, trainG, 28);
+  // cowl trasero + aro
+  cylX(0.165, 0.09, M.motorDk, MO.x+MO.L/2+0.04, MO.y, MO.z, trainG, 28);
+  cylX(0.17, 0.02, M.motorDk, MO.x+MO.L/2+0.10, MO.y, MO.z, trainG, 28);
+  // rejilla del ventilador (disco oscuro)
+  const gr=mesh(new THREE.CircleGeometry(0.162,28), M.grille, MO.x+MO.L/2+0.115, MO.y, MO.z, trainG); gr.rotation.y=Math.PI/2; gr.castShadow=false;
+  // CAJA DE BORNES arriba
+  bevelBox(0.16,0.10,0.14, M.motor, MO.x-0.02, MO.y+MO.r+0.06, MO.z, trainG);
+  bevelBox(0.17,0.02,0.15, M.dark,  MO.x-0.02, MO.y+MO.r+0.115, MO.z, trainG);
+  // patas del motor
+  for(const fx of [MO.x-0.14, MO.x+0.14]) bevelBox(0.09,0.03,0.30, M.motorDk, fx, MO.y-MO.r-0.01, MO.z, trainG);
+  // cáncamo de izaje
+  const eye=new THREE.TorusGeometry(0.022,0.007,8,18); eye.rotateY(Math.PI/2);
+  mesh(eye, M.steel, MO.x-0.05, MO.y+MO.r+0.13, MO.z, trainG);
+})();
+// VENTILADOR DEL MOTOR (animado, tras la rejilla)
+(function buildMotorFan(){
+  motorFan.position.set(MO.x+MO.L/2+0.075, MO.y, MO.z);
+  const hub=cylX(0.03,0.04, M.motorDk, 0,0,0, motorFan, 14);
+  const bladeGeo=new THREE.BoxGeometry(0.015,0.09,0.05);
+  const im=new THREE.InstancedMesh(bladeGeo, M.motorDk, 7);
+  for(let i=0;i<7;i++){ const a=i/7*Math.PI*2; const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(a+0.4,0,0));
+    _m4.compose(new THREE.Vector3(0, Math.cos(a)*0.09, Math.sin(a)*0.09), q, _s1); im.setMatrixAt(i,_m4); }
+  motorFan.add(im);
+})();
+
+// ============================================================
+// ACOPLE + GUARDA (bomba:499-531) — entre airend(+X) y motor
+// ============================================================
+const couplingG=new THREE.Group(); couplingG.position.set(0.58, AE.y, AE.z); trainG.add(couplingG);
+const coupMat=new THREE.MeshStandardMaterial({ color:0xd23b2a, emissive:0x000000, roughness:0.4, metalness:0.2 });
+(function buildCoupling(){
+  const hubGeo=new THREE.CylinderGeometry(0.06,0.06,0.05,20);
+  for(const hx of [-0.05,0.05]){ const h=new THREE.Mesh(hubGeo, M.steel); h.rotation.z=Math.PI/2; h.position.x=hx; h.castShadow=true; couplingG.add(h); }
+  const sleeve=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.06,20), coupMat); sleeve.rotation.z=Math.PI/2; sleeve.castShadow=true; couplingG.add(sleeve);
+  const key=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.012,0.016), M.dark); key.position.y=0.048; couplingG.add(key);
+})();
+// DC-5: guarda-acople CILÍNDRICA (tubo cerrado liso, silueta de hub — no perfil dentado)
+(function buildGuard(){
+  const shell=cylX(0.115, 0.16, M.safety, 0.58, AE.y, AE.z, trainG, 28);   // cilindro liso completo
+  // aros extremos que rematan el cilindro
+  mesh(new THREE.TorusGeometry(0.115,0.012,8,24), M.steel, 0.50, AE.y, AE.z, trainG).rotation.y=Math.PI/2;
+  mesh(new THREE.TorusGeometry(0.115,0.012,8,24), M.steel, 0.66, AE.y, AE.z, trainG).rotation.y=Math.PI/2;
+})();
+
+// ============================================================
+// SEPARADOR aire/aceite — vaso vertical (cilindro + domos) + patas
+//   Layout voxel: x~-0.55, z~-0.35, y 0.2..1.2 · dishedHead como chiller
+// ============================================================
+// DC-4: separador más ancho (dia ~0.40 m) para que no lea alto/delgado
+const SEP={ x:-0.55, z:-0.35, r:0.20, y0:0.26, y1:1.16 };
+(function buildSeparator(){
+  const H=SEP.y1-SEP.y0, cy=(SEP.y0+SEP.y1)/2;
+  cylY(SEP.r, H, M.separator, SEP.x, cy, SEP.z, trainG, 28);
+  dome(SEP.r, 0.12, M.separator, SEP.x, SEP.y1, SEP.z, 1, trainG);
+  dome(SEP.r, 0.12, M.separator, SEP.x, SEP.y0, SEP.z, -1, trainG);
+  // tapa superior con puerto de servicio + válvula mínima de presión
+  cylY(0.06,0.06, M.steel, SEP.x, SEP.y1+0.12, SEP.z, trainG, 16);
+  mesh(new THREE.TorusGeometry(0.07,0.012,8,18), M.flange, SEP.x, SEP.y1+0.14, SEP.z, trainG);
+  // patas (3)
+  for(let i=0;i<3;i++){ const a=i/3*Math.PI*2+0.5; cylY(0.016,0.24, M.steel, SEP.x+Math.cos(a)*0.13, SEP.y0-0.02, SEP.z+Math.sin(a)*0.13, trainG, 8); }
+  // mirilla/nivel lateral
+  cylY(0.012,0.4, M.brass, SEP.x+SEP.r+0.01, cy, SEP.z, trainG, 8);
+})();
+
+// ============================================================
+// AFTERCOOLER — bloque radiador + aletas + FAN AXIAL (aero-fan-kit) en -X
+//   Layout voxel: slab x -0.8..-0.7, y 0.4..1.3, z -0.4..0.4 · fan en x-0.9, guarda x-1.0
+// ============================================================
+const COOL={ x:-0.75, y:0.85, zc:0.0, fanX:-0.92, guardX:-1.0, r:0.42 };
+(function buildCooler(){
+  // marco del radiador
+  bevelBox(0.12,0.92,0.86, M.steel, COOL.x, COOL.y, COOL.zc, trainG);
+  // cara de aletas (planos de aluminio, InstancedMesh)
+  const finGeo=new THREE.PlaneGeometry(0.10,0.86);
+  const nF=26; const finIM=new THREE.InstancedMesh(finGeo, M.cooler, nF);
+  for(let i=0;i<nF;i++){ const yy=COOL.y-0.42+ i/(nF-1)*0.84;
+    _m4.compose(new THREE.Vector3(COOL.x-0.065, yy, COOL.zc), new THREE.Quaternion().setFromEuler(new THREE.Euler(0,Math.PI/2,0)), _s1); finIM.setMatrixAt(i,_m4); }
+  finIM.castShadow=false; finIM.receiveShadow=true; trainG.add(finIM);
+  // DC-7: cara del core con LÍNEAS DE ALETAS de radiador; aluminio claro AUTO-ILUMINADO
+  // (emissive sutil + metalness baja) para que nunca lea negro aunque falte luz directa
+  const face=mesh(new THREE.PlaneGeometry(0.82,0.86),
+    new THREE.MeshStandardMaterial({ map:finLineTex, color:0xd8dce0, roughness:0.42, metalness:0.4,
+      emissive:0x4a5460, emissiveIntensity:0.35, side:THREE.DoubleSide }),
+    COOL.x-0.062, COOL.y, COOL.zc, trainG);
+  face.rotation.y=-Math.PI/2; face.castShadow=false;
+  // manifold de entrada arriba
+  cylZ(0.05,0.7, M.copper, COOL.x-0.02, COOL.y+0.5, COOL.zc, trainG, 14);
+  // VENTILADOR AXIAL: venturi (torus) + guarda (torus radial + rayos)
+  const venturi=mesh(new THREE.TorusGeometry(COOL.r,0.05,10,32), M.dark, COOL.fanX, COOL.y, COOL.zc, trainG); venturi.rotation.y=Math.PI/2;
+  // guarda de dedos (aros torus + rayos) en x = guardX
+  const ringGeo=new THREE.TorusGeometry(1,0.01,6,32);
+  const gRings=new THREE.InstancedMesh(ringGeo, M.grille, 3);
+  [0.14,0.28,0.40].forEach((rr,i)=>{ _m4.compose(new THREE.Vector3(COOL.guardX,COOL.y,COOL.zc), new THREE.Quaternion().setFromEuler(new THREE.Euler(0,Math.PI/2,0)), new THREE.Vector3(rr,rr,rr)); gRings.setMatrixAt(i,_m4); });
+  gRings.castShadow=false; trainG.add(gRings);
+  const spokeGeo=new THREE.BoxGeometry(0.01,0.84,0.014);
+  const spokes=new THREE.InstancedMesh(spokeGeo, M.grille, 6);
+  for(let i=0;i<6;i++){ const a=i/6*Math.PI; const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(a,Math.PI/2,0));
+    _m4.compose(new THREE.Vector3(COOL.guardX,COOL.y,COOL.zc),q,_s1); spokes.setMatrixAt(i,_m4); }
+  spokes.castShadow=false; trainG.add(spokes);
+})();
+// FAN axial animado (hub + aspas con paso)
+(function buildCoolerFan(){
+  coolerFan.position.set(COOL.fanX, COOL.y, COOL.zc);
+  cylX(0.075,0.09, M.dark, 0,0,0, coolerFan, 16);   // hub
+  const bladeGeo=new THREE.BoxGeometry(0.02,0.34,0.14);
+  const im=new THREE.InstancedMesh(bladeGeo, M.steel, 6);
+  for(let i=0;i<6;i++){ const a=i/6*Math.PI*2; const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(a,0,0.5));
+    _m4.compose(new THREE.Vector3(0, Math.cos(a)*0.2, Math.sin(a)*0.2), q, _s1); im.setMatrixAt(i,_m4); }
+  im.castShadow=true; coolerFan.add(im);
+})();
+
+// ============================================================
+// TUBERÍAS (makePipe con codos) — airend->separador->cooler->válvula
+// ============================================================
+(function buildPipes(){
+  // 1) descarga airend (tobera +X arriba) -> tapa del separador
+  makePipe([[AE.x1-0.06, AE.y+0.30, AE.z],[AE.x1-0.06, 1.02, AE.z],[SEP.x, 1.02, -0.05],[SEP.x, SEP.y1+0.06, SEP.z]], 0.028, M.copper, trainG);
+  // junta esfera en el puerto de descarga
+  mesh(new THREE.SphereGeometry(0.035,14,12), M.copper, AE.x1-0.06, AE.y+0.30, AE.z, trainG);
+  // 2) separador (tope) -> aftercooler (manifold arriba)
+  makePipe([[SEP.x, SEP.y1+0.14, SEP.z],[SEP.x, 1.28, SEP.z],[COOL.x-0.02, 1.28, 0.0],[COOL.x-0.02, COOL.y+0.5, COOL.zc]], 0.028, M.copper, trainG);
+  // 3) aftercooler (fondo) -> válvula de salida (baja al frente +Z)
+  makePipe([[COOL.x-0.02, COOL.y-0.42, COOL.zc],[COOL.x, 0.30, 0.0],[-0.8, 0.24, 0.35],[-0.8, 0.22, 0.58]], 0.03, M.copper, trainG);
+  // retorno de aceite separador -> airend (línea fina)
+  makePipe([[SEP.x, 0.30, SEP.z],[-0.2, 0.30, 0.0],[AE.x0+0.1, AE.y-0.12, AE.z]], 0.016, M.copper, trainG);
+})();
+// VÁLVULA DE SALIDA (cuerpo + volante) anclada a la punta del tubo, unida al skid
+(function buildOutletValve(){
+  cylZ(0.05,0.12, M.steel, -0.8, 0.22, 0.6, trainG, 16);         // cuerpo
+  mesh(new THREE.TorusGeometry(0.055,0.012,8,20), M.flange, -0.8, 0.22, 0.63, trainG).rotation.x=Math.PI/2;
+  cylY(0.016,0.12, M.steel, -0.8, 0.30, 0.62, trainG, 10);        // vástago
+  mesh(new THREE.TorusGeometry(0.055,0.012,8,20), M.safety, -0.8, 0.37, 0.62, trainG);  // volante
+})();
+
+// ============================================================
+// SKID / BASE
+// ============================================================
+(function buildSkid(){
+  // base/skid NEGRO (estilo Atlas GA) con perfil y patas
+  bevelBox(2.02,0.12,1.18, M.dark, 0,0.08,0, model);            // viga base negra
+  bevelBox(1.9,0.05,1.06, M.motorDk, 0,0.155,0, model);         // reborde superior del skid
+  // patas en las 4 esquinas
+  for(const [fx,fz] of [[-0.92,-0.52],[-0.92,0.52],[0.92,-0.52],[0.92,0.52]])
+    bevelBox(0.16,0.04,0.16, M.motorDk, fx,0.02,fz, model);
+})();
+
+// ============================================================
+// CANOPY — paneles chapa + louvers extruidos + puerta + grilles
+//   (todo en canopyG; se oculta en cutaway ?train=1)
+// ============================================================
+(function buildCanopy(){
+  const HX=1.0, HZ=0.6, TOP=1.7, t=0.03;
+  // techo
+  bevelBox(2.0, t, 1.2, M.canopy, 0, TOP-t/2, 0, canopyG);
+  // pared trasera (-Z)
+  bevelBox(2.0, TOP-0.1, t, M.canopy, 0, (TOP+0.1)/2, -HZ+t/2, canopyG);
+  // extremo motor (+X) con rejilla circular para el cowl
+  bevelBox(t, TOP-0.1, 1.2, M.canopy, HX-t/2, (TOP+0.1)/2, 0, canopyG);
+  // extremo -X: marco (la guarda del fan cubre el hueco de escape)
+  bevelBox(t, TOP-0.1, 1.2, M.canopy, -HX+t/2, (TOP+0.1)/2, 0, canopyG);
+  const gr=mesh(new THREE.CircleGeometry(0.44,32), M.grille, -HX+0.001, 0.85, 0, canopyG); gr.rotation.y=-Math.PI/2; gr.castShadow=false;
+  // --- FRENTE estilo Atlas GA: PANELES DE ACCESO planos grandes con juntas finas ---
+  // cabezal superior
+  bevelBox(2.0, 0.16, t, M.canopy, 0, TOP-0.08, HZ-t/2, canopyG);
+  // respaldo oscuro recesado tras los paneles del lado derecho: las JUNTAS leen como líneas finas
+  // (cubre hasta x≈-0.10 para sellar la junta puerta/panel; deja libre el resto de la puerta para el reveal)
+  bevelBox(1.12, 1.4, t, M.canopyDk, 0.46, 0.80, HZ-0.03, canopyG);
+  // postes/esquinas verticales del frente
+  bevelBox(0.05, TOP-0.1, t, M.canopy, -HX+0.025, (TOP+0.1)/2, HZ-t/2, canopyG);
+  bevelBox(0.05, TOP-0.1, t, M.canopy,  HX-0.025, (TOP+0.1)/2, HZ-t/2, canopyG);
+  // 2 paneles de acceso planos a la derecha de la puerta (junta fina en x≈0.51)
+  bevelBox(0.44, 1.26, t, M.canopy, 0.28, 0.83, HZ-t/2, canopyG);   // panel central-derecho (aloja HMI)
+  bevelBox(0.42, 1.26, t, M.canopy, 0.73, 0.83, HZ-t/2, canopyG);   // panel derecho
+  // manijas empotradas (ranura oscura vertical) en cada junta de panel
+  for(const hx of [0.05, 0.51]) bevelBox(0.015, 0.26, 0.02, M.canopyDk, hx, 0.9, HZ, canopyG);
+  // clips/latches amarillos en la parte alta de las juntas (acento Atlas)
+  for(const lx of [0.05, 0.51]){ bevelBox(0.03,0.05,0.02, M.safety, lx, 1.42, HZ+0.005, canopyG); }
+  // REJILLA de ventilación CHICA en la parte baja del frente (no domina la cara)
+  bevelBox(0.5, 0.14, t, M.grille, 0.28, 0.30, HZ-t/2, canopyG);
+  const ventSlat=new THREE.BoxGeometry(0.46,0.012,0.015);
+  const ventIM=new THREE.InstancedMesh(ventSlat, M.canopyDk, 4);
+  for(let i=0;i<4;i++){ _m4.compose(new THREE.Vector3(0.28, 0.25+i*0.032, HZ-0.006), new THREE.Quaternion(), _s1); ventIM.setMatrixAt(i,_m4); }
+  ventIM.castShadow=false; canopyG.add(ventIM);
+  // rejilla baja adicional en el lateral +X (ventilación, chica)
+  bevelBox(t, 0.5, 0.4, M.grille, HX-t/2-0.001, 0.35, 0.25, canopyG);
+})();
+
+// ============================================================
+// PUERTA DE ACCESO — bisagra Y 0..105° (sella el frente-izquierdo x -0.9..0)
+// ============================================================
+(function buildDoor(){
+  doorPivot.position.set(-0.9, 0.85, 0.6);   // eje de bisagra (poste izquierdo, cara frontal)
+  // PANEL DE ACCESO plano grande con la LETRA grande estampada (relieve sutil, marca-neutral)
+  const doorMat=new THREE.MeshStandardMaterial({ map:letterTex, roughness:0.52, metalness:0.0 });
+  const panel=bevelBox(0.86, 1.26, 0.04, doorMat, 0.45, 0, 0.0, doorPivot);
+  // manija empotrada (ranura oscura vertical) en el borde libre
+  bevelBox(0.02, 0.24, 0.02, M.canopyDk, 0.80, 0, 0.03, doorPivot);
+  cylY(0.012,0.20, M.steel, 0.80, 0, 0.055, doorPivot, 10);
+})();
+
+// ============================================================
+// HMI (bisel + display emisivo CanvasTexture + e-stop hongo) · NAMEPLATE
+//   en el panel derecho frontal, sobre la cara +Z (parte del canopy -> cutaway lo oculta)
+// ============================================================
+const statusLedMat=new THREE.MeshStandardMaterial({ color:0x0a2018, emissive:0x00ff55, emissiveIntensity:0.15, roughness:0.3, metalness:0.0 });
+(function buildHMI(){
+  const HZf=0.6;
+  // CONTROLADOR arriba-centro del panel central-derecho (estilo GA)
+  bevelBox(0.34,0.30,0.03, M.hmi, 0.28, 1.20, HZf-0.005, canopyG);         // caja/bisel del controlador
+  // DC-3: PANTALLA como plano INSET PROUD (sobresale del bisel, lee como pantalla de vidrio)
+  bevelBox(0.26,0.20,0.02, M.dark, 0.24, 1.21, HZf+0.006, canopyG);        // marco negro inset de la pantalla
+  const disp=mesh(new THREE.PlaneGeometry(0.23,0.17),
+    new THREE.MeshStandardMaterial({ map:screenTex, emissive:0xffffff, emissiveMap:screenTex, emissiveIntensity:0.95, roughness:0.28, metalness:0 }),
+    0.24, 1.21, HZf+0.02, canopyG); disp.castShadow=false;                 // display proud
+  // DC-3: E-STOP con su propia BASE/COLLAR amarillo, al LADO del display (no encima)
+  cylZ(0.045,0.02, M.safety, 0.46, 1.06, HZf+0.004, canopyG, 20);          // collar amarillo
+  cylZ(0.03, 0.03, M.dark,   0.46, 1.06, HZf+0.012, canopyG, 16);          // base del botón
+  const es=mesh(new THREE.SphereGeometry(0.032,16,12), M.estop, 0.46, 1.06, HZf+0.035, canopyG); es.scale.z=0.6;  // hongo rojo
+  // LED de estado (verde con RUN, tenue en STANDBY)
+  const led=cylZ(0.012,0.012, statusLedMat, 0.13, 1.30, HZf+0.006, canopyG, 12); led.castShadow=false;
+  // NAMEPLATE (placa delgada) baja, en el panel derecho
+  const np=mesh(new THREE.PlaneGeometry(0.30,0.17),
+    new THREE.MeshStandardMaterial({ map:plateTex, roughness:0.5, metalness:0.3 }),
+    0.73, 0.5, HZf+0.002, canopyG); np.castShadow=false;
+})();
+
+// ============================================================
+// SERIGRAFÍA / DECALS DE SUPERFICIE (etiquetas, flechas, pernos, manómetro, bandas)
+// ============================================================
+(function buildDecals(){
+  const HZf=0.6, zf=HZf+0.006;
+  // etiqueta de PELIGRO · aire comprimido (panel derecho)
+  decal(warnTex, 0.15, 0.112, 0.86, 0.95, zf, canopyG);
+  // flecha de sentido de flujo (sobre el panel central-derecho)
+  decal(arrowTex, 0.17, 0.085, 0.30, 0.63, zf, canopyG);
+  // ícono de servicio
+  decal(serviceTex, 0.07, 0.07, 0.62, 0.66, zf, canopyG);
+  // PERNOS de esquina en los paneles de acceso (InstancedMesh)
+  const bq=new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2,0,0));
+  const corners=[];
+  for(const [px0,px1] of [[0.09,0.47],[0.55,0.92]]) for(const py of [0.40,1.42]) for(const px of [px0,px1]) corners.push([px,py]);
+  for(const py of [0.40,1.30]) for(const px of [-0.85,-0.06]) corners.push([px,py]);   // puerta
+  const bim=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.008,0.008,0.012,8), M.steel, corners.length);
+  corners.forEach(([px,py],i)=>{ _m4.compose(new THREE.Vector3(px,py,zf-0.006), bq, _s1); bim.setMatrixAt(i,_m4); });
+  bim.castShadow=false; canopyG.add(bim);
+  // MANÓMETRO en el separador (cara +Z, interior — se ve en cutaway)
+  cylZ(0.055,0.03, M.steel, SEP.x, 0.98, SEP.z+SEP.r-0.004, trainG, 18);          // caja del manómetro
+  const gm=mesh(new THREE.PlaneGeometry(0.1,0.1),
+    new THREE.MeshStandardMaterial({ map:gaugeTex, transparent:true, roughness:0.4, metalness:0.1 }),
+    SEP.x, 0.98, SEP.z+SEP.r+0.012, trainG); gm.castShadow=false;
+  // DC-8: BANDAS de color de flujo (aire / aceite) más MARCADAS, marca-neutral
+  const airBand=new THREE.MeshStandardMaterial({ color:0x2f8fe0, roughness:0.45, metalness:0.15 });
+  const oilBand=new THREE.MeshStandardMaterial({ color:0xe0a820, roughness:0.45, metalness:0.15 });
+  // OPT: 3 bandas de AIRE (descarga x2 + salida a cooler) en UN solo InstancedMesh
+  const qx=new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2,0,0));
+  const qz=new THREE.Quaternion().setFromEuler(new THREE.Euler(0,0,Math.PI/2));
+  const airIM=new THREE.InstancedMesh(new THREE.TorusGeometry(0.034,0.014,10,20), airBand, 3);
+  [[AE.x1-0.06,1.00,AE.z,qx],[AE.x1-0.06,0.90,AE.z,qx],[-0.7,1.28,0.0,qz]].forEach(([x,y,z,q],i)=>{ _m4.compose(new THREE.Vector3(x,y,z),q,_s1); airIM.setMatrixAt(i,_m4); });
+  airIM.castShadow=false; trainG.add(airIM);
+  // banda de ACEITE en el retorno
+  mesh(new THREE.TorusGeometry(0.024,0.011,10,18), oilBand, -0.2, 0.30, 0.0, trainG);
+})();
+
+// ============================================================
+// HOTSPOTS — partes clave (raycast + tooltip + ficha DOM)
+// ============================================================
+const PARTS = {
+  airend:    { name:'Airend de tornillo lubricado', spec:'Elemento compresor · rotor macho/hembra', pos:[0.20,0.82,0.15], interior:true },
+  motor:     { name:'Motor eléctrico TEFC',         spec:'45 kW · acoplado al airend',              pos:[0.83,0.76,0.10], interior:true },
+  separator: { name:'Separador aire/aceite',        spec:'Vaso vertical · 8 bar',                   pos:[-0.55,1.10,-0.35], interior:true },
+  cooler:    { name:'Aftercooler + ventilador',     spec:'Radiador de aluminio · fan axial',        pos:[-0.80,0.85,0.0], interior:true },
+  hmi:       { name:'Controlador HMI',              spec:'7.4 bar · LOAD 86%',                      pos:[0.28,1.24,0.62], interior:false },
+  valve:     { name:'Válvula de salida a red',      spec:'Aire comprimido · 7 bar',                 pos:[-0.80,0.44,0.66], interior:false },
+};
+const hotspotsG=new THREE.Group(); model.add(hotspotsG);
+const HS_RING=new THREE.TorusGeometry(0.05,0.008,8,20), HS_DOT=new THREE.SphereGeometry(0.016,12,10), HS_PICK=new THREE.SphereGeometry(0.11,8,6);
+const hotspots=[];
+for(const id in PARTS){ const p=PARTS[id];
+  const g=new THREE.Group(); g.position.set(p.pos[0],p.pos[1],p.pos[2]); hotspotsG.add(g);
+  const ringMat=new THREE.MeshStandardMaterial({ color:0x00d4aa, emissive:0x00d4aa, emissiveIntensity:0.55, roughness:0.4, metalness:0.0, transparent:true, opacity:0.85 });
+  const dotMat =new THREE.MeshStandardMaterial({ color:0x00d4aa, emissive:0x00d4aa, emissiveIntensity:1.0, roughness:0.3, metalness:0.0 });
+  const ring=new THREE.Mesh(HS_RING, ringMat); ring.castShadow=false; ring.userData.part=id;
+  const dot =new THREE.Mesh(HS_DOT, dotMat);  dot.castShadow=false;  dot.userData.part=id;
+  const pick=new THREE.Mesh(HS_PICK, new THREE.MeshBasicMaterial({ colorWrite:false, depthWrite:false })); pick.userData.part=id;
+  g.add(ring); g.add(dot); g.add(pick);
+  hotspots.push({ id, group:g, ringMat, dotMat, interior:p.interior, pos:new THREE.Vector3(p.pos[0],p.pos[1],p.pos[2]) });
+}
+
+// ============================================================
+// ESTADO / DERIVACIÓN ÚNICA (sync) / UI / QUERY PARAMS
+// ============================================================
+const state={ run:false, door:false, train:false, sel:null };
+let rpm=0, doorAng=0, hovered=null;
+const bRot=document.getElementById('bRot');
+const tooltipEl=document.getElementById('tooltip');
+const hsPanel=document.getElementById('hotspot'), hsName=document.getElementById('hsName'), hsSpec=document.getElementById('hsSpec');
+
+// -- efectos 3D derivados del estado --
+function applyRun(){
+  const on=state.run;
+  coupMat.emissive.setHex(on?0x00ff44:0x000000); coupMat.emissiveIntensity=on?0.5:0;
+  statusLedMat.emissiveIntensity = on?2.2:0.15;
+  statusLedMat.emissive.setHex(on?0x00ff55:0x114422);
+  drawHMIScreen(on);
+}
+function applyTrain(){
+  canopyG.visible=!state.train;                 // cutaway oculta TODO el canopy
+  rotorsG.visible = state.train || state.door;
+}
+// -- ÚNICA fuente de verdad: pinta 3D + botones + ficha + marcadores (nunca se contradicen) --
+function sync(){
+  applyRun(); applyTrain();
+  // DC-9: ficha/tooltip del HMI coherente con COMPRESOR (un compresor detenido NO muestra LOAD 86%)
+  PARTS.hmi.spec = state.run ? '7.4 bar · LOAD 86% · EN CARGA' : 'Línea 0.0 bar · LOAD 0% · STANDBY';
+  const setBtn=(idb,on)=>{ const b=document.getElementById(idb); b.className=on?'on':'off'; b.textContent=on?'ON':'OFF'; };
+  setBtn('bRun',state.run); setBtn('bDoor',state.door); setBtn('bTrain',state.train);
+  bRot.className=controls.autoRotate?'on':'off'; bRot.textContent=controls.autoRotate?'ON':'OFF';
+  // ficha DOM
+  const p = state.sel ? PARTS[state.sel] : null;
+  hsPanel.style.display = p ? 'block' : 'none';
+  if(p){ hsName.textContent=p.name; hsSpec.innerHTML='<span class="hk">▸</span> '+p.spec; }
+  // marcadores: interiores solo en cutaway; resalta seleccionado/hover
+  for(const h of hotspots){
+    h.group.visible = h.interior ? state.train : true;
+    const st = (h.id===state.sel)?'sel':(h.id===hovered?'hover':'idle');
+    const e = st==='sel'?1.6:(st==='hover'?1.1:0.55);
+    h.ringMat.emissiveIntensity=e; h.dotMat.emissiveIntensity=st==='idle'?1.0:1.8;
+    const s = st==='sel'?1.5:(st==='hover'?1.25:1.0); h.group.scale.setScalar(s);
+    h.ringMat.color.setHex(st==='sel'?0xffd040:0x00d4aa); h.dotMat.color.setHex(st==='sel'?0xffd040:0x00d4aa);
+    h.ringMat.emissive.setHex(st==='sel'?0xffd040:0x00d4aa); h.dotMat.emissive.setHex(st==='sel'?0xffd040:0x00d4aa);
+  }
+}
+
+// -- botones (togglean estado y re-sincronizan; estado y 3D nunca divergen) --
+function bind(id,key){ document.getElementById(id).onclick=()=>{ state[key]=!state[key]; sync(); }; }
+bind('bRun','run'); bind('bDoor','door'); bind('bTrain','train');
+bRot.onclick=()=>{ controls.autoRotate=!controls.autoRotate; sync(); };
+document.getElementById('hsClose').onclick=()=>{ state.sel=null; sync(); updateTooltip(); };
+
+// -- RAYCAST hotspots (hover + clic) --
+const ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
+function pickAt(ev){
+  const r=renderer.domElement.getBoundingClientRect();
+  ndc.x=((ev.clientX-r.left)/r.width)*2-1; ndc.y=-((ev.clientY-r.top)/r.height)*2+1;
+  ray.setFromCamera(ndc,camera);
+  const hits=ray.intersectObjects(hotspotsG.children,true);
+  return hits.length? hits[0].object.userData.part : null;
+}
+function updateTooltip(ev){
+  // hover sigue al cursor; si no hay hover pero hay selección, ancla al marcador proyectado
+  if(hovered && ev){ const p=PARTS[hovered];
+    tooltipEl.textContent=p.name; tooltipEl.style.display='block';
+    tooltipEl.style.left=(ev.clientX+14)+'px'; tooltipEl.style.top=(ev.clientY+14)+'px'; return;
+  }
+  if(state.sel){ const h=hotspots.find(x=>x.id===state.sel);
+    if(h && h.group.visible){ const v=h.pos.clone().project(camera);
+      const r=renderer.domElement.getBoundingClientRect();
+      tooltipEl.textContent=PARTS[state.sel].name; tooltipEl.style.display='block';
+      tooltipEl.style.left=(r.left+(v.x*0.5+0.5)*r.width+12)+'px';
+      tooltipEl.style.top=(r.top+(-v.y*0.5+0.5)*r.height-6)+'px'; return; }
+  }
+  tooltipEl.style.display='none';
+}
+renderer.domElement.addEventListener('pointermove',ev=>{
+  const id=pickAt(ev); if(id!==hovered){ hovered=id; sync(); }
+  renderer.domElement.style.cursor=id?'pointer':'grab';
+  updateTooltip(ev);
+});
+renderer.domElement.addEventListener('click',ev=>{ const id=pickAt(ev); state.sel=id||null; sync(); updateTooltip(id?ev:null); });
+addEventListener('keydown',ev=>{ if(ev.key==='Escape'){ state.sel=null; sync(); updateTooltip(); } });
+
+// -- Init por query param con SNAP determinista (captura del gate) --
+(function initFromQuery(){
+  const q=new URLSearchParams(location.search); const on1=v=>v==='1'||v==='true';
+  const has=[...q.keys()].length>0;
+  if(q.has('run'))   state.run=on1(q.get('run'));
+  if(q.has('door'))  state.door=on1(q.get('door'));
+  if(q.has('train')) state.train=on1(q.get('train'));
+  // ?sel=<parte>: selecciona y (si es interior) abre cutaway para que sea visible en la foto
+  const sel=q.get('sel');
+  if(sel && PARTS[sel]){ state.sel=sel; if(PARTS[sel].interior) state.train=true; }
+  if(has){ const wantSpin=q.has('spin')?on1(q.get('spin')):false; controls.autoRotate=wantSpin; }
+  sync();
+  if(has){                                              // SNAP: sin transición bajo query param
+    rpm=state.run?1:0; doorAng=state.door?1:0; doorPivot.rotation.y=-doorAng*(105*Math.PI/180);
+  }
+  if(q.get('view')==='cooler'){
+    const tgt=new THREE.Vector3(-0.7,0.85,0), r=4.2, az=225*Math.PI/180, el=20*Math.PI/180;
+    controls.target.copy(tgt);
+    camera.position.set(tgt.x+r*Math.cos(el)*Math.sin(az), tgt.y+r*Math.sin(el), tgt.z+r*Math.cos(el)*Math.cos(az));
+    camera.lookAt(tgt); controls.update();
+  }
+  updateTooltip();
+})();
+
+// ============================================================
+// RESIZE / ANIMATE
+// ============================================================
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+
+const clock=new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05), t=clock.elapsedTime;
+  const target=state.run?1:0, k=state.run?1.6:0.6;
+  rpm+=(target-rpm)*Math.min(1,dt*k); if(Math.abs(rpm-target)<0.0015) rpm=target;
+  const spin=rpm*13;
+  coolerFan.rotation.x -= dt*spin;
+  motorFan.rotation.x  -= dt*spin;
+  rotorsG.rotation.x   += dt*spin*1.4;
+  couplingG.rotation.x -= dt*spin;
+  const dT=state.door?1:0; doorAng+=(dT-doorAng)*Math.min(1,dt*4);
+  doorPivot.rotation.y=-doorAng*(105*Math.PI/180);
+  const amp=state.run?(0.0015+0.004*rpm):0;
+  model.position.set(Math.sin(t*47)*amp, 0, Math.sin(t*53+1.6)*amp*0.8);
+  // billboard de los marcadores de hotspot (miran a la cámara)
+  for(const h of hotspots){ if(h.group.visible) h.group.quaternion.copy(camera.quaternion); }
+  // tooltip fijado a la selección sigue al marcador al orbitar
+  if(state.sel && !hovered) updateTooltip();
+  controls.update();
+  renderer.render(scene,camera);
+}
+animate();
+
+// ============================================================
+// QA HOOK — exportación GLB (research/tools/export-glb.mjs)
+// El exporter lee globalThis.__airtechApp.runtime.scene (GLTFExporter) y strip-ea
+// environment/background y texturas no-dibujables (PMREM/DataTexture) por su cuenta.
+// Estado DEFAULT = modelo COMPLETO: canopy visible (state.train=false) + interior (trainG)
+// + los rotores internos (visible=false por default) forzados a visible para que el
+// GLB incluya TODO el tren de aire (gabinete + airend/motor/separador/cooler/tuberías/rotores).
+// Las CanvasTexture (nameplate, HMI, decals, roughnessMap) son drawable -> SÍ se exportan.
+// Es solo una referencia extra a la escena: no altera query params ni interacción.
+rotorsG.visible = true;
+globalThis.__airtechApp = { runtime: { scene: scene, renderer: renderer } };
+// Flag de readiness (convención app-ready-flag): el exporter/capturador espera este atributo
+// antes de exportar. No es status-text -> solo atributo en <html>, nunca textContent.
+document.documentElement.setAttribute('data-app-ready', 'true');
+</script>
+</body>
+</html>
