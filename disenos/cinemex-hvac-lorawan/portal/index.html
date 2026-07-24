@@ -55,6 +55,25 @@
   .proyecto.proximo{opacity:.6}
   .proyecto.proximo .abrir{background:var(--rule);color:var(--dim)}
 
+  /* A CLIENT FOLDER groups several dashboards behind one card and one access key. It is drawn as a
+     literal folder: a tab sits above the card, and ::after paints over the card's own top border so
+     the tab reads as part of the same shape. The dashboards inside are listed on the card, but the
+     whole card is a single link to the folder page (p/<cliente>/) which carries the real cards. */
+  /* overflow stays visible so the tab can sit outside the card, so the thumbnail has to round its
+     own top corners — .proyecto's overflow:hidden is what normally does that. */
+  .proyecto.carpeta{margin-top:14px;overflow:visible;position:relative}
+  .proyecto.carpeta .miniatura{border-radius:calc(var(--radio) - 1px) calc(var(--radio) - 1px) 0 0}
+  .proyecto.carpeta::before{content:'';position:absolute;top:-13px;left:18px;width:108px;height:14px;
+    background:var(--card);border:1px solid var(--rule);border-bottom:none;border-radius:8px 8px 0 0}
+  .proyecto.carpeta::after{content:'';position:absolute;top:-1px;left:19px;width:106px;height:2px;
+    background:var(--card)}
+  .proyecto.carpeta .nombre{font-size:20px;font-weight:700;letter-spacing:.02em}
+  .proyecto.carpeta p{flex:none}   /* the contents list takes the slack, not the description */
+  .proyecto.carpeta .contenido{list-style:none;display:flex;flex-direction:column;gap:6px;margin-top:4px;flex:1}
+  .proyecto.carpeta .contenido li{font-size:13px;color:var(--dim);display:flex;align-items:baseline;gap:8px}
+  .proyecto.carpeta .contenido li::before{content:'';flex:none;width:6px;height:6px;border-radius:2px;
+    background:var(--accent);opacity:.55}
+
   footer{max-width:1100px;margin:0 auto;padding:0 24px 40px;color:var(--dim);font-size:12px}
 </style>
 </head>
@@ -76,7 +95,8 @@
 
 <script>
   // One place to register projects — add a row here as new dashboards/3D designs land.
-  // Every project lives under /p/ and is guarded by its own access key (see gate.mjs). Clicking a
+  // Every project lives under /p/ and is guarded server-side by its own access key (see
+  // functions/_middleware.js — the login page is served instead of the project). Clicking a
   // card NAVIGATES to it (real URL in the address bar); the project's own "← Proyectos" returns here.
   const PROYECTOS = [
     {
@@ -109,17 +129,63 @@
       tag: 'Diseño 3D · Aire comprimido',
       desc: 'Sala de compresores de tornillo en 3D con gobernador de secuencia: presión de línea, estado por unidad y KPIs de energía en vivo.',
       url: 'p/gobernador/',
-      // miniatura pendiente — sin screenshot en este entorno; usa el placeholder hasta agregar assets/gobernador-thumb.png
+      miniatura: 'assets/gobernador-thumb.png',
+    },
+    {
+      id: 'rescom',
+      carpeta: true,
+      titulo: 'RESCOM',
+      tag: 'Cliente · 3 dashboards',
+      desc: 'Redes y servicios en comunicación.',
+      contenido: [
+        'Centro de Control Energético',
+        'BMS · Edificio Corporativo, pisos 4 a 7',
+        'BMS · Planta Chihuahua',
+      ],
+      url: 'p/rescom/',
+      miniatura: 'assets/rescom-folder.png',
+    },
+    {
+      id: 'rotzinger',
+      carpeta: true,
+      titulo: 'ROTZINGER',
+      tag: 'Cliente · 3 dashboards',
+      desc: 'Refrigeración y aire acondicionado.',
+      contenido: [
+        'Centro de Control Energético',
+        'BMS · Edificio Corporativo, pisos 4 a 7',
+        'BMS · Planta Chihuahua',
+      ],
+      url: 'p/rotzinger/',
+      miniatura: 'assets/rotzinger-folder.png',
     },
     // Próximos: { id, titulo, tag, desc, url: 'p/<proyecto>/', miniatura } — o { proximo: true }.
+    // Carpeta de cliente: { id, carpeta: true, titulo, tag, desc, contenido: [...], url }.
   ];
 
   const grid = document.getElementById('grid');
   for (const p of PROYECTOS) {
     // A live project is an <a> that navigates; a "próximo" placeholder is an inert <div>.
     const card = document.createElement(p.proximo ? 'div' : 'a');
-    card.className = 'proyecto' + (p.proximo ? ' proximo' : '');
+    card.className = 'proyecto' + (p.proximo ? ' proximo' : '') + (p.carpeta ? ' carpeta' : '');
     if (!p.proximo) card.href = p.url;
+
+    if (p.carpeta) {
+      // A folder previews one of its dashboards and lists the rest; opening it lands on the folder
+      // page, which carries a card (with its own preview) per dashboard.
+      const items = p.contenido.map((c) => `<li>${c}</li>`).join('');
+      card.innerHTML = `<div class="miniatura" style="background-image:url('${p.miniatura}')"></div>
+        <div class="cuerpo">
+          <span class="tag">${p.tag}</span>
+          <span class="nombre">${p.titulo}</span>
+          <p>${p.desc}</p>
+          <ul class="contenido">${items}</ul>
+          <span class="abrir">Abrir carpeta →</span>
+        </div>`;
+      grid.appendChild(card);
+      continue;
+    }
+
     const mini = p.miniatura
       ? `<div class="miniatura" style="background-image:url('${p.miniatura}')"></div>`
       : '<div class="miniatura"></div>';
