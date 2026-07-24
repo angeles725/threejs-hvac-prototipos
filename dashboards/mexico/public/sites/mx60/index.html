@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MX60 Chihuahua — BMS</title>
+  <!-- FOUC prevention — SDD mx60-theme-light-dark-per-user.
+       MUST run before any <link rel="stylesheet"> so data-theme is on <html>
+       before CSS parses. Synchronous, no deps. -->
+  <script>(function(){try{var t=localStorage.getItem('mx60.user.theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);else document.documentElement.setAttribute('data-theme','dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+  <link rel="stylesheet" href="css/main.css?v=__BUILD_ID__">
+  <link rel="stylesheet" href="css/components.css?v=__BUILD_ID__">
+  <link rel="icon" href="img/brand-mark.png" type="image/png">
+
+  <!-- Three.js importmap — local bundle, offline-ready (mirror of Angeles
+       ext/threejs/). UpDetail.js loads as ES module and imports from these
+       short paths. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three":          "./ext/threejs/three.module.js",
+      "three/addons/":  "./ext/threejs/addons/"
+    }
+  }
+  </script>
+</head>
+<body>
+
+  <!-- ============================================================
+       HEADER — Honeywell branded, SanLuis-style
+       ============================================================ -->
+  <header id="app-header">
+    <canvas id="particle-canvas"></canvas>
+    <div class="header-content">
+      <div class="header-top">
+        <div class="header-title" role="img" aria-label="RESCOM">
+          <img src="img/brand-logo-inverse.png" alt="" class="header-title-img logo-dark">
+          <img src="img/brand-logo.png" alt="" class="header-title-img logo-light">
+        </div>
+        <div class="header-spacer"></div>
+        <!-- Theme toggle — SDD mx60-theme-light-dark-per-user.
+             Icon state driven by CSS [data-theme] selector (no JS swap needed).
+             Dark mode: shows SUN (click → go light). Light mode: shows MOON (click → go dark).
+             Click handler wired in DashboardApp.init after ThemeStore.init(). -->
+        <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Cambiar tema" title="Cambiar tema claro/oscuro">
+          <svg class="theme-icon-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="5" fill="currentColor"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="23"/><line x1="1" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="23" y2="12"/><line x1="4.2" y1="4.2" x2="6.3" y2="6.3"/><line x1="17.7" y1="17.7" x2="19.8" y2="19.8"/><line x1="4.2" y1="19.8" x2="6.3" y2="17.7"/><line x1="17.7" y1="6.3" x2="19.8" y2="4.2"/></g></svg>
+          <svg class="theme-icon-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 109.8 9.8z" fill="currentColor"/></svg>
+        </button>
+        <div id="header-clock" class="header-clock"></div>
+      </div>
+      <div class="header-subtitle">
+        Building Automation System &mdash; <span id="siteName">MX60 Chihuahua</span>
+      </div>
+    </div>
+
+    <div class="nav-bar-wrap">
+      <button type="button" class="nav-trigger" data-action="nav-toggle" aria-expanded="false" aria-controls="navMenu">
+        <span class="nav-trigger-icon" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </span>
+        <span class="nav-trigger-label" data-prop="active-page-label">Home</span>
+        <span class="nav-trigger-chevron" aria-hidden="true">▾</span>
+      </button>
+      <nav class="nav-bar" id="navMenu" role="navigation" aria-label="Main">
+        <div class="nav-item" data-page="home">Home</div>
+        <div class="nav-item" data-page="alarms">
+          Alarms <span id="nav-alarm-badge" class="nav-badge" style="display:none">0</span>
+        </div>
+        <div class="nav-item" data-page="equipment">Equipment</div>
+        <div class="nav-item" data-page="configuracion">Configuración</div>
+        <div class="nav-item" data-page="schedules">Schedules</div>
+      </nav>
+      <div class="nav-backdrop" data-action="nav-close" aria-hidden="true"></div>
+      <!-- SDD mx60-header-alarm-indicator-and-sticky-nav: alarm indicator mount point.
+           AlarmIndicatorView mounts here at boot (long-lived, not route-bound). -->
+      <div id="mx60-alarm-indicator-mount"></div>
+    </div>
+  </header>
+
+  <!-- ============================================================
+       MAIN CONTENT — page sections (only the active one is shown)
+       ============================================================ -->
+  <main id="main-content">
+    <section class="page" id="page-home"></section>
+    <section class="page" id="page-alarms"></section>
+    <section class="page" id="page-alarm-detail"></section>
+    <section class="page" id="page-schedules"></section>
+    <section class="page" id="page-equipment"></section>
+    <section class="page" id="page-detail"></section>
+    <section class="page" id="page-configuracion"></section>
+  </main>
+
+  <!-- ============================================================
+       FOOTER
+       ============================================================ -->
+  <footer class="app-footer">
+    BMS &mdash; MX60 Chihuahua
+  </footer>
+
+  <!-- ============================================================
+       SCRIPTS — load order matters
+       ============================================================
+       CRITICAL: UMD libraries (Chart.js, date-fns adapter) MUST load
+       BEFORE require.js, otherwise their `define()` calls collide with
+       RequireJS's anonymous-define guard and throw "Mismatched anonymous
+       define() module". This is the SanLuis-verified order.
+       ============================================================ -->
+
+  <!-- 1) UMD libraries — load FIRST so they register as globals (window.Chart, etc.)
+       and don't try to AMD-register against RequireJS. -->
+  <script src="ext/chartjs/chart.umd.min.js?v=__BUILD_ID__"></script>
+  <script src="ext/chartjs/chartjs-adapter-date-fns.bundle.min.js?v=__BUILD_ID__"></script>
+
+  <!-- 2) Niagara-served RequireJS config (paths/packages incl. baja! plugin) -->
+  <script src="/requirejs/config.js"></script>
+  <!-- 3) RequireJS loader (Tridium-shipped) — reads the global 'require' config set above -->
+  <script src="/module/js/com/tridium/js/ext/require/require.min.js"></script>
+  <!-- 4) Boot bajaScript — pattern verified against SanLuis production -->
+  <script>
+    require(['baja!'], function(baja) {
+      window.baja = baja;
+      console.log('[index.html] BajaScript ready');
+    }, function(err) {
+      console.warn('[index.html] BajaScript failed to load — REST fallback only:', err);
+    });
+  </script>
+
+  <!-- 5) WritePoint helper — must be available before any detail page or store that writes -->
+  <script src="js/lib/WritePoint.js?v=__BUILD_ID__"></script>
+  <!-- Version — AUTO-GENERATED at build time by generateBuildId Gradle task.
+       Sets window.MX60.BUILD_ID = "<gitSHA>-<unixSec>" so VersionCheck can
+       compare against the live /mx60/version.json on poll. Must precede every
+       other MX60 script so the constant is defined before any consumer reads it.
+       SDD mx60-version-notification. -->
+  <script src="js/lib/Version.js?v=__BUILD_ID__"></script>
+  <!-- HistoryVocabulary — single source of truth for history range vocabulary
+       (UpDetail / CarcamoDetail / DataloggerDetail consume the same RANGES + RANGE_TO_BACKEND).
+       Classic script (no `type="module"`) so both ES-module and classic consumers can read
+       window.MX60.HistoryVocabulary. Must precede the 3 detail pages below. -->
+  <script src="js/lib/HistoryVocabulary.js?v=__BUILD_ID__"></script>
+  <!-- ChartTheme — CP3: shared Chart.js chrome palette (dark + light).
+       Must precede DataloggerDetail, UpDetail, CarcamoDetail. -->
+  <script src="js/app/ChartTheme.js?v=__BUILD_ID__"></script>
+  <!-- VersionCheck — polls /mx60/version.json every 60s, dispatches
+       `mx60-update-available` CustomEvent on detected drift. Listens-only
+       behavior: no banner without UpdateBanner.js below.
+       SDD mx60-version-notification. -->
+  <script src="js/lib/VersionCheck.js?v=__BUILD_ID__"></script>
+  <!-- UpdateBanner — global banner shown when VersionCheck detects an update.
+       Registers the listener on init(); inject DOM on first event; click
+       "Actualizar" → location.href bypass with timestamp query.
+       SDD mx60-version-notification. -->
+  <script src="js/app/UpdateBanner.js?v=__BUILD_ID__"></script>
+  <!-- Util modules — must precede SubscriptionPool and app scripts that depend on them -->
+  <script src="js/util/Dropdown.js?v=__BUILD_ID__"></script>
+  <script src="js/util/Popover.js?v=__BUILD_ID__"></script>
+  <script src="js/util/RelativeTime.js?v=__BUILD_ID__"></script>
+  <script src="js/util/CsvExport.js?v=__BUILD_ID__"></script>
+  <!-- SDD mx60-frontend-equipment-and-planta-label-mapping:
+       Fuente unica de verdad para labels. Consumidos por ScheduleView,
+       EquipmentCard, Configuracion, AlarmsPage. Cargar ANTES de js/app/*.
+       Orden entre ambos helpers es indistinto (referencia en runtime). -->
+  <script src="js/util/EquipmentLabels.js?v=__BUILD_ID__"></script>
+  <script src="js/util/PlantaLabels.js?v=__BUILD_ID__"></script>
+  <!-- SubscriptionPool — must precede EquipmentData.js -->
+  <script src="js/app/SubscriptionPool.js?v=__BUILD_ID__"></script>
+  <script src="js/app/ConfigManager.js?v=__BUILD_ID__"></script>
+  <script src="js/app/Router.js?v=__BUILD_ID__"></script>
+  <script src="js/app/ParticleAnimation.js?v=__BUILD_ID__"></script>
+  <script src="js/app/Toast.js?v=__BUILD_ID__"></script>
+  <script src="js/app/Confirm.js?v=__BUILD_ID__"></script>
+  <script src="js/app/AlarmLatchStore.js?v=__BUILD_ID__"></script>
+  <script src="js/app/StatusResolver.js?v=__BUILD_ID__"></script>
+  <script src="js/app/AlarmsManager.js?v=__BUILD_ID__"></script>
+  <!-- SDD mx60-header-alarm-indicator-and-sticky-nav: must be AFTER AlarmsManager
+       (subscribes to it) and BEFORE DashboardApp (which calls _bootAlarmIndicator). -->
+  <script src="js/app/AlarmIndicatorView.js?v=__BUILD_ID__"></script>
+  <script src="js/app/ModoOverrideStore.js?v=__BUILD_ID__"></script>
+  <script src="js/app/OutputOverrideStore.js?v=__BUILD_ID__"></script>
+  <script src="js/app/UpThresholdStore.js?v=__BUILD_ID__"></script>
+  <script src="js/app/CarcamoThresholdStore.js?v=__BUILD_ID__"></script>
+  <script src="js/app/DataloggerThresholdStore.js?v=__BUILD_ID__"></script>
+  <!-- ThemeStore — SDD mx60-theme-light-dark-per-user.
+       Must precede DashboardApp.js (which calls ThemeStore.init) and any module
+       that calls MX60.ThemeStore.getTheme()/subscribe(). -->
+  <script src="js/app/ThemeStore.js?v=__BUILD_ID__"></script>
+  <!-- CursorParity — Chart.js-adjacent plugin for syncing vertical cursor lines
+       between charts of the same detail view (UP, Cárcamo, Datalogger). Exposes
+       window.MX60.CursorParity. MUST load AFTER ThemeStore: its module-load
+       theme wiring calls MX60.ThemeStore.getTheme()/subscribe() at load time.
+       Must precede the 3 detail pages below. SDD mx60-detail-charts-parity. -->
+  <script src="js/lib/CursorParityPlugin.js?v=__BUILD_ID__"></script>
+  <script src="js/app/DashboardApp.js?v=__BUILD_ID__"></script>
+  <!-- LiveHistoryBuffer — in-memory ring buffer for buffer-mode history (no BHistoryExt needed).
+       Must precede EquipmentData.js so the buffer exists when _notify() first fires. -->
+  <script src="js/app/LiveHistoryBuffer.js?v=__BUILD_ID__"></script>
+  <!-- Page components — auto-register against DashboardApp on load. -->
+  <script src="js/app/EquipmentData.js?v=__BUILD_ID__"></script>
+  <!-- T2.6: aggregator/scheduler entre EquipmentData (poll) y UI subscribers.
+       Coalesce N pushes -> 1 flush throttled (RAF + 500ms cap). Must precede UpDetail.js. -->
+  <script src="js/app/EquipmentSnapshotStore.js?v=__BUILD_ID__"></script>
+  <script src="js/app/HomeMap.js?v=__BUILD_ID__"></script>
+  <script src="js/app/EquipmentCard.js?v=__BUILD_ID__"></script>
+  <script src="js/app/EquipmentDetail.js?v=__BUILD_ID__"></script>
+  <script src="js/app/DataloggerDetail.js?v=__BUILD_ID__"></script>
+  <script src="js/app/Configuracion.js?v=__BUILD_ID__"></script>
+  <script src="js/app/ScheduleView.js?v=__BUILD_ID__"></script>
+  <!-- C4 chihuahua-reflow-sanluis-replica: Alarms Reflow + Schedules navOrd
+       Load order: TimeRangePicker first (no deps), then presentational components,
+       then AlarmsPage last (depends on C1-C7). -->
+  <script src="js/app/TimeRangePicker.js?v=__BUILD_ID__"></script>
+  <script src="js/app/BulkActionBar.js?v=__BUILD_ID__"></script>
+  <script src="js/app/AlarmDetailsTable.js?v=__BUILD_ID__"></script>
+  <script src="js/app/AlarmNotesModal.js?v=__BUILD_ID__"></script>
+  <script src="js/app/AlarmCards.js?v=__BUILD_ID__"></script>
+  <script src="js/app/AlarmsPage.js?v=__BUILD_ID__"></script>
+  <script src="js/app/AlarmDetailPage.js?v=__BUILD_ID__"></script>
+  <!-- UpDetail is an ES module (uses Three.js). It is deferred by default,
+       so it runs after the IIFEs above have registered MX60.EquipmentDetail. -->
+  <script type="module" src="js/app/UpDetail.js?v=__BUILD_ID__"></script>
+  <script type="module" src="js/app/CarcamoDetail.js?v=__BUILD_ID__"></script>
+  <script>
+    (function() {
+      'use strict';
+      var root = document.getElementById('main-content');
+      MX60.DashboardApp.init(root);
+
+      // Header particle animation — runs for the lifetime of the page.
+      // Has destroy() available if the header is ever torn down (it isn't
+      // in the current shell, but the contract is in place).
+      if (MX60.ParticleAnimation) MX60.ParticleAnimation.init();
+
+      // T2.7: LiveHistoryBuffer ahora es subscriber del EquipmentSnapshotStore
+      // (en lugar de feed manual desde EquipmentData._notify). init() debe
+      // llamarse despues de que el store este disponible (cargado mas arriba).
+      if (MX60.LiveHistoryBuffer && MX60.LiveHistoryBuffer.init) MX60.LiveHistoryBuffer.init();
+
+      // Mobile nav drawer toggle: trigger opens, backdrop or item-click closes.
+      var navWrap = document.querySelector('.nav-bar-wrap');
+      var navTrigger = document.querySelector('[data-action="nav-toggle"]');
+      var navBackdrop = document.querySelector('[data-action="nav-close"]');
+      if (navWrap && navTrigger) {
+        navTrigger.addEventListener('click', function() {
+          var open = navWrap.classList.toggle('is-open');
+          navTrigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }, false);
+      }
+      if (navBackdrop) {
+        navBackdrop.addEventListener('click', function() {
+          navWrap.classList.remove('is-open');
+          if (navTrigger) navTrigger.setAttribute('aria-expanded', 'false');
+        }, false);
+      }
+      // Close on Esc
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && navWrap && navWrap.classList.contains('is-open')) {
+          navWrap.classList.remove('is-open');
+          if (navTrigger) navTrigger.setAttribute('aria-expanded', 'false');
+        }
+      }, false);
+
+      // Measure the actual header height and expose it as a CSS variable
+       // so HOME (and any other full-bleed page) can pin itself directly
+       // below the header without guessing pixel values. Keeps working when
+       // header content changes (logo size, subtitle wraps, nav adds items).
+      var headerEl = document.getElementById('app-header');
+      function setHeaderHeight() {
+        if (!headerEl) return;
+        var h = headerEl.offsetHeight;
+        document.documentElement.style.setProperty('--header-height', h + 'px');
+      }
+      setHeaderHeight();
+      window.addEventListener('resize', setHeaderHeight, false);
+      // Re-measure once images have loaded (logo size can shift the header).
+      window.addEventListener('load', setHeaderHeight, false);
+
+      // Header clock — same format as SanLuis: "vie, 2 may, 14:23:45".
+      // Locale es-MX, weekday short + month short + day + HH:MM:SS.
+      var clockEl = document.getElementById('header-clock');
+      function tickClock() {
+        if (!clockEl) return;
+        clockEl.textContent = new Date().toLocaleString('es-MX', {
+          weekday: 'short', month: 'short', day: 'numeric',
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+      }
+      tickClock();
+      // C2 fix: capture interval id and clear on page unload (Regla #4 — no
+      // dangling setIntervals). The clock lives for the lifetime of the page;
+      // the cleanup is a contract-correctness measure for future tear-down.
+      var clockIntervalId = setInterval(tickClock, 1000);
+      window.addEventListener('beforeunload', function() {
+        clearInterval(clockIntervalId);
+      }, false);
+    })();
+  </script>
+</body>
+</html>
