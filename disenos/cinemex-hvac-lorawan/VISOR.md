@@ -35,49 +35,62 @@ send clients.** Pages 308-redirects `/p/<id>/index.html` → the clean `/p/<id>/
   (`cp portal/index.html publish/index.html`). Keep `portal/index.html` as the source of truth —
   it drifted stale once; do not edit `publish/index.html` directly.
 
-## Access gate — passwords
+## Access gate — server-side (Pages Functions)
 
-**Friction, not security.** The gated page still ships to the browser; the gate hides it behind a
-passcode overlay and holds the 3D until unlock. It keeps honest people out of a client demo — it is
-NOT access control. Real options, if ever needed: Cloudflare Access (per-identity) or payload
-encryption. See the header of `gate.mjs` for the full threat model.
+**The check runs at Cloudflare's edge, before any project byte is served.** `functions/_middleware.js`
+guards every path under `/p/`: without a valid signed cookie the response IS the login page — for the
+HTML and for every sub-resource (bundles, textures, JSON). `curl`, view-source and DevTools on a
+protected URL all get the login markup and nothing else. The portal (`/`) stays open; it only lists
+projects.
 
 How it works:
 
-- **One key per project.** `keygen.mjs` generates keys shaped `PROJECT-XXXX-XXXX`.
-- Only `SHA-256(key + salt)` ships (in `gate-keys.json`, safe to publish). The cleartext keys live in
-  **`gate-secret.txt`** — gitignored, never committed. Share those with the client.
-- At build time each project's `build-publish.mjs` calls `injectGate(...)` (from its local `gate.mjs`),
-  which injects a `<head>` overlay AND rewrites the heavy `<script type="module">` into an inert
-  `application/ag-deferred` tag. The 3D module only boots after a correct key — so the login sits on
-  an empty page, no jank.
-- On success the browser stores `localStorage['agkey:<id>'] = <hash>`. Because the token IS the hash,
-  rotating a key (new hash) auto-invalidates every stored unlock — no per-visitor cleanup.
+- **One key per project id**, stored as a Pages secret named `KEY_<PROJECT>` (`KEY_RESCOM`,
+  `KEY_GOBERNADOR`, …). The key never reaches the browser — no hash, no salt, nothing to attack
+  offline. Cleartext keys stay in the gitignored `gate-secret.txt` for the owner to share.
+- A correct POST sets `ag_<project>=<expiry>.<HMAC>`, signed with the `AG_GATE_SECRET` secret:
+  HttpOnly, Secure, SameSite=Lax, `Path=/p/<project>/`, 30 days. Scoped by path, so one client's
+  cookie does not open another's folder. A tampered signature or a past expiry fails closed.
+- A missing secret also fails **closed** (503 + login), so a misconfigured project is never public.
+- Wrong keys cost ~400 ms each, which makes online guessing hopeless; there is no offline attack.
 
-### Rotate the keys
+The old client-side overlay (`gate.mjs`, `gate-keys.json`, `keygen.mjs`) is **retired**: it shipped
+the whole page before asking, and embedded `SHA-256(key + salt)`, brute-forceable offline in under a
+minute. `injectGate` is now a documented pass-through so the five build pipelines did not need
+surgery; deleting that machinery is a pending cleanup.
+
+### Rotate a key
 
 ```bash
-node disenos/cinemex-hvac-lorawan/keygen.mjs   # regenerates ALL keys + salts + hashes
-# rebuild the 3 projects, then redeploy (see below)
+printf '%s' 'NUEVA-CLAVE' | npx wrangler pages secret put KEY_RESCOM --project-name=visor-angeles
 ```
 
-> ⚠️ `keygen.mjs` regenerates **every** key on each run, so rotating one reissues all of them —
-> redistribute the new keys to every client. (If you ever need additive/independent rotation, teach
-> keygen to preserve existing entries.)
+Takes effect on the next request — no rebuild, no redeploy. Existing cookies stay valid until they
+expire (they are signed with `AG_GATE_SECRET`, not with the key); rotating `AG_GATE_SECRET` instead
+invalidates every session everywhere. Update `gate-secret.txt` by hand so the record stays true.
 
 ## Deploy
 
 ```bash
 cd disenos/cinemex-hvac-lorawan
-node build-publish.mjs                 # cinemex → publish/p/cinemex + _headers + portal guard
+node build-publish.mjs                 # cinemex → publish/p/cinemex + _headers + publish/functions
 node ../datacenter-dhl/build-publish.mjs
 node ../datacenter-hotspot/build-publish.mjs
-cp portal/index.html publish/index.html   # only if the portal changed
+node ../gobernador-aire/build-publish.mjs
+node ../../dashboards/build-publish.mjs   # client folders (rescom, rotzinger, …)
+cp portal/index.html publish/index.html   # only if the portal changed (assets too, if new)
 npx wrangler pages deploy publish --project-name=visor-angeles --branch=main --commit-dirty=true
 ```
 
+> ⚠️ **Deploy from `disenos/cinemex-hvac-lorawan/`, not from the repo root.** Wrangler picks up
+> `functions/` relative to the CURRENT WORKING DIRECTORY, not from the published directory. Deploying
+> from elsewhere silently ships the site with NO access gate — it uploads fine and every project
+> becomes public. The give-away is the deploy log: a correct run prints `✨ Compiled Worker
+> successfully` and `✨ Uploading Functions bundle`. If those lines are absent, the gate is not there.
+
 Verify live with `curl -sSL` (NOT plain curl — `.html` paths 308-redirect and return empty without
-`-L`). Grep the served HTML for `AG_GATE_V2` (gate present) and `application/ag-deferred` (3D deferred).
+`-L`). The one check that matters: `curl -sS -o /dev/null -w '%{http_code}' <url>/p/<id>/` must be
+**401**, and the served body must be the login page — anything else means the gate is off.
 
 ### Deploy gotchas
 

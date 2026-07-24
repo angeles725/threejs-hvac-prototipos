@@ -46,17 +46,15 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { contentHash, hashedName, rewriteRefs } from './publish-hash.mjs';
-import { injectGate, loadGateConfig } from './gate.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DESIGNS = dirname(ROOT);                                   // disenos/
 const CINEMEX = join(DESIGNS, 'cinemex-hvac-lorawan');
 const OUT = join(CINEMEX, 'publish', 'p', 'hotspot');
 
-// Per-project shared-key access gate (see gate.mjs). gate-keys.json is owned by the cinemex dir
-// (read cross-root, exactly like protection.js above); keygen.mjs generates/rotates it. Injected
-// into both pages so a direct link opens the passcode overlay before the viewer boots.
-const GATE = loadGateConfig(join(CINEMEX, 'gate-keys.json'), 'hotspot');
+// Access is enforced SERVER-SIDE by cinemex-hvac-lorawan/functions/_middleware.js (a Cloudflare
+// Pages Function): without a signed cookie the login page is served instead of this project,
+// for the HTML and every asset. Nothing gate-related is baked into the build anymore.
 
 const OWNER = 'Cristian Angeles';
 const YEAR = '2026';
@@ -231,7 +229,7 @@ function buildPage({ source, htmlOut, base, forbidden, rewriteHtml }) {
     `<script type="module" src="./${base}.js"></script>` +
     sourceHtml.slice(inline.endIdx);
   if (rewriteHtml) html = rewriteHtml(html);
-  html = injectGate(rewriteRefs(injectProtection(html), hashMap), GATE, htmlOut);
+  html = rewriteRefs(injectProtection(html), hashMap);
   writeFileSync(join(OUT, htmlOut), html);
 
   return { hashed: hashMap[`${base}.js`], inlineBytes: Buffer.byteLength(inline.code) };

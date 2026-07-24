@@ -51,17 +51,15 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { contentHash, hashedName, rewriteRefs } from './publish-hash.mjs';
-import { injectGate, loadGateConfig } from './gate.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DESIGNS = dirname(ROOT);                                   // disenos/
 const CINEMEX = join(DESIGNS, 'cinemex-hvac-lorawan');
 const OUT = join(CINEMEX, 'publish', 'p', 'dhl');
 
-// Per-project shared-key access gate (see gate.mjs). gate-keys.json is owned by the cinemex dir
-// (read cross-root, exactly like protection.js below); keygen.mjs generates/rotates it. Injected
-// into the top index only — the equipos/** detail views render inside its already-gated iframe.
-const GATE = loadGateConfig(join(CINEMEX, 'gate-keys.json'), 'dhl');
+// Access is enforced SERVER-SIDE by cinemex-hvac-lorawan/functions/_middleware.js (a Cloudflare
+// Pages Function): without a signed cookie the login page is served instead of this project,
+// for the HTML and every asset. Nothing gate-related is baked into the build anymore.
 
 const OWNER = 'Cristian Angeles';
 const YEAR = '2026';
@@ -288,16 +286,13 @@ writeFileSync(join(OUT, hashMap['protection.js']), protectionOut);
 //    stale `?v=` query); the dynamically-built importmap and detail routes stay untouched.
 writeFileSync(
   join(OUT, 'index.html'),
-  injectGate(
-    rewriteRefs(
-      injectProtection(
-        sourceHtml.slice(0, inline.openIdx) +
-          '<script type="module" src="./main.js"></script>' +
-          sourceHtml.slice(inline.endIdx),
-      ),
-      hashMap,
+  rewriteRefs(
+    injectProtection(
+      sourceHtml.slice(0, inline.openIdx) +
+        '<script type="module" src="./main.js"></script>' +
+        sourceHtml.slice(inline.endIdx),
     ),
-    GATE, 'index.html',
+    hashMap,
   ),
 );
 
