@@ -4,14 +4,14 @@
  * Single-page port of disenos/datacenter-hotspot/build-publish.mjs (same profile, same asserts,
  * same three-externalisation deviation), trimmed to ONE standalone page.
  *
- *   node disenos/gobernador-aire/build-publish.mjs  ->  ../cinemex-hvac-lorawan/publish/p/gobernador/
+ *   node disenos/gobernador-aire/build-publish.mjs  ->  ../cinemex-hvac-lorawan/publish/p/kalte/gobernador/
  *
  * The dev SOURCE (gobernador-dashboard.html) stays readable. Only publish/ ships hardened.
  *
- *   gobernador-dashboard.html  classic sim <script>    ->  p/gobernador/sim.<hash>.js   (obfuscated)
- *   gobernador-dashboard.html  inline module          ->  p/gobernador/main.<hash>.js  (bundled, obfuscated)
- *   gobernador-dashboard.html                          ->  p/gobernador/index.html      (both -> <script src>)
- *   ../cinemex-hvac-lorawan/protection.js              ->  p/gobernador/protection.<hash>.js (SOURCE reused,
+ *   gobernador-dashboard.html  classic sim <script>    ->  p/kalte/gobernador/sim.<hash>.js   (obfuscated)
+ *   gobernador-dashboard.html  inline module          ->  p/kalte/gobernador/main.<hash>.js  (bundled, obfuscated)
+ *   gobernador-dashboard.html                          ->  p/kalte/gobernador/index.html      (both -> <script src>)
+ *   ../cinemex-hvac-lorawan/protection.js              ->  p/kalte/gobernador/protection.<hash>.js (SOURCE reused,
  *       obfuscated FRESH for this project — never a copy of cinemex's obfuscated bytes)
  *
  * DEVIATION vs cinemex (same as hotspot/DHL, justified): the page imports three STATICALLY. esbuild
@@ -23,7 +23,7 @@
  * The dynamic `<script>…importmap via String.fromCharCode…</script>` bootstrap that resolves three is
  * a CLASSIC script preceding the module; it is copied through VERBATIM and must never be rewritten.
  *
- * SCOPE: this script owns publish/p/gobernador/ ONLY. The portal (publish/index.html), publish/_headers
+ * SCOPE: this script owns publish/p/kalte/gobernador/ ONLY. The portal (publish/index.html), publish/_headers
  * and the sibling p/* trees belong to their own builders. The gobernador cache rules live in the
  * cinemex build's HEADERS generator (it owns publish/_headers).
  *
@@ -39,11 +39,17 @@ import { contentHash, hashedName, rewriteRefs } from './publish-hash.mjs';
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DESIGNS = dirname(ROOT);                                   // disenos/
 const CINEMEX = join(DESIGNS, 'cinemex-hvac-lorawan');
-const OUT = join(CINEMEX, 'publish', 'p', 'gobernador');
+const OUT = join(CINEMEX, 'publish', 'p', 'kalte', 'gobernador');
 
 // Access is enforced SERVER-SIDE by cinemex-hvac-lorawan/functions/_middleware.js (a Cloudflare
 // Pages Function): without a signed cookie the login page is served instead of this project,
 // for the HTML and every asset. Nothing gate-related is baked into the build anymore.
+//
+// This dashboard is KALTE's, so it ships INSIDE that client's folder rather than as a project of
+// its own. The middleware matches the FIRST segment under /p/, which means KEY_KALTE guards this
+// too — one key opens the client's whole folder, and there is no KEY_GOBERNADOR any more.
+// dashboards/build-publish.mjs cards it on the KALTE folder page and preserves this directory when
+// it rebuilds the folder, so the two scripts can run in either order.
 
 const OWNER = 'Cristian Angeles';
 const YEAR = '2026';
@@ -235,7 +241,7 @@ function buildPage({ source, htmlOut, base, forbidden, simForbidden }) {
 }
 
 // ---- build ----------------------------------------------------------------------------------
-// Idempotent by construction: p/gobernador is rebuilt from scratch every run. Scoped so the sibling
+// Idempotent by construction: p/kalte/gobernador is rebuilt from scratch every run. Scoped so the sibling
 // p/* trees, the portal shell and publish/assets/ are never at risk.
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
@@ -275,7 +281,7 @@ const dashboard = buildPage({
 });
 
 // 3. Final gate: no readable module tree must ship (there is none in source, but assert anyway).
-if (existsSync(join(OUT, 'src'))) throw new Error('publish/p/gobernador/src/ exists — the readable module tree must not ship');
+if (existsSync(join(OUT, 'src'))) throw new Error('publish/p/kalte/gobernador/src/ exists — the readable module tree must not ship');
 
 console.log(`built ${OUT}`);
 console.log(`  ${dashboard.sim}  ${kb(dashboard.simBytes)} inline -> ${kb(statSync(join(OUT, dashboard.sim)).size)} obfuscated (dashboard sim)`);

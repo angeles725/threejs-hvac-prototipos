@@ -21,10 +21,19 @@ publish/
     cinemex/          ← one dir per project, each its own build-publish output
     dhl/
     hotspot/
+    kalte/            ← a CLIENT folder: several dashboards under one id
+      energia/  mx0a/  mx60/
+      gobernador/     ← built by disenos/gobernador-aire/, not by dashboards/
 ```
 
 Each project is served at `https://visor.angeles-group.org/p/<id>/`. **These are the direct links you
 send clients.** Pages 308-redirects `/p/<id>/index.html` → the clean `/p/<id>/` URL.
+
+Two shapes live under `/p/`: a **project** (one dashboard, its own id) and a **client folder** (a
+landing page listing that client's dashboards). A folder can host a dashboard built by another
+script — KALTE hosts the air governor at `/p/kalte/gobernador/`, declared as an `extra` in
+`dashboards/build-publish.mjs`. That builder cards the extra and preserves its directory when it
+rebuilds the folder, so the two scripts may run in any order.
 
 ## Distribution: portal vs direct link
 
@@ -46,7 +55,9 @@ projects.
 How it works:
 
 - **One key per project id**, stored as a Pages secret named `KEY_<PROJECT>` (`KEY_RESCOM`,
-  `KEY_GOBERNADOR`, …). The key never reaches the browser — no hash, no salt, nothing to attack
+  `KEY_KALTE`, …). The id is the FIRST segment under `/p/`, so a client folder needs exactly one
+  key and it opens everything inside — `/p/kalte/gobernador/` is covered by `KEY_KALTE`, which is
+  why moving a dashboard into a folder retires its own key. The key never reaches the browser — no hash, no salt, nothing to attack
   offline. Cleartext keys stay in the gitignored `gate-secret.txt` for the owner to share.
 - A correct POST sets `ag_<project>=<expiry>.<HMAC>`, signed with the `AG_GATE_SECRET` secret:
   HttpOnly, Secure, SameSite=Lax, `Path=/p/<project>/`, 30 days. Scoped by path, so one client's
@@ -83,8 +94,8 @@ cd disenos/cinemex-hvac-lorawan
 node build-publish.mjs                 # cinemex → publish/p/cinemex + _headers + publish/functions
 node ../datacenter-dhl/build-publish.mjs
 node ../datacenter-hotspot/build-publish.mjs
-node ../gobernador-aire/build-publish.mjs
-node ../../dashboards/build-publish.mjs   # client folders (rescom, rotzinger, …)
+node ../../dashboards/build-publish.mjs   # client folders (rescom, rotzinger, kalte)
+node ../gobernador-aire/build-publish.mjs # -> p/kalte/gobernador (order-independent, see below)
 cp portal/index.html publish/index.html   # only if the portal changed (assets too, if new)
 npx wrangler pages deploy publish --project-name=visor-angeles --branch=main --commit-dirty=true
 ```
@@ -114,20 +125,35 @@ Verify live with `curl -sSL` (NOT plain curl — `.html` paths 308-redirect and 
 1. Give the project a `build-publish.mjs` that emits to `../cinemex-hvac-lorawan/publish/p/<id>/`
    (mirror `datacenter-hotspot/build-publish.mjs` — closest template: two standalone pages, inline
    modules, static three imports).
-2. Copy `gate.mjs` and `publish-hash.mjs` into the new project dir (SHARED-BY-COPY — byte-identical,
-   kept in sync by hand; build scripts never import across project roots).
-3. In the new `build-publish.mjs`: `import { injectGate, loadGateConfig } from './gate.mjs'`, load the
-   config with `loadGateConfig(join(CINEMEX, 'gate-keys.json'), '<id>')`, and wrap each shipped page's
-   HTML with `injectGate(...)` (outermost, after `rewriteRefs`).
-4. Add `{ id: '<id>', title: '…' }` to the `PROJECTS` array in `keygen.mjs`, then run keygen (this
-   reissues ALL keys — see the warning above).
-5. Add the project's hashed-bundle patterns to the `HEADERS` block in
+2. Copy `publish-hash.mjs` into the new project dir (SHARED-BY-COPY — byte-identical, kept in sync
+   by hand; build scripts never import across project roots). Nothing gate-related is built in: the
+   middleware guards `/p/` on the server.
+3. Set the key: `printf '%s' '<CLAVE>' | npx wrangler pages secret put KEY_<ID> --project-name=visor-angeles`,
+   record it in `gate-secret.txt`, and remember the deploy requirement in "Rotate a key" above.
+4. Add the project's hashed-bundle patterns to the `HEADERS` block in
    `cinemex-hvac-lorawan/build-publish.mjs` (it owns `publish/_headers`) so they cache immutably.
-6. Add a card to `PROYECTOS` in `portal/index.html` + a thumbnail in `publish/assets/`.
-7. Build all + deploy (above).
+5. Add a card to `PROYECTOS` in `portal/index.html` + a thumbnail in `publish/assets/`.
+6. Build all + deploy (above).
+
+## Add a new client folder
+
+1. Drop `logo.png`, `logo-inverse.png` and `mark.png` in `dashboards/brands/<client>/` — the build
+   throws without all three. If you only have a small logo on a white background, the KALTE run
+   shows the shape of the fix: unmultiply the background instead of thresholding it, so the edges
+   stay smooth.
+2. Add `{ id, name, tagline }` to `CLIENTS` in `dashboards/build-publish.mjs`. To host a dashboard
+   built elsewhere, add `extras: [{ slug, title, tag, desc, builtBy }]` and point that project's own
+   build at `publish/p/<client>/<slug>/`.
+3. `python3 dashboards/thumbs/make-folder-thumb.py <client>` for the portal tile, then
+   `make-thumbs.py <client> <shots-dir>` for the card previews (1600x1000 captures; for mx0a use the
+   BUILDING tab — the crop is calibrated for it, and the Home view puts the logo outside the frame).
+4. Key + portal card + build + deploy, as in the project checklist above. `tag` on the portal card
+   states the dashboard count — update it when the folder gains one.
 
 ## Pending / ideas
 
 - **Pretty URLs** (`/Cinemex`, `/DHL`, …) via a `publish/_redirects` file — unblocked now that the
   custom domain is live. Would alias the capitalized path to `/p/<id>/`.
-- Make `keygen.mjs` additive so adding a project doesn't reissue existing keys.
+- The retired overlay's leftovers (`gate.mjs`, `gate-keys.json`, `keygen.mjs`) are still in the tree
+  and still imported as a no-op `injectGate` by the five build pipelines. Deleting them is pending
+  cleanup.

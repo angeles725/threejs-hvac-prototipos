@@ -8,10 +8,14 @@
  * Output goes to ../disenos/cinemex-hvac-lorawan/publish/p/<client>/ — one folder per client, the
  * same three dashboards inside each, wearing that client's brand:
  *
- *   p/<client>/index.html   the folder page (cards for the three dashboards)
+ *   p/<client>/index.html   the folder page (cards for the three dashboards, plus any `extras`)
  *   p/<client>/energia/     dashboard-energetico (React, built with base=/p/<client>/energia/)
  *   p/<client>/mx0a/        MEXICO site mx0a, served at /snls/ on Vercel
  *   p/<client>/mx60/        MEXICO site mx60
+ *
+ * A client may also HOST a project built by another script — KALTE hosts the air governor, which
+ * `disenos/gobernador-aire/build-publish.mjs` writes to p/kalte/gobernador/. Those are declared as
+ * `extras` on the client: this script cards them and preserves their directory, nothing more.
  *
  * WHITE LABEL. The dashboards reference brand-logo.png / brand-logo-inverse.png / brand-mark.png,
  * never a client name. brands/<client>/ holds those three files (plus the client's display name and
@@ -44,7 +48,7 @@
  * RULE: never edit publish/ by hand. It is generated. Edit the source, rebuild.
  */
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -56,10 +60,31 @@ const PUBLISH = join(CINEMEX, 'publish');
 const MEXICO = join(ROOT, 'mexico');
 const ENERGIA = join(ROOT, 'dashboard-energetico');
 
-/** Clients that get a folder. `id` is also the gate project id and the URL segment. */
+/**
+ * Clients that get a folder. `id` is also the gate project id and the URL segment.
+ *
+ * `extras` lists projects that live INSIDE this client's folder but are built by someone else
+ * (their own build-publish.mjs writes straight into publish/p/<client>/<slug>/). This script only
+ * adds their card to the folder page and keeps their directory alive across rebuilds — it never
+ * builds them. See the ownership note above `resetFolder`.
+ */
 const CLIENTS = [
   { id: 'rescom', name: 'RESCOM', tagline: 'Redes y servicios en comunicación.' },
   { id: 'rotzinger', name: 'ROTZINGER', tagline: 'Refrigeración y aire acondicionado.' },
+  {
+    id: 'kalte',
+    name: 'KALTE',
+    tagline: 'Aire comprimido y refrigeración industrial.',
+    extras: [
+      {
+        slug: 'gobernador',
+        title: 'Gobernador de Aire · Sala de compresores',
+        tag: 'Aire comprimido · 3D',
+        desc: 'Sala de compresores de tornillo en 3D con gobernador de secuencia: presión de línea, estado por unidad y KPIs de energía en vivo.',
+        builtBy: 'disenos/gobernador-aire/build-publish.mjs',
+      },
+    ],
+  },
 ];
 
 /** The three dashboards, in the order they appear on a folder page. */
@@ -97,6 +122,25 @@ function replaceExactly(html, needle, replacement, count, label) {
     throw new Error(`${label}: expected ${count}x ${JSON.stringify(needle)}, found ${hits}`);
   }
   return html.split(needle).join(replacement);
+}
+
+/**
+ * Rebuild p/<client>/ from scratch WITHOUT touching directories owned by another builder.
+ *
+ * A blunt `rm -rf` of the folder would delete an extra project (see `extras`) whenever this script
+ * runs after its builder, and the only symptom would be a dead card inside the client's folder —
+ * the kind of breakage nobody notices until the client clicks. Keeping those names makes the build
+ * order between the two scripts irrelevant.
+ */
+function resetFolder(dir, keep) {
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+    return;
+  }
+  for (const entry of readdirSync(dir)) {
+    if (keep.includes(entry)) continue;
+    rmSync(join(dir, entry), { recursive: true, force: true });
+  }
 }
 
 /** Run a package's local vite binary. */
@@ -163,6 +207,8 @@ for (const client of clients) {
   const out = join(PUBLISH, 'p', client.id);
   const brand = join(ROOT, 'brands', client.id);
   const thumbs = join(ROOT, 'thumbs', client.id);
+  const extras = client.extras ?? [];
+  const cardsFor = [...DASHBOARDS, ...extras];
 
   for (const file of BRAND_FILES) {
     if (!existsSync(join(brand, file))) {
@@ -173,8 +219,7 @@ for (const client of clients) {
   log(`building dashboard-energetico for ${client.id}…`);
   vite(ENERGIA, ['build', `--base=${base}energia/`], { VITE_BRAND_NAME: client.name });
 
-  rmSync(out, { recursive: true, force: true });
-  mkdirSync(out, { recursive: true });
+  resetFolder(out, extras.map((e) => e.slug));
 
   cpSync(join(ENERGIA, 'dist'), join(out, 'energia'), { recursive: true });
 
@@ -249,7 +294,15 @@ for (const client of clients) {
   }
 
   /* ── folder page ── */
-  const cards = DASHBOARDS.map((d) => {
+  // An extra's card points at a directory this script does not produce. If its builder has not run
+  // yet the card would 404, so say it out loud rather than shipping a dead link.
+  for (const extra of extras) {
+    if (!existsSync(join(out, extra.slug))) {
+      log(`WARNING ${client.id}: p/${client.id}/${extra.slug}/ is missing — run ${extra.builtBy} or its card 404s`);
+    }
+  }
+
+  const cards = cardsFor.map((d) => {
     const thumb = existsSync(join(thumbs, `${d.slug}-thumb.png`))
       ? `<div class="miniatura" style="background-image:url('${d.slug}-thumb.png')"></div>`
       : '<div class="miniatura"></div>';
@@ -270,12 +323,12 @@ for (const client of clients) {
 
   // Card previews (thumbs/make-thumbs.py regenerates them from live screenshots).
   let missing = 0;
-  for (const { slug } of DASHBOARDS) {
+  for (const { slug } of cardsFor) {
     const file = join(thumbs, `${slug}-thumb.png`);
     if (existsSync(file)) cpSync(file, join(out, `${slug}-thumb.png`));
     else missing += 1;
   }
-  if (missing) log(`WARNING ${client.id}: ${missing}/${DASHBOARDS.length} thumbnails missing — cards ship without a preview`);
+  if (missing) log(`WARNING ${client.id}: ${missing}/${cardsFor.length} thumbnails missing — cards ship without a preview`);
 
   // The portal's own card for this folder shows the client logo (thumbs/make-folder-thumb.py).
   // The portal HTML is hand-staged, but its assets are not — stage this one here so a new client
