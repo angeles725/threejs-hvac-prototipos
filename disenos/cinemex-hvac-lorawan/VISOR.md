@@ -147,6 +147,9 @@ Verify live with `curl -sSL` (NOT plain curl — `.html` paths 308-redirect and 
 3. `python3 dashboards/thumbs/make-folder-thumb.py <client>` for the portal tile, then
    `make-thumbs.py <client> <shots-dir>` for the card previews (1600x1000 captures; for mx0a use the
    BUILDING tab — the crop is calibrated for it, and the Home view puts the logo outside the frame).
+   Just rebuild after changing one: the folder's images are content-hashed, so a new thumbnail gets
+   a new filename and browsers pick it up on the next load. **The portal's own `/assets/` tiles are
+   NOT** — those still need the manual rename described at the top of `publish/_headers`.
 4. Key + portal card + build + deploy, as in the project checklist above. `tag` on the portal card
    states the dashboard count — update it when the folder gains one.
 

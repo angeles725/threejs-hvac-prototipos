@@ -31,7 +31,7 @@
  */
 import JavaScriptObfuscator from 'javascript-obfuscator';
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { contentHash, hashedName, rewriteRefs } from './publish-hash.mjs';
@@ -205,8 +205,8 @@ function dynamizeThreeImports(moduleCode, label) {
  */
 const BRAND_SRC = join(dirname(DESIGNS), 'dashboards', 'brands', 'kalte');
 const BRAND_FILES = [
-  { from: 'logo-inverse.png', to: 'brand-logo-inverse.png' },
-  { from: 'mark.png', to: 'brand-mark.png' },
+  { from: 'logo-inverse.png', to: 'brand-logo-inverse' },
+  { from: 'mark.png', to: 'brand-mark' },
 ];
 
 function stageBrand(html) {
@@ -214,12 +214,17 @@ function stageBrand(html) {
   for (const { from, to } of BRAND_FILES) {
     const src = join(BRAND_SRC, from);
     if (!existsSync(src)) throw new Error(`brand file missing: ${src}`);
-    copyFileSync(src, join(OUT, to));
+
+    // Content-hashed like every other emitted asset: a fixed name would let a browser keep serving
+    // the previous logo for hours after a change (Pages defaults unmatched files to max-age=14400).
+    const bytes = readFileSync(src);
+    const name = hashedName(to, 'png', contentHash(bytes));
+    writeFileSync(join(OUT, name), bytes);
 
     const ref = `../../dashboards/brands/kalte/${from}`;
     const hits = out.split(ref).length - 1;
     if (hits !== 1) throw new Error(`brand rewrite: expected 1x ${JSON.stringify(ref)}, found ${hits}`);
-    out = out.split(ref).join(to);
+    out = out.split(ref).join(name);
   }
   return out;
 }

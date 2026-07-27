@@ -48,6 +48,7 @@
  * RULE: never edit publish/ by hand. It is generated. Edit the source, rebuild.
  */
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -122,6 +123,32 @@ function replaceExactly(html, needle, replacement, count, label) {
     throw new Error(`${label}: expected ${count}x ${JSON.stringify(needle)}, found ${hits}`);
   }
   return html.split(needle).join(replacement);
+}
+
+/**
+ * Copy an image under a content-hashed name and return that name (null if the source is missing).
+ *
+ * Images used to ship under fixed names, which meant a changed thumbnail or logo stayed invisible
+ * for hours: nothing in publish/_headers matches them, so Pages applies its own max-age=14400 and
+ * the browser keeps the old bytes without even asking. Only a hard reload showed the new one.
+ * Putting the content hash in the filename makes the name itself the cache key: new bytes produce a
+ * new URL, and the folder page that points at it is `no-cache` (the directory-index rule in
+ * publish/_headers), so the browser cannot have the new name cached and has to fetch it.
+ *
+ * No _headers rule is needed, and adding a broad one would be actively harmful: a wildcard matches
+ * across slashes, so marking the client folder's PNGs immutable would also catch the FIXED-name
+ * brand files copied into energia/ and mx0a/img/ below, pinning those for a year instead of hours.
+ *
+ * `sha256` truncated to 8 hex chars, the same convention as the publish-hash.mjs the disenos
+ * builders share. That module is not imported here: builders never reach across project roots, and
+ * copying it for two of its four functions would add a third copy to keep in sync by hand.
+ */
+function stageHashed(srcFile, destDir, base, ext) {
+  if (!existsSync(srcFile)) return null;
+  const bytes = readFileSync(srcFile);
+  const name = `${base}.${createHash('sha256').update(bytes).digest('hex').slice(0, 8)}.${ext}`;
+  writeFileSync(join(destDir, name), bytes);
+  return name;
 }
 
 /**
@@ -302,9 +329,14 @@ for (const client of clients) {
     }
   }
 
+  // Card previews (thumbs/make-thumbs.py regenerates them from live screenshots). Staged BEFORE the
+  // page is written: the hashed filenames are what the cards link to.
+  let missing = 0;
   const cards = cardsFor.map((d) => {
-    const thumb = existsSync(join(thumbs, `${d.slug}-thumb.png`))
-      ? `<div class="miniatura" style="background-image:url('${d.slug}-thumb.png')"></div>`
+    const preview = stageHashed(join(thumbs, `${d.slug}-thumb.png`), out, `${d.slug}-thumb`, 'png');
+    if (!preview) missing += 1;
+    const thumb = preview
+      ? `<div class="miniatura" style="background-image:url('${preview}')"></div>`
       : '<div class="miniatura"></div>';
     return `      <a class="tarjeta" href="${d.slug}/">
         ${thumb}
@@ -316,19 +348,11 @@ for (const client of clients) {
         </div>
       </a>`;
   }).join('\n');
-
-  writeFileSync(join(out, 'index.html'), folderPage(client, cards));
-  cpSync(join(brand, 'logo.png'), join(out, 'logo.png'));
-  cpSync(join(brand, 'mark.png'), join(out, 'mark.png'));
-
-  // Card previews (thumbs/make-thumbs.py regenerates them from live screenshots).
-  let missing = 0;
-  for (const { slug } of cardsFor) {
-    const file = join(thumbs, `${slug}-thumb.png`);
-    if (existsSync(file)) cpSync(file, join(out, `${slug}-thumb.png`));
-    else missing += 1;
-  }
   if (missing) log(`WARNING ${client.id}: ${missing}/${cardsFor.length} thumbnails missing — cards ship without a preview`);
+
+  const logo = stageHashed(join(brand, 'logo.png'), out, 'logo', 'png');
+  const mark = stageHashed(join(brand, 'mark.png'), out, 'mark', 'png');
+  writeFileSync(join(out, 'index.html'), folderPage(client, cards, { logo, mark }));
 
   // The portal's own card for this folder shows the client logo (thumbs/make-folder-thumb.py).
   // The portal HTML is hand-staged, but its assets are not — stage this one here so a new client
@@ -340,14 +364,14 @@ for (const client of clients) {
   log(`done -> ${out}`);
 }
 
-function folderPage(client, cards) {
+function folderPage(client, cards, { logo, mark }) {
   return `<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${client.name} · Dashboards</title>
-<link rel="icon" type="image/png" href="mark.png">
+<link rel="icon" type="image/png" href="${mark}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -398,7 +422,7 @@ function folderPage(client, cards) {
 </head>
 <body>
 <header class="top">
-  <img src="logo.png" alt="${client.name}">
+  <img src="${logo}" alt="${client.name}">
   <a class="volver" href="../../">← Proyectos</a>
 </header>
 
