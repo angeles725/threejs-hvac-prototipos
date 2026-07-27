@@ -65,10 +65,9 @@ How it works:
 - A missing secret also fails **closed** (503 + login), so a misconfigured project is never public.
 - Wrong keys cost ~400 ms each, which makes online guessing hopeless; there is no offline attack.
 
-The old client-side overlay (`gate.mjs`, `gate-keys.json`, `keygen.mjs`) is **retired**: it shipped
-the whole page before asking, and embedded `SHA-256(key + salt)`, brute-forceable offline in under a
-minute. `injectGate` is now a documented pass-through so the five build pipelines did not need
-surgery; deleting that machinery is a pending cleanup.
+The old client-side overlay (`gate.mjs`, `gate-keys.json`, `keygen.mjs`) is **gone**: it shipped the
+whole page before asking, and embedded `SHA-256(key + salt)`, brute-forceable offline in under a
+minute. The files are deleted and no build imports `injectGate` any more — verified 2026-07-27.
 
 ### Rotate a key
 
@@ -157,6 +156,6 @@ Verify live with `curl -sSL` (NOT plain curl — `.html` paths 308-redirect and 
 
 - **Pretty URLs** (`/Cinemex`, `/DHL`, …) via a `publish/_redirects` file — unblocked now that the
   custom domain is live. Would alias the capitalized path to `/p/<id>/`.
-- The retired overlay's leftovers (`gate.mjs`, `gate-keys.json`, `keygen.mjs`) are still in the tree
-  and still imported as a no-op `injectGate` by the five build pipelines. Deleting them is pending
-  cleanup.
+- The portal's own `/assets/` tiles cannot be content-hashed the way the client folders' images now
+  are: Pages ignores `Cache-Control` for that path (see the note at the top of `publish/_headers`),
+  so a changed tile still needs a manual rename. Worth another look if Pages ever honours it.
