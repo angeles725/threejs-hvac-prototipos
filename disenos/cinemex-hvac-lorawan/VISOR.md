@@ -63,10 +63,17 @@ surgery; deleting that machinery is a pending cleanup.
 
 ```bash
 printf '%s' 'NUEVA-CLAVE' | npx wrangler pages secret put KEY_RESCOM --project-name=visor-angeles
+npx wrangler pages deploy publish --project-name=visor-angeles --branch=main --commit-dirty=true
 ```
 
-Takes effect on the next request — no rebuild, no redeploy. Existing cookies stay valid until they
-expire (they are signed with `AG_GATE_SECRET`, not with the key); rotating `AG_GATE_SECRET` instead
+**The `secret put` alone does nothing to the live site.** Pages binds environment variables to a
+*deployment*, so the running deployment keeps using the old key until you deploy again — measured on
+2026-07-27: right after uploading six new keys, every OLD key still returned 303 and every new one
+401. A plain redeploy of the already-built `publish/` is enough (no rebuild needed, so a rotation
+never smuggles in content changes). Expect a few minutes of mixed results across edges afterwards.
+
+Existing cookies stay valid until they expire (they are signed with `AG_GATE_SECRET`, not with the
+key), so rotating a key does NOT kick out anyone already inside; rotating `AG_GATE_SECRET` instead
 invalidates every session everywhere. Update `gate-secret.txt` by hand so the record stays true.
 
 ## Deploy
