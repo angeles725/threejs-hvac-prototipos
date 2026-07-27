@@ -31,7 +31,7 @@
  */
 import JavaScriptObfuscator from 'javascript-obfuscator';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { contentHash, hashedName, rewriteRefs } from './publish-hash.mjs';
@@ -195,6 +195,36 @@ function dynamizeThreeImports(moduleCode, label) {
 }
 
 /**
+ * Brand files the page references. The SOURCE of truth is the client's folder under dashboards/ —
+ * copying them into this project would fork the logo and let the two drift apart. The page points
+ * at them with a repo-relative path so it also renders correctly when opened straight from disk;
+ * this build stages them next to the page and repoints the URLs.
+ *
+ * Each rewrite asserts its hit count: a silent miss ships a dashboard with a broken logo, which is
+ * exactly the kind of thing nobody notices until a client opens it.
+ */
+const BRAND_SRC = join(dirname(DESIGNS), 'dashboards', 'brands', 'kalte');
+const BRAND_FILES = [
+  { from: 'logo-inverse.png', to: 'brand-logo-inverse.png' },
+  { from: 'mark.png', to: 'brand-mark.png' },
+];
+
+function stageBrand(html) {
+  let out = html;
+  for (const { from, to } of BRAND_FILES) {
+    const src = join(BRAND_SRC, from);
+    if (!existsSync(src)) throw new Error(`brand file missing: ${src}`);
+    copyFileSync(src, join(OUT, to));
+
+    const ref = `../../dashboards/brands/kalte/${from}`;
+    const hits = out.split(ref).length - 1;
+    if (hits !== 1) throw new Error(`brand rewrite: expected 1x ${JSON.stringify(ref)}, found ${hits}`);
+    out = out.split(ref).join(to);
+  }
+  return out;
+}
+
+/**
  * Build one page: harden BOTH inline scripts — the classic simulation `<script>` into
  * `sim.<hash>.js` and the 3D viewer module into `<base>.<hash>.js` — swap each for a hashed
  * `<script src>`, inject protection, wrap the gate outermost. The sim stays a CLASSIC external
@@ -233,7 +263,7 @@ function buildPage({ source, htmlOut, base, forbidden, simForbidden }) {
     sourceHtml.slice(sim.endIdx, inline.openIdx) +
     `<script type="module" src="./${base}.js"></script>` +
     sourceHtml.slice(inline.endIdx);
-  html = rewriteRefs(injectProtection(html), hashMap);
+  html = stageBrand(rewriteRefs(injectProtection(html), hashMap));
   writeFileSync(join(OUT, htmlOut), html);
 
   return { hashed: hashMap[`${base}.js`], sim: hashMap['sim.js'],
