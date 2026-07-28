@@ -1,4 +1,4 @@
-# Nave Panccadia — ground floor + upper storey + roof + plant
+# Nave Panccadia — ground floor + upper storey + roof + plant + the recovered doors
 
 Two-storey 3D model, now roofed, of an industrial bakery plant on Av. Del Curtidor (client: Rotzinger León),
 reconstructed from the client's AutoCAD 2007 DWG.
@@ -10,8 +10,8 @@ DesignSpec — it was RECONSTRUCTED from a real CAD drawing under the Research-S
 | | |
 |---|---|
 | Viewer | [`nave-panccadia-3d-v3.html`](nave-panccadia-3d-v3.html) — self-contained, opens from the filesystem. Supersedes `v2`, which had no roof |
-| Geometry | [`ground-floor.json`](ground-floor.json) · [`upper-floor.json`](upper-floor.json) · [`roof.json`](roof.json) · [`equipment.json`](equipment.json) |
-| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, 15 cited blocks) |
+| Geometry | [`ground-floor.json`](ground-floor.json) · [`upper-floor.json`](upper-floor.json) · [`roof.json`](roof.json) · [`equipment.json`](equipment.json) · [`recovered-blocks.json`](recovered-blocks.json) |
+| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, 18 cited blocks) |
 | Source DWG | preserved in that corpus at `raw/`, `sha256 053750e0…948ee7f3` |
 
 ## Storey control
@@ -28,6 +28,7 @@ The viewer opens with both storeys. Buttons in the HUD:
 | **Roof off — read the plan** | one click to strip the roof and look down into the building |
 | **Equipment** | shows/hides the 35 machines |
 | **Equipment labels** | shows/hides their name tags |
+| **Doors** | shows/hides the two recovered leaves |
 | **Columns** · **Top view** | as before |
 
 ## What the model contains
@@ -101,6 +102,22 @@ that repeat to the millimetre across instances. **35 machines placed**, 26 of th
 3.009 × 1.009 m. A table called "3 by 1" is 3 m by 1 m — a fourth witness that 1 drawing unit is
 1 metre, and the first SEMANTIC one (the other three were geometric).
 
+### The two doors that were not in the DXF
+
+The DXF has no doors. It turned out `dwg2dxf` **dropped 32 anonymous block definitions** on the way
+out of the DWG — it wrote the generic `BLOCK_HEADER` name (`*U`) instead of the unique name that
+lives on the `BLOCK` entity one level in (`*U116`, `*U183`, …), so 36 inserts collapsed onto a single
+identifier that was never written. Reading the DWG by a second route (`dwgread -O JSON`) recovered
+all 48 of them.
+
+| Leaf | Length | Placement |
+|---|---|---|
+| `*U116` | **2.715 m** | sits **4 mm** from a wall line, filling a **2.778 m opening** |
+| `*U183` | **1.393 m** | drawn **OPEN**, perpendicular to the walls it spans |
+
+`*U116` is the **first and only certified opening** in this reconstruction. Inferring the rest from
+the gaps between wall runs was tested and refuted — see below.
+
 ## What it does NOT contain — read before reusing
 
 - **No door openings**, on either storey. All 47 `puerta 1.20` block inserts in the DWG lie OUTSIDE
@@ -113,6 +130,11 @@ that repeat to the millimetre across instances. **35 machines placed**, 26 of th
   measured fabric.
 - **8 drawn shapes are unnamed**, and 3 labels — `Báscula`, `Rebanadora`, `mesa 2x1` — name equipment
   with no drawn footprint at all.
+- **Door leaf height (2.10 m) is stated**, not drawn — the drawing gives no door height anywhere.
+- **Only 2 openings of the whole building are known.** The other 37 `puerta 1.20` blocks sit outside
+  the plan, and the gap-inference route is refuted.
+- **The 34 recovered `MOBILIARIO` symbols are carried but not placed** — they are in
+  `recovered-blocks.json`, waiting for the furniture pass.
 - **Wall heights are an ASSUMPTION** (ground 3.15 m, upper partitions 3.00 m, low walls 1.10 m). The
   drawing states floor LEVELS, never wall heights. The viewer's HUD labels these as assumptions.
 - **The roof's EXTENT is an extrapolation.** The pitch and the ridge are certified at three drawn
@@ -140,6 +162,7 @@ that repeat to the millimetre across instances. **35 machines placed**, 26 of th
 | `techo-topview.png` | the roof that shipped: ridge (blue) straight and oblique, eaves on the outline |
 | `techo-topview-v-rechazado.png` | the ridge model that was **rejected** — folded into a V, and passed every arithmetic check |
 | `equipo-topview.png` | the 35 machines in plan (teal = ground floor, purple = upper) |
+| `puertas-recuperadas.png` | the two recovered leaves against the walls — one fills its opening, one is open |
 
 ## Regenerating it
 
@@ -203,7 +226,13 @@ gate and were caught by eye:
    check that cannot fail reports coverage the gate does not have, under a name that invites the
    trust it has not earned.
 
-An eighth, about method rather than geometry: **a check that cannot SEE a defect still returns a
+8. **A check is only as good as the SPECIMEN it measures.** The door gate's strongest check was
+   `*U116` lying 4 mm from a wall line, named "certifies the transform chain" on the reasoning that
+   no wrong composition lands a leaf 4 mm from a line by luck. The reasoning was sound and the
+   premise was false: `*U116`'s insert is rotation 0, scale [1, 1] — an identity transform that no
+   composition error can move. The chain was exercised only by the other leaf.
+
+A ninth, about method rather than geometry: **a check that cannot SEE a defect still returns a
 confident answer.** The parapet drawn around the raised slab agreed with the projected outline on
 37 of 39 segments — but a parapet only exists where floor meets open air, so it could never have
 detected enclosed floor. The test that worked was semantic: a labelled room cannot float.
@@ -216,7 +245,8 @@ Ground floor operator-confirmed correct against the CAD, 2026-07-28.
 Upper storey added 2026-07-28 — validation gate 35/35, all 5 third-path guards proven failing.
 Roof added 2026-07-28 — 13 roof checks, ridge and extent confirmed against the top-view render.
 Industrial plant added 2026-07-28 — 35 machines from the `PDF2_*` layers.
-Current gate: **53/53** checks, **14/14** guards proven failing.
+Doors recovered from the DWG 2026-07-28 — the DXF never had them.
+Current gate: **60/60** checks, **17/17** guards proven failing.
 
 **Both the upper storey and the roof are awaiting operator confirmation against the CAD.** That
 confirmation is the only oracle this project has that the arithmetic gate cannot provide — it has
