@@ -1,6 +1,6 @@
-# Nave Panccadia — ground floor + upper storey
+# Nave Panccadia — ground floor + upper storey + roof
 
-Two-storey 3D model of an industrial bakery plant on Av. Del Curtidor (client: Rotzinger León),
+Two-storey 3D model, now roofed, of an industrial bakery plant on Av. Del Curtidor (client: Rotzinger León),
 reconstructed from the client's AutoCAD 2007 DWG.
 
 **Not a design3d run.** Unlike the equipment designs in this folder, this one was NOT authored from a
@@ -9,9 +9,9 @@ DesignSpec — it was RECONSTRUCTED from a real CAD drawing under the Research-S
 
 | | |
 |---|---|
-| Viewer | [`nave-panccadia-3d-v2.html`](nave-panccadia-3d-v2.html) — self-contained, opens from the filesystem |
-| Geometry | [`ground-floor.json`](ground-floor.json) · [`upper-floor.json`](upper-floor.json) |
-| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, 12 cited blocks) |
+| Viewer | [`nave-panccadia-3d-v3.html`](nave-panccadia-3d-v3.html) — self-contained, opens from the filesystem. Supersedes `v2`, which had no roof |
+| Geometry | [`ground-floor.json`](ground-floor.json) · [`upper-floor.json`](upper-floor.json) · [`roof.json`](roof.json) |
+| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, 14 cited blocks) |
 | Source DWG | preserved in that corpus at `raw/`, `sha256 053750e0…948ee7f3` |
 
 ## Storey control
@@ -24,6 +24,8 @@ The viewer opens with both storeys. Buttons in the HUD:
 | **Upper walls** | hides just the partitions, leaving the deck readable |
 | **Ground floor only** | one click to strip the upper storey away and read the hall |
 | **Mezzanine** | drives the upper deck |
+| **Roof** | shows/hides the roof |
+| **Roof off — read the plan** | one click to strip the roof and look down into the building |
 | **Columns** · **Top view** | as before |
 
 ## What the model contains
@@ -56,6 +58,25 @@ occupiable second floor runs along the eastern side, and the rest of the upper p
 `AZOTEA` (roof terrace). Anything that extrudes the full plan outline as an upper slab roofs over the
 hall.
 
+### Roof (`+7.4 … +9.5 m`)
+
+| Element | Value | Confidence |
+|---|---|---|
+| Form | symmetric **gable on steel trusses** | measured — three transversal sections |
+| Pitch | **10 %** (1 in 10, ≈5.7°) both slopes | measured — six independent fits, spread **0.16 pp** |
+| Ridge | **oblique in plan**, travelling 9.68 m across the length | measured at 3 stations, straight-line fit (residual 0.79 m) |
+| Apex | 8.54 – 9.48 m | derived; agrees with the three measured apexes to **±0.26 m** |
+| Eaves | 6.87 – 8.67 m | derived from the pitch; the drawing measures 7.44 – 8.03 m |
+| Extent | plan Y 219.66 – 260.94 | measured — the run the longitudinal section draws straight |
+
+**The ridge is oblique because the nave narrows.** Every section ends on the same straight east wall
+while the west wall is oblique, so the building goes from 34.81 m wide at section C-C' to 23.66 m at
+A-A'. The ridge follows.
+
+**The gable stops short of the south end on purpose.** South of plan Y 219.66 the upper plan is
+labelled `AZOTEA` — a flat roof terrace, not this gable. That area is deliberately left unroofed
+rather than roofed on a guess.
+
 ## What it does NOT contain — read before reusing
 
 - **No door openings**, on either storey. All 47 `puerta 1.20` block inserts in the DWG lie OUTSIDE
@@ -63,7 +84,13 @@ hall.
   The doors were never placed as objects, so they are not reconstructable from this drawing.
 - **Wall heights are an ASSUMPTION** (ground 3.15 m, upper partitions 3.00 m, low walls 1.10 m). The
   drawing states floor LEVELS, never wall heights. The viewer's HUD labels these as assumptions.
-- **No roof form.** The +9.20 m level is known; its geometry lives only in the sections.
+- **The roof's EXTENT is an extrapolation.** The pitch and the ridge are certified at three drawn
+  cuts only (plan Y 228.7 – 244.1); the rest of the 41 m run applies them beyond their evidence.
+- **What the longitudinal section's high line depicts is still OPEN.** It is dead straight (0.000 m
+  fit residual over 41.3 m) at −3.71 %, and the obvious reading — that it is the ridge — was
+  REFUTED: it would rise where the building is wider, and it does the opposite. The two survivors
+  (the roof on the cut plane, and the east eave seen beyond it) are each wrong in a different way.
+  The build adopts NEITHER; it only takes the extent from that line.
 - **The laboratory annex outline is a measured rectangle**, bounded by that room's own wall
   centrelines — not a reconstructed polygon. The drawn `PROYECCIÓN` layer omits it entirely.
 
@@ -78,6 +105,9 @@ hall.
 | `planta-baja-muros.png` | only the layers the extractor consumes |
 | `modelo-vs-dxf.png` | model overlaid on the drawing — grey with no red on it was dropped |
 | `orientacion-mapeos.png` | the two CAD→three.js coordinate mappings, side by side |
+| `corte-cc-armadura.png` | section C-C' as AutoCAD draws it — the truss the roof is read from |
+| `techo-topview.png` | the roof that shipped: ridge (blue) straight and oblique, eaves on the outline |
+| `techo-topview-v-rechazado.png` | the ridge model that was **rejected** — folded into a V, and passed every arithmetic check |
 
 ## Regenerating it
 
@@ -88,11 +118,13 @@ cd ~/investigacion/nave-panccadia
 V=.venv/bin/python
 $V tools/extract-gf.py     raw/nave-panccadia.dxf build/ground-floor.json
 $V tools/extract-pa.py     raw/nave-panccadia.dxf build/upper-floor.json
-$V tools/validate-model.py build/ground-floor.json build/upper-floor.json   # 35/35 must pass
-$V tools/prove-guards.py   build/ground-floor.json build/upper-floor.json   # 5/5 must be CAUGHT
-$V tools/build-viewer.py   build/ground-floor.json build/nave-panccadia-3d.html build/upper-floor.json
-$V tools/topview-check.py  build/ground-floor.json build/render/topview-two-storeys.png \
-                           --mapping flip --upper build/upper-floor.json
+$V tools/roof-profile.py   raw/nave-panccadia.dxf > corpus/sources/probes/roof-profile.txt
+$V tools/extract-roof.py   build/ground-floor.json build/roof.json
+$V tools/validate-model.py build/ground-floor.json build/upper-floor.json build/roof.json  # 48/48
+$V tools/prove-guards.py   build/ground-floor.json build/upper-floor.json build/roof.json  # 10/10 CAUGHT
+$V tools/build-viewer.py   build/ground-floor.json build/nave-panccadia-3d.html build/upper-floor.json build/roof.json
+$V tools/topview-check.py  build/ground-floor.json build/render/topview-roof.png \
+                           --mapping flip --upper build/upper-floor.json --roof build/roof.json
 ```
 
 **Do not skip the last two steps.** `prove-guards.py` re-proves that each guard still fails on its
@@ -120,7 +152,18 @@ gate and were caught by eye:
    position and the walls' offset, and none constrained its X. The top-view render showed it in one
    glance. Arithmetic could not catch a wrong PLACE either.
 
-A fifth, about method rather than geometry: **a check that cannot SEE a defect still returns a
+5. **A derived shape extrapolated past its evidence invents geometry no check can see.** The roof's
+   first ridge model put the ridge on the outline's mid-width — right inside the three measured cuts,
+   and beyond them the mid-width of a chamfered plan turns a corner. The ridge folded into a **V** and
+   the roof degenerated to a 2.16 m sliver, while the apexes still matched all three sections to
+   0.26 m and the pitch was still exactly 10 %. Fit the thing you measured; do not re-derive it from
+   something that merely agrees with it locally.
+
+6. **Proving a guard tests the INJECTOR too.** The V guard first reported MISSED — because the
+   injector pushed the ridge further along the direction it already ran, so nothing folded. Trusting
+   that verdict would have meant "fixing" a guard that worked.
+
+A seventh, about method rather than geometry: **a check that cannot SEE a defect still returns a
 confident answer.** The parapet drawn around the raised slab agreed with the projected outline on
 37 of 39 segments — but a parapet only exists where floor meets open air, so it could never have
 detected enclosed floor. The test that worked was semantic: a labelled room cannot float.
@@ -130,6 +173,11 @@ Detail: blocks 7–12 of the corpus, and `retros/2026-07-28-run1-retro.md`.
 ## Status
 
 Ground floor operator-confirmed correct against the CAD, 2026-07-28.
-Upper storey added 2026-07-28 — validation gate **35/35**, all 5 third-path guards proven failing,
-registration and placement confirmed against the top-view render. **Awaiting operator confirmation
-against the CAD.**
+Upper storey added 2026-07-28 — validation gate 35/35, all 5 third-path guards proven failing.
+Roof added 2026-07-28 — validation gate **48/48** (13 roof checks, every witness checked on BOTH
+axes), **10/10** guards proven failing, ridge and extent confirmed against the top-view render.
+
+**Both the upper storey and the roof are awaiting operator confirmation against the CAD.** That
+confirmation is the only oracle this project has that the arithmetic gate cannot provide — it has
+caught three defects that shipped past a green gate, and the roof's V-fold would have been a
+fourth.
