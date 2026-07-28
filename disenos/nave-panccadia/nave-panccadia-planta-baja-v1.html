@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nave Panccadia — Ground Floor</title>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<style>
+  :root {
+    --paper: #f4f1ea;
+    --ink: #1c2431;
+    --navy: #2b3a55;
+    --rust: #b4532a;
+    --muted: #7d8794;
+    --line: #d8d2c6;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--paper); }
+  canvas { display: block; }
+  #hud {
+    position: fixed; top: 16px; left: 16px; z-index: 10;
+    background: rgba(244, 241, 234, 0.94);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--rust);
+    padding: 14px 16px; max-width: 340px;
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px; line-height: 1.55; color: var(--ink);
+  }
+  #hud h1 {
+    margin: 0 0 2px; font-size: 13px; font-weight: 600;
+    letter-spacing: 0.02em; text-transform: uppercase;
+  }
+  #hud .sub { color: var(--muted); margin-bottom: 10px; font-size: 10px; }
+  #hud table { border-collapse: collapse; width: 100%; }
+  #hud td { padding: 1px 0; vertical-align: top; }
+  #hud td:first-child { color: var(--muted); padding-right: 10px; white-space: nowrap; }
+  #hud td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  #hud .sec {
+    margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    font-size: 9px; color: var(--rust); font-weight: 600;
+  }
+  #hud .warn { color: var(--rust); }
+  #legend {
+    position: fixed; bottom: 16px; left: 16px; z-index: 10;
+    background: rgba(244, 241, 234, 0.94); border: 1px solid var(--line);
+    padding: 10px 14px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10px;
+    color: var(--ink);
+  }
+  #legend div { display: flex; align-items: center; gap: 8px; padding: 1px 0; }
+  #legend i { width: 12px; height: 12px; display: inline-block; border-radius: 2px; }
+  #help {
+    position: fixed; bottom: 16px; right: 16px; z-index: 10;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10px; color: var(--muted); text-align: right;
+  }
+  button {
+    font-family: inherit; font-size: 10px; cursor: pointer;
+    background: var(--paper); color: var(--navy);
+    border: 1px solid var(--line); padding: 3px 8px; margin-top: 8px;
+    margin-right: 4px;
+  }
+  button:hover { border-color: var(--navy); }
+  button[aria-pressed="true"] { background: var(--navy); color: var(--paper); }
+</style>
+</head>
+<body>
+<div id="hud">
+  <h1>Nave Panccadia</h1>
+  <div class="sub">Ground floor &middot; Av. Del Curtidor</div>
+  <table>
+    <tr><td>Floor area</td><td id="s-size"></td></tr>
+    <tr><td>Bounding box</td><td id="s-bbox"></td></tr>
+    <tr><td>Mezzanine area</td><td id="s-mezzarea"></td></tr>
+    <tr><td>Wall runs</td><td id="s-walls"></td></tr>
+    <tr><td>Concrete columns</td><td id="s-conc"></td></tr>
+    <tr><td>Steel columns</td><td id="s-steel"></td></tr>
+  </table>
+  <div class="sec">Certified levels</div>
+  <table>
+    <tr><td>Slab</td><td id="s-slab"></td></tr>
+    <tr><td>Mezzanine</td><td id="s-mezz"></td></tr>
+    <tr><td>Roof</td><td id="s-roof"></td></tr>
+  </table>
+  <div class="sec">Assumptions</div>
+  <table>
+    <tr><td>Wall height</td><td>3.15 m *</td></tr>
+    <tr><td>Low-wall height</td><td>1.10 m *</td></tr>
+    <tr><td class="warn" colspan="2">* not in the drawing &mdash; stated, not measured</td></tr>
+  </table>
+  <div class="sec">Openings</div>
+  <table>
+    <tr><td class="warn" colspan="2">Doors not reconstructable: 47 door blocks are orphaned outside the plan.</td></tr>
+  </table>
+  <div>
+    <button id="b-mezz" aria-pressed="true">Mezzanine</button>
+    <button id="b-cols" aria-pressed="true">Columns</button>
+    <button id="b-top">Top view</button>
+  </div>
+</div>
+<div id="legend">
+  <div><i style="background:#c9c2b4"></i> Walls (measured thickness)</div>
+  <div><i style="background:#d9d3c6"></i> Walls (assumed 0.15 m)</div>
+  <div><i style="background:#8c97a8"></i> Concrete columns</div>
+  <div><i style="background:#b4532a"></i> Steel HSS 8&times;8&times;1/4</div>
+</div>
+<div id="help">drag orbit &middot; scroll zoom &middot; right-drag pan</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const DATA = {"meta":{"source":"Proyecto Nave Panccadia_Av.Del Curtidor.dwg","units":"metres (Block 1: $INSUNITS is wrong)","clip":{"x":[245.51,280.18],"y":[208.1,261.44]},"origin_shift":[-245.51,-208.1],"size":{"x":34.67,"y":53.34}},"levels":{"slab":0.0,"mezzanine":3.15,"roof":9.2},"outline":{"poly":[[0.239,37.713],[10.069,23.988],[26.143,1.696],[34.128,2.921],[34.429,2.996],[34.514,3.071],[34.551,11.927],[34.576,20.717],[34.584,29.373],[34.511,53.02],[34.293,53.193],[20.492,50.683],[20.221,50.591],[16.336,48.216],[8.217,43.098],[4.184,40.526],[0.396,38.06]],"area":1101.0,"method":"convex hull of wall geometry (the building is a chamfered convex polygon; the clip rectangle is NOT its shape)"},"mezzanine_outline":{"poly":[[34.6148,34.2941],[18.1931,34.2596],[18.196,25.2722],[26.0417,25.2718],[26.0417,11.3075],[27.831,11.3084],[27.8316,8.906],[34.623,8.9063],[34.6148,34.2941]],"area":284.0,"source":"PROYECCI\u00d3N layer \u2014 the drawn slab projection, not a bounding box"},"walls":[{"a":[10.3689,34.4644],"b":[22.6734,34.4644],"t":0.1,"paired":true},{"a":[22.6734,41.4159],"b":[13.5497,41.4159],"t":0.1,"paired":true},{"a":[13.5497,37.9484],"b":[22.6734,37.9484],"t":0.1,"paired":true},{"a":[34.576,20.7173],"b":[34.5515,12.2216],"t":0.17,"paired":true},{"a":[34.5137,3.0709],"b":[34.5506,11.927],"t":0.17,"paired":true},{"a":[34.4881,38.0562],"b":[34.5808,29.6697],"t":0.17,"paired":true},{"a":[34.4881,38.0562],"b":[34.5808,29.6697],"t":0.17,"paired":true},{"a":[34.5838,29.3735],"b":[34.5831,28.5067],"t":0.17,"paired":true},{"a":[34.4426,22.1876],"b":[34.4425,22.011],"t":0.1,"paired":true},{"a":[17.9762,13.2085],"b":[22.6673,6.7276],"t":0.17,"paired":true},{"a":[8.4289,26.3984],"b":[13.0662,19.9918],"t":0.17,"paired":true},{"a":[13.2448,19.7451],"b":[17.7996,13.4524],"t":0.17,"paired":true},{"a":[25.1129,51.3479],"b":[25.1129,43.9295],"t":0.15,"paired":true},{"a":[10.2689,34.5144],"b":[2.8221,34.5144],"t":0.15,"paired":false},{"a":[25.2227,26.9991],"b":[18.3727,26.9991],"t":0.15,"paired":true},{"a":[34.5115,53.0202],"b":[34.4827,45.8807],"t":0.169,"paired":true},{"a":[34.4819,45.5206],"b":[34.4843,38.4094],"t":0.17,"paired":true},{"a":[0.2387,37.7133],"b":[4.1766,32.273],"t":0.17,"paired":true},{"a":[10.3189,37.8984],"b":[10.3189,34.5144],"t":0.1,"paired":true},{"a":[4.3374,32.0509],"b":[8.2693,26.6189],"t":0.17,"paired":true},{"a":[22.8651,6.4539],"b":[26.2121,1.7457],"t":0.17,"paired":true},{"a":[32.847,26.9991],"b":[34.4968,26.9991],"t":0.15,"paired":true},{"a":[14.5815,46.9177],"b":[19.4449,46.9209],"t":0.15,"paired":true},{"a":[31.0727,8.8118],"b":[32.8727,8.8118],"t":0.15,"paired":true},{"a":[20.4916,50.6832],"b":[23.3444,51.1818],"t":0.17,"paired":true},{"a":[0.3961,38.0598],"b":[3.9532,40.3753],"t":0.17,"paired":true},{"a":[16.3362,48.2164],"b":[20.2209,50.5908],"t":0.164,"paired":true},{"a":[25.2872,51.5243],"b":[29.8128,52.3662],"t":0.17,"paired":true},{"a":[20.5062,50.5995],"b":[25.0434,51.3925],"t":0.15,"paired":false},{"a":[27.9196,8.8868],"b":[27.9196,11.4075],"t":0.15,"paired":true},{"a":[12.2847,45.6283],"b":[16.107,48.0667],"t":0.17,"paired":true},{"a":[8.2171,43.0983],"b":[12.0539,45.4959],"t":0.15,"paired":true},{"a":[4.1845,40.5257],"b":[7.991,42.943],"t":0.17,"paired":true},{"a":[30.0706,52.4138],"b":[34.2933,53.1928],"t":0.17,"paired":true},{"a":[13.8479,26.9991],"b":[17.9227,26.9991],"t":0.15,"paired":true},{"a":[19.5227,42.8719],"b":[19.52,46.8459],"t":0.15,"paired":true},{"a":[31.2408,11.4835],"b":[27.9946,11.4826],"t":0.15,"paired":true},{"a":[32.6969,26.9251],"b":[29.1726,26.9231],"t":0.15,"paired":false},{"a":[20.3622,30.6303],"b":[23.6354,30.6324],"t":0.1,"paired":true},{"a":[23.6354,27.2741],"b":[20.3622,27.2741],"t":0.1,"paired":true},{"a":[23.6854,30.5824],"b":[23.6854,27.324],"t":0.1,"paired":true},{"a":[10.3688,37.9984],"b":[10.3689,41.3659],"t":0.15,"paired":false},{"a":[2.7721,37.7922],"b":[2.7721,34.5144],"t":0.1,"paired":true},{"a":[28.9946,13.2328],"b":[31.2407,13.2331],"t":0.15,"paired":true},{"a":[30.9227,8.7368],"b":[27.8446,8.7368],"t":0.15,"paired":false},{"a":[32.0161,22.1991],"b":[32.0161,25.2741],"t":0.15,"paired":true},{"a":[13.5477,26.9991],"b":[11.3027,26.9991],"t":0.15,"paired":true},{"a":[32.772,25.3191],"b":[32.772,24.6209],"t":0.15,"paired":true},{"a":[22.7234,36.8144],"b":[22.7234,37.8984],"t":0.1,"paired":true},{"a":[11.2419,26.8802],"b":[12.2324,25.5099],"t":0.15,"paired":true},{"a":[30.9977,4.3213],"b":[30.9977,6.3445],"t":0.15,"paired":true},{"a":[32.9477,6.3364],"b":[32.9477,4.4465],"t":0.15,"paired":true},{"a":[12.2497,41.4158],"b":[10.3689,41.4159],"t":0.1,"paired":true},{"a":[12.2497,37.9484],"b":[10.3689,37.9484],"t":0.1,"paired":true},{"a":[26.0448,25.3941],"b":[24.1727,25.3941],"t":0.15,"paired":true},{"a":[29.0976,25.3191],"b":[29.0976,26.9231],"t":0.15,"paired":true},{"a":[32.9477,8.7368],"b":[32.9477,7.2857],"t":0.15,"paired":true},{"a":[27.9945,13.3078],"b":[27.9946,11.5584],"t":0.15,"paired":false},{"a":[13.5477,26.9241],"b":[13.5477,25.2538],"t":0.15,"paired":false},{"a":[13.8479,25.2538],"b":[13.8479,26.9241],"t":0.15,"paired":false},{"a":[34.0733,26.9241],"b":[34.0733,25.2608],"t":0.15,"paired":false},{"a":[34.0883,26.9241],"b":[34.0883,25.2758],"t":0.15,"paired":false},{"a":[31.3157,13.1582],"b":[31.3157,11.5578],"t":0.15,"paired":true},{"a":[18.2967,47.8951],"b":[18.2958,49.2718],"t":0.15,"paired":true},{"a":[32.697,25.4701],"b":[32.6969,26.9251],"t":0.15,"paired":false},{"a":[18.2977,25.4754],"b":[18.2977,26.7741],"t":0.15,"paired":true},{"a":[13.4997,41.3659],"b":[13.4997,40.1153],"t":0.1,"paired":true},{"a":[22.7234,34.5144],"b":[22.7234,35.6144],"t":0.1,"paired":true},{"a":[22.7234,40.2659],"b":[22.7234,41.3659],"t":0.1,"paired":true},{"a":[20.3122,27.3241],"b":[20.3122,28.3521],"t":0.1,"paired":true},{"a":[20.3122,29.5521],"b":[20.3122,30.5803],"t":0.1,"paired":true},{"a":[22.6734,39.0659],"b":[22.6734,37.9984],"t":0.15,"paired":false},{"a":[13.4997,38.9154],"b":[13.4997,37.9984],"t":0.1,"paired":true},{"a":[32.8723,7.2112],"b":[31.9727,7.2153],"t":0.15,"paired":true},{"a":[2.7721,38.7922],"b":[2.7721,39.4724],"t":0.1,"paired":true},{"a":[32.0911,13.1583],"b":[31.3907,13.1582],"t":0.15,"paired":false},{"a":[30.9977,2.6713],"b":[30.9977,3.2713],"t":0.15,"paired":true},{"a":[34.1158,12.3632],"b":[34.3086,11.7981],"t":0.15,"paired":false},{"a":[32.118,25.3931],"b":[32.6967,25.3951],"t":0.15,"paired":true},{"a":[31.3907,11.5578],"b":[31.9141,11.5577],"t":0.15,"paired":false},{"a":[12.8017,25.5538],"b":[12.2932,25.5538],"t":0.15,"paired":false},{"a":[30.9977,7.1439],"b":[30.9977,7.6439],"t":0.15,"paired":true},{"a":[30.9977,8.7368],"b":[30.9977,8.2444],"t":0.15,"paired":true},{"a":[12.325,25.2538],"b":[12.8017,25.2538],"t":0.15,"paired":false},{"a":[34.1287,2.9963],"b":[34.4287,2.9963],"t":0.15,"paired":true},{"a":[10.2448,23.7447],"b":[10.6029,24.0039],"t":0.15,"paired":false},{"a":[10.427,24.2469],"b":[10.0689,23.9877],"t":0.15,"paired":false},{"a":[34.0733,25.2608],"b":[34.4954,25.2608],"t":0.15,"paired":false},{"a":[34.0883,25.2758],"b":[34.4954,25.2758],"t":0.15,"paired":false},{"a":[31.7477,3.0713],"b":[31.7477,2.6713],"t":0.15,"paired":true},{"a":[31.8227,3.0713],"b":[31.8227,2.6713],"t":0.15,"paired":false},{"a":[32.9477,3.2713],"b":[32.9477,2.9213],"t":0.15,"paired":true},{"a":[13.5477,25.2538],"b":[13.8479,25.2538],"t":0.15,"paired":false},{"a":[10.6029,24.0039],"b":[10.427,24.2469],"t":0.15,"paired":false},{"a":[12.8017,25.2538],"b":[12.8017,25.5538],"t":0.15,"paired":false},{"a":[34.1298,3.3213],"b":[34.4298,3.3213],"t":0.15,"paired":false},{"a":[34.1447,3.3063],"b":[34.4298,3.3063],"t":0.15,"paired":false},{"a":[34.1287,3.0713],"b":[34.1298,3.3213],"t":0.15,"paired":false},{"a":[34.1437,3.0712],"b":[34.1447,3.3063],"t":0.15,"paired":false},{"a":[19.5234,41.6659],"b":[19.5234,41.4659],"t":0.15,"paired":true},{"a":[31.0727,3.2713],"b":[31.2727,3.2713],"t":0.15,"paired":false},{"a":[31.2727,3.2713],"b":[31.2727,3.0713],"t":0.15,"paired":false},{"a":[31.0727,3.2563],"b":[31.2577,3.2563],"t":0.15,"paired":false},{"a":[31.2577,3.2563],"b":[31.2577,3.0713],"t":0.15,"paired":false},{"a":[34.4927,22.1877],"b":[34.4927,22.011],"t":0.15,"paired":false},{"a":[26.1428,1.6964],"b":[26.2814,1.7949],"t":0.15,"paired":false},{"a":[29.1727,25.3191],"b":[29.0227,25.3191],"t":0.15,"paired":false},{"a":[31.0727,8.2438],"b":[30.9227,8.2444],"t":0.15,"paired":false},{"a":[32.847,24.6209],"b":[32.697,24.6208],"t":0.15,"paired":false},{"a":[32.0911,22.1991],"b":[31.9411,22.1991],"t":0.15,"paired":false},{"a":[18.0727,26.7741],"b":[18.2227,26.7741],"t":0.15,"paired":false},{"a":[19.4477,42.8719],"b":[19.5977,42.872],"t":0.15,"paired":false},{"a":[30.9227,7.6445],"b":[31.0727,7.6439],"t":0.15,"paired":false},{"a":[31.0727,7.1439],"b":[30.9227,7.1439],"t":0.15,"paired":false},{"a":[31.0727,6.3445],"b":[30.9227,6.3445],"t":0.15,"paired":false},{"a":[34.1287,3.0713],"b":[34.1281,2.9213],"t":0.15,"paired":false},{"a":[25.2227,26.9241],"b":[25.2227,27.0741],"t":0.15,"paired":false},{"a":[31.9724,7.1405],"b":[31.973,7.2905],"t":0.15,"paired":false},{"a":[24.1727,25.3191],"b":[24.1727,25.4691],"t":0.15,"paired":false},{"a":[25.0379,43.9295],"b":[25.1879,43.9295],"t":0.15,"paired":false},{"a":[32.8727,6.3364],"b":[33.0227,6.3364],"t":0.15,"paired":false},{"a":[33.0227,4.3213],"b":[32.8727,4.3213],"t":0.15,"paired":false},{"a":[19.4484,41.5659],"b":[19.5984,41.5659],"t":0.2,"paired":true},{"a":[33.0227,2.9213],"b":[32.8727,2.9213],"t":0.15,"paired":false},{"a":[32.8727,3.2713],"b":[33.0227,3.2713],"t":0.15,"paired":false},{"a":[18.2227,25.4754],"b":[18.3727,25.4754],"t":0.15,"paired":false},{"a":[18.2217,47.8951],"b":[18.3717,47.8952],"t":0.15,"paired":false},{"a":[31.8227,2.6713],"b":[31.6727,2.6713],"t":0.15,"paired":false},{"a":[31.6727,3.0713],"b":[31.8227,3.0713],"t":0.15,"paired":false},{"a":[30.9227,4.3213],"b":[31.0727,4.3213],"t":0.15,"paired":false},{"a":[31.0727,2.6713],"b":[30.9227,2.6713],"t":0.15,"paired":false},{"a":[30.9227,3.2713],"b":[31.0727,3.2713],"t":0.15,"paired":false},{"a":[27.8445,13.3077],"b":[27.9945,13.3078],"t":0.15,"paired":false},{"a":[18.0727,26.9241],"b":[18.0727,26.7741],"t":0.15,"paired":false},{"a":[28.9946,13.1579],"b":[28.9946,13.3078],"t":0.15,"paired":false},{"a":[32.0911,13.3081],"b":[32.0911,13.1583],"t":0.15,"paired":false},{"a":[31.9141,11.5577],"b":[31.9141,11.4086],"t":0.15,"paired":false},{"a":[32.1177,25.3191],"b":[32.1177,25.4681],"t":0.15,"paired":false},{"a":[33.0227,7.1351],"b":[32.8919,7.1363],"t":0.15,"paired":false},{"a":[27.9607,34.1683],"b":[34.446,34.1726],"t":0.15,"paired":false,"low":true},{"a":[34.4454,34.2226],"b":[27.9607,34.2183],"t":0.15,"paired":false,"low":true},{"a":[32.0469,21.9959],"b":[32.0469,16.5859],"t":0.15,"paired":false,"low":true},{"a":[31.9971,21.9959],"b":[31.9969,16.5859],"t":0.15,"paired":false,"low":true},{"a":[18.9822,30.2775],"b":[18.9796,34.4144],"t":0.15,"paired":false,"low":true},{"a":[19.0296,34.4144],"b":[19.0322,30.2775],"t":0.15,"paired":false,"low":true},{"a":[31.9969,16.3827],"b":[31.9968,13.3081],"t":0.15,"paired":false,"low":true},{"a":[32.0469,16.3827],"b":[32.0469,13.3081],"t":0.15,"paired":false,"low":true},{"a":[22.7007,30.6818],"b":[22.6994,32.8144],"t":0.15,"paired":false,"low":true},{"a":[22.7494,32.8144],"b":[22.7507,30.6819],"t":0.15,"paired":false,"low":true},{"a":[12.3422,26.9241],"b":[12.3432,25.5538],"t":0.1,"paired":true,"low":true},{"a":[30.9977,3.2713],"b":[30.9977,4.3213],"t":0.15,"paired":true,"low":true},{"a":[32.9477,3.2713],"b":[32.9477,4.3213],"t":0.15,"paired":true,"low":true},{"a":[32.8727,2.9963],"b":[31.8227,2.9963],"t":0.15,"paired":true,"low":true},{"a":[17.4526,47.9946],"b":[17.4521,48.7685],"t":0.1,"paired":true,"low":true},{"a":[18.2217,47.9451],"b":[17.5026,47.9446],"t":0.1,"paired":true,"low":true},{"a":[30.9977,8.2438],"b":[30.9977,7.6445],"t":0.15,"paired":true,"low":true}],"columns":{"concrete":[{"c":[17.9428,13.3748],"w":0.294,"d":0.36,"rot":21.48,"h":9.2},{"c":[27.6339,8.8987],"w":0.296,"d":0.41,"rot":114.78,"h":9.2},{"c":[17.9428,13.3748],"w":0.294,"d":0.36,"rot":21.48,"h":9.2},{"c":[13.215,19.9148],"w":0.294,"d":0.394,"rot":20.54,"h":9.2},{"c":[4.097,40.4004],"w":0.264,"d":0.303,"rot":118.87,"h":9.2},{"c":[8.1341,42.9675],"w":0.264,"d":0.303,"rot":118.87,"h":9.2},{"c":[12.2015,45.5099],"w":0.264,"d":0.298,"rot":118.87,"h":9.2},{"c":[16.2505,48.0909],"w":0.264,"d":0.3,"rot":118.87,"h":9.2},{"c":[20.3766,50.6019],"w":0.255,"d":0.29,"rot":99.91,"h":9.2},{"c":[0.254,37.8995],"w":0.294,"d":0.42,"rot":125.9,"h":9.2},{"c":[25.166,51.466],"w":0.242,"d":0.264,"rot":10.54,"h":9.2},{"c":[29.9492,52.3558],"w":0.242,"d":0.265,"rot":10.45,"h":9.2},{"c":[34.4495,53.1632],"w":0.316,"d":0.32,"rot":89.76,"h":9.2},{"c":[34.4021,45.665],"w":0.26,"d":0.42,"rot":23.96,"h":9.2},{"c":[34.3977,38.194],"w":0.26,"d":0.433,"rot":23.48,"h":9.2},{"c":[34.5118,29.5235],"w":0.292,"d":0.362,"rot":9.07,"h":9.2},{"c":[34.5012,20.8629],"w":0.285,"d":0.371,"rot":7.68,"h":9.2},{"c":[34.4822,12.0774],"w":0.29,"d":0.361,"rot":9.99,"h":9.2},{"c":[22.8378,6.6437],"w":0.366,"d":0.384,"rot":35.9,"h":9.2},{"c":[8.4628,26.581],"w":0.262,"d":0.468,"rot":32.48,"h":9.2},{"c":[4.3717,32.2345],"w":0.266,"d":0.457,"rot":32.4,"h":9.2}],"steel":[{"c":[26.1443,11.454],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[34.2889,11.457],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[32.0157,16.4843],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[26.146,19.253],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[32.0157,22.0975],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[32.0161,25.3757],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[18.2976,25.3738],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[18.2962,29.8689],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[18.2947,34.158],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[26.1443,34.1628],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[30.6758,35.5404],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[30.6753,37.6704],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[32.0157,34.167],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[34.3048,37.6735],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[34.3292,35.543],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[34.2449,34.1685],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[34.2939,25.3774],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[34.2907,22.0994],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[34.2889,16.4858],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[34.2953,29.8689],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[26.1443,29.8685],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[34.2889,9.0535],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[32.0157,11.4562],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[26.1433,25.3734],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[32.0157,9.0529],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[32.0157,34.167],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[27.9325,11.455],"w":0.203,"d":0.203,"rot":0.0,"h":3.15},{"c":[27.9332,9.0526],"w":0.203,"d":0.203,"rot":0.0,"h":3.15}]},"door_candidates":[{"c":[22.5722,7.9517],"span":2.154,"verts":5,"confidence":"candidate"},{"c":[23.0199,6.7589],"span":0.1,"verts":5,"confidence":"candidate"},{"c":[26.8215,9.9744],"span":2.154,"verts":5,"confidence":"candidate"},{"c":[27.4408,8.8206],"span":0.1,"verts":5,"confidence":"candidate"},{"c":[30.9348,26.4742],"span":3.524,"verts":2,"confidence":"candidate"},{"c":[31.1485,1.5536],"span":2.154,"verts":5,"confidence":"candidate"},{"c":[25.9918,0.8615],"span":2.154,"verts":5,"confidence":"candidate"},{"c":[26.0826,2.1323],"span":0.1,"verts":5,"confidence":"candidate"},{"c":[30.8848,2.8351],"span":0.101,"verts":5,"confidence":"candidate"},{"c":[32.4822,22.1059],"span":0.73,"verts":4,"confidence":"candidate"},{"c":[31.1941,25.3756],"span":1.441,"verts":4,"confidence":"candidate"},{"c":[29.8931,25.4449],"span":1.441,"verts":4,"confidence":"candidate"},{"c":[29.975,25.5574],"span":0.073,"verts":3,"confidence":"candidate"},{"c":[29.975,25.5748],"span":0.073,"verts":3,"confidence":"candidate"},{"c":[31.0921,25.2439],"span":0.073,"verts":3,"confidence":"candidate"},{"c":[31.0921,25.2613],"span":0.073,"verts":3,"confidence":"candidate"}],"door_note":"47 `puerta` block inserts exist in the file but ALL lie outside the ground-floor plan (orphaned library blocks). No swing arcs exist inside the plan. Openings are NOT reliably reconstructable from this drawing."};
+
+const WALL_H = 3.15;   // assumption: partitions rise to the mezzanine level
+const LOW_H  = 1.10;   // assumption: MURO BAJO is a parapet
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xf4f1ea);
+scene.fog = new THREE.Fog(0xf4f1ea, 90, 220);
+
+const W = DATA.meta.size.x, D = DATA.meta.size.y;
+
+// --- CAD -> three.js coordinate mapping ------------------------------------
+// CAD is right-handed in XY: +X right, +Y UP the sheet.
+// three.js is right-handed in 3D: +X right, +Y up, +Z TOWARD THE VIEWER.
+// A plan lives in the XZ plane, and looking down at XZ from +Y makes screen-up
+// equal to -Z. Mapping z = y therefore MIRRORS the plan vertically, which is
+// exactly the defect this fixes: the site chamfer came out on the wrong side.
+//
+// z = D - y flips the axis and keeps the model in positive coordinates.
+// Consequence for rotations: dz = -dy, so a bearing that was -atan2(dy, dx)
+// becomes +atan2(dy, dx). Every rotation below follows that rule.
+const mapZ = (y) => D - y;
+const mapXZ = (p) => [p[0], mapZ(p[1])];
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 1000);
+camera.position.set(W * 1.05, 34, D * 1.05);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(W / 2, 2, D / 2);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI / 2.05;
+
+// --- lighting -------------------------------------------------------------
+scene.add(new THREE.HemisphereLight(0xffffff, 0xc9c2b4, 1.5));
+const sun = new THREE.DirectionalLight(0xfff6e8, 1.9);
+sun.position.set(W * 0.9, 46, -D * 0.35);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const s = Math.max(W, D) * 0.75;
+Object.assign(sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 1, far: 160 });
+scene.add(sun);
+
+// --- materials ------------------------------------------------------------
+const matWallMeasured = new THREE.MeshStandardMaterial({ color: 0xc9c2b4, roughness: 0.92 });
+const matWallAssumed  = new THREE.MeshStandardMaterial({ color: 0xd9d3c6, roughness: 0.95 });
+const matConcrete     = new THREE.MeshStandardMaterial({ color: 0x8c97a8, roughness: 0.85 });
+const matSteel        = new THREE.MeshStandardMaterial({ color: 0xb4532a, roughness: 0.55, metalness: 0.35 });
+const matSlab         = new THREE.MeshStandardMaterial({ color: 0xe8e3d8, roughness: 1 });
+const matMezz         = new THREE.MeshStandardMaterial({
+  color: 0xb9b1a1, roughness: 0.9, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
+
+// --- slab -----------------------------------------------------------------
+// The slab follows the BUILDING OUTLINE, not the clip rectangle. The site is
+// chamfered, so a rectangular slab invents ~750 m2 of floor that does not
+// exist -- the defect that made the first model unrecognisable against the CAD.
+function shapeFrom(poly) {
+  // Points are mapped to the XZ plane FIRST, so the slab is flipped by the
+  // same rule as everything else -- a shape built in raw CAD coords would sit
+  // mirrored under the walls.
+  const pts = poly.map(mapXZ);
+  const sh = new THREE.Shape();
+  sh.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) sh.lineTo(pts[i][0], pts[i][1]);
+  sh.closePath();
+  return sh;
+}
+function slabMesh(poly, thickness, material) {
+  const geo = new THREE.ExtrudeGeometry(shapeFrom(poly),
+    { depth: thickness, bevelEnabled: false });
+  // The flip is ALREADY applied, in shapeFrom(). This rotation only lays the
+  // shape's local XY plane down into the world XZ plane:
+  //   rotateX(+90 deg):  (x, s, 0) -> (x, 0, +s)   world_z = +s  ✓ matches walls
+  //   rotateX(-90 deg):  (x, s, 0) -> (x, 0, -s)   world_z = -s  ✗ flipped AGAIN
+  // Using -90 here applies the flip a SECOND time and throws the slab to
+  // negative Z, detached from the walls. Flip the points OR the rotation --
+  // never both.
+  geo.rotateX(Math.PI / 2);
+  // Extruded thickness now runs toward -Y, i.e. the slab hangs BELOW its
+  // placement height, which is what a floor slab should do.
+  return new THREE.Mesh(geo, material);
+}
+
+const slab = slabMesh(DATA.outline.poly, 0.25, matSlab);
+slab.position.y = 0;
+slab.receiveShadow = true;
+scene.add(slab);
+
+// --- walls ----------------------------------------------------------------
+// Each wall is a centreline a->b with a thickness. Build one box per run,
+// rotated to the segment's own bearing -- 26.2% of the plan is oblique
+// (Block 4), so nothing may be axis-snapped.
+const wallGroup = new THREE.Group();
+let runTotal = 0;
+for (const w of DATA.walls) {
+  const dx = w.b[0] - w.a[0], dy = w.b[1] - w.a[1];
+  const len = Math.hypot(dx, dy);
+  if (len < 0.05) continue;
+  runTotal += len;
+  const h = w.low ? LOW_H : WALL_H;
+  const geo = new THREE.BoxGeometry(len, h, w.t);
+  const mesh = new THREE.Mesh(geo, w.paired ? matWallMeasured : matWallAssumed);
+  mesh.position.set((w.a[0] + w.b[0]) / 2, h / 2,
+                    mapZ((w.a[1] + w.b[1]) / 2));
+  // dz = -dy under the flip, so the bearing sign inverts.
+  mesh.rotation.y = Math.atan2(dy, dx);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  wallGroup.add(mesh);
+}
+scene.add(wallGroup);
+
+// --- columns --------------------------------------------------------------
+const colGroup = new THREE.Group();
+function addColumn(c, material) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(c.w, c.h, c.d), material);
+  m.position.set(c.c[0], c.h / 2, mapZ(c.c[1]));
+  // Same sign inversion as the walls: the Z flip reverses in-plane bearings.
+  m.rotation.y = c.rot * Math.PI / 180;
+  m.castShadow = true;
+  colGroup.add(m);
+}
+for (const c of DATA.columns.concrete) addColumn(c, matConcrete);
+for (const c of DATA.columns.steel) addColumn(c, matSteel);
+scene.add(colGroup);
+
+// --- mezzanine deck -------------------------------------------------------
+// Its extent is the convex span of the steel frame (Block 5 §5.4), not a
+// guess: the HSS tubes ARE the mezzanine's supports.
+const mezzGroup = new THREE.Group();
+if (DATA.mezzanine_outline && DATA.mezzanine_outline.poly) {
+  // The drawn PROYECCIÓN outline, not a bounding box around the steel.
+  const deck = slabMesh(DATA.mezzanine_outline.poly, 0.18, matMezz);
+  deck.position.y = DATA.levels.mezzanine;
+  deck.castShadow = true;
+  mezzGroup.add(deck);
+}
+scene.add(mezzGroup);
+
+// --- ground grid ----------------------------------------------------------
+const grid = new THREE.GridHelper(Math.max(W, D) * 1.6, 40, 0xb9b1a1, 0xdcd6ca);
+grid.position.set(W / 2, -0.26, D / 2);
+scene.add(grid);
+
+// --- HUD ------------------------------------------------------------------
+const txt = (id, v) => document.getElementById(id).textContent = v;
+txt('s-size', `${DATA.outline.area} m²`);
+txt('s-bbox', `${DATA.meta.size.x} × ${DATA.meta.size.y} m`);
+txt('s-walls', `${DATA.walls.length} (${runTotal.toFixed(0)} m)`);
+txt('s-conc', DATA.columns.concrete.length);
+txt('s-mezzarea', DATA.mezzanine_outline.poly ? ` m²` : 'n/a');
+txt('s-steel', DATA.columns.steel.length);
+txt('s-slab', `${DATA.levels.slab.toFixed(2)} m`);
+txt('s-mezz', `+${DATA.levels.mezzanine.toFixed(2)} m`);
+txt('s-roof', `+${DATA.levels.roof.toFixed(2)} m`);
+
+const toggle = (btn, obj) => {
+  btn.addEventListener('click', () => {
+    obj.visible = !obj.visible;
+    btn.setAttribute('aria-pressed', String(obj.visible));
+  });
+};
+toggle(document.getElementById('b-mezz'), mezzGroup);
+toggle(document.getElementById('b-cols'), colGroup);
+document.getElementById('b-top').addEventListener('click', () => {
+  camera.position.set(W / 2, Math.max(W, D) * 1.25, D / 2 + 0.01);
+  controls.target.set(W / 2, 0, D / 2);
+});
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+(function loop() {
+  requestAnimationFrame(loop);
+  controls.update();
+  renderer.render(scene, camera);
+})();
+</script>
+</body>
+</html>
