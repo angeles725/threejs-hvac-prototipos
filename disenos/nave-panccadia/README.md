@@ -1,4 +1,4 @@
-# Nave Panccadia — ground floor + upper storey + roof
+# Nave Panccadia — ground floor + upper storey + roof + plant
 
 Two-storey 3D model, now roofed, of an industrial bakery plant on Av. Del Curtidor (client: Rotzinger León),
 reconstructed from the client's AutoCAD 2007 DWG.
@@ -10,8 +10,8 @@ DesignSpec — it was RECONSTRUCTED from a real CAD drawing under the Research-S
 | | |
 |---|---|
 | Viewer | [`nave-panccadia-3d-v3.html`](nave-panccadia-3d-v3.html) — self-contained, opens from the filesystem. Supersedes `v2`, which had no roof |
-| Geometry | [`ground-floor.json`](ground-floor.json) · [`upper-floor.json`](upper-floor.json) · [`roof.json`](roof.json) |
-| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, 14 cited blocks) |
+| Geometry | [`ground-floor.json`](ground-floor.json) · [`upper-floor.json`](upper-floor.json) · [`roof.json`](roof.json) · [`equipment.json`](equipment.json) |
+| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, 15 cited blocks) |
 | Source DWG | preserved in that corpus at `raw/`, `sha256 053750e0…948ee7f3` |
 
 ## Storey control
@@ -26,6 +26,8 @@ The viewer opens with both storeys. Buttons in the HUD:
 | **Mezzanine** | drives the upper deck |
 | **Roof** | shows/hides the roof |
 | **Roof off — read the plan** | one click to strip the roof and look down into the building |
+| **Equipment** | shows/hides the 35 machines |
+| **Equipment labels** | shows/hides their name tags |
 | **Columns** · **Top view** | as before |
 
 ## What the model contains
@@ -77,11 +79,40 @@ A-A'. The ridge follows.
 labelled `AZOTEA` — a flat roof terrace, not this gable. That area is deliberately left unroofed
 rather than roofed on a guess.
 
+### Industrial plant (`PDF2_*` layers)
+
+**Authored geometry, not a traced PDF underlay** — the footprints are rectangles at round dimensions
+that repeat to the millimetre across instances. **35 machines placed**, 26 of them named:
+
+| Equipment | Footprint (m) | Count |
+|---|---|---|
+| cámara de fermentación · `ISOPAN 4C2P` | 2.33 × 2.24 | 1 |
+| horno rotativo · `SVP-3` | 2.07 × 2.05 | 2 |
+| `LAMINADORA` | 3.32 × 1.06 | 1 |
+| mesa 3x1 | 3.01 × 1.01 | 3 |
+| horno dominó · `2T6040` / `4T6040` | 1.63 × 1.63 | 2 |
+| fermentadora · `ISOPAN 2C1P` | 2.20 × 1.20 | 1 |
+| ultracongelador | 2.18 × 1.02 | 1 |
+| Amasadora / Batidora | 1.02 × 1.12 | 4 |
+| Horno convección · `ECOFRAN` | 1.16 × 1.29 | 2 |
+| estufa · freidora · Báscula · Cuentalitros | — | 4 |
+
+**A free unit check fell out of this.** The label `mesa 3x1` sits on a rectangle measuring
+3.009 × 1.009 m. A table called "3 by 1" is 3 m by 1 m — a fourth witness that 1 drawing unit is
+1 metre, and the first SEMANTIC one (the other three were geometric).
+
 ## What it does NOT contain — read before reusing
 
 - **No door openings**, on either storey. All 47 `puerta 1.20` block inserts in the DWG lie OUTSIDE
   the plan (scattered from X=6.56 to X=608), and the `PUERTAS` layer holds no swing arcs inside it.
   The doors were never placed as objects, so they are not reconstructable from this drawing.
+- **Equipment HEIGHTS are an assumption, and a large one.** The plans give footprints; the section
+  island carries no `PDF2_*` geometry at all, so not one machine height is measurable anywhere in
+  this drawing. The build uses a stated convention for bakery plant (rotary oven 2.20 m, mixers
+  1.40 m, tables 0.90 m…). The equipment is drawn in its own colour so it cannot be mistaken for
+  measured fabric.
+- **8 drawn shapes are unnamed**, and 3 labels — `Báscula`, `Rebanadora`, `mesa 2x1` — name equipment
+  with no drawn footprint at all.
 - **Wall heights are an ASSUMPTION** (ground 3.15 m, upper partitions 3.00 m, low walls 1.10 m). The
   drawing states floor LEVELS, never wall heights. The viewer's HUD labels these as assumptions.
 - **The roof's EXTENT is an extrapolation.** The pitch and the ridge are certified at three drawn
@@ -108,6 +139,7 @@ rather than roofed on a guess.
 | `corte-cc-armadura.png` | section C-C' as AutoCAD draws it — the truss the roof is read from |
 | `techo-topview.png` | the roof that shipped: ridge (blue) straight and oblique, eaves on the outline |
 | `techo-topview-v-rechazado.png` | the ridge model that was **rejected** — folded into a V, and passed every arithmetic check |
+| `equipo-topview.png` | the 35 machines in plan (teal = ground floor, purple = upper) |
 
 ## Regenerating it
 
@@ -120,9 +152,10 @@ $V tools/extract-gf.py     raw/nave-panccadia.dxf build/ground-floor.json
 $V tools/extract-pa.py     raw/nave-panccadia.dxf build/upper-floor.json
 $V tools/roof-profile.py   raw/nave-panccadia.dxf > corpus/sources/probes/roof-profile.txt
 $V tools/extract-roof.py   build/ground-floor.json build/roof.json
-$V tools/validate-model.py build/ground-floor.json build/upper-floor.json build/roof.json  # 48/48
-$V tools/prove-guards.py   build/ground-floor.json build/upper-floor.json build/roof.json  # 10/10 CAUGHT
-$V tools/build-viewer.py   build/ground-floor.json build/nave-panccadia-3d.html build/upper-floor.json build/roof.json
+$V tools/equipment.py      raw/nave-panccadia.dxf build/equipment.json
+$V tools/validate-model.py build/ground-floor.json build/upper-floor.json build/roof.json build/equipment.json  # 53/53
+$V tools/prove-guards.py   build/ground-floor.json build/upper-floor.json build/roof.json build/equipment.json  # 14/14 CAUGHT
+$V tools/build-viewer.py   build/ground-floor.json build/nave-panccadia-3d.html build/upper-floor.json build/roof.json build/equipment.json
 $V tools/topview-check.py  build/ground-floor.json build/render/topview-roof.png \
                            --mapping flip --upper build/upper-floor.json --roof build/roof.json
 ```
@@ -163,7 +196,14 @@ gate and were caught by eye:
    injector pushed the ridge further along the direction it already ran, so nothing folded. Trusting
    that verdict would have meant "fixing" a guard that worked.
 
-A seventh, about method rather than geometry: **a check that cannot SEE a defect still returns a
+7. **Proving guards finds VACUOUS checks, not only wrong ones.** The equipment gate carried a check
+   named "equipment cloud is not mirrored across the plan". Injecting a real mirror tripped the
+   outline and slab checks and left that one green: it asserted a *precondition* for detection, not
+   the detection, and could not fail on its own defect under any input. Deleted, not renamed — a
+   check that cannot fail reports coverage the gate does not have, under a name that invites the
+   trust it has not earned.
+
+An eighth, about method rather than geometry: **a check that cannot SEE a defect still returns a
 confident answer.** The parapet drawn around the raised slab agreed with the projected outline on
 37 of 39 segments — but a parapet only exists where floor meets open air, so it could never have
 detected enclosed floor. The test that worked was semantic: a labelled room cannot float.
@@ -174,8 +214,9 @@ Detail: blocks 7–12 of the corpus, and `retros/2026-07-28-run1-retro.md`.
 
 Ground floor operator-confirmed correct against the CAD, 2026-07-28.
 Upper storey added 2026-07-28 — validation gate 35/35, all 5 third-path guards proven failing.
-Roof added 2026-07-28 — validation gate **48/48** (13 roof checks, every witness checked on BOTH
-axes), **10/10** guards proven failing, ridge and extent confirmed against the top-view render.
+Roof added 2026-07-28 — 13 roof checks, ridge and extent confirmed against the top-view render.
+Industrial plant added 2026-07-28 — 35 machines from the `PDF2_*` layers.
+Current gate: **53/53** checks, **14/14** guards proven failing.
 
 **Both the upper storey and the roof are awaiting operator confirmation against the CAD.** That
 confirmation is the only oracle this project has that the arithmetic gate cannot provide — it has
