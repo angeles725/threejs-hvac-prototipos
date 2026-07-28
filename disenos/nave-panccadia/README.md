@@ -1,4 +1,4 @@
-# Nave Panccadia — ground floor + upper storey + roof + plant + the recovered doors
+# Nave Panccadia — ground floor + upper storey + roof + plant + doors + furniture + named spaces
 
 Two-storey 3D model, now roofed, of an industrial bakery plant on Av. Del Curtidor (client: Rotzinger León),
 reconstructed from the client's AutoCAD 2007 DWG.
@@ -10,8 +10,8 @@ DesignSpec — it was RECONSTRUCTED from a real CAD drawing under the Research-S
 | | |
 |---|---|
 | Viewer | [`nave-panccadia-3d-v3.html`](nave-panccadia-3d-v3.html) — self-contained, opens from the filesystem. Supersedes `v2`, which had no roof |
-| Geometry | [`ground-floor.json`](ground-floor.json) · [`upper-floor.json`](upper-floor.json) · [`roof.json`](roof.json) · [`equipment.json`](equipment.json) · [`recovered-blocks.json`](recovered-blocks.json) |
-| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, 18 cited blocks) |
+| Geometry | [`ground-floor.json`](ground-floor.json) · [`upper-floor.json`](upper-floor.json) · [`roof.json`](roof.json) · [`equipment.json`](equipment.json) · [`recovered-blocks.json`](recovered-blocks.json) · [`furniture.json`](furniture.json) · [`rooms.json`](rooms.json) |
+| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, 20 cited blocks) |
 | Source DWG | preserved in that corpus at `raw/`, `sha256 053750e0…948ee7f3` |
 
 ## Storey control
@@ -29,6 +29,8 @@ The viewer opens with both storeys. Buttons in the HUD:
 | **Equipment** | shows/hides the 35 machines |
 | **Equipment labels** | shows/hides their name tags |
 | **Doors** | shows/hides the two recovered leaves |
+| **Furniture** | shows/hides the 60 triaged pieces |
+| **Spaces** · **Space names** | shows/hides the 10 mapped rooms and their labels |
 | **Columns** · **Top view** | as before |
 
 ## What the model contains
@@ -118,6 +120,50 @@ all 48 of them.
 `*U116` is the **first and only certified opening** in this reconstruction. Inferring the rest from
 the gaps between wall runs was tested and refuted — see below.
 
+### Furniture (`MOBILIARIO`)
+
+The layer has **4,946 entities** and that number is misleading: **4,408 lie outside both plans** —
+they are the furniture drawn in ELEVATION inside the section island. Four filters, each of which
+rejects, leave **60 real footprints** (37 ground, 23 upper). They repeat like catalogue items: nine
+at 0.500 × 0.400 m, six at 2.540 × 1.100, four at 1.201 × 1.001.
+
+Round tables were given a fair test — circles are converted to polygons rather than skipped — and
+then rejected on their own merits: every in-plan circle has a radius under 13 cm, so they are
+symbols.
+
+### Named spaces — and where the missing doors are
+
+There is no polygon in the drawing to look a room label up in: the walls are open segments. So each
+of the 21 ground-floor labels is **flood-filled** from its own position — and that choice answered a
+question the geometry could not.
+
+**Every label reaches the same 1,029.96 m².** The interior is ONE connected space, because every room
+has a doorway and one doorway merges two spaces. That is the trace the missing doors leave.
+
+Sealing every collinear gap up to a door width and re-flooding closes real rooms, and the sweep has a
+**plateau**:
+
+| seal ≤ | gaps closed | rooms enclosed |
+|---|---|---|
+| 1.2 m | 55 | 5 |
+| **1.8 m** | **67** | **10** |
+| 2.4 m | 76 | **10** |
+| 3.0 m | 84 | 11 |
+
+Nine more gaps sealed between 1.8 and 2.4 m close no additional room. **The doorways are 1.8 m or
+narrower**; wider gaps are open passages.
+
+**The cold rooms close**: `CÁMARA DE REFRIGERACIÓN` **40.4 m²**, `CÁMARA DE CONGELACIÓN` **30.3 m²**.
+Their doorways are those gaps. Also mapped: cuarto de repostería/laminado 96.0 m² (one region, two
+labels), bicicletas y motos 56.2, refrigeración ×2, vigilancia, bodega, cuarto hidráulico.
+
+Eleven spaces still leak and most of them should — `PASILLO DE SERVICIO`, `ÁREA DE TRABAJO`,
+`ESTACIONAMIENTO`, `CARGA Y DESCARGA` are circulation. Four that arguably should close
+(`BAÑO`, `CUARTO DE MÁQUINAS`, `DESINFECCIÓN`, `VERTEDERO`) were left leaking rather than forcing
+them shut by widening the seal until they complied.
+
+Rooms are painted as their **exact covered cells**, never as bounding boxes.
+
 ## What it does NOT contain — read before reusing
 
 - **No door openings**, on either storey. All 47 `puerta 1.20` block inserts in the DWG lie OUTSIDE
@@ -135,6 +181,11 @@ the gaps between wall runs was tested and refuted — see below.
   the plan, and the gap-inference route is refuted.
 - **The 34 recovered `MOBILIARIO` symbols are carried but not placed** — they are in
   `recovered-blocks.json`, waiting for the furniture pass.
+- **Furniture heights are worse than assumed — they are unkeyable.** The equipment at least has
+  labels, so a height can be keyed off a name. `MOBILIARIO` carries no text inside either plan at
+  all. Every piece takes one stated 0.90 m.
+- **The doorways are not located individually.** The seal test is evidence about the POPULATION of
+  gaps, not about any single one. Only the two recovered leaves mark specific openings.
 - **Wall heights are an ASSUMPTION** (ground 3.15 m, upper partitions 3.00 m, low walls 1.10 m). The
   drawing states floor LEVELS, never wall heights. The viewer's HUD labels these as assumptions.
 - **The roof's EXTENT is an extrapolation.** The pitch and the ridge are certified at three drawn
@@ -232,7 +283,17 @@ gate and were caught by eye:
    premise was false: `*U116`'s insert is rotation 0, scale [1, 1] — an identity transform that no
    composition error can move. The chain was exercised only by the other leaf.
 
-A ninth, about method rather than geometry: **a check that cannot SEE a defect still returns a
+9. **A layer's headline count is not its scope.** `MOBILIARIO` was scoped as "4,946 entities, the
+   single largest layer" and treated as a probable discard. 4,408 of them are elevation drawings and
+   outliers; the gap was a tenth of the size it was given, and its answer was yes.
+
+10. **When a per-item test refuses to discriminate, ask the structural question.** Whether a given
+    gap is a doorway cannot be decided by its width — that was tested and refuted. Whether the gaps
+    TOGETHER turn the plan into a coherent set of rooms can be, and the sweep's plateau at 1.8–2.4 m
+    is the signature of a real door population. The per-item refutation still stands; the structural
+    result is about the population, not any single gap.
+
+An eleventh, about method rather than geometry: **a check that cannot SEE a defect still returns a
 confident answer.** The parapet drawn around the raised slab agreed with the projected outline on
 37 of 39 segments — but a parapet only exists where floor meets open air, so it could never have
 detected enclosed floor. The test that worked was semantic: a labelled room cannot float.
@@ -246,7 +307,9 @@ Upper storey added 2026-07-28 — validation gate 35/35, all 5 third-path guards
 Roof added 2026-07-28 — 13 roof checks, ridge and extent confirmed against the top-view render.
 Industrial plant added 2026-07-28 — 35 machines from the `PDF2_*` layers.
 Doors recovered from the DWG 2026-07-28 — the DXF never had them.
-Current gate: **60/60** checks, **17/17** guards proven failing.
+Furniture triaged 2026-07-28 — 60 pieces of 4,946 entities.
+Named spaces mapped 2026-07-28 — 10 rooms of 21 ground-floor labels.
+Current gate: **71/71** checks, **22/22** guards proven failing.
 
 **Both the upper storey and the roof are awaiting operator confirmation against the CAD.** That
 confirmation is the only oracle this project has that the arithmetic gate cannot provide — it has
