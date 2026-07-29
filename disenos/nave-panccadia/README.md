@@ -9,7 +9,7 @@ DesignSpec — it was RECONSTRUCTED from a real CAD drawing under the Research-S
 
 | | |
 |---|---|
-| Viewer | **[`nave-panccadia-3d-v4.html`](nave-panccadia-3d-v4.html)** — self-contained, opens from the filesystem by double-click. Supersedes `v3` |
+| Viewer | **[`nave-panccadia-3d-v5.html`](nave-panccadia-3d-v5.html)** — adds a single **`Labels off`** switch. Supersedes `v4`<br>[`nave-panccadia-3d-v4.html`](nave-panccadia-3d-v4.html) — self-contained, opens from the filesystem by double-click. Supersedes `v3` |
 | Geometry (new in v4) | [`doors.json`](doors.json) · [`facade-3d.json`](facade-3d.json) · [`grid-full.json`](grid-full.json) · [`sections.json`](sections.json) |
 | Geometry | [`ground-floor.json`](ground-floor.json) · [`upper-floor.json`](upper-floor.json) · [`roof.json`](roof.json) · [`equipment.json`](equipment.json) · [`recovered-blocks.json`](recovered-blocks.json) · [`furniture.json`](furniture.json) · [`rooms.json`](rooms.json) · [`rooms-pa.json`](rooms-pa.json) |
 | Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, **35 cited blocks**, coverage 37/39) |
@@ -46,6 +46,18 @@ The viewer opens with both storeys. Buttons in the HUD:
 | **Doors** | the 9 leaves on 8 positions, with the 4 drawn swing arcs on the slab |
 | **Facade** | the 24 measured elements of `FACHADA PRINCIPAL`, on the south-east face |
 | **Grid** | the structural grid as a slab overlay — **off by default**, a legend rather than geometry |
+| **Labels off** | one switch that hides EVERY tag at once — equipment, space names, upper space names. Click again and each group returns to whatever its own button was set to |
+
+## Known wrong, as of v5
+
+Recorded here rather than left for the reader to find:
+
+| | |
+|---|---|
+| **The doors and the facade float** | They stand on the south-east street front, and that face has **no wall in the model** — because the plan draws no `MUROS` there. What it draws is `CONTEXTO`: eight parking bays of 5.00 × 2.70 m, a driveway, and the property line. The street front is **glazing**, not masonry, which is why the facade elevation shows 3.46 m storefront bays and why `MUROS` is empty there. The storefront is measured but not yet built. |
+| **Only 9 doors** | That is every door the CAD draws in this plan. Interior doorways are not drawn as door symbols, and no opening is cut anywhere: **0 of 9** leaves have a gap in the extracted walls and only 2 of 9 in the raw geometry. Cutting more would invent them. |
+| **The roof reads flat at its ends** | Pitch and ridge are certified only at the three drawn transversal cuts. Extrapolating a straight oblique ridge over a nave that narrows drives the ridge toward one edge, so the rise falls from 1.74 m to **0.134 m** — geometrically consistent with the fit, visually a single tilted plane. It is an extrapolation and the HUD says so. |
+
 | **Doors** | shows/hides the two recovered leaves |
 | **Furniture** | shows/hides the 60 triaged pieces |
 | **Spaces** · **Space names** | shows/hides the ground floor's 9 mapped regions and their labels |
