@@ -1,4 +1,4 @@
-# Nave Panccadia — ground floor + upper storey + roof + plant + doors + furniture + named spaces
+# Nave Panccadia — ground floor + upper storey + roof + plant + doors + furniture + named spaces (both storeys)
 
 Two-storey 3D model, now roofed, of an industrial bakery plant on Av. Del Curtidor (client: Rotzinger León),
 reconstructed from the client's AutoCAD 2007 DWG.
@@ -10,9 +10,9 @@ DesignSpec — it was RECONSTRUCTED from a real CAD drawing under the Research-S
 | | |
 |---|---|
 | Viewer | [`nave-panccadia-3d-v3.html`](nave-panccadia-3d-v3.html) — self-contained, opens from the filesystem. Supersedes `v2`, which had no roof |
-| Geometry | [`ground-floor.json`](ground-floor.json) · [`upper-floor.json`](upper-floor.json) · [`roof.json`](roof.json) · [`equipment.json`](equipment.json) · [`recovered-blocks.json`](recovered-blocks.json) · [`furniture.json`](furniture.json) · [`rooms.json`](rooms.json) |
-| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, 20 cited blocks) |
-| Source DWG | preserved in that corpus at `raw/`, `sha256 053750e0…948ee7f3` |
+| Geometry | [`ground-floor.json`](ground-floor.json) · [`upper-floor.json`](upper-floor.json) · [`roof.json`](roof.json) · [`equipment.json`](equipment.json) · [`recovered-blocks.json`](recovered-blocks.json) · [`furniture.json`](furniture.json) · [`rooms.json`](rooms.json) · [`rooms-pa.json`](rooms-pa.json) |
+| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, 21 cited blocks) |
+| Source DWG | preserved in that corpus at `raw/`, `sha256 053750e0…948ee7f3` (the converted DXF is `f1f688e8…635d18b2`) |
 
 ## Storey control
 
@@ -30,7 +30,8 @@ The viewer opens with both storeys. Buttons in the HUD:
 | **Equipment labels** | shows/hides their name tags |
 | **Doors** | shows/hides the two recovered leaves |
 | **Furniture** | shows/hides the 60 triaged pieces |
-| **Spaces** · **Space names** | shows/hides the 10 mapped rooms and their labels |
+| **Spaces** · **Space names** | shows/hides the ground floor's 9 mapped regions and their labels |
+| **Spaces (upper)** · **Upper space names** | shows/hides the upper storey's 7 mapped rooms and their labels |
 | **Columns** · **Top view** | as before |
 
 ## What the model contains
@@ -163,6 +164,58 @@ Eleven spaces still leak and most of them should — `PASILLO DE SERVICIO`, `ÁR
 them shut by widening the seal until they complied.
 
 Rooms are painted as their **exact covered cells**, never as bounding boxes.
+
+Ten labels close, but they are **9 distinct regions, 259.3 m²**: `CUARTO DE REPOSTERÍA` and
+`CUARTO DE LAMINADO` reach the same 96.02 m² fill, so they are one space under two names.
+
+### Named spaces upstairs — and the plateau that was left alone
+
+The same flood runs over the upper storey's own wall fabric. Three things about it are worth knowing.
+
+**The "20 upper labels" were never 20 spaces.** They are **17 rooms + `AZOTEA` + 2 sheet
+annotations** — `PLANTA ALTA` and `ESC 1:100` sit *below* the plan, at negative Y: they are the
+drawing's title and scale. The 18 real spaces match, exactly, the independent census made when the
+storey was first mapped.
+
+**`LABORATORIO` lands in the annex.** That is the strip added to the slab because the `PROYECCIÓN`
+outline stops short of it — and here it is confirmed again, by a completely different measurement
+(does the label fall inside the polygon?) than the one that established it.
+
+**The seal sweep upstairs has TWO plateaus, and only one was used:**
+
+| seal ≤ | gaps closed | labels | **distinct regions** | area |
+|---|---|---|---|---|
+| 1.2 m | 85 | 6 | 6 | 76.87 m² |
+| **1.5–2.1 m** | 93–117 | 7 | **7** | **81.30 m²** |
+| 2.4 m | 123 | 8 | 8 | 87.75 m² |
+| 2.7–3.5 m | 130–161 | 11 | 9 | 153.29 m² |
+| 4.0–5.0 m | 169–183 | 11 | 9 | 145.6 → 142.1 m² |
+
+The **1.5–2.1 m** plateau is adopted: it overlaps the ground floor's band, which is what one
+building's door catalogue should do. The **2.7–3.5 m** plateau is real — it is flat over three widths
+and it lands on the 2.778 m doorway recovered from the DWG — but it was **not** adopted, because the
+two extra rooms it buys come with a 65.54 m² region that `COMEDOR`, `ÁREA DE LOCKERS` and `SITE` all
+reach at once. A server room open to a canteen is not a plausible plan, and widening the seal until
+more rooms appear would be fitting the threshold to the answer. It is recorded as an open question
+instead.
+
+The seven that close, all **100 % on the slab**:
+
+| Space | Area |
+|---|---|
+| BAÑO HOMBRES | 30.01 m² |
+| BAÑO MUJERES | 19.24 m² |
+| PRIVADO | 16.66 m² |
+| OFICINA | 6.46 m² |
+| ARCHIVO | 4.43 m² |
+| BAÑO | 2.41 m² |
+| BAÑO M | 2.09 m² |
+
+**`AZOTEA` never closes**, and that is what makes the rest mean anything: a method that can turn a
+roof terrace into a room is not measuring, it is just filling. It stayed open at every width tested.
+
+81.30 m² is **27 % of the 297.3 m² slab**. The rest is open-plan office and circulation this method
+cannot bound — not floor shown to be empty.
 
 ## What it does NOT contain — read before reusing
 
