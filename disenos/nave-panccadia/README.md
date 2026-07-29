@@ -1,4 +1,4 @@
-# Nave Panccadia — ground floor + upper storey + roof + plant + doors + furniture + named spaces (both storeys)
+# Nave Panccadia — ground floor + upper storey + roof + plant + doors + furniture + named spaces + principal facade + structural grid
 
 Two-storey 3D model, now roofed, of an industrial bakery plant on Av. Del Curtidor (client: Rotzinger León),
 reconstructed from the client's AutoCAD 2007 DWG.
@@ -9,10 +9,25 @@ DesignSpec — it was RECONSTRUCTED from a real CAD drawing under the Research-S
 
 | | |
 |---|---|
-| Viewer | [`nave-panccadia-3d-v3.html`](nave-panccadia-3d-v3.html) — self-contained, opens from the filesystem. Supersedes `v2`, which had no roof |
+| Viewer | **[`nave-panccadia-3d-v4.html`](nave-panccadia-3d-v4.html)** — self-contained, opens from the filesystem by double-click. Supersedes `v3` |
+| Geometry (new in v4) | [`doors.json`](doors.json) · [`facade-3d.json`](facade-3d.json) · [`grid-full.json`](grid-full.json) · [`sections.json`](sections.json) |
 | Geometry | [`ground-floor.json`](ground-floor.json) · [`upper-floor.json`](upper-floor.json) · [`roof.json`](roof.json) · [`equipment.json`](equipment.json) · [`recovered-blocks.json`](recovered-blocks.json) · [`furniture.json`](furniture.json) · [`rooms.json`](rooms.json) · [`rooms-pa.json`](rooms-pa.json) |
-| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, 21 cited blocks) |
+| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, **35 cited blocks**, coverage 37/39) |
 | Source DWG | preserved in that corpus at `raw/`, `sha256 053750e0…948ee7f3` (the converted DXF is `f1f688e8…635d18b2`) |
+
+## What changed in v4
+
+`v3` shipped before Blocks 28–35. Four things it did not have:
+
+| | |
+|---|---|
+| **The roof never drew.** | The viewer read `s.eave` from stations that carry `eave_w`/`eave_e` — 52 stations of NaN. It had been silently absent since the roof was built, and no arithmetic check could see it: the defect was in the consumer, not the data. Found by opening the page in a browser, which the gate had claimed was impossible. |
+| **Seven of the eight doors were missing.** | The openings gap had been closed on an INSERT census, and six of the eight doors here are drawn as loose geometry, which no census of block references can see. The leaf sits on `PUERTAS` and the swing arc on `PROYECCIÓN`, so a one-layer search finds half the symbol. |
+| **No facade.** | `FACHADA PRINCIPAL` is a 1:1 elevation — 4 of 5 annotated levels exact to 10 mm — registered to the plan grid to 0.9 mm. Its 24 measured elements now stand on the south-east street front. |
+| **No grid.** | 21 vertical and 19 horizontal axes, found by bubble rather than by a search band. Overlay only, off by default. |
+
+Verified in a real browser, not just arithmetically: **99/99** model checks and a page that loads with
+**zero console errors or warnings** across 18 controls.
 
 ## Storey control
 
@@ -28,6 +43,9 @@ The viewer opens with both storeys. Buttons in the HUD:
 | **Roof off — read the plan** | one click to strip the roof and look down into the building |
 | **Equipment** | shows/hides the 35 machines |
 | **Equipment labels** | shows/hides their name tags |
+| **Doors** | the 9 leaves on 8 positions, with the 4 drawn swing arcs on the slab |
+| **Facade** | the 24 measured elements of `FACHADA PRINCIPAL`, on the south-east face |
+| **Grid** | the structural grid as a slab overlay — **off by default**, a legend rather than geometry |
 | **Doors** | shows/hides the two recovered leaves |
 | **Furniture** | shows/hides the 60 triaged pieces |
 | **Spaces** · **Space names** | shows/hides the ground floor's 9 mapped regions and their labels |
