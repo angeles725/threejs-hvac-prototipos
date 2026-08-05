@@ -1,0 +1,1762 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Operaciones IA · Predicción de Hotspot</title>
+<style>
+  :root{
+    /* DHL centro de datos — paleta azul-grisácea clara (no blanco puro) */
+    --bg:#EDF0F6; --bg2:#F4F6FB; --card:#FFFFFF; --card2:#F1F4FA;
+    --edge:#E1E6EF; --edge2:#D3DAE7;
+    --tx:#1B2430; --mut:#5C6B84; --dim:#9BA6B8;
+    --teal:#3B6FF5; --cyan:#3B6FF5; --blue:#2E5FE0;
+    --hot:#F5883D; --red:#E5484D; --amber:#8A5A00; --green:#34C08B;
+    --primary:#3B6FF5; --primary-strong:#2E5FE0; --primary-soft:#DCE7FF; --primary-bg:#EAF0FF;
+    --surface-secondary:#F1F4FA; --background-secondary:#F4F6FB;
+    --border:#E1E6EF; --border-subtle:rgba(225,230,239,0.7);
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; }
+  body{ background:var(--bg); color:var(--tx); overflow:hidden;
+    font-family:'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif; font-size:13px; }
+  .mono{ font-family:'JetBrains Mono',ui-monospace,monospace; }
+  ::-webkit-scrollbar{ width:6px; height:6px; } ::-webkit-scrollbar-thumb{ background:var(--edge2); border-radius:3px; }
+
+  /* ---------- estructura ---------- */
+  .app{ display:grid; grid-template-columns:54px 1fr; grid-template-rows:52px 1fr; height:100vh; }
+  .sidebar{ grid-row:1/3; background:var(--bg2); border-right:1px solid var(--edge);
+    display:flex; flex-direction:column; align-items:center; padding-top:10px; gap:6px; }
+  .sidebar .logo{ width:34px; height:34px; border-radius:9px; margin-bottom:12px;
+    background:linear-gradient(135deg,var(--teal),var(--blue)); display:grid; place-items:center;
+    font-weight:800; color:#04121a; font-size:16px; }
+  .sidebar .nav{ width:36px; height:36px; border-radius:9px; display:grid; place-items:center;
+    color:var(--dim); cursor:pointer; transition:.15s; }
+  .sidebar .nav:hover{ color:var(--tx); background:#111a2b; }
+  .sidebar .nav.act{ color:var(--teal); background:#0d2a2a; }
+  .sidebar .nav svg{ width:19px; height:19px; }
+
+  .topbar{ grid-column:2; display:flex; align-items:center; gap:18px; padding:0 20px;
+    background:var(--bg2); border-bottom:1px solid var(--edge); }
+  .topbar .brand{ font-weight:700; letter-spacing:.02em; font-size:15px; }
+  .topbar .brand b{ color:var(--teal); }
+  .topbar .brand span{ color:var(--mut); font-weight:400; font-size:11px; letter-spacing:.14em; margin-left:8px; }
+  .topbar .drop{ display:flex; align-items:center; gap:8px; padding:7px 14px; border:1px solid var(--edge2);
+    border-radius:8px; color:var(--tx); font-size:12px; cursor:pointer; background:#0b1220; }
+  .topbar .drop small{ color:var(--mut); }
+  .topbar .spacer{ flex:1; }
+  .topbar .ic{ width:34px; height:34px; border-radius:8px; display:grid; place-items:center;
+    color:var(--mut); background:#0b1220; border:1px solid var(--edge); cursor:pointer; position:relative; }
+  .topbar .ic .dot{ position:absolute; top:7px; right:8px; width:6px; height:6px; border-radius:50%; background:var(--cyan); }
+  .topbar .av{ width:34px; height:34px; border-radius:8px; display:grid; place-items:center; font-weight:700;
+    color:#04121a; background:linear-gradient(135deg,var(--cyan),var(--teal)); }
+
+  .main{ grid-column:2; display:grid; grid-template-rows:auto 1fr auto; gap:12px;
+    padding:12px; overflow:hidden; background:radial-gradient(1200px 600px at 55% 30%, #0a1220, var(--bg)); }
+
+  /* ---------- KPI row ---------- */
+  .kpis{ display:grid; grid-template-columns:repeat(6,1fr); gap:12px; }
+  .kpi{ background:var(--card); border:1px solid var(--edge); border-radius:12px; padding:12px 14px;
+    display:flex; flex-direction:column; gap:2px; position:relative; overflow:hidden; }
+  .kpi .kt{ color:var(--mut); font-size:11px; display:flex; align-items:center; gap:7px; }
+  .kpi .kt svg{ width:15px; height:15px; opacity:.85; }
+  .kpi .kv{ font-size:23px; font-weight:700; letter-spacing:.01em; }
+  .kpi .kv small{ font-size:12px; color:var(--mut); font-weight:500; }
+  .kpi .kd{ font-size:10.5px; color:var(--mut); }
+  .kpi .kd.up{ color:var(--amber); } .kpi .kd.ok{ color:var(--green); }
+  .kpi.state .kv{ font-size:19px; }
+
+  /* ---------- mid row ---------- */
+  .mid{ display:grid; grid-template-columns:266px 1fr 322px; gap:12px; min-height:0; }
+  .card{ background:var(--card); border:1px solid var(--edge); border-radius:12px; }
+  .card .hd{ padding:10px 14px; border-bottom:1px solid var(--edge); display:flex; align-items:center;
+    justify-content:space-between; font-size:12px; color:var(--tx); font-weight:600; }
+  .card .hd .sub{ color:var(--mut); font-weight:400; font-size:10.5px; }
+
+  .analytics{ display:flex; flex-direction:column; overflow:hidden; }
+  .analytics .body{ padding:10px 12px; overflow:auto; display:flex; flex-direction:column; gap:12px; }
+  .chartblk .cl{ display:flex; justify-content:space-between; font-size:10.5px; color:var(--mut); margin-bottom:3px; }
+  .chartblk canvas{ width:100%; height:52px; display:block; }
+  .chartblk .ax{ display:flex; justify-content:space-between; font-size:9px; color:var(--dim); margin-top:2px; }
+  .aisle .ar{ display:flex; align-items:center; gap:8px; margin:6px 0; font-size:11px; }
+  .aisle .ar .nm{ width:44px; color:var(--mut); }
+  .aisle .ar .bar{ flex:1; height:7px; background:#0a1120; border-radius:4px; overflow:hidden; }
+  .aisle .ar .bar i{ display:block; height:100%; border-radius:4px;
+    background:linear-gradient(90deg,var(--teal),var(--cyan)); }
+  .aisle .ar .pc{ width:34px; text-align:right; color:var(--tx); }
+
+  /* ---------- centro 3D ---------- */
+  .stage{ position:relative; border-radius:12px; overflow:hidden; border:1px solid var(--edge);
+    background:radial-gradient(700px 380px at 50% 40%, #0b1524, #070b13); min-height:0; }
+  #glcanvas{ position:absolute; inset:0; width:100%; height:100%; }
+  .stage .stt{ position:absolute; top:12px; left:14px; font-size:11px; color:var(--mut); z-index:3; }
+  .stage .stt b{ color:var(--tx); font-size:12px; display:block; }
+  .stage .scale{ position:absolute; right:14px; top:50%; transform:translateY(-50%); z-index:3;
+    display:flex; flex-direction:column; align-items:center; gap:4px; font-size:9px; color:var(--mut); }
+  .stage .scale .bar{ width:9px; height:150px; border-radius:3px;
+    background:linear-gradient(to top,#3b6ff5,#ff9a1e,#ff2233); }
+  .callout{ position:absolute; z-index:4; transform:translate(-50%,-100%); pointer-events:none;
+    background:rgba(12,8,6,.94); border:1px solid var(--hot); border-radius:9px; padding:9px 12px;
+    box-shadow:0 0 26px #ff6a3d44; opacity:0; transition:opacity .5s; white-space:nowrap; }
+  .callout .ct{ color:var(--amber); font-size:9.5px; font-weight:700; letter-spacing:.1em; }
+  .callout .cb{ color:var(--hot); font-size:20px; font-weight:800; line-height:1.1; }
+  .callout .cb span{ font-size:10px; color:var(--mut); font-weight:500; }
+  .callout::after{ content:''; position:absolute; left:50%; bottom:-7px; transform:translateX(-50%);
+    border-left:7px solid transparent; border-right:7px solid transparent; border-top:7px solid var(--hot); }
+  .stage .demopill{ position:absolute; left:14px; bottom:12px; z-index:3; display:flex; gap:6px;
+    align-items:center; font-size:10px; color:var(--mut); background:rgba(7,11,19,.7); padding:5px 10px;
+    border:1px solid var(--edge); border-radius:20px; }
+  .stage .demopill .d{ width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); }
+
+  /* ---------- panel AI ---------- */
+  .ai{ display:flex; flex-direction:column; overflow:hidden; }
+  .ai .body{ padding:12px 14px; overflow:auto; display:flex; flex-direction:column; gap:12px; }
+  .ai .badge{ display:inline-block; background:#3a1420; color:var(--red); border:1px solid #5a2030;
+    font-size:9px; font-weight:700; letter-spacing:.1em; padding:3px 8px; border-radius:5px; }
+  .ai .lead{ font-size:15px; line-height:1.45; }
+  .ai .lead b{ color:var(--hot); } .ai .lead .g{ color:var(--red); font-weight:800; }
+  .ai .ringrow{ display:flex; align-items:center; gap:14px; }
+  .ai .ring{ position:relative; width:66px; height:66px; flex:none; }
+  .ai .ring .num{ position:absolute; inset:0; display:grid; place-items:center; font-weight:800; font-size:15px; }
+  .ai .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .ai .kv2 .l{ color:var(--mut); font-size:10px; } .ai .kv2 .v{ font-weight:600; font-size:12px; }
+  .ai .kv2 .v.hi{ color:var(--red); }
+  .ai .sec{ border-top:1px solid var(--edge); padding-top:10px; }
+  .ai .sec .st{ color:var(--teal); font-size:9.5px; letter-spacing:.12em; font-weight:700; margin-bottom:5px; }
+  .ai .sec p{ margin:0; font-size:11.5px; color:#c4d0de; line-height:1.5; }
+  .ai .resp{ display:flex; justify-content:space-between; align-items:center; margin:6px 0; font-size:11px; }
+  .ai .resp .s{ display:flex; align-items:center; gap:7px; color:#c4d0de; }
+  .ai .resp .s .ck{ width:14px; height:14px; border-radius:50%; border:1.5px solid var(--dim); display:grid; place-items:center; font-size:9px; }
+  .ai .resp .s.done .ck{ border-color:var(--green); color:var(--green); }
+  .ai .resp .s.prog .ck{ border-color:var(--cyan); color:var(--cyan); }
+  .ai .resp .rs{ font-size:10px; color:var(--mut); }
+  .ai .resp .rs.prog{ color:var(--cyan); } .ai .resp .rs.pend{ color:var(--mut); }
+  .ai .tti{ display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--edge);
+    padding-top:10px; font-size:11px; color:var(--mut); } .ai .tti b{ color:var(--amber); font-size:15px; }
+
+  /* ---------- bottom row ---------- */
+  .bottom{ display:grid; grid-template-columns:1.5fr 1fr 1fr 1fr; gap:12px; height:196px; }
+  .bcard{ background:var(--card); border:1px solid var(--edge); border-radius:12px; display:flex;
+    flex-direction:column; overflow:hidden; }
+  .bcard .bh{ padding:9px 13px; border-bottom:1px solid var(--edge); display:flex; align-items:center;
+    justify-content:space-between; font-size:11.5px; font-weight:600; }
+  .bcard .bh .tabs{ display:flex; gap:4px; }
+  .bcard .bh .tab{ font-size:10px; padding:3px 9px; border-radius:6px; color:var(--mut); cursor:pointer; border:1px solid transparent; }
+  .bcard .bh .tab.act{ color:var(--tx); background:#132033; border-color:var(--edge2); }
+  .bcard .bb{ flex:1; padding:11px 13px; min-height:0; position:relative; }
+
+  /* timeline */
+  .tl{ display:flex; justify-content:space-between; position:relative; height:100%; }
+  .tl::before{ content:''; position:absolute; left:6%; right:6%; top:20px; height:2px; background:var(--edge2); }
+  .tl .step{ position:relative; width:23%; text-align:center; }
+  .tl .step .dot{ width:15px; height:15px; border-radius:50%; margin:13px auto 8px; border:2px solid var(--edge2);
+    background:var(--bg); display:grid; place-items:center; font-size:8px; }
+  .tl .step.done .dot{ border-color:var(--green); color:var(--green); background:#0c2418; }
+  .tl .step.live .dot{ border-color:var(--cyan); color:var(--cyan); background:#0a1f2e; box-shadow:0 0 10px #28c8ff66; }
+  .tl .step .tm{ font-size:9.5px; color:var(--teal); } .tl .step .tt{ font-size:10px; font-weight:600; margin:2px 0; }
+  .tl .step .td{ font-size:9px; color:var(--mut); line-height:1.3; }
+  .tl-foot{ display:flex; justify-content:space-between; font-size:10px; color:var(--mut); margin-top:4px; }
+  .tl-foot b{ color:var(--tx); }
+
+  #heatcv{ width:100%; height:100%; display:block; border-radius:6px; }
+  .heatscale{ display:flex; justify-content:space-between; font-size:9px; color:var(--mut); margin-top:4px; }
+
+  .schem{ width:100%; height:100%; }
+  .schem .lgd{ display:flex; gap:16px; font-size:9.5px; color:var(--mut); margin-top:4px; }
+  .schem .lgd i{ display:inline-block; width:16px; height:3px; border-radius:2px; vertical-align:middle; margin-right:5px; }
+
+  .sugg{ display:flex; flex-direction:column; gap:9px; }
+  .sugg .sg{ background:#0a1120; border:1px solid var(--edge); border-radius:9px; padding:9px 11px; display:flex;
+    justify-content:space-between; align-items:center; }
+  .sugg .sg .t{ font-size:11px; } .sugg .sg .t b{ color:var(--teal); }
+  .sugg .sg .t small{ display:block; color:var(--mut); font-size:9.5px; margin-top:2px; }
+  .sugg .sg .v{ font-size:17px; font-weight:800; color:var(--teal); }
+
+  .live{ position:fixed; right:16px; bottom:8px; font-size:10px; color:var(--mut); display:flex; gap:6px; align-items:center; }
+  .live .d{ width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); }
+
+  /* ===== LIGHT LOGISTICS / DHL — overrides (colores/fondos/sombras) ===== */
+  body{ background:
+    radial-gradient(circle at 100% 0%, rgba(59,111,245,0.08) 0%, transparent 42%),
+    linear-gradient(150deg,#EFF2F8 0%,#E7ECF4 55%,#DEE4EF 100%); color:var(--tx); }
+  ::-webkit-scrollbar-thumb{ background:#cdd6e4; }
+  .sidebar{ background:var(--background-secondary); border-right:1px solid var(--border); }
+  .sidebar .nav:hover{ color:var(--tx); background:var(--primary-bg); }
+  .sidebar .nav.act{ color:var(--primary); background:var(--primary-bg); }
+  .topbar{ background:rgba(255,255,255,0.72); border-bottom:1px solid var(--border); backdrop-filter:blur(12px); }
+  .topbar .drop{ background:rgba(255,255,255,0.82); border-color:var(--border); color:var(--tx); box-shadow:0 6px 16px rgba(70,90,125,0.06); }
+  .topbar .ic{ background:rgba(255,255,255,0.82); border-color:var(--border); box-shadow:0 6px 16px rgba(70,90,125,0.06); }
+  .card,.bcard,.kpi{ background:linear-gradient(145deg,rgba(255,255,255,0.97),rgba(247,249,252,0.9));
+    border:1px solid var(--border-subtle); border-radius:16px;
+    box-shadow:0 16px 40px rgba(69,88,120,0.07),0 3px 12px rgba(69,88,120,0.04),inset 0 1px 0 rgba(255,255,255,0.9); }
+  .card .hd,.bcard .bh{ border-bottom:1px solid var(--border); }
+  .main{ background:transparent; }
+  .stage{ background:radial-gradient(760px 480px at 47% 36%,#e6ebf4 0%,#d3dcea 70%,#c5cfe1 100%); border:1px solid var(--border); }
+  .aisle .ar .bar{ background:#E5E9F0; } .analytics .chartblk canvas,.stage .stt{ color:var(--mut); }
+  .callout{ background:rgba(255,255,255,0.96); border-color:var(--hot); box-shadow:0 8px 26px rgba(245,136,61,0.28); }
+  .callout .cb{ color:var(--hot); } .callout .cb span{ color:var(--mut); }
+  .demopill{ background:rgba(255,255,255,0.8); border:1px solid var(--border); color:var(--mut); }
+  .ai .badge{ background:#FFE7E9; color:var(--red); border:1px solid #FAD1D5; }
+  .ai .sec p{ color:#47536a; } .ai .resp .s{ color:#2f3a4f; } .ai .resp .s .ck{ border-color:#c3ccdb; }
+  .bcard .bh .tab.act{ background:var(--primary-bg); color:var(--primary); border-color:var(--primary-soft); }
+  .tl .step .dot{ background:#fff; border-color:#D5DEEC; }
+  .tl .step.done .dot{ background:#E5F8EC; border-color:var(--green); color:var(--green); }
+  .tl .step.live .dot{ background:var(--primary-bg); border-color:var(--primary); color:var(--primary); box-shadow:0 0 10px rgba(59,111,245,0.25); }
+  .sugg .sg{ background:var(--surface-secondary); border:1px solid var(--border); }
+  .kpi .kd.up{ color:#8A5A00; }
+  .live .d{ background:var(--green); box-shadow:0 0 8px rgba(52,192,139,0.5); }
+
+  /* ===== responsive / una sola vista ===== */
+  .main{ gap:10px; padding:10px 12px; }
+  @media (max-width:1200px){ .mid{ grid-template-columns:230px 1fr 288px; } .kpis{ grid-template-columns:repeat(3,1fr); } }
+  @media (max-width:920px){ .mid{ grid-template-columns:1fr; } .kpis{ grid-template-columns:repeat(2,1fr); } .bottom{ grid-template-columns:1fr 1fr; height:auto; } .main{ overflow:auto; } }
+  @media (max-height:720px){ .kpi .kd{ display:none; } }
+
+  /* ===== multi-vista (router por sidebar, patrón Cinemex) ===== */
+  button.nav{ appearance:none; -webkit-appearance:none; background:transparent; border:0; padding:0;
+    font-family:inherit; font-size:15px; line-height:1; }
+  .sidebar .nav[aria-current="page"]{ color:var(--primary); background:var(--primary-bg); }
+  .main{ grid-column:2; grid-row:2; }
+  .app:not([data-view="inicio"]) .main{ display:none; }
+  .view{ grid-column:2; grid-row:2; display:none; overflow:auto; padding:14px 16px 26px;
+    flex-direction:column; gap:14px; }
+  .app[data-view="salas"] .view[data-view="salas"],
+  .app[data-view="termica"] .view[data-view="termica"],
+  .app[data-view="energia"] .view[data-view="energia"],
+  .app[data-view="analitica"] .view[data-view="analitica"],
+  .app[data-view="ajustes"] .view[data-view="ajustes"],
+  .app[data-view="seguridad"] .view[data-view="seguridad"]{ display:flex; }
+
+  .vhead{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; }
+  .vhead .vt{ font-size:19px; font-weight:700; letter-spacing:.01em; }
+  .vhead .vs{ color:var(--mut); font-size:11px; margin-top:4px; }
+  .vsub{ color:var(--mut); font-size:11px; }
+  .vrow{ display:grid; gap:12px; }
+  @media (max-width:1000px){ .vrow{ grid-template-columns:1fr !important; } }
+  .vpanel{ background:linear-gradient(145deg,rgba(255,255,255,0.97),rgba(247,249,252,0.9));
+    border:1px solid var(--border-subtle); border-radius:16px;
+    box-shadow:0 16px 40px rgba(69,88,120,0.07),0 3px 12px rgba(69,88,120,0.04),inset 0 1px 0 rgba(255,255,255,0.9); }
+  .vpanel .ph{ padding:11px 15px; border-bottom:1px solid var(--border); font-size:12px; font-weight:600;
+    display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .vpanel .ph .sub{ color:var(--mut); font-weight:400; font-size:10.5px; }
+  .vpanel .pb{ padding:14px 15px; }
+
+  .stat{ background:linear-gradient(145deg,rgba(255,255,255,0.97),rgba(247,249,252,0.9));
+    border:1px solid var(--border-subtle); border-radius:14px; padding:12px 14px;
+    box-shadow:0 8px 22px rgba(69,88,120,0.06); }
+  .stat .l{ color:var(--mut); font-size:11px; } .stat .n{ font-size:22px; font-weight:700; margin-top:3px; }
+  .stat .n small{ font-size:12px; color:var(--mut); font-weight:500; }
+  .stat .d{ font-size:10.5px; color:var(--mut); margin-top:2px; }
+
+  .chip{ font-size:9.5px; font-weight:700; letter-spacing:.05em; padding:3px 9px; border-radius:20px; white-space:nowrap; }
+  .chip.nominal{ background:#E5F8EC; color:#1c7a54; }
+  .chip.warning{ background:#FFF3DC; color:#8A5A00; }
+  .chip.hot{ background:#FFE7E9; color:#E5484D; }
+  .chip.ok{ background:#E5F8EC; color:#1c7a54; }
+  .chip.off{ background:#EEF1F7; color:#5C6B84; }
+
+  .rackgrid{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  @media (max-width:1100px){ .rackgrid{ grid-template-columns:repeat(2,1fr); } }
+  .rackcard{ background:linear-gradient(145deg,rgba(255,255,255,0.97),rgba(247,249,252,0.9));
+    border:1px solid var(--border-subtle); border-radius:14px; padding:13px 15px; text-decoration:none;
+    color:var(--tx); display:flex; flex-direction:column; gap:11px; transition:.15s;
+    box-shadow:0 8px 22px rgba(69,88,120,0.06); }
+  .rackcard:hover{ transform:translateY(-2px); border-color:var(--primary-soft);
+    box-shadow:0 16px 34px rgba(59,111,245,0.14); }
+  .rackcard .rt{ display:flex; align-items:center; justify-content:space-between; }
+  .rackcard .rt .nm{ font-size:15px; font-weight:700; }
+  .rackcard .rm{ display:flex; justify-content:space-between; }
+  .rackcard .rm div b{ font-size:16px; font-weight:700; display:block; }
+  .rackcard .rm div small{ color:var(--mut); font-size:10px; }
+
+  .dtable{ width:100%; border-collapse:collapse; font-size:12px; }
+  .dtable th{ text-align:left; color:var(--mut); font-weight:600; font-size:10.5px;
+    padding:9px 14px; border-bottom:1px solid var(--border); }
+  .dtable td{ padding:9px 14px; border-bottom:1px solid var(--border-subtle); }
+  .dtable tr:last-child td{ border-bottom:none; }
+  .dtable td.r,.dtable th.r{ text-align:right; }
+
+  .distrow{ display:flex; align-items:center; gap:10px; margin:9px 0; font-size:11.5px; }
+  .distrow .nm{ width:150px; color:var(--mut); }
+  .distrow .bar{ flex:1; height:9px; background:#E5E9F0; border-radius:5px; overflow:hidden; }
+  .distrow .bar i{ display:block; height:100%; border-radius:5px; background:linear-gradient(90deg,var(--primary),var(--cyan)); }
+  .distrow .bar i.hot{ background:linear-gradient(90deg,var(--amber),var(--hot)); }
+  .distrow .pc{ width:70px; text-align:right; }
+
+  .bigchart{ width:100%; height:120px; display:block; }
+  .heatbig{ width:100%; height:260px; display:block; border-radius:10px; }
+
+  .setrow{ display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:13px 0; border-bottom:1px solid var(--border-subtle); }
+  .setrow:last-child{ border-bottom:none; }
+  .setrow .lab b{ font-size:12.5px; } .setrow .lab small{ display:block; color:var(--mut); font-size:10.5px; margin-top:2px; }
+  .setrow .ctl{ display:flex; align-items:center; gap:10px; }
+  .setrow input[type=range]{ width:180px; accent-color:var(--primary); }
+  .setrow input[type=number]{ width:76px; padding:6px 8px; border:1px solid var(--border); border-radius:8px;
+    background:#fff; color:var(--tx); font-family:inherit; font-size:12px; }
+  .setrow .val{ min-width:62px; text-align:right; font-weight:700; }
+  .toggle{ position:relative; width:44px; height:24px; flex:none; }
+  .toggle input{ opacity:0; width:100%; height:100%; margin:0; cursor:pointer; }
+  .toggle .tk{ position:absolute; inset:0; border-radius:20px; background:#D5DEEC; transition:.15s; pointer-events:none; }
+  .toggle .tk::after{ content:''; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%;
+    background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2); transition:.15s; }
+  .toggle input:checked + .tk{ background:var(--primary); }
+  .toggle input:checked + .tk::after{ transform:translateX(20px); }
+
+  .insight{ background:var(--surface-secondary); border:1px solid var(--border); border-radius:12px; padding:12px 14px; font-size:12px; line-height:1.5; }
+  .insight b{ color:var(--primary); }
+  .insight .big{ font-size:20px; font-weight:800; color:var(--primary); }
+
+  .gobtn{ appearance:none; background:var(--primary-bg); border:1px solid var(--primary-soft); color:var(--primary);
+    font-family:inherit; font-size:10px; font-weight:700; letter-spacing:.03em; padding:3px 9px; border-radius:7px;
+    cursor:pointer; transition:.15s; }
+  .gobtn:hover{ background:var(--primary-soft); }
+
+  .devlist{ display:flex; flex-direction:column; gap:8px; }
+  .devrow{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 12px;
+    background:var(--surface-secondary); border:1px solid var(--border); border-radius:10px; font-size:12px; margin-bottom:6px; }
+  .devrow:last-child{ margin-bottom:0; }
+  .devrow .nm{ display:flex; align-items:center; gap:9px; }
+  .alertchips{ display:flex; flex-wrap:wrap; gap:8px; }
+
+  /* ===== Feature 1: badge del sidebar (Seguridad) ===== */
+  .sidebar .nav{ position:relative; }
+  .navbadge{ position:absolute; top:1px; right:1px; min-width:15px; height:15px; padding:0 3px;
+    border-radius:8px; background:var(--red); color:#fff; font-size:9px; font-weight:800; line-height:15px;
+    text-align:center; display:none; box-shadow:0 1px 5px rgba(229,72,77,0.55); }
+  .navbadge.warn{ background:var(--hot); box-shadow:0 1px 5px rgba(245,136,61,0.5); }
+  .navbadge.show{ display:block; }
+
+  /* ===== Feature 1: feed de alertas térmicas (vista Seguridad) ===== */
+  .alertfeed{ display:flex; flex-direction:column; max-height:320px; overflow:auto; }
+  .alertrow{ display:grid; grid-template-columns:80px 66px 1fr 58px; align-items:center; gap:10px;
+    padding:9px 15px; border-bottom:1px solid var(--border-subtle); font-size:12px; }
+  .alertrow:last-child{ border-bottom:none; }
+  .alertrow.info{ background:rgba(52,192,139,0.06); }
+  .alertrow .at{ color:var(--mut); font-size:11px; }
+  .alertrow .am{ font-weight:700; }
+  .alertrow a.am{ color:var(--primary); text-decoration:none; }
+  .alertrow a.am:hover{ text-decoration:underline; }
+  .alertrow .amsg{ font-weight:500; color:var(--tx); }
+  .alertrow .av{ text-align:right; color:var(--tx); }
+  .alertrow .chip{ justify-self:start; }
+  .alertempty{ padding:18px 15px; color:var(--mut); font-size:12px; }
+
+  /* ===== Feature 2: botón Aplicar acción (Motor IA) ===== */
+  .applybtn{ appearance:none; margin-top:10px; width:100%; background:var(--primary);
+    border:1px solid var(--primary-strong); color:#fff; font-family:inherit; font-size:12px; font-weight:700;
+    letter-spacing:.02em; padding:8px 12px; border-radius:9px; cursor:pointer; transition:.15s;
+    box-shadow:0 6px 16px rgba(59,111,245,0.18); }
+  .applybtn:hover{ background:var(--primary-strong); }
+  .applybtn:disabled{ opacity:.7; cursor:default; box-shadow:none; }
+
+  /* ===== Feature 3: ranking de riesgo + sparklines por rack (vista Analítica) ===== */
+  .riskhead,.riskrow{ display:grid; grid-template-columns:26px 52px 1.05fr 96px 60px 76px 72px;
+    align-items:center; gap:10px; }
+  .riskhead{ padding:8px 15px; border-bottom:1px solid var(--border); color:var(--mut);
+    font-size:10.5px; font-weight:600; }
+  .riskhead .r,.riskrow .r{ text-align:right; }
+  .riskrow{ padding:9px 15px; border-bottom:1px solid var(--border-subtle); font-size:12px; }
+  .riskrow:last-child{ border-bottom:none; }
+  .riskrow .rrank{ color:var(--mut); }
+  .riskrow .rname{ color:var(--primary); text-decoration:none; font-weight:700; }
+  .riskrow .rname:hover{ text-decoration:underline; }
+  .riskrow .rbar{ height:8px; background:#E5E9F0; border-radius:5px; overflow:hidden; }
+  .riskrow .rbar i{ display:block; height:100%; border-radius:5px;
+    background:linear-gradient(90deg,var(--primary),var(--cyan)); }
+  .riskrow .rbar i.warn{ background:linear-gradient(90deg,#E0A32B,var(--hot)); }
+  .riskrow .rbar i.hot{ background:linear-gradient(90deg,var(--hot),var(--red)); }
+  .riskrow .rhspark{ width:100%; height:26px; display:block; }
+  @media (max-width:1000px){ .riskhead,.riskrow{ grid-template-columns:24px 46px 1fr 60px 70px; }
+    .riskhead .rh-hist,.riskrow .rhspark,.riskhead .rh-ttc,.riskrow .rttc{ display:none; } }
+</style>
+</head>
+<body>
+<div class="app" data-view="inicio">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="logo">◇</div>
+    <button type="button" class="nav act" data-view="inicio" title="Inicio" aria-current="page">◱</button>
+    <button type="button" class="nav" data-view="salas" title="Salas">▦</button>
+    <button type="button" class="nav" data-view="termica" title="Térmica">❄</button>
+    <button type="button" class="nav" data-view="energia" title="Energía">⚡</button>
+    <button type="button" class="nav" data-view="analitica" title="Analítica">▤</button>
+    <button type="button" class="nav" data-view="ajustes" title="Ajustes">⚙</button>
+    <div style="flex:1"></div>
+    <button type="button" class="nav" data-view="seguridad" title="Seguridad">⛊<span class="navbadge" id="secBadge"></span></button>
+  </div>
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="brand mono"><b>niagara</b> <span>OPERACIONES IA</span></div>
+    <div class="drop mono"><small>Caso de uso #1:</small> Predicción de Hotspot ▾</div>
+    <div class="spacer"></div>
+    <div class="drop mono">Data Center 01 ▾</div>
+    <div class="ic">◔<div class="dot"></div></div>
+    <div class="ic">?</div>
+    <div class="av">AS</div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- KPIs -->
+    <div class="kpis">
+      <div class="kpi"><div class="kt">🌡 Temp. Promedio</div><div class="kv mono" id="kTemp">27.4<small>°C</small></div><div class="kd up" id="kTempD">▲ 2.1°C vs ayer</div></div>
+      <div class="kpi"><div class="kt">⚙ Utilización GPU</div><div class="kv mono" id="kGpu">81<small>%</small></div><div class="kd up">▲ 6% vs ayer</div></div>
+      <div class="kpi"><div class="kt">🌀 Flujo de Aire</div><div class="kv mono" id="kAir">74<small>%</small></div><div class="kd up">▲ 5% vs ayer</div></div>
+      <div class="kpi"><button class="gobtn" data-go-view="energia" title="Ver energía" style="position:absolute;top:8px;right:8px">Ver ↗</button><div class="kt">⚡ Consumo</div><div class="kv mono" id="kPow">1.92<small>MW</small></div><div class="kd up">▲ 120 kW vs ayer</div></div>
+      <div class="kpi state"><div class="kt">❄ Estado CRAH</div><div class="kv" id="kCrah">Adaptativo</div><div class="kd ok">● Optimización IA activa</div></div>
+      <div class="kpi state"><div class="kt">🛡 Salud Sistema</div><div class="kv" id="kHealth" style="color:var(--green)">Saludable</div><div class="kd ok">Todos los sistemas OK</div></div>
+    </div>
+
+    <!-- MID -->
+    <div class="mid">
+      <!-- Analytics -->
+      <div class="card analytics">
+        <div class="hd">Analítica Histórica y en Vivo <span class="sub">−24h → ahora</span></div>
+        <div class="body">
+          <div class="chartblk"><div class="cl"><span>Tendencia de Temperatura</span><span class="mono">°C</span></div>
+            <canvas id="cTemp"></canvas><div class="ax mono"><span>-24h</span><span>-12h</span><span>ahora</span></div></div>
+          <div class="chartblk"><div class="cl"><span>Utilización GPU</span><span class="mono">%</span></div>
+            <canvas id="cGpu"></canvas><div class="ax mono"><span>-24h</span><span>-12h</span><span>ahora</span></div></div>
+          <div class="chartblk"><div class="cl"><span>Energía Consumida</span><span class="mono">MW</span></div>
+            <canvas id="cPow"></canvas><div class="ax mono"><span>-24h</span><span>-12h</span><span>ahora</span></div></div>
+          <div class="aisle">
+            <div class="cl" style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut);margin-bottom:4px"><span>Distribución de Flujo</span><span class="mono">%</span></div>
+            <div class="ar"><span class="nm">Pasillo A</span><span class="bar"><i style="width:72%"></i></span><span class="pc mono">72%</span></div>
+            <div class="ar"><span class="nm">Pasillo B</span><span class="bar"><i id="aisleB" style="width:74%;background:linear-gradient(90deg,var(--amber),var(--hot))"></i></span><span class="pc mono" id="aisleBp">74%</span></div>
+            <div class="ar"><span class="nm">Pasillo C</span><span class="bar"><i style="width:68%"></i></span><span class="pc mono">68%</span></div>
+            <div class="ar"><span class="nm">Pasillo D</span><span class="bar"><i style="width:75%"></i></span><span class="pc mono">75%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3D stage -->
+      <div class="stage">
+        <canvas id="glcanvas"></canvas>
+        <div class="stt"><b>SALA B · Pasillo Frío/Caliente</b>Racks B19 – B26 · vista isométrica</div>
+        <div class="scale"><span id="stageHi">40°C</span><div class="bar"></div><span id="stageLo">22°C</span></div>
+        <div class="callout" id="callout"><div class="ct"><span id="coName">RACK B23</span> · HOTSPOT PREDICHO</div>
+          <div class="cb"><span id="coMin">43</span> <span>min a temp. crítica</span></div></div>
+        <div class="demopill"><span class="d"></span> DEMO · <span id="phaseName" class="mono">NORMAL</span></div>
+      </div>
+
+      <!-- AI Engine -->
+      <div class="card ai">
+        <div class="hd">Motor IA Niagara <span class="badge">ALERTA PREDICTIVA</span><button class="gobtn" data-go-view="analitica">Ver análisis ↗</button></div>
+        <div class="body">
+          <div class="ringrow">
+            <div class="lead" id="aiLead">El <b>Rack B23</b> alcanzará temperatura <span class="g">crítica</span> en <span class="g mono" id="aiMin">43 min</span></div>
+            <div class="ring"><svg viewBox="0 0 66 66"><circle cx="33" cy="33" r="28" fill="none" stroke="#152033" stroke-width="6"/>
+              <circle id="ringArc" cx="33" cy="33" r="28" fill="none" stroke="var(--teal)" stroke-width="6" stroke-linecap="round"
+                stroke-dasharray="175.9" stroke-dashoffset="14" transform="rotate(-90 33 33)"/></svg>
+              <div class="num mono" id="ringNum">92%</div></div>
+          </div>
+          <div class="grid2">
+            <div class="kv2"><div class="l">Severidad</div><div class="v hi" id="aiSev">● Alta</div></div>
+            <div class="kv2"><div class="l">Sistemas afectados</div><div class="v mono">8 GPUs</div></div>
+          </div>
+          <div class="sec"><div class="st">CAUSA RAÍZ (DETECTADA POR IA)</div>
+            <p id="aiCausa">Alta carga GPU + eficiencia de flujo reducida en pasillo B + temperatura ambiente elevada.</p></div>
+          <div class="sec"><div class="st">ACCIÓN RECOMENDADA</div>
+            <p id="aiAccion">Incrementar flujo hacia pasillo B, ajustar setpoint CRAH y balancear la carga térmica.</p>
+            <button type="button" class="applybtn" id="applyAi">Aplicar acción</button></div>
+          <div class="sec"><div class="st">RESPUESTA AUTOMATIZADA</div>
+            <div class="resp" id="r0"><span class="s"><span class="ck">✓</span> Ajuste CRAH</span><span class="rs">—</span></div>
+            <div class="resp" id="r1"><span class="s"><span class="ck">✓</span> Incremento de flujo</span><span class="rs">—</span></div>
+            <div class="resp" id="r2"><span class="s"><span class="ck">✓</span> Balanceo térmico</span><span class="rs">—</span></div>
+          </div>
+          <div class="tti">Tiempo a impacto (sin acción)<b class="mono" id="aiTti">43 min</b></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM -->
+    <div class="bottom">
+      <div class="bcard">
+        <div class="bh">Cronología de Respuesta Automatizada</div>
+        <div class="bb">
+          <div class="tl">
+            <div class="step done"><div class="dot">✓</div><div class="tm mono">12:41:02</div><div class="tt">Ajuste CRAH</div><div class="td">Setpoint 18°→16°C · Fila B</div></div>
+            <div class="step done"><div class="dot">✓</div><div class="tm mono">12:41:08</div><div class="tt">Incremento Flujo</div><div class="td">Ventilador 68%→85% · Pasillo B</div></div>
+            <div class="step done"><div class="dot">✓</div><div class="tm mono">12:41:15</div><div class="tt">Balanceo Térmico</div><div class="td">8 servidores redistribuidos</div></div>
+            <div class="step live"><div class="dot">●</div><div class="tm mono">12:41:22</div><div class="tt">Acción Preventiva</div><div class="td">Ejecutada con éxito</div></div>
+          </div>
+          <div class="tl-foot"><span>Tiempo total de respuesta: <b class="mono">20s</b></span><span>Temp. prevista tras acciones: <b class="mono" style="color:var(--teal)" id="tlTemp">31.2°C</b></span></div>
+        </div>
+      </div>
+
+      <div class="bcard">
+        <div class="bh">Mapa Térmico<div class="tabs"><span class="tab act" data-hv="front">Frontal</span><span class="tab" data-hv="top">Superior</span><button class="gobtn" data-go-view="termica">Ampliar ↗</button></div></div>
+        <div class="bb"><canvas id="heatcv"></canvas>
+          <div class="heatscale mono"><span id="heatLo1">22°C</span><span id="heatHi1">40°C</span></div></div>
+      </div>
+
+      <div class="bcard">
+        <div class="bh">Esquema de Flujo<div class="tabs"><span class="tab" data-sc="before">Antes</span><span class="tab act" data-sc="after">Después</span></div></div>
+        <div class="bb"><svg class="schem" id="schem" viewBox="0 0 300 130" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="lgd"><span><i style="background:var(--cyan)"></i>Aire frío</span><span><i style="background:var(--hot)"></i>Aire caliente</span></div></div>
+      </div>
+
+      <div class="bcard">
+        <div class="bh">Sugerencias IA <span class="mono" style="color:var(--teal)">2</span></div>
+        <div class="bb"><div class="sugg">
+          <div class="sg"><div class="t"><b>Reducir probabilidad de hotspot</b><small>Continuando las acciones automáticas</small></div><div class="v">68%</div></div>
+          <div class="sg"><div class="t"><b>Reserva de enfriamiento</b><small>Margen extra para aumento de carga</small></div><div class="v">14%</div></div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== VISTA: SALAS ===== -->
+  <section class="view" data-view="salas">
+    <div class="vhead"><div><div class="vt">Salas · Sala B</div><div class="vs">Inicio › Salas › Sala B · Racks B19–B26</div></div></div>
+    <div class="vrow" id="salasSummary" style="grid-template-columns:repeat(4,1fr)"></div>
+    <div class="vpanel"><div class="ph">Racks de la sala <span class="sub">clic para ver detalle</span></div>
+      <div class="pb"><div class="rackgrid" id="salasGrid"></div></div></div>
+  </section>
+
+  <!-- ===== VISTA: TÉRMICA ===== -->
+  <section class="view" data-view="termica">
+    <div class="vhead"><div><div class="vt">Térmica · Mapa de calor</div><div class="vs">Inicio › Térmica · pasillo frío/caliente en vivo</div></div>
+      <span class="vsub mono" id="termClock">—</span></div>
+    <div class="vrow" style="grid-template-columns:1.4fr 1fr">
+      <div class="vpanel"><div class="ph">Mapa térmico de la sala <span class="sub" id="heatSub2">22°C → 40°C</span></div>
+        <div class="pb"><canvas id="heatBig" class="heatbig"></canvas>
+          <div class="heatscale mono"><span id="heatLo2">22°C</span><span id="heatMid2">31°C</span><span id="heatHi2">40°C</span></div></div></div>
+      <div class="vpanel"><div class="ph">Gradiente de pasillos</div><div class="pb" id="aisleGrad"></div></div>
+    </div>
+    <div class="vpanel"><div class="ph">Ranking de hotspots <span class="sub">ordenado por temperatura · ΔT entrada→salida</span></div>
+      <div class="pb" style="padding:0"><table class="dtable"><thead><tr>
+        <th>Rack</th><th class="r">Temp</th><th class="r">Entrada</th><th class="r">Salida</th><th class="r">ΔT</th><th>Estado</th>
+      </tr></thead><tbody id="hotRank"></tbody></table></div></div>
+  </section>
+
+  <!-- ===== VISTA: ENERGÍA ===== -->
+  <section class="view" data-view="energia">
+    <div class="vhead"><div><div class="vt">Energía · Consumo</div><div class="vs">Inicio › Energía · potencia y eficiencia</div></div></div>
+    <div class="vrow" id="enerStats" style="grid-template-columns:repeat(4,1fr)"></div>
+    <div class="vrow" style="grid-template-columns:1.3fr 1fr">
+      <div class="vpanel"><div class="ph">Distribución por rack <span class="sub">kW</span></div>
+        <div class="pb" id="enerRacks"></div></div>
+      <div class="vpanel"><div class="ph">Tendencia de energía <span class="sub">MW · −24h → ahora</span></div>
+        <div class="pb"><canvas id="enerTrend" class="bigchart"></canvas>
+          <div class="ax mono" style="display:flex;justify-content:space-between;font-size:9px;color:var(--dim);margin-top:4px"><span>-24h</span><span>-12h</span><span>ahora</span></div></div></div>
+    </div>
+    <div class="vpanel"><div class="ph">Distribución por PDU y eficiencia CRAH</div><div class="pb" id="enerPdu"></div></div>
+  </section>
+
+  <!-- ===== VISTA: ANALÍTICA ===== -->
+  <section class="view" data-view="analitica">
+    <div class="vhead"><div><div class="vt">Analítica · Histórico y predicción</div><div class="vs">Inicio › Analítica · tendencias y modelo IA</div></div></div>
+    <div class="vrow" style="grid-template-columns:1fr 1fr">
+      <div class="vpanel"><div class="ph">Temperatura <span class="sub">°C</span></div><div class="pb"><canvas id="anTemp" class="bigchart"></canvas></div></div>
+      <div class="vpanel"><div class="ph">Utilización GPU <span class="sub">%</span></div><div class="pb"><canvas id="anGpu" class="bigchart"></canvas></div></div>
+      <div class="vpanel"><div class="ph">Energía <span class="sub">MW</span></div><div class="pb"><canvas id="anPow" class="bigchart"></canvas></div></div>
+      <div class="vpanel"><div class="ph">Flujo de aire <span class="sub">%</span></div><div class="pb"><canvas id="anAir" class="bigchart"></canvas></div></div>
+    </div>
+    <div class="vrow" style="grid-template-columns:1.1fr 1fr">
+      <div class="vpanel"><div class="ph">Tiempo a crítico por rack <span class="sub">predicción IA</span></div>
+        <div class="pb" style="padding:0"><table class="dtable"><thead><tr><th>Rack</th><th class="r">Temp</th><th class="r">Tendencia</th><th class="r">Tiempo a crítico</th></tr></thead><tbody id="ttcBody"></tbody></table></div></div>
+      <div class="vpanel"><div class="ph">Correlaciones e insights</div><div class="pb" id="insights" style="display:flex;flex-direction:column;gap:10px"></div></div>
+    </div>
+    <div class="vrow"><div class="vpanel"><div class="ph">Ranking de riesgo <span class="sub">proximidad a crítico · historial de temperatura por rack</span></div>
+      <div class="pb" id="riskRank" style="padding:0"></div></div></div>
+  </section>
+
+  <!-- ===== VISTA: AJUSTES ===== -->
+  <section class="view" data-view="ajustes">
+    <div class="vhead"><div><div class="vt">Ajustes · Configuración</div><div class="vs">Inicio › Ajustes · parámetros del motor IA y umbrales</div></div></div>
+    <div class="vrow" style="grid-template-columns:1.2fr 1fr">
+      <div class="vpanel"><div class="ph">Motor IA · enfriamiento y umbrales</div><div class="pb">
+        <div class="setrow"><div class="lab"><b>Setpoint CRAH</b><small>Temperatura de suministro; más bajo enfría toda la sala (°C)</small></div>
+          <div class="ctl"><input type="range" id="setSetpoint" min="14" max="22" step="0.5" value="18"><span class="val mono" id="setSetpointV">18.0°C</span></div></div>
+        <div class="setrow"><div class="lab"><b>Umbral de atención</b><small>Temp. desde la que la IA marca advertencia (°C)</small></div>
+          <div class="ctl"><input type="number" id="setWarn" min="24" max="40" step="0.5" value="30"></div></div>
+        <div class="setrow"><div class="lab"><b>Umbral crítico</b><small>Temp. que dispara alerta crítica y respuesta (°C)</small></div>
+          <div class="ctl"><input type="number" id="setCrit" min="26" max="45" step="0.5" value="34"></div></div>
+        <div class="setrow"><div class="lab"><b>Límite de carga GPU</b><small>Racks por encima calientan antes y la IA los prioriza (%)</small></div>
+          <div class="ctl"><input type="range" id="setGpuLimit" min="50" max="100" step="1" value="85"><span class="val mono" id="setGpuLimitV">85%</span></div></div>
+        <div class="setrow"><div class="lab"><b>Sensibilidad de la IA</b><small>Más alta: mayor confianza y predice el hotspot antes (%)</small></div>
+          <div class="ctl"><input type="range" id="setSensitivity" min="0" max="100" step="5" value="60"><span class="val mono" id="setSensitivityV">60%</span></div></div>
+        <div class="setrow"><div class="lab"><b>Temperatura ambiente</b><small>Sube la línea base térmica de todos los racks (°C)</small></div>
+          <div class="ctl"><input type="range" id="setAmbient" min="18" max="32" step="0.5" value="24"><span class="val mono" id="setAmbientV">24°C</span></div></div>
+        <div class="setrow"><div class="lab"><b>Respuesta automática</b><small>Mitigación IA sin intervención; auto-enfría los racks calientes</small></div>
+          <label class="toggle"><input type="checkbox" id="setAuto" checked><span class="tk"></span></label></div>
+      </div></div>
+      <div class="vpanel"><div class="ph">Vista previa en vivo</div><div class="pb" id="setPreview"></div></div>
+    </div>
+  </section>
+
+  <!-- ===== VISTA: SEGURIDAD ===== -->
+  <section class="view" data-view="seguridad">
+    <div class="vhead"><div><div class="vt">Seguridad · Accesos y eventos</div><div class="vs">Inicio › Seguridad · puertas, cámaras y bitácora</div></div>
+      <span class="vsub mono" id="secClock">—</span></div>
+    <div class="vrow"><div class="vpanel"><div class="ph">Alertas activas</div><div class="pb"><div class="alertchips" id="secChips"></div></div></div></div>
+    <div class="vrow"><div class="vpanel"><div class="ph">Alertas térmicas en vivo <span class="sub">escalados por rack · más recientes primero</span></div>
+      <div class="pb" style="padding:0"><div class="alertfeed" id="secAlertsFeed"></div></div></div></div>
+    <div class="vrow" style="grid-template-columns:1fr 1.3fr">
+      <div class="vpanel"><div class="ph">Puertas y cámaras</div><div class="pb"><div class="devlist" id="secDevices"></div></div></div>
+      <div class="vpanel"><div class="ph">Bitácora de accesos <span class="sub">últimos eventos</span></div>
+        <div class="pb" style="padding:0"><table class="dtable"><thead><tr><th>Hora</th><th>Zona</th><th>Evento</th><th>Usuario</th></tr></thead><tbody id="secLog"></tbody></table></div></div>
+    </div>
+  </section>
+</div>
+<div class="live">● Modelo actualizado: <span class="mono" id="liveClock">12:41:20</span> · EN VIVO</div>
+
+<!--
+  LOCAL importmap — three r160 ships inside this build (vendor/three/).
+  The page makes ZERO network requests: it renders on a machine with no internet at all.
+  The old CDN bootstrap was removed on purpose; do not reintroduce a unpkg/jsdelivr URL here.
+-->
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ===== estado global compartido por todo el dashboard =====
+const PHASES=[
+  {name:'NORMAL',dur:7,heatTo:0.05,min:'--'},
+  {name:'PREDICCIÓN',dur:6,heatTo:0.55,min:'43'},
+  {name:'CRÍTICO',dur:6.5,heatTo:1.0,min:'12'},
+  {name:'MITIGANDO',dur:8,heatTo:0.08,min:'∞'},
+];
+const S={phaseIdx:0,tPhase:0,heat:0.05,intensity:0.05};   // heat = max(rackHeat) derivado; intensity = escenario de fase
+
+// ===== config editable (vista Ajustes) + datos por-rack para las vistas =====
+let render3D=true;                                   // gate del loop 3D: solo renderiza en 'inicio'
+const REFRESH_MS=1500;                               // cadencia fija de refresco de vistas (antes CFG.tick)
+// motor IA: umbrales + variables que gobiernan la predicción y la mitigación
+const CFG={ setpoint:18, warnTemp:30, critTemp:34, gpuLimit:85, aiSensitivity:60, ambientTemp:24, autoResp:true };
+const RACKINFO={
+  B19:{baseT:24.4,gpu:61,air:76}, B20:{baseT:25.1,gpu:69,air:74},
+  B21:{baseT:25.9,gpu:73,air:73}, B22:{baseT:25.5,gpu:67,air:75},
+  B23:{baseT:27.2,gpu:88,air:70}, B24:{baseT:24.9,gpu:65,air:74},
+  B25:{baseT:24.1,gpu:59,air:77}, B26:{baseT:24.7,gpu:63,air:76}
+};
+// ===== estado térmico POR RACK (0..1) — reemplaza el escalar global como driver =====
+const rackHeat={}, rackHeatTarget={}, rackVel={};    // heat actual, objetivo de este frame, velocidad (u/s)
+Object.keys(RACKINFO).forEach(nm=>{ rackHeat[nm]=0; rackHeatTarget[nm]=0; rackVel[nm]=0; });
+let activeHot=[];                                    // 1-3 racks calientes actuales (rotan)
+let hotTimer=0, hotInterval=30;                      // acumulador y periodo de reshuffle (s)
+const HEAT_SPAN=15;                                  // °C que aporta un rack a rackHeat=1 (declarado temprano: usado en el arranque síncrono)
+const AMB_REF=24;                                    // ambiente de referencia (línea base de CFG.ambientTemp)
+const HEAT_LO=22;                                    // °C frío/idle -> hotUnit 0 (escala de "hotness" por TEMPERATURA, compartida 3D↔heatmap)
+
+// ===== Feature 1 & 3: feed de alertas, memoria de estado por rack e historial de temperatura =====
+// (declarados temprano — leídos por el loop de fondo desde el primer frame; evita TDZ)
+const ALERT_CAP=60, HIST_CAP=60;
+const alerts=[];                                     // {ts,rack,sev,temp,msg?}  más recientes primero (cap 60)
+const prevStatus={};                                 // último rackStatus por rack (para detectar SOLO escalados)
+const rackHist={};                                   // historial de rackTemp por rack (cap 60), append ~1/s
+Object.keys(RACKINFO).forEach(nm=>{ rackHist[nm]=[]; });   // prevStatus se llena en el primer tick (sin emitir)
+let alertAccum=0;                                    // acumulador ~1s del tick térmico de fondo
+let aiPlan=null;                                     // plan estructurado de la última recomendación IA (Feature 2)
+
+// ============================================================
+//  ESCENA 3D (embebida en .stage) — geometría lisa, ~0.05 m/u
+// ============================================================
+const canvas=document.getElementById('glcanvas');
+const stage=canvas.parentElement;
+const scene=new THREE.Scene();
+scene.fog=new THREE.Fog(0xdde4ef,9,32);
+
+const camera=new THREE.PerspectiveCamera(33,1,0.02,200);
+camera.position.set(4.7,3.5,5.6);
+
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=false;                 // sin sombras (pedido) -> mejor rendimiento
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.02;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+
+const pmrem=new THREE.PMREMGenerator(renderer);
+scene.environment=pmrem.fromScene(new RoomEnvironment(),0.03).texture;
+
+const controls=new OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true; controls.dampingFactor=0.08;
+controls.target.set(0,0.95,0.35); controls.autoRotate=false;
+controls.maxPolarAngle=Math.PI*0.49; controls.minDistance=3.2; controls.maxDistance=15;
+controls.enablePan=false;
+
+scene.add(new THREE.AmbientLight(0xdae2ee,0.95));
+const key=new THREE.DirectionalLight(0xffffff,1.3); key.position.set(3.5,6,3.5); scene.add(key);
+const fill=new THREE.DirectionalLight(0x9db8e6,0.4); fill.position.set(-4,3,-2.5); scene.add(fill);
+const rim=new THREE.DirectionalLight(0x3b6ff5,0.25); rim.position.set(0,2.4,-5); scene.add(rim);
+
+const COL={frame:0x2a2d38,frameD:0x16181f,side:0x0c0e14,glass:0xdfe7f2,led:0x3b6ff5,cold:0x3b6ff5,hot:0xf5883d,floor:0xd3dbe8};
+const WH=2.7;                                      // altura de contencion / techo
+const P=0.72, X0=-2.52, ZFRONT=0.475;              // paso entre racks, origen X, Z del frente de la fila
+const RNAMES=['B19','B20','B21','B22','B23','B24','B25','B26'];
+const HOTNAME='B23';
+
+// ===PURE-GEN-START===
+function makeLabel(text,hot){
+  const c=document.createElement('canvas'); c.width=256; c.height=128; const g=c.getContext('2d');
+  if(hot){ g.fillStyle='#ff6a2a'; g.fillRect(38,26,180,76); g.fillStyle='#170a04'; }
+  else { g.fillStyle='#d8e6f2'; }
+  g.font='bold 60px JetBrains Mono, monospace'; g.textAlign='center'; g.textBaseline='middle';
+  g.fillText(text,128,66);
+  const tex=new THREE.CanvasTexture(c); tex.anisotropy=4;
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
+  s.scale.set(0.62,0.31,1); return s;
+}
+// ---- rack 42U realista (puerta abierta) — dimensiones en metros (1 unidad = 1 m) ----
+function rackCanvasTex(w,h,draw){
+  const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); draw(g,w,h);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return t;
+}
+function serverFrontTex(is2U){ const w=512,h=is2U?128:64;
+  return rackCanvasTex(w,h,(g)=>{
+    g.fillStyle='#14151d'; g.fillRect(0,0,w,h); g.fillStyle='#0c0d14'; g.fillRect(3,3,w-6,h-6);
+    const by=h*0.20,bh=h*0.60,bw=18,gap=6;                                   // bahias de disco
+    for(let i=0;i<7;i++){ const x=12+i*(bw+gap); g.fillStyle='#22242f'; g.fillRect(x,by,bw,bh);
+      g.fillStyle='#343643'; g.fillRect(x+2,by+4,bw-4,3); g.fillStyle='#0b0b11'; g.fillRect(x+bw-7,by+bh-9,4,4); }
+    const gx0=176,gx1=352,gy0=h*0.13,gy1=h*0.87;                             // rejilla perforada
+    g.fillStyle='#090a10'; g.fillRect(gx0,gy0,gx1-gx0,gy1-gy0); g.fillStyle='#1c1e28';
+    for(let yy=gy0+5;yy<gy1-2;yy+=6) for(let xx=gx0+5;xx<gx1-2;xx+=6){ g.beginPath(); g.arc(xx,yy,1.6,0,6.283); g.fill(); }
+    g.fillStyle='#39566a'; g.font='bold '+((h*0.17)|0)+'px monospace'; g.textAlign='left'; g.fillText('NODE',372,h*0.40);
+    g.fillStyle='#1c1e28'; for(let i=0;i<4;i++) g.fillRect(372,h*0.52+i*6,104,3);
+  });
+}
+const RMAT={
+  FRAME:  new THREE.MeshStandardMaterial({color:0x2b2b36,roughness:0.5, metalness:0.15}),
+  FRAME_D:new THREE.MeshStandardMaterial({color:0x141620,roughness:0.6, metalness:0.1}),
+  SIDE:   new THREE.MeshStandardMaterial({color:0x0d1016,roughness:0.2, metalness:0.25,transparent:true,opacity:0.5,side:THREE.DoubleSide}),
+  PDU:    new THREE.MeshStandardMaterial({color:0x101018,roughness:0.6, metalness:0}),
+  DOOR:   new THREE.MeshStandardMaterial({color:0x16303f,roughness:0.12,metalness:0.35,transparent:true,opacity:0.16,side:THREE.DoubleSide}),
+  FRONT1: new THREE.MeshStandardMaterial({map:serverFrontTex(false),roughness:0.6,metalness:0}),
+  FRONT2: new THREE.MeshStandardMaterial({map:serverFrontTex(true), roughness:0.6,metalness:0})
+};
+const HW=0.30,HD=0.425,RH=2.0,U=0.04445,BASE=0.10,FRONT=0.425,PANEL=0.409,LEDZ=0.416,SRVW=0.462;
+const chGeo=new THREE.BoxGeometry(SRVW,U*0.9,0.34);
+const f1Geo=new THREE.PlaneGeometry(SRVW,U*0.9);
+const f2Geo=new THREE.PlaneGeometry(SRVW,U*2*0.9);
+const ledBGeo=new THREE.BoxGeometry(0.14,0.016,0.006);
+const STACK=[2,2,2,1,2,2,2,1,2,2,2,1,2,2,2,1,2,2,2,1];   // ~35U de abajo->arriba
+
+function buildRack(name,x,z,hot,label){
+  const g=new THREE.Group(); g.position.set(x,0,z); scene.add(g);
+  const add=(geo,mat,px,py,pz,parent)=>{ const m=new THREE.Mesh(geo,mat); m.position.set(px,py,pz);
+    m.castShadow=false; m.receiveShadow=false; (parent||g).add(m); return m; };   // SIN sombras
+  // carcasa (objetivo del glow termico) — material unico por rack
+  const bodyMat=new THREE.MeshStandardMaterial({color:0x141019,roughness:0.5,metalness:0.15,emissive:0x000000});
+  const body=add(new THREE.BoxGeometry(2*HW*0.98,RH*0.98,2*HD*0.9),bodyMat,0,RH/2,-0.03);
+  // gabinete: base, techo, postes, laterales (vidrio), fondo
+  add(new THREE.BoxGeometry(2*HW,0.05,2*HD),RMAT.FRAME_D,0,0.045,0);
+  add(new THREE.BoxGeometry(2*HW+0.02,0.04,2*HD+0.02),RMAT.FRAME,0,RH-0.02,0);
+  for(const sx of [-HW+0.014,HW-0.014]) for(const sz of [-HD+0.014,HD-0.014])
+    add(new THREE.BoxGeometry(0.026,RH-0.09,0.026),RMAT.FRAME,sx,RH/2,sz);
+  add(new THREE.BoxGeometry(0.01,RH-0.13,2*HD-0.05),RMAT.SIDE,-HW+0.006,RH/2,0);
+  add(new THREE.BoxGeometry(0.01,RH-0.13,2*HD-0.05),RMAT.SIDE, HW-0.006,RH/2,0);
+  add(new THREE.BoxGeometry(2*HW-0.03,RH-0.13,0.01),RMAT.FRAME_D,0,RH/2,-HD+0.006);
+  // stack: chasis + frente texturizado + barra LED (material unico -> el calor tinta B23)
+  const leds=[]; let cum=0;
+  for(const uh of STACK){ const yc=BASE+cum*U+uh*U/2; if(yc>RH-0.1)break;
+    add(chGeo,RMAT.FRAME_D,0,yc,FRONT-0.19);
+    add(uh>=2?f2Geo:f1Geo, uh>=2?RMAT.FRONT2:RMAT.FRONT1,0,yc,PANEL);
+    const lm=new THREE.MeshStandardMaterial({color:COL.led,emissive:COL.led,emissiveIntensity:1.3,roughness:0.5});
+    const led=new THREE.Mesh(ledBGeo,lm); led.position.set(0.08,yc,LEDZ); g.add(led); leds.push(led);
+    cum+=uh; }
+  // PDUs verticales (2)
+  for(const sx of [-HW+0.02,HW-0.02]) add(new THREE.BoxGeometry(0.028,RH-0.4,0.045),RMAT.PDU,sx,RH/2,-HD+0.08);
+  // PUERTA ABIERTA (vidrio, bisagra izquierda, ~86 grados hacia el pasillo)
+  const door=new THREE.Group(); door.position.set(-HW,RH/2,FRONT+0.01); door.rotation.y=-1.5; g.add(door);
+  const dW=2*HW-0.01, dH=RH-0.14;
+  add(new THREE.PlaneGeometry(dW,dH),RMAT.DOOR,dW/2,0,0,door);
+  add(new THREE.BoxGeometry(0.014,dH,0.014),RMAT.FRAME,0.006,0,0,door);
+  add(new THREE.BoxGeometry(0.014,dH,0.014),RMAT.FRAME,dW-0.006,0,0,door);
+  add(new THREE.BoxGeometry(0.02,0.09,0.03),RMAT.FRAME,dW-0.03,0,0.02,door);        // manija
+  // jaula de alerta (solo B23 la enciende)
+  const cage=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(2*HW*1.07,RH*1.03,2*HD*1.12)),
+    new THREE.LineBasicMaterial({color:COL.hot,transparent:true,opacity:0}));
+  cage.position.set(0,RH/2,0); g.add(cage);
+  if(label!==false){ const lbl=makeLabel(name,hot); lbl.position.set(0,RH+0.26,0.12); g.add(lbl); }
+  return {name,group:g,body,leds,cage,top:new THREE.Vector3(x,RH,z)};
+}
+function buildBackRack(x,z){                          // fila trasera tenue (profundidad)
+  const g=new THREE.Group(); g.position.set(x,0,z); scene.add(g);
+  const b=new THREE.Mesh(new THREE.BoxGeometry(2*HW,RH,2*HD),
+    new THREE.MeshStandardMaterial({color:0x0c0e15,roughness:0.6,metalness:0.2}));
+  b.position.y=RH/2; g.add(b);
+  const strip=new THREE.Mesh(new THREE.PlaneGeometry(0.32,RH-0.34),
+    new THREE.MeshBasicMaterial({color:0x0a3348})); strip.position.set(0,RH/2,HD+0.006); g.add(strip);
+  return g;
+}
+function buildRacks(){
+  const map={};
+  RNAMES.forEach((nm,i)=>{ map[nm]=buildRack(nm, X0+i*P, ZFRONT, false, true); });
+  for(let i=0;i<7;i++) buildBackRack(X0+0.36+i*P, -1.15);   // segunda fila (tenue)
+  return map;
+}
+function buildRoom(){
+  const g=new THREE.Group(); scene.add(g);
+  const FX=4.2, FZ=3.0;
+  const floor=new THREE.Mesh(new THREE.BoxGeometry(2*FX,0.22,2*FZ),
+    new THREE.MeshStandardMaterial({color:COL.floor,roughness:0.9,metalness:0.15}));
+  floor.position.set(0,-0.11,0); g.add(floor);
+  const tiles=new THREE.GridHelper(2*Math.max(FX,FZ),28,0xa6b4ca,0xccd5e2); tiles.position.set(0,0.006,0); g.add(tiles);
+  // losetas perforadas del pasillo frio (frente a la fila)
+  for(let i=0;i<8;i++){ const t=new THREE.Mesh(new THREE.PlaneGeometry(0.44,0.5),
+    new THREE.MeshStandardMaterial({color:0x0a2434,emissive:0x0b3a54,emissiveIntensity:0.7,roughness:0.6}));
+    t.rotation.x=-Math.PI/2; t.position.set(X0+i*P,0.012,1.35); g.add(t); }
+  // paredes de contencion (vidrio)
+  const glass=new THREE.MeshStandardMaterial({color:COL.glass,roughness:0.1,metalness:0.2,transparent:true,opacity:0.09,side:THREE.DoubleSide});
+  const mkwall=(w,h,d,px,py,pz)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),glass); m.position.set(px,py,pz); g.add(m);
+    const e=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w,h,d)),
+      new THREE.LineBasicMaterial({color:0x9fb2cc,transparent:true,opacity:0.3})); e.position.set(px,py,pz); g.add(e); };
+  mkwall(2*FX,WH,0.03,0,WH/2,-FZ);        // fondo
+  mkwall(0.03,WH,2*FZ,-FX,WH/2,0);        // izq
+  mkwall(0.03,WH,2*FZ, FX,WH/2,0);        // der
+  // vigas de techo
+  const beam=new THREE.MeshStandardMaterial({color:0xb2bccd,roughness:0.7,metalness:0.2});
+  for(let i=-3;i<=3;i++){ const b=new THREE.Mesh(new THREE.BoxGeometry(2*FX,0.05,0.05),beam); b.position.set(0,WH,i*0.85); g.add(b); }
+  // plenum superior + difusores frios
+  const plenum=new THREE.Mesh(new THREE.BoxGeometry(5.8,0.16,0.7),
+    new THREE.MeshStandardMaterial({color:0xc2ccdd,roughness:0.5,metalness:0.2}));
+  plenum.position.set(0,WH-0.22,0.55); g.add(plenum);
+  for(let i=0;i<8;i++){ const df=new THREE.Mesh(new THREE.PlaneGeometry(0.46,0.5),
+    new THREE.MeshStandardMaterial({color:COL.cold,emissive:COL.cold,emissiveIntensity:0.85,roughness:0.5}));
+    df.rotation.x=Math.PI/2; df.position.set(X0+i*P,WH-0.31,0.55); g.add(df); }
+  scene.add(g); return {bounds:{FX,FZ}};
+}
+
+// --- ribbons de flujo: tubos con textura desplazada (glow) ---
+function flowTexture(){
+  const c=document.createElement('canvas'); c.width=64; c.height=1; const g=c.getContext('2d');
+  for(let x=0;x<64;x++){ const a=Math.pow(Math.max(0,Math.sin(x/64*Math.PI*2)),2);
+    g.fillStyle='rgba(255,255,255,'+a+')'; g.fillRect(x,0,1,1); }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; return t;
+}
+function makeRibbon(pts,color,rad,reps){
+  const curve=new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p)));
+  const geo=new THREE.TubeGeometry(curve,40,rad,8,false);
+  const tex=flowTexture(); tex.repeat.set(reps||3,1);
+  const mat=new THREE.MeshBasicMaterial({color,map:tex,transparent:true,opacity:0.0,
+    blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
+  const m=new THREE.Mesh(geo,mat); m.userData={tex,speed:0.4+Math.random()*0.3,base:color}; scene.add(m); return m;
+}
+function buildFlows(){
+  const cool=[], hot=[];
+  // grandes barridos de aire frio desde el piso frontal subiendo sobre la fila
+  cool.push(makeRibbon([[-3.0,0.08,2.1],[-2.2,0.5,1.5],[-1.5,1.3,0.85],[-1.1,2.1,0.25],[-0.5,2.35,-0.2]],COL.cold,0.05,5));
+  cool.push(makeRibbon([[-2.5,0.08,2.4],[-1.7,0.45,1.8],[-0.9,1.1,1.05],[-0.3,1.9,0.45],[0.3,2.3,0.0]],COL.cold,0.045,5));
+  cool.push(makeRibbon([[2.9,0.08,2.1],[2.1,0.5,1.5],[1.3,1.2,0.85],[0.8,2.0,0.25],[0.3,2.35,-0.1]],COL.cold,0.05,5));
+  cool.push(makeRibbon([[2.4,0.08,2.4],[1.6,0.45,1.85],[0.8,1.05,1.05],[0.2,1.9,0.4],[-0.3,2.3,0.0]],COL.cold,0.045,5));
+  // descenso desde el plenum hacia el pasillo frio (por rack)
+  for(let i=0;i<8;i++){ const x=X0+i*P;
+    cool.push(makeRibbon([[x,WH-0.35,0.55],[x,1.5,0.72],[x,0.7,1.05],[x,0.28,1.35]],COL.cold,0.028,4)); }
+  // exhausto caliente sobre B23
+  const xb=X0+4*P;
+  hot.push(makeRibbon([[xb,1.3,-0.05],[xb,1.9,-0.55],[xb,2.4,-0.95]],COL.hot,0.05,3));
+  hot.push(makeRibbon([[xb-0.12,1.0,0.15],[xb-0.06,1.8,-0.1],[xb,2.5,-0.4]],COL.hot,0.04,3));
+  return {cool,hot};
+}
+// ===PURE-GEN-END===
+
+buildRoom();
+const racks=buildRacks();
+const flows=buildFlows();
+
+// penacho critico sobre B23 (particulas simples)
+const plume=[]; const pgeo=new THREE.SphereGeometry(0.045,6,6);
+for(let i=0;i<26;i++){ const m=new THREE.Mesh(pgeo,new THREE.MeshBasicMaterial({color:0xff3320,
+  transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
+  m.userData={t:Math.random(),seed:Math.random()*6.28}; scene.add(m); plume.push(m); }
+
+// charco de calor en el piso bajo B23
+const hotPool=new THREE.Mesh(new THREE.CircleGeometry(0.72,32),
+  new THREE.MeshBasicMaterial({color:0xff5a1e,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
+hotPool.rotation.x=-Math.PI/2; hotPool.position.set(racks[HOTNAME].top.x,0.02,ZFRONT); scene.add(hotPool);
+
+const hotLight=new THREE.PointLight(0xff4a20,0,3.4,2);
+hotLight.position.copy(racks[HOTNAME].top).add(new THREE.Vector3(0,-0.5,0)); scene.add(hotLight);
+
+// ===== termica B23 =====
+const cCold=new THREE.Color(COL.led),cWarm=new THREE.Color(0xff9a1e),cCrit=new THREE.Color(0xff2233),_t=new THREE.Color();
+function heatColor(h,o){ if(h<0.5)o.copy(cCold).lerp(cWarm,h/0.5); else o.copy(cWarm).lerp(cCrit,(h-0.5)/0.5); return o; }
+// tinta CADA rack según su propio rackHeat; los efectos dramáticos siguen al peor rack
+function applyHeat(){
+  const shimmer=Math.sin(sim*3)*0.12;                // leve respiración de LEDs (dato "vivo")
+  for(const nm of RNAMES){
+    // "hotness" por TEMPERATURA (MISMA escala que el heatmap): el rack más caliente en 3D
+    // coincide con la celda más caliente del mapa térmico, con intensidad coherente.
+    const r=racks[nm]; const hu=hotUnit(nm); heatColor(hu,_t);
+    r.body.material.emissive.copy(_t);
+    r.body.material.emissiveIntensity = hu>0.05 ? 0.10+hu*1.05 : 0;
+    r.leds.forEach((l,i)=>{ l.material.color.copy(_t); l.material.emissive.copy(_t);
+      l.material.emissiveIntensity = 0.55+hu*1.9+shimmer-(i%3)*0.08; });   // color+intensidad desde hotUnit
+    r.cage.material.opacity = Math.max(0, hu-0.45)*1.3; // jaula de alerta cuando el rack se calienta
+  }
+  // efectos siguen al peor rack (charco + luz puntual); intensidad escalada por hotUnit(worst)
+  const worst=worstRack(); const wu=hotUnit(worst); const top=racks[worst].top;
+  hotPool.position.set(top.x,0.02,ZFRONT);
+  hotPool.material.opacity=wu*0.55; hotPool.scale.setScalar(0.8+wu*0.5);
+  hotLight.position.set(top.x, top.y-0.5, top.z); hotLight.intensity=wu*2.6;
+}
+
+// ============================================================
+//  INTERACCION: hover (cursor pointer) + click -> vista de detalle del rack
+// ============================================================
+const raycaster=new THREE.Raycaster(); const ndc=new THREE.Vector2();
+Object.entries(racks).forEach(([nm,r])=>{ r.group.userData.rackName=nm; });   // etiqueta cada rack pickeable
+const pickables=Object.values(racks).map(r=>r.group);
+const hoverBox=new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(2*HW*1.1,RH*1.02,2*HD*1.14)),
+  new THREE.LineBasicMaterial({color:0x28c8ff,transparent:true,opacity:0.9}));
+hoverBox.visible=false; scene.add(hoverBox);
+let hoverName=null;
+function pickRack(ev){
+  const r=canvas.getBoundingClientRect();
+  ndc.x=((ev.clientX-r.left)/r.width)*2-1; ndc.y=-((ev.clientY-r.top)/r.height)*2+1;
+  raycaster.setFromCamera(ndc,camera);
+  const hits=raycaster.intersectObjects(pickables,true);
+  for(const hit of hits){ let o=hit.object; while(o){ if(o.userData&&o.userData.rackName) return o.userData.rackName; o=o.parent; } }
+  return null;
+}
+canvas.addEventListener('pointermove',ev=>{
+  hoverName=pickRack(ev);
+  canvas.style.cursor=hoverName?'pointer':'default';
+  if(hoverName){ const rk=racks[hoverName]; hoverBox.position.set(rk.top.x,RH/2,rk.group.position.z); hoverBox.visible=true; }
+  else hoverBox.visible=false;
+});
+let _dx=0,_dy=0;
+canvas.addEventListener('pointerdown',ev=>{ _dx=ev.clientX; _dy=ev.clientY; });
+canvas.addEventListener('pointerup',ev=>{
+  if(Math.abs(ev.clientX-_dx)>5||Math.abs(ev.clientY-_dy)>5) return;   // fue rotacion de camara, no click
+  const nm=pickRack(ev);
+  if(nm) window.location.href='rack-detail.html?rack='+encodeURIComponent(nm);
+});
+
+// ============================================================
+//  MAPA TÉRMICO (canvas) — campo gaussiano + colormap turbo
+// ============================================================
+const heatcv=document.getElementById('heatcv'); const hctx=heatcv.getContext('2d');
+let heatView='front';
+// MISMA rampa que el glow 3D (heatColor): azul frío -> naranja -> rojo crítico.
+// Así una celda del heatmap tiene el MISMO color que el rack en la escena 3D.
+function heatColorRGB(t){
+  t=Math.max(0,Math.min(1,t));
+  const cold=[59,111,245], warm=[255,154,30], crit=[255,34,51];   // #3b6ff5 · #ff9a1e · #ff2233
+  const mix=(a,b,u)=>[Math.round(a[0]+(b[0]-a[0])*u),Math.round(a[1]+(b[1]-a[1])*u),Math.round(a[2]+(b[2]-a[2])*u)];
+  return t<0.5 ? mix(cold,warm,t/0.5) : mix(warm,crit,(t-0.5)/0.5);
+}
+// Renderiza el LAYOUT de la sala: los 8 racks B19–B26 en su orden de fila, cada
+// uno como una columna coloreada por SU hotUnit (turbo) — la MISMA "hotness" por
+// temperatura que gobierna el glow 3D — con caída gaussiana para look de heatmap
+// + etiqueta y temperatura por celda. El campo turbo se pinta a MEDIA resolución
+// (buffer offscreen escalado) para permitir cadencia alta sin pagar el loop por-pixel.
+function renderRoomHeat(cv,mode){
+  if(!cv)return; const ctx=cv.getContext('2d');
+  const w=cv.clientWidth, h=cv.clientHeight; if(!w||!h)return;
+  cv.width=w; cv.height=h;
+  const N=RNAMES.length;
+  const temps=RNAMES.map(rackTemp);
+  const units=RNAMES.map(hotUnit);                   // MISMA escala que el glow 3D (applyHeat)
+  const domeY = mode==='top' ? 0.5 : 0.42;           // 'top' centra el domo; 'front' lo sube un poco
+  const bw=Math.max(2,Math.round(w/2)), bh=Math.max(2,Math.round(h/2));   // buffer a media resolución
+  const tmp=renderRoomHeat._tmp || (renderRoomHeat._tmp=document.createElement('canvas'));
+  tmp.width=bw; tmp.height=bh; const tctx=tmp.getContext('2d');
+  const img=tctx.createImageData(bw,bh);
+  for(let py=0;py<bh;py++){
+    const v=py/bh;
+    for(let px=0;px<bw;px++){
+      const u=px/bw;
+      let val=0.05;                                  // piso ambiente frío
+      for(let i=0;i<N;i++){
+        const cx=(i+0.5)/N; const dx=(u-cx);
+        const gx=Math.exp(-dx*dx*(N*N)*0.55);        // difusión horizontal ~1 celda
+        const gy=1-0.45*Math.min(1,Math.abs(v-domeY)*2);   // domo vertical (look de calor)
+        val=Math.max(val, units[i]*gx*Math.max(0.35,gy));
+      }
+      // curva de contraste: mantiene los racks fríos bien azules y hace que la huella
+      // caliente (naranja/rojo) resalte, igual que el atenuado por intensidad del 3D.
+      const [r,g,b]=heatColorRGB(Math.pow(val,1.5)); const idx=(py*bw+px)*4;
+      img.data[idx]=r; img.data[idx+1]=g; img.data[idx+2]=b; img.data[idx+3]=255;
+    }
+  }
+  tctx.putImageData(img,0,0);
+  ctx.imageSmoothingEnabled=true; ctx.drawImage(tmp,0,0,bw,bh,0,0,w,h);   // escala suave a resolución completa
+  // separadores + etiqueta + temperatura por rack
+  const cellW=w/N; const lblSize=Math.max(8.5,Math.min(13,cellW*0.26));
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(let i=0;i<N;i++){
+    const cx=(i+0.5)*cellW;
+    ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.beginPath();
+    ctx.moveTo(i*cellW,0); ctx.lineTo(i*cellW,h); ctx.stroke();
+    ctx.fillStyle='rgba(9,14,24,0.55)'; ctx.fillRect(cx-cellW*0.47, h-Math.min(30,h*0.3), cellW*0.94, Math.min(28,h*0.28));
+    ctx.fillStyle='#f2f6fc'; ctx.font='bold '+lblSize+'px JetBrains Mono, monospace';
+    ctx.fillText(RNAMES[i], cx, h-Math.min(19,h*0.2));
+    ctx.fillStyle='#dbe6f4'; ctx.font=(lblSize*0.9)+'px JetBrains Mono, monospace';
+    ctx.fillText(fmt(temps[i],1)+'°', cx, h-Math.min(7,h*0.075));
+  }
+}
+// Mantiene las etiquetas de escala honestas con la escala real (HEAT_LO..critTemp+6),
+// que cambia cuando se ajusta el umbral crítico en Ajustes.
+function refreshHeatLegend(){
+  const lo=HEAT_LO, hi=heatHi(), mid=(lo+hi)/2;
+  const set=(id,v)=>{ const e=document.getElementById(id); if(e)e.textContent=Math.round(v)+'°C'; };
+  set('heatLo1',lo); set('heatHi1',hi);
+  set('heatLo2',lo); set('heatMid2',mid); set('heatHi2',hi);
+  set('stageHi',hi); set('stageLo',lo);
+  const sub=document.getElementById('heatSub2'); if(sub)sub.textContent=Math.round(lo)+'°C → '+Math.round(hi)+'°C';
+}
+function drawHeat(){ renderRoomHeat(heatcv,heatView); refreshHeatLegend(); }
+
+// ============================================================
+//  ESQUEMA DE FLUJO (SVG) — Antes / Después
+// ============================================================
+const schem=document.getElementById('schem'); let scMode='after';
+function drawSchem(){
+  const cool='#28c8ff', hot='#ff6a3d';
+  const box=(x,y,w,h)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#0e1524" stroke="#22314a"/>`;
+  const crah=(x)=>`<rect x="${x}" y="18" width="20" height="94" rx="3" fill="#0c1a24" stroke="#28c8ff66"/>
+    <text x="${x+10}" y="68" fill="#28c8ff" font-size="7" text-anchor="middle" font-family="monospace">CRAH</text>`;
+  const flow=(x1,y1,x2,y2,col,cls)=>`<path d="M${x1} ${y1} L${x2} ${y2}" stroke="${col}" stroke-width="2.4"
+    fill="none" stroke-dasharray="6 5" class="${cls}" marker-end="url(#ah_${col===cool?'c':'h'})"/>`;
+  const defs=`<defs>
+    <marker id="ah_c" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="${cool}"/></marker>
+    <marker id="ah_h" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="${hot}"/></marker>
+    <style>.fl{animation:dash 1s linear infinite}@keyframes dash{to{stroke-dashoffset:-22}}</style></defs>`;
+  // dos racks centrales
+  const racksSvg=box(120,40,26,52)+box(154,40,26,52);
+  let arrows;
+  if(scMode==='after'){ // optimizado: frío entra ordenado a pasillo central, caliente sale limpio
+    arrows=flow(45,50,118,50,cool,'fl')+flow(255,50,182,50,cool,'fl')
+          +flow(133,38,133,14,hot,'fl')+flow(167,38,167,14,hot,'fl');
+  } else { // antes: recirculación, frío se mezcla con caliente
+    arrows=flow(45,60,110,72,cool,'fl')+flow(133,40,150,28,hot,'fl')
+          +flow(190,70,150,60,hot,'fl')+flow(255,66,185,74,cool,'fl');
+  }
+  schem.innerHTML=defs+crah(20)+crah(260)+racksSvg+arrows;
+}
+
+// ============================================================
+//  UI wiring
+// ============================================================
+document.querySelectorAll('[data-hv]').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('[data-hv]').forEach(x=>x.classList.remove('act')); t.classList.add('act');
+  heatView=t.dataset.hv; drawHeat();
+});
+document.querySelectorAll('[data-sc]').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('[data-sc]').forEach(x=>x.classList.remove('act')); t.classList.add('act');
+  scMode=t.dataset.sc; drawSchem();
+});
+
+const $=id=>document.getElementById(id);
+const respEls=[$('r0'),$('r1'),$('r2')];
+function setPhase(i){ S.phaseIdx=((i%PHASES.length)+PHASES.length)%PHASES.length; S.tPhase=0;
+  $('phaseName').textContent=PHASES[S.phaseIdx].name; }
+
+// KPIs / motor IA — función de CFG y del PEOR rack (no de constantes fijas)
+function updatePanels(){
+  const worst=worstRack(); const info=RACKINFO[worst];
+  const temps=RNAMES.map(rackTemp);
+  const avg=temps.reduce((a,b)=>a+b,0)/temps.length;
+  const wt=rackTemp(worst); const ttc=ttcInfo(worst);
+
+  // KPIs (promedios reales de los racks)
+  $('kTemp').innerHTML=fmt(avg)+'<small>°C</small>';
+  $('kGpu').innerHTML=Math.round(RNAMES.reduce((a,nm)=>a+rackGpu(nm),0)/RNAMES.length)+'<small>%</small>';
+  $('kAir').innerHTML=Math.round(RNAMES.reduce((a,nm)=>a+rackAir(nm),0)/RNAMES.length)+'<small>%</small>';
+  $('kPow').innerHTML=(1.90+S.heat*0.22).toFixed(2)+'<small>MW</small>';
+  const crit=wt>=CFG.critTemp;
+  $('kCrah').textContent = wt>=CFG.warnTemp?'Refuerzo':'Adaptativo';
+  $('kHealth').textContent = crit?'En riesgo':'Saludable';
+  $('kHealth').style.color = crit?'var(--red)':'var(--green)';
+  const bp=clamp(Math.round(68+S.heat*24),0,100); $('aisleB').style.width=bp+'%'; $('aisleBp').textContent=bp+'%';
+
+  // ===== Motor IA =====
+  const lead = ttc.mins===0
+    ? 'El <b>Rack '+worst+'</b> está en temperatura <span class="g">crítica</span>'
+    : ttc.mins===Infinity
+      ? 'El <b>Rack '+worst+'</b> se mantiene <b>estable</b> — sin hotspot previsto'
+      : 'El <b>Rack '+worst+'</b> alcanzará temperatura <span class="g">crítica</span> en <span class="g mono">'+ttc.label+'</span>';
+  $('aiLead').innerHTML=lead;                          // nota: reescribe el interior (incluido #aiMin)
+  const ttcShort = ttc.mins===Infinity?'∞':ttc.mins===0?'0 min':ttc.label;
+  $('aiTti').textContent=ttcShort;                     // #aiTti vive fuera del lead
+  $('coMin').textContent=ttc.mins===Infinity?'∞':ttc.mins;
+  $('coName').textContent='RACK '+worst;
+
+  // ring de confianza: cercanía a crítico modulada por sensibilidad IA
+  const prox=clamp((wt-CFG.warnTemp)/Math.max(1,(CFG.critTemp-CFG.warnTemp)),0,1.3);
+  let conf=Math.round((52+prox*40)*(0.7+0.3*CFG.aiSensitivity/60)); conf=clamp(conf,5,99);
+  $('ringNum').textContent=conf+'%';
+  $('ringArc').setAttribute('stroke-dashoffset',(175.9*(1-conf/100)).toFixed(1));
+  $('ringArc').setAttribute('stroke', wt>=CFG.critTemp?'var(--red)':wt>=CFG.warnTemp?'var(--amber)':'var(--teal)');
+  $('aiSev').textContent = wt>=CFG.critTemp?'● Alta':wt>=CFG.warnTemp?'● Media':'● Baja';
+  $('aiSev').className='v '+(wt>=CFG.warnTemp?'hi':'');
+  $('tlTemp').textContent=fmt(Math.min(wt,CFG.critTemp-1.5))+'°C';
+
+  // causa raíz + acción recomendada — de señales reales del peor rack
+  const sig=[], acc=[];
+  if(info.gpu>=CFG.gpuLimit){ sig.push('alta carga GPU ('+info.gpu+'% > límite '+CFG.gpuLimit+'%)'); acc.push('balancear la carga GPU de '+worst); }
+  if(info.air<74){ sig.push('flujo de aire reducido ('+info.air+'%)'); acc.push('incrementar el flujo hacia su pasillo'); }
+  if(CFG.ambientTemp>=27){ sig.push('temperatura ambiente elevada ('+fmt(CFG.ambientTemp,0)+'°C)'); acc.push('reforzar el enfriamiento ambiente'); }
+  if(CFG.setpoint>17){ sig.push('setpoint CRAH alto ('+fmt(CFG.setpoint)+'°C)'); acc.push('bajar el setpoint CRAH'); }
+  if(!sig.length) sig.push('carga térmica combinada en el pasillo');
+  if(!acc.length) acc.push('mantener monitorización y margen de enfriamiento');
+  $('aiCausa').textContent='En '+worst+': '+sig.join(' + ')+'.';
+  const a0=acc[0]; $('aiAccion').textContent=a0.charAt(0).toUpperCase()+a0.slice(1)+(acc.length>1?'; '+acc.slice(1).join('; '):'')+'.';
+  // plan estructurado para el botón "Aplicar acción" (Feature 2) — deriva de las MISMAS señales
+  aiPlan={ worst, gpuHigh:info.gpu>=CFG.gpuLimit, airLow:info.air<74, ambHigh:CFG.ambientTemp>=27, spHigh:CFG.setpoint>17 };
+
+  // respuesta automatizada: activa cuando autoResp, manual si no
+  const st=[['pend','—'],['pend','—'],['pend','—']];
+  if(CFG.autoResp){
+    if(wt>=CFG.critTemp){ st[0]=['done','Listo']; st[1]=['done','Listo']; st[2]=['prog','En progreso']; }
+    else if(wt>=CFG.warnTemp){ st[0]=['done','Listo']; st[1]=['prog','En progreso']; st[2]=['pend','Pendiente']; }
+    else { st[0]=['prog','En progreso']; st[1]=['pend','Pendiente']; st[2]=['pend','Pendiente']; }
+  } else { st[0]=['pend','Manual']; st[1]=['pend','Manual']; st[2]=['pend','Manual']; }
+  respEls.forEach((el,i)=>{ const [cls,txt]=st[i]; const s=el.querySelector('.s'), r=el.querySelector('.rs');
+    s.className='s '+(cls==='prog'?'prog':cls==='done'?'done':''); r.textContent=txt; r.className='rs '+(cls==='prog'?'prog':'pend'); });
+
+  $('callout').style.opacity = rackHeat[worst]>0.25?1:0;
+}
+
+// ============================================================
+//  RESIZE (mide el contenedor .stage)
+// ============================================================
+function resize(){
+  const w=stage.clientWidth,h=stage.clientHeight;
+  if(!w||!h){ return; }                             // .stage oculto (otra vista): evita aspect NaN
+  renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
+  drawHeat();
+}
+addEventListener('resize',resize);
+
+// ============================================================
+//  LOOP
+// ============================================================
+const clock=new THREE.Clock(); let sim=0; const _v=new THREE.Vector3();
+
+// selecciona 1-3 racks calientes con sesgo hacia GPU alta / por encima del límite;
+// el peso base 0.3 garantiza que la rotación NUNCA se fija en un solo rack
+function reshuffleHot(){
+  const count=1+Math.floor(Math.random()*3);          // 1..3 racks
+  const pool=RNAMES.slice(); const chosen=[];
+  for(let k=0;k<count && pool.length;k++){
+    const wts=pool.map(nm=>{ let x=0.3+Math.pow(RACKINFO[nm].gpu/100,3);
+      if(RACKINFO[nm].gpu>=CFG.gpuLimit) x*=2.5; return x; });
+    let tot=wts.reduce((a,b)=>a+b,0), r=Math.random()*tot, i=0;
+    while(i<wts.length-1 && r>wts[i]){ r-=wts[i]; i++; }
+    chosen.push(pool[i]); pool.splice(i,1);
+  }
+  activeHot=chosen;
+}
+// avanza el modelo térmico por rack: activos rampan hacia un objetivo escalado por
+// la intensidad de fase; inactivos decaen; autoResp mitiga (recorta objetivo y rampa)
+function updateRackHeat(dt){
+  hotTimer+=dt;
+  if(activeHot.length===0 || hotTimer>=hotInterval){ reshuffleHot(); hotTimer=0; hotInterval=25+Math.random()*20; }
+  const intensity=S.intensity;                         // 0..1 del escenario de fase
+  for(const nm of RNAMES){
+    const active=activeHot.indexOf(nm)>=0;
+    let target=0;
+    if(active){
+      target=(0.35+0.6*intensity)*(0.7+0.3*RACKINFO[nm].gpu/100);
+      if(CFG.autoResp) target*=0.55;                   // auto-cooling: recorta el objetivo
+    }
+    target=Math.min(1,target); rackHeatTarget[nm]=target;
+    const cur=rackHeat[nm];
+    let speed; if(target>cur){ speed=active?0.5:0.9; if(active&&CFG.autoResp) speed*=0.6; } else speed=1.1;
+    rackHeat[nm]=cur+(target-cur)*Math.min(1,speed*dt);
+    rackVel[nm]=speed*(target-cur);
+  }
+  let mx=0; for(const nm of RNAMES) if(rackHeat[nm]>mx) mx=rackHeat[nm];
+  S.heat=mx;                                           // derivado: peor rack (consumidores legados)
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05); sim+=dt;
+
+  // máquina de estados: la fase define la INTENSIDAD del escenario (cuántos/cuán fuerte)
+  S.tPhase+=dt; const p=PHASES[S.phaseIdx]; const u=Math.min(S.tPhase/p.dur,1);
+  const prev=S.phaseIdx===0?PHASES[3].heatTo:PHASES[S.phaseIdx-1].heatTo;
+  S.intensity=prev+(p.heatTo-prev)*(u*u*(3-2*u));
+  if(S.tPhase>=p.dur){ setPhase(S.phaseIdx+1); }
+  updateRackHeat(dt);                                  // heat por rack (barato, vivo en todas las vistas)
+
+  // Feature 1 & 3: tick térmico de fondo ~1/s (alertas + historial + badge). Corre ANTES del
+  // gate render3D para acumular incluso fuera de 'inicio'. dt está capado a 0.05 => nunca dispara
+  // en la primera llamada síncrona a animate() (protege el acceso a appEl aún en TDZ en ese punto).
+  alertAccum+=dt; if(alertAccum>=1){ alertAccum-=1; thermalTick(); }
+
+  // gate de rendimiento (truco Cinemex setRenderLoop): la máquina de estados y el
+  // modelo por rack siguen avanzando pero el trabajo 3D pesado se omite fuera de
+  // 'inicio'. El rAF nunca se re-programa dos veces: una sola cadena al inicio.
+  if(!render3D) return;
+
+  applyHeat();                                         // tinta todos los racks + reubica efectos al peor
+
+  const worst=worstRack(); const wtop=racks[worst].top; const wh=rackHeat[worst];
+
+  // ribbons de flujo
+  flows.cool.forEach(m=>{ m.userData.tex.offset.x-=dt*m.userData.speed; m.material.opacity=0.55; });
+  flows.hot.forEach(m=>{ m.userData.tex.offset.x-=dt*m.userData.speed*0.8; m.material.opacity=0.28+wh*0.4; });
+
+  // penacho crítico — sigue al peor rack
+  plume.forEach(pt=>{ if(wh<0.35){pt.material.opacity=0;return;}
+    pt.userData.t+=dt*0.3; if(pt.userData.t>1)pt.userData.t=0; const t=pt.userData.t,s=pt.userData.seed;
+    pt.position.set(wtop.x+Math.sin(t*5+s)*0.12*t, wtop.y+t*1.1, wtop.z+Math.cos(t*5+s)*0.12*t);
+    pt.material.opacity=Math.sin(t*Math.PI)*wh*0.85; });
+
+  // callout — sigue al peor rack
+  if(wh>0.25){ _v.copy(wtop).add(new THREE.Vector3(0,0.55,0)).project(camera);
+    const r=stage.getBoundingClientRect();
+    $('callout').style.left=((_v.x*0.5+0.5)*r.width)+'px';
+    $('callout').style.top=((-_v.y*0.5+0.5)*r.height)+'px'; }
+
+  // paneles + heatmap animado: redibuja ~cada 0.3s O de inmediato si cambia el peor rack,
+  // para que el heatmap "en vivo" coincida con el glow 3D (que se actualiza cada frame).
+  updatePanels();
+  if(sim-(window.__lastHeat||0)>=0.3 || worst!==window.__lastWorst){
+    window.__lastHeat=sim; window.__lastWorst=worst; drawHeat();
+  }
+
+  controls.update();
+  renderer.render(scene,camera);
+}
+setPhase(0); resize(); drawSchem(); drawHeat();
+animate();
+
+// ============================================================
+//  SPARKLINES (canvas) del panel de analítica
+// ============================================================
+// ---- tooltip de sparklines: fecha, hora y valor del punto más cercano al cursor ----
+let _sparkTip=null;
+function sparkTip(){
+  if(!_sparkTip){ _sparkTip=document.createElement('div');
+    _sparkTip.style.cssText='position:fixed;z-index:99998;pointer-events:none;display:none;'
+      +'background:#1B2430;color:#fff;border:1px solid rgba(255,255,255,0.14);border-radius:7px;'
+      +'padding:5px 9px;font:600 11px/1.35 JetBrains Mono,ui-monospace,monospace;'
+      +'box-shadow:0 6px 20px rgba(20,28,40,0.28);white-space:nowrap;transform:translate(-50%,-118%)';
+    document.body.appendChild(_sparkTip); }
+  return _sparkTip;
+}
+function hideSparkTip(){ if(_sparkTip)_sparkTip.style.display='none'; }
+// ---- ejes etiquetados (Feature: axes) ----
+// Reserva un rect INSET dentro del canvas para dibujar etiquetas de eje; todo (área,
+// línea, marcador, índice del tooltip) se mapea a este inset, no al canvas completo.
+// axes: 'xy' (ambos ejes), 'y' (solo Y), '' (ninguno, comportamiento original).
+// Constantes de padding de este archivo: top/bottom base 3px (equivale al -3 original).
+function sparkGeom(w,h,axes){
+  const ax=axes||''; const hasY=ax==='y'||ax==='xy', hasX=ax==='xy';
+  const padL=hasY?34:0, padR=(hasY||hasX)?3:0, padT=3, padB=hasX?15:3;
+  let x0=padL,y0=padT,pw=w-padL-padR,ph=h-padT-padB,eff=ax;
+  if(eff && (pw<40||ph<24)){ x0=0;y0=3;pw=w;ph=h-6;eff=''; }   // demasiado pequeño: sin ejes
+  return {plotX0:x0,plotY0:y0,plotW:pw,plotH:ph,axes:eff};
+}
+// rejilla + etiquetas de eje, dibujadas detrás del área. Colores muted del tema (--mut/--dim).
+function drawSparkAxes(g,s){
+  const x0=s.plotX0,y0=s.plotY0,pw=s.plotW,ph=s.plotH,vmin=s.vmin,vmax=s.vmax;
+  const dec=vmax<=5?1:0; const uRaw=(s.unit||'').trim();
+  const uLab=(uRaw==='°C'||uRaw==='%')?uRaw:'';   // MW se omite (ancho); el encabezado ya indica MW
+  g.save(); g.font='9px JetBrains Mono,ui-monospace,monospace'; g.textBaseline='middle';
+  [vmax,(vmin+vmax)/2,vmin].forEach((v,k)=>{
+    const y=y0+ph*(1-(v-vmin)/(vmax-vmin));
+    g.strokeStyle='rgba(92,107,132,0.15)'; g.lineWidth=1;
+    g.beginPath(); g.moveTo(x0,y+.5); g.lineTo(x0+pw,y+.5); g.stroke();
+    g.fillStyle='#9BA6B8'; g.textAlign='right';
+    const ty=k===0?y+4:(k===2?y-4:y);   // nudge de etiquetas superior/inferior hacia adentro
+    g.fillText(v.toFixed(dec)+uLab,x0-4,ty);
+  });
+  if(s.axes==='xy' && s.times && s.times.length){
+    const N=s.pts.length, now=s.times[N-1];
+    g.fillStyle='#9BA6B8'; g.textBaseline='top';
+    [0,Math.floor((N-1)/2),N-1].forEach((i,k)=>{
+      const x=N<2?x0+pw:x0+i/(N-1)*pw;
+      let lab; if(k===2) lab='ahora';
+      else { const dt=now-s.times[i]; lab=s.real?'-'+Math.round(dt/1000)+'s':'-'+Math.round(dt/3600000)+'h'; }
+      g.textAlign=k===0?'left':(k===2?'right':'center');
+      g.fillText(lab,x,y0+ph+4);
+    });
+  }
+  g.restore();
+}
+// pinta solo la sparkline (área + línea) desde el stash — reutilizado por spark() y por el overlay de hover
+function paintSparkBase(cv,s){
+  const g=cv.getContext('2d'); const w=cv.width,h=cv.height; g.clearRect(0,0,w,h);
+  const pts=s.pts,vmin=s.vmin,vmax=s.vmax,color=s.color; const N=pts.length;
+  const x0=s.plotX0,y0=s.plotY0,pw=s.plotW,ph=s.plotH,yb=s.axes?(s.plotY0+s.plotH):h;   // sin ejes: base al fondo (idéntico al original)
+  const X=i=>N<2?x0+pw:x0+i/(N-1)*pw, Y=v=>y0+ph*(1-(v-vmin)/(vmax-vmin));
+  if(s.axes) drawSparkAxes(g,s);   // rejilla detrás del área
+  g.beginPath(); g.moveTo(x0,yb); pts.forEach((v,i)=>g.lineTo(X(i),Y(v))); g.lineTo(x0+pw,yb); g.closePath();
+  const grad=g.createLinearGradient(0,y0,0,yb); grad.addColorStop(0,color+'55'); grad.addColorStop(1,color+'00');
+  g.fillStyle=grad; g.fill();
+  g.beginPath(); pts.forEach((v,i)=>i?g.lineTo(X(i),Y(v)):g.moveTo(X(i),Y(v))); g.strokeStyle=color; g.lineWidth=1.6; g.stroke();
+}
+// guía vertical + punto en el índice bajo el cursor
+function drawSparkMarker(cv,s,idx){
+  const g=cv.getContext('2d'); const N=s.pts.length;
+  const x0=s.plotX0,y0=s.plotY0,pw=s.plotW,ph=s.plotH;
+  const x=N<2?x0+pw:x0+idx/(N-1)*pw, y=y0+ph*(1-(s.pts[idx]-s.vmin)/(s.vmax-s.vmin));
+  g.save();
+  g.strokeStyle=s.color+'99'; g.lineWidth=1; g.beginPath(); g.moveTo(x,y0); g.lineTo(x,y0+ph); g.stroke();
+  g.fillStyle=s.color; g.beginPath(); g.arc(x,y,2.6,0,6.283); g.fill();
+  g.fillStyle='#fff'; g.beginPath(); g.arc(x,y,1.1,0,6.283); g.fill();
+  g.restore();
+}
+function showSparkTip(ev,s,idx){
+  const d=new Date(s.times[idx]);
+  const p2=n=>String(n).padStart(2,'0');
+  const dd=p2(d.getDate())+'/'+p2(d.getMonth()+1);
+  const hh=s.real ? p2(d.getHours())+':'+p2(d.getMinutes())+':'+p2(d.getSeconds())
+                  : p2(d.getHours())+':'+p2(d.getMinutes());
+  const val=s.pts[idx].toFixed(s.vmax<=5?2:1);
+  const t=sparkTip();
+  t.innerHTML='<span style="color:#8FB3FF">'+dd+'</span> · '+hh+' · <b>'+val+s.unit+'</b>';
+  t.style.display='block'; t.style.left=ev.clientX+'px'; t.style.top=ev.clientY+'px';
+}
+// enlaza (una sola vez por canvas) los handlers de hover al canvas de la sparkline
+function bindSparkTooltip(cv){
+  if(cv._sparkBound) return; cv._sparkBound=true; cv.style.cursor='crosshair';
+  cv.addEventListener('mousemove',ev=>{
+    const s=cv._spark; if(!s||!s.pts.length) return;
+    const rect=cv.getBoundingClientRect(); if(!rect.width) return;
+    const N=s.pts.length; const sx=rect.width/cv.width;   // px CSS por px de canvas (≈1)
+    const cursorCv=(ev.clientX-rect.left)/sx;             // cursor en px de canvas
+    let idx=Math.round((cursorCv-s.plotX0)/s.plotW*(N-1));
+    idx=Math.max(0,Math.min(N-1,idx));
+    paintSparkBase(cv,s); drawSparkMarker(cv,s,idx); showSparkTip(ev,s,idx);
+  });
+  cv.addEventListener('mouseleave',()=>{ const s=cv._spark; if(s)paintSparkBase(cv,s); hideSparkTip(); });
+}
+// sparkline reutilizable: sin `data` genera una serie sintética sembrada (span 24h);
+// con `data` (array real, p.ej. rackHist[nm]) grafica los valores en vivo (cadencia ~1s) — Feature 3.
+// `unit` (°C, %, MW…) se usa en el tooltip de hover.
+// `axes`: 'xy' (ejes X+Y), 'y' (solo Y) o '' / omitido (ninguno) — ver sparkGeom.
+function spark(id,color,seed,vmin,vmax,trend,data,unit,axes){
+  const cv=$(id); if(!cv)return; const w=cv.clientWidth,h=cv.clientHeight; if(!w||!h)return;
+  cv.width=w; cv.height=h;
+  const geom=sparkGeom(w,h,axes);
+  let pts; const real=!!(data && data.length);
+  if(real){
+    pts=data.slice(-48).map(v=>Math.max(vmin,Math.min(vmax,v)));
+  } else {
+    const N=48; let val=(vmin+vmax)/2; pts=[]; let r=seed;
+    const rnd=()=>{ r=(r*9301+49297)%233280; return r/233280; };
+    for(let i=0;i<N;i++){ val+=(rnd()-0.5)*(vmax-vmin)*0.18 + trend*(vmax-vmin)/N*(i>N*0.7?2.2:0.4);
+      val=Math.max(vmin,Math.min(vmax,val)); pts.push(val); }
+  }
+  const N=pts.length; const now=Date.now();
+  // timestamps por punto: real -> ~1s por muestra (cadencia de thermalTick); sintético -> últimas 24h
+  const times = real
+    ? pts.map((_,i)=>now-(N-1-i)*1000)
+    : pts.map((_,i)=>now-(N-1-i)*(24*3600*1000/Math.max(1,N-1)));
+  const s={pts,times,color,unit:unit||'',vmin,vmax,real,
+    plotX0:geom.plotX0,plotY0:geom.plotY0,plotW:geom.plotW,plotH:geom.plotH,axes:geom.axes}; cv._spark=s;
+  paintSparkBase(cv,s); bindSparkTooltip(cv);
+}
+function drawCharts(){
+  spark('cTemp','#ff6a3d',12345,22,38,0.6,null,'°C','y');
+  spark('cGpu','#28c8ff',54321,55,95,0.4,null,'%','y');
+  spark('cPow','#00d4aa',99887,1.4,2.2,0.5,null,' MW','y');
+}
+drawCharts(); addEventListener('resize',drawCharts);
+
+// hook de integración
+window.__APP={scene,camera,renderer,racks,state:S,PHASES,setPhase,applyHeat,setHeat:h=>{S.heat=Math.max(0,Math.min(1,h));},version:'dc-dashboard-v1'};
+
+// reloj "vivo"
+setInterval(()=>{ const d=new Date(); $('liveClock').textContent=
+  [d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':'); },1000);
+
+// ============================================================
+//  ROUTER MULTI-VISTA (patrón Cinemex + deep-link por hash)
+//  Estado = atributo data-view en .app; CSS muestra/oculta; el
+//  loop 3D se pausa fuera de 'inicio' vía render3D.
+// ============================================================
+const VIEWS=['inicio','salas','termica','energia','analitica','ajustes','seguridad'];
+const appEl=document.querySelector('.app');
+
+// ---- helpers de datos derivados de la simulación (S.heat, sim, CFG) ----
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function fmt(n,d){ return Number(n).toFixed(d==null?1:d); }
+function coolDelta(){ return (18-CFG.setpoint)*0.42; }            // setpoint<18 => enfría la sala
+function nowClock(){ const d=new Date();
+  return [d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':'); }
+// temperatura a partir de un valor de heat arbitrario (para actual y objetivo)
+function tempFromHeat(nm,h){ const info=RACKINFO[nm]; const seed=nm.charCodeAt(2);
+  const jit=Math.sin(sim*0.55+seed)*0.4;
+  return info.baseT + (CFG.ambientTemp-AMB_REF) + h*HEAT_SPAN + jit - coolDelta(); }
+function rackTemp(nm){ return tempFromHeat(nm,rackHeat[nm]); }
+function rackTargetTemp(nm){ return tempFromHeat(nm,rackHeatTarget[nm]); }
+// ===== "hotness" por temperatura (0..1) — ÚNICA normalización compartida por el glow 3D
+// (applyHeat) y el heatmap (renderRoomHeat). LO frío/idle, HI ~ crítico+6°C. Al ser monótona
+// en rackTemp, el rack más caliente es siempre el más brillante en 3D y la celda más caliente.
+function heatHi(){ return CFG.critTemp+6; }
+function hotUnit(nm){ return clamp((rackTemp(nm)-HEAT_LO)/Math.max(1,heatHi()-HEAT_LO),0,1); }
+function rackGpu(nm){ const info=RACKINFO[nm]; const jit=Math.sin(sim*0.5+nm.charCodeAt(1))*3;
+  return clamp(Math.round(info.gpu+rackHeat[nm]*10+jit),0,100); }
+function rackAir(nm){ const info=RACKINFO[nm];
+  return clamp(Math.round(info.air-rackHeat[nm]*8+Math.sin(sim*0.4+nm.charCodeAt(1))*2),0,100); }
+function rackKw(nm){ const info=RACKINFO[nm]; return Math.round(18+info.gpu*0.6+rackHeat[nm]*50); }
+function rackStatus(t){ if(t>=CFG.critTemp)return'hot'; if(t>=CFG.warnTemp)return'warning'; return'nominal'; }
+// rack con la temperatura más alta ahora mismo
+function worstRack(){ let best=RNAMES[0], bt=-1e9; for(const nm of RNAMES){ const t=rackTemp(nm); if(t>bt){bt=t;best=nm;} } return best; }
+// predicción "tiempo a crítico" para un rack: función de (crítico − temp), si sube, y de la sensibilidad IA
+function ttcInfo(nm){
+  const t=rackTemp(nm);
+  if(t>=CFG.critTemp) return {mins:0,label:'crítico',rising:true};
+  const heating=(activeHot.indexOf(nm)>=0) && rackTargetTemp(nm)>t+0.05;
+  if(!heating || rackTargetTemp(nm)<CFG.critTemp) return {mins:Infinity,label:'estable',rising:false};
+  const margin=CFG.critTemp-t;
+  const sens=clamp(CFG.aiSensitivity,0,100)/100;      // más sensible => predice antes (menos minutos)
+  const factor=13-sens*8;                             // sens 0 -> ×13, sens 1 -> ×5
+  const mins=clamp(Math.round(margin*factor),1,240);
+  return {mins,label:mins+' min',rising:true};
+}
+function ttcText(nm){ const i=ttcInfo(nm); return i.mins===Infinity?'estable':i.label; }
+const STATUS_LABEL={nominal:'Nominal',warning:'Atención',hot:'Crítico'};
+function stat(l,n,d){ return '<div class="stat"><div class="l">'+l+'</div><div class="n mono">'+n+'</div><div class="d">'+(d||'')+'</div></div>'; }
+
+// ---- mapa térmico reutilizable: mismo renderer de layout de sala que drawHeat ----
+function paintHeat(cv,mode){ renderRoomHeat(cv,mode); }
+
+// ---- populate por vista (lee estado en vivo) ----
+function popSalas(){
+  const names=Object.keys(RACKINFO); let warn=0,crit=0,sum=0;
+  const cards=names.map(nm=>{
+    const t=rackTemp(nm), st=rackStatus(t); sum+=t;
+    if(st==='warning')warn++; if(st==='hot')crit++;
+    return '<a class="rackcard" href="rack-detail.html?rack='+nm+'">'+
+      '<div class="rt"><span class="nm mono">'+nm+'</span><span class="chip '+st+'">'+STATUS_LABEL[st]+'</span></div>'+
+      '<div class="rm"><div><b class="mono">'+fmt(t)+'°</b><small>Temp</small></div>'+
+      '<div><b class="mono">'+rackGpu(nm)+'%</b><small>GPU</small></div>'+
+      '<div><b class="mono">'+rackAir(nm)+'%</b><small>Flujo</small></div></div></a>';
+  }).join('');
+  document.getElementById('salasGrid').innerHTML=cards;
+  const avg=sum/names.length;
+  document.getElementById('salasSummary').innerHTML=
+    stat('Racks activos',names.length,'en Sala B')+
+    stat('Temp. promedio',fmt(avg)+'°',(avg>=CFG.warnTemp?'sobre umbral':'dentro de rango'))+
+    stat('En atención',warn,'racks ≥ '+fmt(CFG.warnTemp)+'°')+
+    stat('Críticos',crit,'racks ≥ '+fmt(CFG.critTemp)+'°');
+}
+function popTermica(){
+  paintHeat(document.getElementById('heatBig'),'front'); refreshHeatLegend();
+  const rows=Object.keys(RACKINFO).map(nm=>({nm,t:rackTemp(nm)})).sort((a,b)=>b.t-a.t);
+  document.getElementById('hotRank').innerHTML=rows.map(r=>{
+    const st=rackStatus(r.t);
+    const inlet=20-coolDelta()*0.5+Math.sin(sim*0.3+r.nm.charCodeAt(2))*0.3;
+    const outlet=r.t+2.5; const dT=outlet-inlet;
+    return '<tr><td class="mono">'+r.nm+'</td><td class="r mono">'+fmt(r.t)+'°</td>'+
+      '<td class="r mono">'+fmt(inlet)+'°</td><td class="r mono">'+fmt(outlet)+'°</td>'+
+      '<td class="r mono">'+fmt(dT)+'°</td><td><span class="chip '+st+'">'+STATUS_LABEL[st]+'</span></td></tr>';
+  }).join('');
+  const aisles=[['Pasillo A (frío)',22-coolDelta()*0.4],['Pasillo B (caliente)',24+S.heat*14-coolDelta()*0.4],
+    ['Pasillo C (frío)',23-coolDelta()*0.4],['Pasillo D',24-coolDelta()*0.4]];
+  document.getElementById('aisleGrad').innerHTML=aisles.map(a=>{
+    const nm=a[0],tv=a[1]; const pc=clamp((tv-20)/(50-20)*100,4,100); const hot=tv>=CFG.warnTemp;
+    return '<div class="distrow"><span class="nm">'+nm+'</span>'+
+      '<span class="bar"><i class="'+(hot?'hot':'')+'" style="width:'+pc.toFixed(0)+'%"></i></span>'+
+      '<span class="pc mono">'+fmt(tv)+'°</span></div>';
+  }).join('');
+  const c=document.getElementById('termClock'); if(c)c.textContent='act. '+nowClock();
+}
+function popEnergia(){
+  const names=Object.keys(RACKINFO);
+  const totalMW=1.90+S.heat*0.22-coolDelta()*0.01;
+  const pue=1.28+S.heat*0.22+(CFG.setpoint<16?0.05:0);         // más frío => más energía de enfriamiento
+  const crahEff=clamp(Math.round(92-S.heat*22+(18-CFG.setpoint)*1.5),40,99);
+  document.getElementById('enerStats').innerHTML=
+    stat('Consumo total',fmt(totalMW,2)+' MW','carga TI + enfriamiento')+
+    stat('PUE',fmt(pue,2),pue>1.5?'mejorable':'eficiente')+
+    stat('Eficiencia CRAH',crahEff+'%',crahEff<70?'bajo carga':'nominal')+
+    stat('Setpoint',fmt(CFG.setpoint)+'°','suministro CRAH');
+  const kws=names.map(nm=>({nm,kw:rackKw(nm)})); const maxkw=Math.max.apply(null,kws.map(k=>k.kw));
+  document.getElementById('enerRacks').innerHTML=kws.map(k=>{
+    const hot=rackStatus(rackTemp(k.nm))!=='nominal';
+    return '<div class="distrow"><span class="nm mono">'+k.nm+'</span>'+
+      '<span class="bar"><i class="'+(hot?'hot':'')+'" style="width:'+(k.kw/maxkw*100).toFixed(0)+'%"></i></span>'+
+      '<span class="pc mono">'+k.kw+' kW</span></div>';
+  }).join('');
+  spark('enerTrend','#00d4aa',99887,1.4,2.2,0.5,null,' MW','y');
+  const pduTot=kws.reduce((a,k)=>a+k.kw,0); const pduA=Math.round(pduTot*0.52), pduB=pduTot-pduA;
+  document.getElementById('enerPdu').innerHTML=
+    '<div class="distrow"><span class="nm">PDU-A · fase 1</span><span class="bar"><i style="width:52%"></i></span><span class="pc mono">'+pduA+' kW</span></div>'+
+    '<div class="distrow"><span class="nm">PDU-B · fase 2</span><span class="bar"><i style="width:48%"></i></span><span class="pc mono">'+pduB+' kW</span></div>'+
+    '<div class="distrow"><span class="nm">Enfriamiento (CRAH)</span><span class="bar"><i class="'+(crahEff<70?'hot':'')+'" style="width:'+(100-crahEff).toFixed(0)+'%"></i></span><span class="pc mono">'+crahEff+'% ef.</span></div>';
+}
+function popAnalitica(){
+  spark('anTemp','#ff6a3d',12345,22,38,0.6,null,'°C','xy');
+  spark('anGpu','#28c8ff',54321,55,95,0.4,null,'%','xy');
+  spark('anPow','#00d4aa',99887,1.4,2.2,0.5,null,' MW','xy');
+  spark('anAir','#3b6ff5',24680,60,90,0.3,null,'%','xy');
+  const rows=Object.keys(RACKINFO).map(nm=>({nm,t:rackTemp(nm)})).sort((a,b)=>b.t-a.t);
+  document.getElementById('ttcBody').innerHTML=rows.map(r=>{
+    const info=ttcInfo(r.nm); const rising=info.rising;
+    const ttc=info.mins===Infinity?'estable':info.label;
+    const arrow=rising?'▲':'▬'; const col=rising?'color:var(--hot)':'color:var(--mut)';
+    return '<tr><td class="mono">'+r.nm+'</td><td class="r mono">'+fmt(r.t)+'°</td>'+
+      '<td class="r mono" style="'+col+'">'+arrow+'</td><td class="r mono">'+ttc+'</td></tr>';
+  }).join('');
+  const worst=worstRack();
+  const prox=clamp((rackTemp(worst)-CFG.warnTemp)/Math.max(1,(CFG.critTemp-CFG.warnTemp)),0,1.3);
+  const conf=clamp(Math.round((52+prox*40)*(0.7+0.3*CFG.aiSensitivity/60)),5,99);
+  document.getElementById('insights').innerHTML=
+    '<div class="insight">Correlación GPU↔Temp en <b>'+worst+'</b>: <b class="mono">r=0.87</b>. El aumento de carga GPU precede al alza térmica ~8 min.</div>'+
+    '<div class="insight">Confianza del modelo de hotspot: <span class="big mono">'+conf+'%</span> · sensibilidad IA '+CFG.aiSensitivity+'%.</div>'+
+    '<div class="insight">Reducir el setpoint CRAH 1&deg;C baja la temp. de sala ~<b class="mono">0.4°C</b> a costa de <b class="mono">+3%</b> de energía de enfriamiento.</div>';
+  renderRiskRanking();
+}
+function popAjustes(){
+  const names=Object.keys(RACKINFO);
+  const avg=names.reduce((a,nm)=>a+rackTemp(nm),0)/names.length;
+  const worst=worstRack(); const wt=rackTemp(worst); const st=rackStatus(wt);
+  document.getElementById('setPreview').innerHTML=
+    stat('Peor rack ahora',worst+' · '+fmt(wt)+'°',STATUS_LABEL[st])+
+    '<div style="height:10px"></div>'+
+    '<div class="devrow"><span class="nm">Temp. promedio de sala</span><span class="chip '+(avg>=CFG.warnTemp?'warning':'ok')+'">'+fmt(avg)+'°</span></div>'+
+    '<div class="devrow"><span class="nm">Hotspots activos</span><span class="mono">'+activeHot.length+' rack'+(activeHot.length===1?'':'s')+'</span></div>'+
+    '<div class="devrow"><span class="nm">Umbral atención / crítico</span><span class="mono">'+fmt(CFG.warnTemp)+'° / '+fmt(CFG.critTemp)+'°</span></div>'+
+    '<div class="devrow"><span class="nm">Setpoint · ambiente</span><span class="mono">'+fmt(CFG.setpoint)+'° · '+fmt(CFG.ambientTemp,0)+'°</span></div>'+
+    '<div class="devrow"><span class="nm">Límite GPU · sensibilidad IA</span><span class="mono">'+CFG.gpuLimit+'% · '+CFG.aiSensitivity+'%</span></div>'+
+    '<div class="devrow"><span class="nm">Respuesta automática</span><span class="chip '+(CFG.autoResp?'ok':'off')+'">'+(CFG.autoResp?'Activa':'Manual')+'</span></div>';
+}
+function popSeguridad(){
+  const chips=[['hot','Acceso denegado · Sala B'],['warning','Puerta entreabierta · Pasillo C'],['ok','Perímetro seguro']];
+  document.getElementById('secChips').innerHTML=chips.map(c=>'<span class="chip '+c[0]+'">'+c[1]+'</span>').join('');
+  const devices=[['Puerta principal','ok','Cerrada'],['Puerta Sala B','warning','Entreabierta'],
+    ['Cámara CAM-01','ok','En línea'],['Cámara CAM-04','off','Sin señal'],
+    ['Lector biométrico','ok','Operativo'],['Sensor de humo','ok','Nominal']];
+  document.getElementById('secDevices').innerHTML=devices.map(d=>
+    '<div class="devrow"><span class="nm">'+d[0]+'</span><span class="chip '+d[1]+'">'+d[2]+'</span></div>').join('');
+  const now=new Date();
+  const log=[[0,'Sala A','Acceso concedido','A. Serrano'],[47,'Sala B','Acceso concedido','M. Ríos'],
+    [126,'Pasillo C','Puerta forzada','—'],[309,'Acceso NOC','Acceso concedido','J. Peña'],
+    [512,'Sala B','Salida','M. Ríos'],[880,'Perímetro','Ronda de seguridad','Vigilancia']];
+  document.getElementById('secLog').innerHTML=log.map(e=>{
+    const d=new Date(now.getTime()-e[0]*1000);
+    const hh=[d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':');
+    return '<tr><td class="mono">'+hh+'</td><td>'+e[1]+'</td><td>'+e[2]+'</td><td>'+e[3]+'</td></tr>';
+  }).join('');
+  renderAlertsFeed();
+  const c=document.getElementById('secClock'); if(c)c.textContent='último evento '+nowClock();
+}
+
+// ============================================================
+//  Feature 1: feed de alertas térmicas + badge del sidebar
+// ============================================================
+// Empuja una entrada al feed (más recientes primero, cap ALERT_CAP).
+function pushAlert(rack,sev,temp,msg){
+  alerts.unshift({ ts:Date.now(), rack, sev, temp, msg });
+  if(alerts.length>ALERT_CAP) alerts.length=ALERT_CAP;
+}
+// Tick de fondo ~1/s: detecta SOLO transiciones de estado (escalado -> alerta; vuelta a
+// nominal -> 'normalizado'), acumula el historial por rack y refresca badge/feed si aplica.
+const _RANK={nominal:0,warning:1,hot:2};
+function thermalTick(){
+  let alarmCount=0, anyHot=false;
+  for(const nm of RNAMES){
+    const t=rackTemp(nm), st=rackStatus(t);
+    if(st==='warning'||st==='hot') alarmCount++;
+    if(st==='hot') anyHot=true;
+    const prev=prevStatus[nm];
+    if(prev!==undefined && st!==prev){                 // SOLO en transición (dedupe: nunca por frame)
+      if(_RANK[st]>_RANK[prev]) pushAlert(nm, st==='hot'?'crítico':'aviso', t);   // escalado
+      else if(st==='nominal') pushAlert(nm,'normalizado',t);                       // volvió a rango
+    }
+    prevStatus[nm]=st;
+    const h=rackHist[nm]; h.push(t); if(h.length>HIST_CAP) h.shift();              // historial O(1)
+  }
+  updateSecBadge(alarmCount,anyHot);
+  if(appEl.dataset.view==='seguridad') renderAlertsFeed();   // re-render solo si la vista está activa
+}
+// Badge del sidebar (Seguridad): nº de racks actualmente en atención/crítico; rojo si hay crítico.
+function updateSecBadge(count,anyHot){
+  const b=document.getElementById('secBadge'); if(!b)return;
+  if(count>0){ b.textContent=count; b.classList.add('show'); b.classList.toggle('warn',!anyHot); }
+  else { b.classList.remove('show'); }
+}
+// Render del feed (vista Seguridad): tiempo · rack (link a detalle) · chip severidad · temp.
+function renderAlertsFeed(){
+  const el=document.getElementById('secAlertsFeed'); if(!el)return;
+  if(!alerts.length){ el.innerHTML='<div class="alertempty">Sin escalados térmicos — todos los racks en rango nominal.</div>'; return; }
+  el.innerHTML=alerts.map(a=>{
+    const d=new Date(a.ts);
+    const hh=[d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':');
+    if(a.sev==='info'){                                // entrada informativa: acción IA aplicada
+      return '<div class="alertrow info"><span class="at mono">'+hh+'</span>'+
+        '<span class="amsg" style="grid-column:2 / 4">'+a.msg+'</span>'+
+        '<span class="chip ok" style="justify-self:end">Acción IA</span></div>';
+    }
+    const chipCls=a.sev==='crítico'?'hot':a.sev==='aviso'?'warning':'ok';
+    const sevLabel={ 'crítico':'Crítico','aviso':'Aviso','normalizado':'Normalizado' }[a.sev];
+    return '<div class="alertrow"><span class="at mono">'+hh+'</span>'+
+      '<a class="am mono" href="rack-detail.html?rack='+a.rack+'">'+a.rack+'</a>'+
+      '<span class="chip '+chipCls+'">'+sevLabel+'</span>'+
+      '<span class="av mono">'+fmt(a.temp)+'°</span></div>';
+  }).join('');
+}
+
+// ============================================================
+//  Feature 2: "Aplicar acción" — ejecuta una mitigación real y visible
+// ============================================================
+// Sincroniza los controles de Ajustes con el estado CFG (tras aplicar acción IA).
+function syncAjustesControls(){
+  const setV=(id,val)=>{ const e=document.getElementById(id); if(e)e.value=val; };
+  const setT=(id,txt)=>{ const e=document.getElementById(id); if(e)e.textContent=txt; };
+  setV('setSetpoint',CFG.setpoint);       setT('setSetpointV',fmt(CFG.setpoint)+'°C');
+  setV('setWarn',CFG.warnTemp);            setV('setCrit',CFG.critTemp);
+  setV('setGpuLimit',CFG.gpuLimit);        setT('setGpuLimitV',CFG.gpuLimit+'%');
+  setV('setSensitivity',CFG.aiSensitivity);setT('setSensitivityV',CFG.aiSensitivity+'%');
+  setV('setAmbient',CFG.ambientTemp);      setT('setAmbientV',fmt(CFG.ambientTemp,0)+'°C');
+  const au=document.getElementById('setAuto'); if(au)au.checked=CFG.autoResp;
+}
+function applyAiAction(){
+  const btn=document.getElementById('applyAi'); if(!btn||btn.disabled)return;
+  const plan=aiPlan||{}; const worst=plan.worst||worstRack(); const done=[];
+  // Mapea la recomendación a mitigaciones reales que enfrían de forma VISIBLE:
+  if(plan.spHigh || plan.ambHigh || CFG.setpoint>14){    // bajar setpoint CRAH ~2°C (persistente vía coolDelta)
+    const before=CFG.setpoint; CFG.setpoint=clamp(CFG.setpoint-2,14,22);
+    if(CFG.setpoint!==before) done.push('setpoint CRAH '+fmt(before)+'°→'+fmt(CFG.setpoint)+'°');
+  }
+  if(!CFG.autoResp){ CFG.autoResp=true; done.push('respuesta automática activada'); }  // recorta objetivos térmicos
+  // recorta la carga térmica de los racks calientes (o del peor) — enfriamiento inmediato y visible
+  const targets = activeHot.length ? activeHot.slice() : [worst];
+  targets.forEach(nm=>{ rackHeat[nm]*=0.35; rackHeatTarget[nm]*=0.35; });
+  activeHot=[];                                          // fuerza reshuffle: apaga los hotspots actuales
+  done.push('carga térmica reducida en '+targets.join(', '));
+  syncAjustesControls();                                 // el estado CFG se refleja en los controles de Ajustes
+  pushAlert(worst,'info',rackTemp(worst),'Acción IA aplicada: '+done.join(' · '));
+  // micro-feedback del botón: Aplicando… -> Aplicada ✓ -> re-habilita
+  btn.disabled=true; btn.textContent='Aplicando…';
+  setTimeout(()=>{ btn.textContent='Aplicada ✓';
+    setTimeout(()=>{ btn.textContent='Aplicar acción'; btn.disabled=false; },1300); },450);
+  updatePanels();                                        // el panel IA refleja el cambio de inmediato
+  refreshActiveView();                                   // y las vistas dependientes (feed/ranking) si están activas
+}
+
+// ============================================================
+//  Feature 3: ranking de riesgo + sparklines de historial por rack
+// ============================================================
+// Render en la vista Analítica: 8 racks ordenados por riesgo (proximidad a crítico) DESC,
+// con barra de riesgo, sparkline de rackHist en vivo, temp, chip de estado y tiempo a crítico.
+function renderRiskRanking(){
+  const el=document.getElementById('riskRank'); if(!el)return;
+  const rows=RNAMES.map(nm=>{ const t=rackTemp(nm);
+    const risk=clamp((t-CFG.warnTemp)/Math.max(1,(CFG.critTemp-CFG.warnTemp)),0,1);
+    return { nm, t, risk, st:rackStatus(t), ttc:ttcInfo(nm) };
+  }).sort((a,b)=>b.risk-a.risk);
+  el.innerHTML='<div class="riskhead"><span>#</span><span>Rack</span><span>Riesgo</span>'+
+    '<span class="rh-hist">Historial</span><span class="r">Temp</span><span>Estado</span>'+
+    '<span class="r rh-ttc">T. crítico</span></div>'+
+    rows.map((r,i)=>{
+      const barCls=r.st==='hot'?'hot':r.st==='warning'?'warn':'';
+      const ttc=r.ttc.mins===Infinity?'estable':r.ttc.label;
+      return '<div class="riskrow"><span class="rrank mono">'+(i+1)+'</span>'+
+        '<a class="rname mono" href="rack-detail.html?rack='+r.nm+'">'+r.nm+'</a>'+
+        '<span class="rbar"><i class="'+barCls+'" style="width:'+Math.max(4,r.risk*100).toFixed(0)+'%"></i></span>'+
+        '<canvas class="rhspark" id="rh_'+r.nm+'"></canvas>'+
+        '<span class="rtemp mono r">'+fmt(r.t)+'°</span>'+
+        '<span class="chip '+r.st+'">'+STATUS_LABEL[r.st]+'</span>'+
+        '<span class="rttc mono r">'+ttc+'</span></div>';
+    }).join('');
+  // sparklines con datos reales de rackHist (o sintético sembrado si aún no hay historial)
+  rows.forEach(r=>{ const arr=rackHist[r.nm];
+    const col=r.st==='hot'?'#e5484d':r.st==='warning'?'#f5883d':'#3b6ff5';
+    spark('rh_'+r.nm, col, r.nm.charCodeAt(2)*131, 22, 40, 0.2, arr&&arr.length>1?arr:null, '°C');
+  });
+}
+
+const POP={ salas:popSalas, termica:popTermica, energia:popEnergia, analitica:popAnalitica, ajustes:popAjustes, seguridad:popSeguridad };
+function refreshActiveView(){ const fn=POP[appEl.dataset.view]; if(fn)fn(); }
+
+// refresco periódico de la vista activa (solo cuando no es 'inicio'); cadencia fija
+let viewTimer=null;
+function startViewTimer(){ if(viewTimer)clearInterval(viewTimer);
+  viewTimer=setInterval(()=>{ if(!render3D)refreshActiveView(); }, REFRESH_MS); }
+
+function activateView(id){
+  if(VIEWS.indexOf(id)<0)id='inicio';
+  appEl.dataset.view=id;
+  document.querySelectorAll('.sidebar .nav[data-view]').forEach(b=>{
+    const on=b.dataset.view===id; b.classList.toggle('act',on);
+    if(on)b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
+  });
+  render3D=(id==='inicio');
+  if(render3D){ resize(); }        // el .stage vuelve a tener tamaño -> re-mide y reanuda render
+  else refreshActiveView();        // pinta la vista destino desde el estado en vivo
+  // deep-link por hash (sin re-disparar activateView: hashchange compara antes de actuar)
+  if(id==='inicio'){ if(location.hash) history.replaceState(null,'',location.pathname+location.search); }
+  else if(location.hash!=='#'+id){ location.hash=id; }
+}
+
+// ---- wiring de los controles de Ajustes (una vez) ----
+function afterCfgChange(){ if(render3D) updatePanels(); else refreshActiveView(); }
+function wireAjustes(){
+  const sp=document.getElementById('setSetpoint'), spv=document.getElementById('setSetpointV');
+  sp.addEventListener('input',()=>{ CFG.setpoint=parseFloat(sp.value); spv.textContent=fmt(CFG.setpoint)+'°C'; afterCfgChange(); });
+  const warn=document.getElementById('setWarn');
+  warn.addEventListener('input',()=>{ const v=parseFloat(warn.value); if(!isNaN(v)){ CFG.warnTemp=v; afterCfgChange(); } });
+  const crit=document.getElementById('setCrit');
+  crit.addEventListener('input',()=>{ const v=parseFloat(crit.value); if(!isNaN(v)){ CFG.critTemp=v; afterCfgChange(); } });
+  const gpu=document.getElementById('setGpuLimit'), gpuv=document.getElementById('setGpuLimitV');
+  gpu.addEventListener('input',()=>{ CFG.gpuLimit=parseInt(gpu.value,10); gpuv.textContent=CFG.gpuLimit+'%'; afterCfgChange(); });
+  const sens=document.getElementById('setSensitivity'), sensv=document.getElementById('setSensitivityV');
+  sens.addEventListener('input',()=>{ CFG.aiSensitivity=parseInt(sens.value,10); sensv.textContent=CFG.aiSensitivity+'%'; afterCfgChange(); });
+  const amb=document.getElementById('setAmbient'), ambv=document.getElementById('setAmbientV');
+  amb.addEventListener('input',()=>{ CFG.ambientTemp=parseFloat(amb.value); ambv.textContent=fmt(CFG.ambientTemp,0)+'°C'; afterCfgChange(); });
+  const auto=document.getElementById('setAuto');
+  auto.addEventListener('change',()=>{ CFG.autoResp=auto.checked; afterCfgChange(); });
+}
+
+function bootRouter(){
+  document.querySelectorAll('.sidebar .nav[data-view]').forEach(b=>
+    b.addEventListener('click',()=>activateView(b.dataset.view)));
+  document.addEventListener('click',ev=>{ const g=ev.target.closest('[data-go-view]');
+    if(g){ ev.preventDefault(); activateView(g.getAttribute('data-go-view')); } });
+  addEventListener('hashchange',()=>{ const id=(location.hash||'').replace('#','')||'inicio';
+    if(id!==appEl.dataset.view) activateView(id); });
+  wireAjustes(); startViewTimer();
+  const ab=document.getElementById('applyAi'); if(ab) ab.addEventListener('click',applyAiAction);  // Feature 2
+  activateView((location.hash||'').replace('#','')||'inicio');
+}
+bootRouter();
+
+/* ===== auto-update: recarga sola cuando el origen sirve una versión nueva =====
+   Sondea el ETag/Last-Modified de ESTA misma página (HEAD, sin caché propia).
+   Si el tag cambió respecto al de la carga inicial → toast breve + location.reload().
+   No borra caché ni exige shift+ctrl+r: el header no-cache del origen hace que el
+   reload revalide y baje los bytes nuevos. Si el origen no manda ningún tag
+   (p.ej. file://), queda inerte y no molesta. */
+(function(){
+  const url = location.pathname + location.search, INTERVAL = 20000;
+  let known = null, busy = false;
+  const tagOf = r => r.headers.get('ETag') || r.headers.get('Last-Modified');
+  function toast(){
+    const t = document.createElement('div');
+    t.textContent = 'Nueva versión — actualizando…';
+    t.style.cssText = 'position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:99999;'
+      + 'background:#1B2430;color:#fff;padding:9px 16px;border-radius:8px;'
+      + 'font:600 13px system-ui;box-shadow:0 6px 24px rgba(0,0,0,.25)';
+    document.body.appendChild(t);
+  }
+  function check(){
+    fetch(url,{method:'HEAD',cache:'no-store'}).then(r=>{
+      const tag = tagOf(r);
+      if(!tag) return;                 // origen sin ETag/Last-Modified: nada que comparar
+      if(known === null){ known = tag; return; }
+      if(tag !== known && !busy){ busy = true; toast(); setTimeout(()=>location.reload(), 700); }
+    }).catch(()=>{});
+  }
+  check();
+  setInterval(check, INTERVAL);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) check(); });
+})();
+</script>
+</body>
+</html>
