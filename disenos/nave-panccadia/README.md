@@ -9,10 +9,10 @@ DesignSpec — it was RECONSTRUCTED from a real CAD drawing under the Research-S
 
 | | |
 |---|---|
-| Viewer | **[`nave-panccadia-3d-v6.html`](nave-panccadia-3d-v6.html)** — adds the **20 measured openings** with their lintels. Supersedes `v5`<br>[`nave-panccadia-3d-v5.html`](nave-panccadia-3d-v5.html) · [`nave-panccadia-3d-v4.html`](nave-panccadia-3d-v4.html) — self-contained, opens from the filesystem by double-click. Supersedes `v3` |
+| Viewer | **[`nave-panccadia-3d-v9.html`](nave-panccadia-3d-v9.html)** — every doorway carries its **door leaf from the architect's own `puerta 1.20` block**; doorways already holding a measured door are **deduplicated for real** (point-to-segment, 0.8 m — the v8 midpoint check never fired); doorways ≥ 1.5 m open **two leaves** on opposite jambs (O06/O19/O20); and **no two faces share a plane** any more (2 mm clearances + a 20 mm upper-slab inset that removes the first-floor band on the facade). Supersedes `v7` (visible doorways + per-door swing arcs) and `v6` (the 20 measured openings).<br>[`nave-panccadia-3d-v7.html`](nave-panccadia-3d-v7.html) · [`nave-panccadia-3d-v6.html`](nave-panccadia-3d-v6.html) — self-contained, opens from the filesystem by double-click. |
 | Geometry (new in v4) | [`doors.json`](doors.json) · [`facade-3d.json`](facade-3d.json) · [`grid-full.json`](grid-full.json) · [`sections.json`](sections.json) |
 | Geometry | [`ground-floor.json`](ground-floor.json) · [`upper-floor.json`](upper-floor.json) · [`roof.json`](roof.json) · [`equipment.json`](equipment.json) · [`recovered-blocks.json`](recovered-blocks.json) · [`furniture.json`](furniture.json) · [`rooms.json`](rooms.json) · [`rooms-pa.json`](rooms-pa.json) |
-| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, **35 cited blocks**, coverage 37/39) |
+| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, **39 cited blocks**, coverage 39/39 — read-only corpus EXHAUSTED; B38/B39 certify the v9 build) |
 | Source DWG | preserved in that corpus at `raw/`, `sha256 053750e0…948ee7f3` (the converted DXF is `f1f688e8…635d18b2`) |
 
 ## What changed in v4
