@@ -9,10 +9,10 @@ DesignSpec — it was RECONSTRUCTED from a real CAD drawing under the Research-S
 
 | | |
 |---|---|
-| Viewer | **[`nave-panccadia-3d-v10.html`](nave-panccadia-3d-v10.html)** — collapses the **53 overlapping wall pairs** the extraction produced (runs drawn twice or thrice, and "face twins" — both face lines promoted to full walls) into single clean runs, and **clips the measured door leaves clear** of walls and steel columns they crossed (4 mm air). Supersedes `v9` (real door dedup, evidence-based leaf counts, no coplanar faces).<br>[`nave-panccadia-3d-v9.html`](nave-panccadia-3d-v9.html) · [`nave-panccadia-3d-v7.html`](nave-panccadia-3d-v7.html) · [`nave-panccadia-3d-v6.html`](nave-panccadia-3d-v6.html) — self-contained, opens from the filesystem by double-click. |
+| Viewer | **[`nave-panccadia-3d-v12.html`](nave-panccadia-3d-v12.html)** — walls drawn as **stretch solids** (boolean union per height class: 81 closed solids per storey, corner/junction interpenetration dissolved, closure-proved V=A·h); door **frames re-anchored** to the drawn wall (4 were up to 74 mm off); **upper columns un-doubled** (20 of 28 were the ground columns drawn twice, 2 duplicated). Supersedes `v10` (overlapping walls collapsed, leaves clipped) and `v9`.<br>[`nave-panccadia-3d-v10.html`](nave-panccadia-3d-v10.html) · [`nave-panccadia-3d-v9.html`](nave-panccadia-3d-v9.html) · [`nave-panccadia-3d-v7.html`](nave-panccadia-3d-v7.html) — self-contained, opens from the filesystem by double-click. |
 | Geometry (new in v4) | [`doors.json`](doors.json) · [`facade-3d.json`](facade-3d.json) · [`grid-full.json`](grid-full.json) · [`sections.json`](sections.json) |
 | Geometry | [`ground-floor.json`](ground-floor.json) · [`upper-floor.json`](upper-floor.json) · [`roof.json`](roof.json) · [`equipment.json`](equipment.json) · [`recovered-blocks.json`](recovered-blocks.json) · [`furniture.json`](furniture.json) · [`rooms.json`](rooms.json) · [`rooms-pa.json`](rooms-pa.json) |
-| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, **40 cited blocks**, coverage 40/40 — read-only corpus EXHAUSTED; B38/B39 certify the v9 build) |
+| Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, **41 cited blocks**, coverage 41/41 — read-only corpus EXHAUSTED; B38/B39 certify the v9 build) |
 | Source DWG | preserved in that corpus at `raw/`, `sha256 053750e0…948ee7f3` (the converted DXF is `f1f688e8…635d18b2`) |
 
 ## What changed in v4
