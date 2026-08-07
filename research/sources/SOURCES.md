@@ -6,6 +6,11 @@
 
 | File | Type | Origin (URL) | Date (UTC) | sha256 | Blocks that cite it |
 |---|---|---|---|---|---|
+| web-snapshots/angusj.com_clipper2_Overview_2026-08-07.md | web-snapshot | https://www.angusj.com/clipper2/Docs/Overview.htm | 2026-08-07T00:00:00Z | ffba6230d1f35f4dcc4dc178ab75b91da489e89368b2d8fb3c80659747543f66 | B45 |
+| web-snapshots/angusj.com_clipper2_InflatePaths_2026-08-07.md | web-snapshot | http://www.angusj.com/clipper2/Docs/Units/Clipper/Functions/InflatePaths.htm | 2026-08-07T00:00:00Z | 04adefee3b9bb4ff1fae3e56498d94abd723bc1460524f7c2796d885cbe56590 | B45 |
+| web-snapshots/en.wikipedia.org_Straight_skeleton_2026-08-07.md | web-snapshot | https://en.wikipedia.org/wiki/Straight_skeleton | 2026-08-07T00:00:00Z | 70c0bc53a1c7e452e915f80f7a8086f1053f208648b568685710035b90b6b8cf | B45 |
+| web-snapshots/github_strandedkitty_straight-skeleton_2026-08-07.md | web-snapshot | https://github.com/StrandedKitty/straight-skeleton | 2026-08-07T00:00:00Z | 0dcf407328d87876b7e52d8e988f4eb0cb3f7c48ca2134cac8bcf070edc0b46b | B45 |
+| web-snapshots/npm_clipper2-wasm_polygon-clipping_js-clippers_2026-08-07.md | web-snapshot | https://github.com/xaviergonz/js-angusj-clipper | 2026-08-07T00:00:00Z | 2594113baa7be5807301194d786792732da074de723d2e6bdd8670bb65867c18 | B45 |
 
 ## Structure
 

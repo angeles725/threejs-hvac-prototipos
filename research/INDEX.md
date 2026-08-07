@@ -115,6 +115,12 @@ This index guides through the **40 blocks** of this research. Each block is an i
 | 38 | Deliverables + visual QA | [block38](threejs-block38.md) | 4K capture contract (tested live), transparent captures, tools/capture.mjs, pixelmatch golden regression, delivery kit table |
 | 39 | Dataviz craft | [block39](threejs-block39.md) | Cleveland-McGill ranking, chart discipline (no gauges), Monash red/green ramp flagged colorblind-risky, per-widget style contract |
 
+### Layer 9 — Procedural generation & numerical methods for design tools (run 9)
+
+| # | Block | File | Key topics |
+|---|--------|---------|------------|
+| 45 | Robust polygon offsetting + straight skeleton | [block45](threejs-block45.md) | the nave build tool's `collapseWalls` union-find collapses only collinear runs, leaving corner/T/X junctions interpenetrating (`[CERT]` file:line); polygon offset = Minkowski-with-disk + join types (Round/Miter/Square/Bevel) + miter_limit acute-angle fallback; boolean union via Vatti + the integer-coordinate robustness trick (Clipper does the maths on scaled ints; pure-JS Martinez uses floats + loop-caps); straight skeleton wavefront + edge/split events + the roof lift (z = slope·time_reached); mature JS libs table (clipper2-wasm Boost/maintained, js-angusj-clipper Clipper1/int-only, StrandedKitty CGAL-WASM skeleton MIT, polygon-clipping Martinez FP); actionable build-tool recommendation (offset→union→straight-skeleton roof, snap to int grid first) |
+
 ---
 
 ## Pending (gap-backlog)
@@ -182,3 +188,14 @@ This index guides through the **40 blocks** of this research. Each block is an i
 - [x] G56 — Per-unit DETAIL VIEW pattern analysis (MX60-web + chihuahua/Niagara): dedicated page = header+KPI cockpit+focused single-unit 3D+Chart.js trends; portable (Niagara only binds the data source) → [Block 42], port plan pending user go-ahead
 - [x] G57 — Casino BMS reference (niagara-casino React/Vite) analysis + consolidated hotel detail-OVERLAY build plan (overlay over persistent scene; focused per-unit mini-3D via existing builders; Chart.js trends+comfort bands+ayer baseline; insights engine) → [Block 43]
 - [x] G58 — Hotel detail OVERLAY It.A (focused mini-3D via existing builders + KPI cockpit) + cross-iframe chrome-hide + full 3D-UI restyle to B11 Industrial (paper/navy/rust, IBM Plex, flat) + scene labels removed + navy blueprint viewer bg → [Block 43], deployed
+
+### RUN 9 — procedural generation & numerical methods for design tools (new axis, 2026-08-07)
+
+- [x] G59 — Robust polygon offsetting + straight skeleton (wall-union, corner/roof closure) → [Block 45]
+- [ ] G60 — Robust boolean CSG on 3D solids (three-bvh-csg) → **pending**
+- [ ] G61 — Triangulation: earcut vs Constrained Delaunay for holed polygons (the cap step) → **pending**
+- [ ] G62 — Mesh simplification via Quadric Error Metrics (LOD/decimation) → **pending**
+- [ ] G63 — Isosurfaces: marching cubes vs dual contouring (three.js MarchingCubes) → **pending**
+- [ ] G64 — Curves & surfaces: Bézier/Catmull-Rom/NURBS (three.js Curve API, NURBS addons) → **pending**
+- [ ] G65 — Numerical robustness of geometric predicates (orientation/incircle, epsilon/snapping) → **pending**
+- [ ] G66 — Procedural placement: poisson-disk/blue-noise + WFC / L-systems → **pending**
