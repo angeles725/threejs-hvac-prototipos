@@ -34,6 +34,13 @@
 | web-snapshots/github_mrdoob_threejs_SimplifyModifier_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/jsm/modifiers/SimplifyModifier.js | 2026-08-07T08:26:55Z | d1e1482576667e0fe7a3e69779861b69ce52ed308eae68f2cdca78a52334ce64 | B49 |
 | web-snapshots/github_mrdoob_threejs_SimplifyModifier_r160 | web-snapshots | https://raw.githubusercontent.com/mrdoob/three.js/r160/examples/jsm/modifiers/SimplifyModifier.js | 2026-08-07T08:27:59Z | 9e78a3feda98a33d7845ee1875450a90ac9c2dab77725f38c7d622b2a1c373c8 | B49 |
 | web-snapshots/github_zeux_meshoptimizer_simplifier_cpp_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/zeux/meshoptimizer/master/src/simplifier.cpp | 2026-08-07T08:28:41Z | dc40aadb307577ed3f7adb5102a506263de8b9fea1d5582a24c04bff2874a2cc | B49 |
+| web-snapshots/raw.githubusercontent.com_mrdoob_three.js_dev_examples_jsm_objects_MarchingCubes.md | web-snapshot | https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/jsm/objects/MarchingCubes.js | 2026-08-07T08:36:04Z | fbcc0516750d71f43551f2dae91e6000269a65b2f88a36171c1fc0f8214ece81 | B50 |
+| web-snapshots/paulbourke.net_geometry_polygonise_.md | web-snapshot | https://paulbourke.net/geometry/polygonise/ | 2026-08-07T08:36:04Z | aa0b09c2338633ff5890f8d704d403330117d8fb81b9dc5b53e959f0ae2e1958 | B50 |
+| web-snapshots/en.wikipedia.org_wiki_Marching_cubes.md | web-snapshot | https://en.wikipedia.org/wiki/Marching_cubes | 2026-08-07T08:36:05Z | 428b537b318991387d66c4df8ffedab551a8542aae3061cbba157141e59683d7 | B50 |
+| web-snapshots/en.wikipedia.org_wiki_Isosurface.md | web-snapshot | https://en.wikipedia.org/wiki/Isosurface | 2026-08-07T08:36:13Z | 7fb53d414fe3833edcaf61ca0bf14cf1dab4bc426558b544effe30eabc458d20 | |
+| manuals/dualcontour-ju-2002 | manuals | https://people.eecs.berkeley.edu/~jrs/meshpapers/JuLosassoSchaeferWarren.pdf | 2026-08-07T08:36:44Z | 54727ae903c6b3b21abefeb8a3e47a6266b542e8ebc8b814187c4be4dedcdca4 | B50 |
+| web-snapshots/www.boristhebrave.com_2018_04_15_dual-contouring-tutorial_.md | web-snapshot | https://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/ | 2026-08-07T08:37:48Z | 41783ae7d9bb67fcc2b1cc539304a4ef721332dcb5c5ed8ec7d7b354140f5dd0 | B50 |
+| web-snapshots/raw.githubusercontent.com_mikolalysenko_isosurface_master_README.md.md | web-snapshot | https://raw.githubusercontent.com/mikolalysenko/isosurface/master/README.md | 2026-08-07T08:37:48Z | ca665c3f2a56b9c3afdc83727f03c2a85584f829ba10cb3d0ceb140e8dbe8f39 | B50 |
 
 ## Structure
 

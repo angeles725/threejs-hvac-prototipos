@@ -1,0 +1,463 @@
+                       Surface Simplification Using Quadric Error Metrics
+                                                Michael Garland∗              Paul S. Heckbert†
+
+                                                           Carnegie Mellon University
+
+
+Abstract                                                                      We have developed an algorithm which produces simplified ver-
+                                                                           sions of such polygonal models. Our algorithm is based on the iter-
+Many applications in computer graphics require complex, highly             ative contraction of vertex pairs (a generalization of edge contrac-
+detailed models. However, the level of detail actually necessary           tion). As the algorithm proceeds, a geometric error approximation
+may vary considerably. To control processing time, it is often desir-      is maintained at each vertex of the current model. This error approx-
+able to use approximations in place of excessively detailed models.        imation is represented using quadric matrices. The primary advan-
+   We have developed a surface simplification algorithm which can          tages of our algorithm are:
+rapidly produce high quality approximations of polygonal models.              • Efficiency: The algorithm is able to simplify complex models
+The algorithm uses iterative contractions of vertex pairs to simplify           quite rapidly. For example, our implementation can create a
+models and maintains surface error approximations using quadric                 100 face approximation of a 70,000 face model in 15 seconds.
+matrices. By contracting arbitrary vertex pairs (not just edges), our           The error approximation is also very compact, requiring only
+algorithm is able to join unconnected regions of models. This can               10 floating point numbers per vertex.
+facilitate much better approximations, both visually and with re-
+spect to geometric error. In order to allow topological joining, our          • Quality: The approximations produced by our algorithm
+system also supports non-manifold surface models.                               maintain high fidelity to the original model. The primary fea-
+                                                                                tures of the model are preserved even after significant simpli-
+CR Categories: I.3.5 [Computer Graphics]: Computational Ge-                     fication.
+ometry and Object Modeling—surface and object representations
+                                                                              • Generality: Unlike most other surface simplification algo-
+Keywords: surface simplification, multiresolution modeling, pair
+                                                                                rithms, ours is able to join unconnected regions of the model
+contraction, level of detail, non-manifold
+                                                                                together, a process which we term aggregation. Provided that
+                                                                                maintaining object topology is not an important concern, this
+                                                                                can facilitate better approximations of models with many dis-
+1 Introduction                                                                  connected components. This also requires our algorithm to
+                                                                                support non-manifold1 models.
+Many computer graphics applications require complex, highly de-
+tailed models to maintain a convincing level of realism. Conse-
+quently, models are often created or acquired at a very high reso-         2 Background and Related Work
+lution to accommodate this need for detail. However, the full com-
+plexity of such models is not always required, and since the compu-        The goal of polygonal surface simplification is to take a polygonal
+tational cost of using a model is directly related to its complexity, it   model as input and generate a simplified model (i.e., an approxima-
+is useful to have simpler versions of complex models. Naturally, we        tion of the original) as output. We assume that the input model (Mn )
+would like to automatically produce these simplified models. Re-           has been triangulated. The target approximation (Mg ) will satisfy
+cent work on surface simplification algorithms has focused on this         some given target criterion which is typically either a desired face
+goal.                                                                      count or a maximum tolerable error. We are interested in surface
+   As with most other work in this area, we will focus on the simpli-      simplification algorithms that can be used in rendering systems for
+fication of polygonal models. We will assume that the model con-           multiresolution modeling — the generation of models with appro-
+sists of triangles only. This implies no loss of generality, since every   priate levels of detail for the current context.
+polygon in the original model can be triangulated as part of a pre-            We do not assume that the topology of the model must be main-
+processing phase. To achieve more reliable results, when corners of        tained. In certain application areas, medical imaging for example,
+two faces intersect at a point, the faces should be defined as sharing     maintaining the object topology can be essential. However, in appli-
+a single vertex rather than using two separate vertices which happen       cation areas such as rendering, topology is less important than over-
+to be coincident in space.                                                 all appearance. Our algorithm is capable of both closing topological
+                                                                           holes as well as joining unconnected regions.
+   ∗ garland@cs.cmu.edu; http://www.cs.cmu.edu/∼garland/                       Many prior simplification algorithms have either implicitly or ex-
+   † ph@cs.cmu.edu; http://www.cs.cmu.edu/∼ph/                             plicitly assumed that their input surfaces were, and ought to remain,
+                                                                           manifold surfaces. Let us stress that we do not make this assump-
+                                                                           tion. In fact, the process of aggregation will regularly create non-
+                                                                           manifold regions.
+
+                                                                           2.1 Surface Simplification
+                                                                           In recent years, the problem of surface simplification, and the more
+                                                                           general problem of multiresolution modeling, has received increas-
+                                                                              1 A manifold is a surface for which the infinitesimal neighborhood of ev-
+
+                                                                           ery point is topologically equivalent to a disk (or half-disk for a manifold
+                                                                           with boundary).
+                                                                                                              contract
+                       v2     contract                v
+                                                                                               v2                                      v
+                                                                                        v1
+             v1
+
+
+              Before                                After                                 Before                                     After
+
+Figure 1: Edge contraction. The highlighted edge is contracted              Figure 2: Non-edge contraction. When non-edge pairs are con-
+into a single point. The shaded triangles become degenerate and are         tracted, unconnected sections of the model are joined. The dashed
+removed during the contraction.                                             line indicates the two vertices being contracted together.
+
+
+ing attention. Several different algorithms have been formulated for        serves model topology. Again, these are often limitations for the
+simplifying surfaces. Those algorithms which are most relevant to           purposes of simplification for rendering.
+our work can be broadly categorized into 3 classes:                            None of these previously developed algorithms provide the com-
+                                                                            bination of efficiency, quality, and generality that we desire. Vertex
+                                                                            decimation algorithms are unsuitable for our needs; they are careful
+Vertex Decimation. Schroeder et al. [9] describe an algorithm               to maintain model topology and usually assume manifold geometry.
+which we would term vertex decimation. Their method iteratively             Vertex clustering algorithms are very general and can be very fast.
+selects a vertex for removal, removes all adjacent faces, and retri-        However, they provide poor control over their results and these re-
+angulates the resulting hole. Soucy and Laurendeau [10] described           sults can be of rather low quality. Edge contraction algorithms can
+a more sophisticated, but essentially similar algorithm. While they         not support aggregation.
+provide reasonable efficiency and quality, these methods are not re-           We have developed an algorithm which supports both aggrega-
+ally suited for our purpose. Both methods use vertex classification         tion and high quality approximations. It possesses much of the gen-
+and retriangulation schemes which are inherently limited to mani-           erality of vertex clustering as well as the quality and control of itera-
+fold surfaces, and they carefully maintain the topology of the model.       tive contraction algorithms. It also allows faster simplification than
+While these are important features in some domains, they are restric-       some higher quality methods [3].
+tions for multiresolution rendering systems.
+
+Vertex Clustering. The algorithm described by Rossignac and                 3 Decimation via Pair Contraction
+Borrel [8] is one of the few capable of processing arbitrary polygo-
+nal input. A bounding box is placed around the original model and           Our simplification algorithm is based on the iterative contraction of
+divided into a grid. Within each cell, the cell’s vertices are clustered    vertex pairs; a generalization of the iterative edge contraction tech-
+together into a single vertex, and the model faces are updated ac-          nique used in previous work. A pair contraction, which we will
+cordingly. This process can be very fast, and can make drastic topo-        write (v1 , v2 ) → v̄, moves the vertices v1 and v2 to the new posi-
+logical alterations to the model. However, while the size of the grid       tion v̄, connects all their incident edges to v1 , and deletes the vertex
+cells does provide a geometric error bound, the quality of the out-         v2 . Subsequently, any edges or faces which have become degenerate
+put is often quite low. In addition, it is difficult to construct an ap-    are removed. The effect of a contraction is small and highly local-
+proximation with a specific face count, since the number of faces           ized. If (v1 , v2 ) is an edge, then 1 or more faces will be removed
+is only indirectly determined by the specified grid dimensions. The         (see Figure 1). Otherwise, two previously separate sections of the
+exact approximation produced is also dependent on the exact posi-           model will be joined at v̄ (see Figure 2).
+tion and orientation of the original model with respect to the sur-             This notion of contraction is in fact quite general; we can con-
+rounding grid. This uniform method can easily be generalized to use         tract a set of vertices into a single vertex: (v1 , v2 , . . . , vk ) → v̄. This
+an adaptive grid structure, such as an octree [6]. This can improve         form of generalized contraction can express both pair contractions
+the simplification results, but it still does not support the quality and   as well as more general operations such as vertex clustering. How-
+control that we desire.                                                     ever, we use pair contraction as the atomic operation of our algo-
+                                                                            rithm because it is the most fine-grained contraction operation.
+Iterative Edge Contraction. Several algorithms have been                        Starting with the initial model Mn , a sequence of pair contractions
+published that simplify models by iteratively contracting edges (see        is applied until the simplification goals are satisfied and a final ap-
+Figure 1). The essential difference between these algorithms lies in        proximation Mg is produced. Because each contraction corresponds
+how they choose an edge to contract. Some notable examples of               to a local incremental modification of the current model, the algo-
+such algorithms are those of Hoppe [4, 3], Ronfard and Rossignac            rithm actually generates a sequence of models Mn , Mn−1 , . . . , Mg .
+[7], and Guéziec [2]. These algorithms all seem to have been de-           Thus, a single run can produce a large number of approximate mod-
+signed for use on manifold surfaces, although edge contractions can         els or a multiresolution representation such as a progressive mesh
+be utilized on non-manifold surfaces. By performing successive              [3].
+edge contractions, they can close holes in the object but they can-
+not join unconnected regions.                                               3.1 Aggregation
+   If it is critical that the approximate model lie within some dis-
+tance of the original model and that its topology remain unchanged,         The primary benefit which we gain by utilizing general vertex pair
+the simplification envelopes technique of Cohen et al. [1] can be           contractions is the ability of the algorithm to join previously uncon-
+used in conjunction with one of the above simplification algorithms.        nected regions of the model together. A potential side benefit is that
+As long as any modification made to the model is restricted to lie          it makes the algorithm less sensitive to the mesh connectivity of the
+within the envelopes, a global error guarantee can be maintained.           original model. If in fact two faces meet at a vertex which is dupli-
+However, while this provides strong error limits, the method is in-         cated, the contraction of that pair of vertices will repair this short-
+herently limited to orientable manifold surfaces and carefully pre-         coming of the initial mesh.
+                                                                           vT Qv. In Section 5, we will describe how the initial matrices are
+                                                                           constructed. Note that the level surface 1(v) = , which is the set
+                                                                           of all points whose error with respect to Q is , is a quadric surface.
+                                                                               For a given contraction (v1 , v2 ) → v̄, we must derive a new ma-
+                                                                           trix Q̄ which approximates the error at v̄. We have chosen to use the
+                                                                           simple additive rule Q̄ = Q1 + Q2 .
+                                                                               In order to perform the contraction (v1 , v2 ) → v̄, we must also
+Figure 3: On the left is a regular grid of 100 closely spaced cubes.       choose a position for v̄. A simple scheme would be to select either
+In the middle, an approximation built using only edge contractions         v1 , v2 , or (v1 + v2 )/2 depending on which one of these produces
+demonstrates unacceptable fragmentation. On the right, the result          the lowest value of 1(v̄). However, it would be nice to find a po-
+of using more general pair contractions to achieve aggregation is an       sition for v̄ which minimizes 1(v̄). Since the error function 1 is
+approximation much closer to the original.                                 quadratic, finding its minimum is a linear problem. Thus, we find
+                                                                           v̄ by solving ∂1/∂x = ∂1/∂y = ∂1/∂z = 0. This is equivalent2 to
+                                                                           solving:
+                                                                                                                               
+   In some applications, such as rendering, topology may be less im-                          q11 q12 q13 q14                  0
+portant than overall shape. Consider a shape such as that shown in                           q12 q22 q23 q24                0 
+                                                                                             q                         v̄ = 
+Figure 3 which is made up of 100 closely spaced cubes in a regu-                                13   q23 q33 q34              0 
+lar grid. Suppose we wanted to construct an approximation of the                               0      0   0       1            1
+model on the left for rendering at a distance. Algorithms based on
+edge contraction can close holes in objects, but they can never join       for v̄. The bottom row of the matrix is empty because v̄ is an homo-
+disconnected components. In an algorithm using only edge con-              geneous vector — its w component is always 1. Assuming that this
+traction, the individual components are individually simplified into       matrix is invertible, we get that
+nothing, as in the model in the middle. Using pair contraction, the
+                                                                                                                          −1    
+individual components can be merged into a single object, as in the                             q11      q12    q13    q14       0
+model on the right. The result is a much more faithful approxima-                              q12      q22    q23    q24   0 
+                                                                                         v̄ = 
+                                                                                                                       q34   0 
+tion.                                                                                                                                               (1)
+                                                                                                q13      q23    q33
+   Allowing aggregation also requires us to support non-manifold                                 0        0      0      1        1
+surfaces. At the instant when two separate regions are joined, a non-
+manifold region is quite likely to be created. It would require a great    If this matrix is not invertible, we attempt to find the optimal vertex
+deal of care and effort to ensure that a contraction never created a       along the segment v1 v2 . If this also fails, we fall back on choosing
+non-manifold region without severely limiting the kinds of contrac-        v̄ from amongst the endpoints and the midpoint.
+tions that we could perform.
+
+                                                                           4.1 Algorithm Summary
+3.2 Pair Selection
+We have chosen to select the set of valid pairs at initialization time,    Our simplification algorithm is built around pair contractions and
+and to consider only these pairs during the course of the algorithm.       error quadrics. The current implementation represents models us-
+Our decision is based on the assumption that, in a good approxima-         ing an adjacency graph structure: vertices, edges, and faces are all
+tion, points do not move far from their original positions.                explicitly represented and linked together. To track the set of valid
+   We will say that a pair (v1 , v2 ) is a valid pair for contraction if   pairs, each vertex maintains a list of the pairs of which it is a mem-
+either:                                                                    ber. The algorithm itself can be quickly summarized as follows:
+
+  1. (v1 , v2 ) is an edge, or                                               1. Compute the Q matrices for all the initial vertices.
+
+  2. kv1 − v2 k < t, where t is a threshold parameter                        2. Select all valid pairs.
+
+    Using a threshold of t = 0 gives a simple edge contraction algo-         3. Compute the optimal contraction target v̄ for each valid pair
+rithm. Higher thresholds allow non-connected vertices to be paired.             (v1 , v2 ). The error v̄T (Q1 + Q2 )v̄ of this target vertex becomes
+Naturally, this threshold must be chosen with some care; if it is too           the cost of contracting that pair.
+high, widely separated portions of the model could be connected,
+which is presumably undesirable, and it could create O(n2 ) pairs.           4. Place all the pairs in a heap keyed on cost with the minimum
+    We must track the set of valid pairs during the course of iterative         cost pair at the top.
+contraction. With each vertex, we associate the set of pairs of which
+it is a member. When we perform the contraction (v1 , v2 ) → v̄,             5. Iteratively remove the pair (v1 , v2 ) of least cost from the heap,
+not only does v1 acquire all the edges that were linked to v2 , it also         contract this pair, and update the costs of all valid pairs involv-
+merges the set of pairs from v2 into its own set. Every occurrence of           ing v1 .
+v2 in a valid pair is replaced by v1 , and duplicate pairs are removed.
+                                                                              The only remaining issue is how to compute the initial Q matrices
+                                                                           from which the error metric 1 is constructed.
+4 Approximating Error With Quadrics
+                                                                              2 You can verify this for yourself by taking partial derivatives of
+In order to select a contraction to perform during a given iteration,
+we need some notion of the cost of a contraction. To define this cost,              vT Qv    =    q11 x2 + 2q12 xy + 2q13 xz + 2q14 x + q22 y2
+we attempt to characterize the error at each vertex. To do this, we                          +    2q23 yz + 2q24 y + q33 z2 + 2q34 z + q44
+associate a symmetric 4×4 matrix Q with each vertex, and we define
+the error at vertex v = [vx v y vz 1]T to be the quadratic form 1(v) =
+Figure 4: A sequence of approximations generated using our algorithm. The original model on the left has 5,804 faces. The approximations
+to the right have 994, 532, 248, and 64 faces respectively. Note that features such as horns and hooves continue to exist through many simpli-
+fications. Only at extremely low levels of detail do they begin to disappear.
+
+
+
+5 Deriving Error Quadrics                                                   vertices of its defining triangle. This may introduce some impreci-
+                                                                            sion into the error measurement, but it has major benefits: the space
+To construct our error quadrics, we must choose a heuristic to char-        required to track a plane set is only that required for a 4×4 symmet-
+acterize the geometric error. We have selected a heuristic which is         ric matrix (10 floating point numbers), and the cost of updating the
+quite similar to the one given by Ronfard and Rossignac [7]. Fol-           approximation is only that for adding two such matrices. If we are
+lowing [7], we can observe that in the original model, each vertex          willing to sacrifice some additional storage, it would even be possi-
+is the solution of the intersection of a set of planes — namely, the        ble to eliminate this multiple counting using an inclusion-exclusion
+planes of the triangles that meet at that vertex. We can associate a        formula.
+set of planes with each vertex, and we can define the error of the             Thus, to compute the initial Q matrices required for our pair con-
+vertex with respect to this set as the sum of squared distances to its      traction algorithm, each vertex must accumulate the planes for the
+planes:                                                                     triangles which meet at that vertex. For each vertex, this set of
+                                             X                              planes defines several fundamental error quadrics Kp . The error
+             1(v) = 1([vx v y vz 1]T ) =           (pT v)2        (2)       quadric Q for this vertex is the sum of the fundamental quadrics.
+                                                  p∈planes(v)               Note that the initial error estimate for each vertex is 0, since each
+                                                                            vertex lies in the planes of all its incident triangles.
+where p = [a b c d]T represents the plane defined by the equation
+ax + by + cz + d = 0 where a2 + b2 + c2 = 1. This approximate
+error metric is similar to [7], although we have used a summation           5.1 Geometric Interpretation
+rather than a maximum over the set of planes. The set of planes at a        As we will see, our plane-based error quadrics produce fairly high
+vertex is initialized to be the planes of the triangles that meet at that   quality approximations. In addition, they also possess a useful geo-
+vertex. Note that if we were to track these plane sets explicitly, as [7]   metric meaning3 .
+did, we would propagate planes after a contraction (v1 , v2 ) → v̄ us-          The level surfaces of these quadrics are almost always ellipsoids.
+ing the rule: planes(v̄) = planes(v1 ) ∪ planes(v2 ). This can require      In some circumstances, the level surfaces may be degenerate. For
+a sizeable amount of storage that does not diminish as simplification       instance, parallel planes (e.g., around a planar surface region) will
+progresses.                                                                 produce level surfaces which are two parallel planes, and planes
+   The error metric given in (2) can be rewritten as a quadratic form:      which are all parallel to a line (e.g., around a linear surface crease)
+                                   X                                        will produce cylindrical level surfaces. The matrix used for find-
+                   1(v) =                 (vT p)(pT v)                      ing optimal vertex positions (Eq. 1) will be invertible as long as the
+                                   p∈planes(v)                              level surfaces are non-degenerate ellipsoids. In this case, v̄ will be
+                                        X
+                           =                     vT (ppT )v                 at the center of the ellipsoid.
+                                   p∈planes(v)
+                                                         !
+                                            X                               6 Additional Details
+                           =       vT
+                                                       Kp v
+                                         p∈planes(v)
+                                                                            The general algorithm outlined so far performs well on most mod-
+where Kp is the matrix:                                                     els. However, there are a few important enhancements which im-
+                                                                            prove its performance on certain types of models, particularly planar
+                                                                          models with open boundaries.
+                            a2              ab      ac     ad
+                           ab              b2      bc     bd 
+               Kp = ppT = 
+                            ac              bc      c2     cd              Preserving Boundaries. The error quadrics derived earlier do
+                            ad              bd      cd     d2               not make any allowance for open boundaries. For models such as
+                                                                            terrain height fields, it is necessary to preserve boundary curves
+This fundamental error quadric Kp can be used to find the squared           while simplifying their shape. We might also wish to preserve dis-
+distance of any point in space to the plane p. We can sum these fun-        crete color discontinuities. In such cases, we initially label each
+damental quadrics together and represent an entire set of planes by         edge as either normal or as a “discontinuity”. For each face sur-
+a single matrix Q.                                                          rounding a particular discontinuity edge, we generate a perpendic-
+   We implicitly track sets of planes using a single matrix; instead        ular plane running through the edge. These constraint planes are
+of computing a set union (planes(v1 ) ∪ planes(v2 )) we simply add          then converted into quadrics, weighted by a large penalty factor, and
+two quadrics (Q1 + Q2 ). If the sets represented by Q1 and Q2 in
+the original metric are disjoint, the quadric addition is equivalent to        3 Kalvin and Taylor [5] describe a somewhat similar use of quadrics to
+the set union. If there is some overlap, then a single plane may be         represent plane sets. They were tracking sets of planes which fit a set of
+counted multiple times. However, any single plane can be counted            points within some tolerance. They used ellipsoids in plane-space to rep-
+at most 3 times since each plane is initially distributed only to the       resent the set of valid approximating planes.
+          Model        Faces          t      Init (s)   Simplify (s)                    Faces (i)   Fixed (Ei )   Optimal (Ei )   Reduction
+        Bunny          69,451         0      3.3        12.0                              10        0.0062        0.0054           13.4%
+      Crater Lake      199,114        0      10.6       36.0                              100       0.00032       0.00025          21.7%
+         Cow           5,804          0      0.22       0.69                              500       2.4e-05       1.3e-05          47.6%
+      Cube Grid        1,200         0.12    0.25       0.17                             1000       5.7e-06       3.4e-06          40.3%
+         Foot          4,204          0      0.16       0.41                             2000       1.2e-06       7.9e-07          32.4%
+         Foot          4,204        0.318    0.43       0.76                             3000       3.6e-07       2.6e-07          28.2%
+
+Figure 5: Sample running times. All data reflects the time needed           Figure 6: Effect of optimal vertex placement. Choosing an opti-
+to make a 10 face approximation of the given model. Initialization          mal position, rather than a fixed choice amongst the endpoints and
+time includes selecting valid pairs, computing initial error matrices,      midpoint, can significantly reduce approximation error. Approxi-
+and choosing contraction targets. Simplification time includes the          mations are of cow model using t = 0.
+iterative contraction of pairs.
+
+                                                                            effect is modest. However, at more reasonable levels of detail the
+added into the initial quadrics for the endpoints of the edge. We have      effect is substantial; optimal vertex placement can reduce the over-
+found that this works quite well.                                           all error by as much as 50%. In our experiments, we have also found
+                                                                            that using optimal vertex placement tends to produce more well-
+Preventing Mesh Inversion. Pair contractions do not neces-                  shaped meshes.
+sarily preserve the orientation of the faces in the area of the contrac-        Figures 8–13 demonstrate the performance of our algorithm on
+tion. For instance, it is possible to contract an edge and cause some       much larger models. Figure 9 represents a significant simplifica-
+neighboring faces to fold over on each other. It is usually best to try     tion (1.4%) of the original, but notice that all the major details of
+to avoid this type of mesh inversion. We use essentially the same           the original remain. In particular, notice that the contours on the in-
+scheme as others have before ([7] for example). When considering            terior of the ear and the large contours around the rear leg have been
+a possible contraction, we compare the normal of each neighboring           preserved. Figure 10 presents an even more drastic approximation:
+face before and after the contraction. If the normal flips, that con-       100 faces or 0.14% of the original size. While most of the detail of
+traction can be either heavily penalized or disallowed.                     the model has disappeared, the basic structure of the object is still
+                                                                            intact; the major features such as the head, legs, tail, and ears are all
+                                                                            apparent, albeit highly simplified. Figure 12 shows a very densely
+6.1 Evaluating Approximations                                               tessellated terrain model, and Figure 13 shows a highly simplified
+In order to evaluate the quality of approximations produced by our          version. While the small scale texture of the terrain has largely dis-
+algorithm, we need an error measurement which is a bit more rig-            appeared, all the basic features of the terrain remain. Also note that
+orous than the heuristic error measurement employed by the algo-            the open boundary has been properly preserved. Without the bound-
+rithm itself. We have chosen a metric which measures the average            ary constraints described earlier, the boundary would have been sig-
+squared distance between the approximation and the original model.          nificantly eroded.
+This is very similar to the Edist energy term used by Hoppe et al. [4].         Figure 11 illustrates the nature of the error quadrics accumulated
+We define the approximation error Ei = E(Mn , Mi ) of the simplified        during simplification. The level surface vT Qv =  is shown for each
+model Mi as:                                                                vertex. Each level surface is an ellipsoid centered around the corre-
+                                                                   !        sponding vertex. The interpretation of these ellipsoids is that a ver-
+                    1        X                    X                         tex can be moved anywhere within its ellipsoid and have an error
+        Ei =                       d 2 (v, Mi ) +     d 2 (v, Mn )          less than . The significant feature of the ellipsoids is that they con-
+              |Xn | + |Xi | v∈X                   v∈X
+                                n                 i                         form to the shape of the model surface very nicely. They are large
+                                                                            and flat on mostly planar areas such as the middle of the hind leg,
+where Xn and Xi are sets of points sampled on the models Mn and Mi          and they are elongated along discontinuity lines such as the contours
+respectively. The distance d(v, M) = min p∈M kv − pk is the mini-           through the ear and along the bottom of the leg. In some sense, these
+mum distance from v to the closest face of M (k · k is the usual Eu-        ellipsoids can be thought of as accumulating information about the
+clidean vector length operator). We use this metric for evaluation          shape of the local surface around their vertex.
+purposes only; it plays no part in the actual algorithm.                        Figures 14–17 demonstrate the real benefits which aggregation
+                                                                            via pair contractions can provide. The original model consists of
+7 Results                                                                   the bones of a human’s left foot. There are many separate bone
+                                                                            segments, some of which even interpenetrate (obviously an error
+Our algorithm can produce high fidelity approximations in fairly            in model reconstruction). Three approximations are compared: one
+short amounts of time. Figure 5 summarizes the running time4 of             built by uniform vertex clustering, one built with edge contractions
+our current implementation using the models shown in this paper.            alone, and one built with pair contractions. When edge contractions
+Figure 4 shows a sample sequence of approximations generated by             alone are used, the small segments at the ends of the toes collapse
+our algorithm. This entire sequence of cows was constructed in              into single points; this creates the impression that the toes are slowly
+about a second. Notice that features such as horns and hooves re-           receding back into the foot. On the other hand, using the more gen-
+main recognizable through many simplifications. Only at extremely           eral pair contractions allows separate bone segments to be merged.
+low levels of detail do they begin to disappear.                            As you can see in Figure 17, the toes are being merged into single
+   As described earlier, our algorithm attempts to optimize the             long segments. Figure 19 shows some of the pairs initially selected
+placement of vertices after contractions. Figure 6 summarizes the           as valid. Notice how they span the gaps between bone segments.
+effect of this policy on approximations for a representative model          Finally, Figure 18 shows another illustration of the level surfaces
+(the cow model of Fig. 4). At extremely low levels of detail, the           of the error quadrics accumulated during simplification (this is the
+                                                                            model seen in Figure 16).
+   4 This data was collected on an SGI Indigo2 with a 195 MHz R10000 pro-       The benefits of aggregation are not solely visual. Aggregation
+cessor and 128 Mbytes of memory.                                            can also produce objectively lower approximation error. Figure 7
+                           0.04                                                   aggregation as we would like.
+                                                     250 Face Approximation
+
+                          0.035
+                                                                                  9 Conclusion
+                           0.03
+
+
+
+
+    Approximation Error
+                                                                                  We have described a surface simplification algorithm which is capa-
+                          0.025
+                                                                                  ble of rapidly producing high fidelity approximations of polygonal
+                           0.02
+                                                                                  models. Our algorithm uses iterative pair contractions to simplify
+                                                                                  models and quadric error metrics to track the approximate error of
+                          0.015                                                   the model as it is being simplified. The quadrics stored with the fi-
+                                                                                  nal vertices can also be used to characterize the overall shape of the
+                           0.01                                                   surface.
+                                                                                     Our algorithm has the ability to join unconnected sections of
+                          0.005
+                                  0   0.5                1              1.5   2
+                                                                                  models while still maintaining fairly high quality results. While
+                                            Pair Distance Threshold (t)           most previous algorithms are also inherently limited to manifold
+                                                                                  surfaces, our system is quite capable of handling and simplifying
+Figure 7: The effect of pair thresholds. Approximation error E250                 non-manifold objects. Finally, our algorithm provides a useful mid-
+is shown as a function of t for a 250 face approximation of the foot              dle ground between very fast, low-quality methods such as vertex
+model (Fig. 14). Pair contractions resulting in aggregation can sig-              clustering [8] and very slow, high-quality methods such as mesh op-
+nificantly reduce approximation error.                                            timization [3].
+
+
+                                                                                  References
+shows the error E250 for 250 face approximations of the foot model
+using various values of t. A fairly wide range of values all produce               [1] Jonathan Cohen, Amitabh Varshney, Dinesh Manocha, Greg
+objectively better approximations than are achieved by the edge                        Turk, Hans Weber, Pankaj Agarwal, Frederick Brooks, and
+contraction only approximation (t = 0). Notice, however, that in-                      William Wright. Simplification envelopes. In SIGGRAPH ’96
+creasing t does not always improve the approximation. This is due                      Proc., pages 119–128, Aug. 1996. http://www.cs.unc.edu/∼geom/
+to the nature of our quadric error metric. Locally, the distance to a                  envelope.html.
+set of planes is a reasonable approximation of the distance to a set
+of faces. However, because planes have infinite extent and faces do                [2] André Guéziec. Surface simplification with variable tolerance.
+not, the error metric becomes less reliable as we move farther away.                   In Second Annual Intl. Symp. on Medical Robotics and Com-
+                                                                                       puter Assisted Surgery (MRCAS ’95), pages 132–139, Novem-
+                                                                                       ber 1995.
+8 Discussion                                                                       [3] Hugues Hoppe. Progressive meshes. In SIGGRAPH ’96 Proc.,
+                                                                                       pages 99–108, Aug. 1996. http://www.research.microsoft.com/
+Our algorithm provides a mix of efficiency, quality, and generality                    research/graphics/hoppe/.
+not found in earlier algorithms. While certain other algorithms are
+faster or generate higher quality approximations than ours, they typ-              [4] Hugues Hoppe, Tony DeRose, Tom Duchamp, John Mc-
+ically do not meet the capability of our algorithm in all three areas.                 Donald, and Werner Stuetzle.          Mesh optimization.     In
+The only algorithm capable of simplifying arbitrary polygonal mod-                     SIGGRAPH ’93 Proc., pages 19–26, Aug. 1993.              http://
+els, vertex clustering [8], does not reliably produce high quality ap-                 www.research.microsoft.com/research/graphics/hoppe/.
+proximations. None of the higher quality methods available [2, 7, 3]
+support aggregation. Both [2] and [3] seem to be significantly more                [5] Alan D. Kalvin and Russell H. Taylor. Superfaces:polygonal
+time consuming than our algorithm. The results of [7] are most sim-                    mesh simplification with bounded error. IEEE Computer
+ilar to our own because we use a very similar error approximation.                     Graphics and Appl., 16(3), May 1996. http://www.computer.org/
+                                                                                       pubs/cg&a/articles/g30064.pdf.
+However, our system uses a more efficient means to track plane sets,
+and it incorporates some enhancements such as boundary preserva-                   [6] David Luebke and Carl Erikson. View-dependent simplifica-
+tion.                                                                                  tion of arbitrary polygonal environments. In SIGGRAPH 97
+   There remain various aspects of our algorithm that could be im-                     Proc., August 1997.
+proved upon. We have used a fairly simple scheme for selecting
+valid pairs. It is quite possible that a more sophisticated adaptive               [7] Rémi Ronfard and Jarek Rossignac. Full-range approximation
+scheme could produce better results. We have not addressed the is-                     of triangulated polyhedra. Computer Graphics Forum, 15(3),
+sue of surface properties such as color. One possible solution is to                   Aug. 1996. Proc. Eurographics ’96.
+treat each vertex as a vector (x, y, z, r, g, b), construct 7×7 quadrics,
+and simplify. We believe this could work well, but the added size                  [8] Jarek Rossignac and Paul Borrel. Multi-resolution 3D approx-
+and complexity make it less attractive than the basic algorithm.                       imations for rendering complex scenes. In B. Falcidieno and
+   Although it generally performs well, our algorithm has a couple                     T. Kunii, editors, Modeling in Computer Graphics: Methods
+of clear weaknesses. First, as mentioned earlier, measuring error as                   and Applications, pages 455–465, 1993.
+a distance to a set of planes only works well in a suitably local neigh-           [9] William J. Schroeder, Jonathan A. Zarge, and William E.
+borhood. Second, the information accumulated in the quadrics is es-                    Lorensen. Decimation of triangle meshes. Computer Graph-
+sentially implicit, which can at times be problematic. Suppose we                      ics (SIGGRAPH ’92 Proc.), 26(2):65–70, July 1992.
+join together two cubes and would like to remove the planes associ-
+ated with the now defunct interior faces. Not only is it, in general,             [10] Marc Soucy and Denis Laurendeau. Multiresolution surface
+difficult to determine what faces are defunct, there is no clear way to                modeling based on hierarchical triangulation. Computer Vi-
+reliably remove the appropriate planes from the quadrics. As a re-                     sion and Image Understanding, 63(1):1–14, 1996.
+sult, our algorithm does not do as good a job at simplification with
+                                                                     Figure 11: 1,000 face approximation. Error ellipsoids for each ver-
+                                                                     tex are shown in green.
+Figure 8: Original bunny model with 69,451 triangles. Rendered
+using flat shading just as in approximations below.
+
+
+
+
+Figure 9: An approximation using only 1,000 triangles (generated
+in 15 seconds).                                                          Figure 12: Terrain model of Crater Lake (199,114 faces).
+
+
+
+
+Figure 10: An approximation using only 100 triangles (generated in
+15 seconds).
+
+                                                                      Figure 13: Simplified model with 999 faces (took 46 seconds).
+Figure 14: Original. Bones of a human’s left foot (4,204 faces).
+Note the many separate bone segments.
+
+
+
+
+                                                                        Figure 18: Level surfaces of the error quadrics at the vertices of the
+                                                                        approximation shown in Figure 16.
+
+
+Figure 15: Uniform Vertex Clustering. 262 face approximation
+(11 × 4 × 4 grid). Indiscriminate joining destroys approximation
+quality.
+
+
+
+
+Figure 16: Edge Contractions. 250 face approximation. Bone seg-
+ments at the ends of the toes have disappeared; the toes appear to be
+receding back into the foot.
+
+
+
+
+                                                                        Figure 19: Pairs selected as valid during initialization (for Fig. 17).
+                                                                        Red pairs are edges; green pairs are non-edges.
+
+
+Figure 17: Pair Contractions. 250 face approximation (t = 0.318).
+Toes are being merged into larger solid components. No receding
+artifacts. This model now contains 61 non-manifold edges.
+

@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **49 blocks**
+Total: **50 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -55,3 +55,4 @@ Total: **49 blocks**
 | 47 | [threejs-block47.md](threejs-block47.md) | Triangulating a footprint's cap/floor: earcut (Three.js's built-in) vs Constrained Delaunay, the math, the JS libraries, and when each pays |
 | 48 | [threejs-block48.md](threejs-block48.md) | Robust geometric predicates: why float `orient2d`/`incircle` flip sign near degeneracy, the three fixes (exact adaptive, integer snapping, epsilon), and the snapping rule for a CAD build tool |
 | 49 | [threejs-block49.md](threejs-block49.md) | Mesh simplification by Quadric Error Metrics (Garland-Heckbert 1997): the maths, what three.js `SimplifyModifier` ACTUALLY runs (Melax 1998, then a meshoptimizer wrapper — NOT hand-rolled QEM), and the build-time-decimate rule for equipment LOD |
+| 50 | [threejs-block50.md](threejs-block50.md) | Isosurface extraction: Marching Cubes (Lorensen-Cline 1987) vs Dual Contouring (Ju et al. 2002) — the maths, what `three.js/MarchingCubes.js` ACTUALLY runs, the honest JS-ecosystem maturity, and where isosurfaces fit the HVAC prototypes |
