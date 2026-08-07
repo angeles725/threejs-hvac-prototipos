@@ -9,10 +9,10 @@
 > cameras/controls, procedural geometry/textures, versioning) — not the whole library.
 <!-- research-state.v1 -->
 schema: research-state.v1
-covered_blocks: 51
-gaps_closed: 47
+covered_blocks: 52
+gaps_closed: 48
 known_gaps: 48
-investigable_open: 1
+investigable_open: 0
 requires_execution_open: 1
 blocked_open: 0
 <!-- /research-state.v1 -->
@@ -29,13 +29,15 @@ blocked_open: 0
   for holed polygons — **B47**), G62 (QEM mesh simplification), G63 (marching cubes /
   dual contouring), G64 (Bézier/Catmull-Rom/NURBS curves & surfaces), G65 (robust geometric predicates +
   epsilon/snapping — **B48** — the cross-cutting foundation B45/B46/B47 all pointed at),
-  G66 (poisson-disk / WFC / L-systems procedural placement). **G64 (curves & surfaces — Bézier/Catmull-Rom/
-  NURBS) — B51, this iteration.** 1 read-only-investigable gap remains (G66). NOT at STOP.
+  G66 (poisson-disk / WFC / L-systems procedural placement — **B52**). **G66 (procedural placement —
+  poisson-disk/blue-noise Bridson 2007 + WFC constraint-solving + L-systems) — B52, this iteration (LAST
+  gap).** **0 read-only-investigable gaps remain → RUN 9 read-only set EXHAUSTED = STOP.** Remaining work is
+  requires-execution only (G41 equipment-LOD, §19 build phase).
 - **RUN 8 (REOPEN §8, 2026-07-06, AUTO — build-phase §19, user-driven client-satisfaction loop)**: voxel→realistic parity map + living-environment build on `hotel-realista-ensamblado.html` (G42, [Block 41]). Replaces the flat "infinite plane" ground + static sea with procedural terrain relief + per-vertex biomes (1 draw call), a GPU wave-displaced sea (0 CPU cost), and a gradient sky background. Spawns G43 (vegetation/paths/furniture), G44 (voxel-parity interactions + duct audit), G45 (per-floor temperature) as in-loop requires-execution gaps. Visual QA deferred: WSL headless has no WebGL context — syntax-checked only (`node --check` PASS).
 - **RUN 7 (REOPEN §8, 2026-07-06, supervised — user present)**: applied+measured LOD on the assembled hotel (G40). Cap +1 (B40). Prompted by live implementation of a building LOD in `hotel-realista-ensamblado.html`; documents the before/after with a `[CERT-hw]` browser probe. Emergent G41 (equipment LOD) is **requires-execution**, not read-only → does not reopen the static count.
 - **RUN 6 (REOPEN §8, 2026-07-04, AUTO/orchestrated — queued behind the WORKFLOW.md fix writers)**: design-craft completion from the graphic-designer + 3D-designer lens (G33-G39). Cap +7 (B33-B39). Order per driver recommendation: template-system first (multiplier), then motion/UX, then 2D tokens/accessibility, then art direction/deliverables/dataviz.
-- **Covered blocks**: 51 (B1-B51)
-- **Coverage metric**: 47 / 48 closed — **RUN 9 IN PROGRESS (read-only-investigable=1: G66). B45+B46+B47+B48+B49+B50+B51 written.** (Runs 7-8 history below; G41 queued as requires-execution §19 build phase.)
+- **Covered blocks**: 52 (B1-B52)
+- **Coverage metric**: 48 / 48 closed — **RUN 9 STOPPED (read-only-investigable=0). B45+B46+B47+B48+B49+B50+B51+B52 written.** (Runs 7-8 history below; G41 remains as requires-execution §19 build phase.)
 - **RUN 5 STOPPED (2026-07-04): read-only-investigable = 0 — ALL RUNS COMPLETE (32/32 gaps, 5 runs)**
 - **RUN 5 (2026-07-04, AUTO/orchestrated)**: HVAC-domain design (G29-G32) — G29 (HVAC/industrial equipment visualization domain, B29), G30 (dashboards & telemetry, B30), G31 (terrain/relief, B31), and G32 (buildings/BIM, B32) covered — **RUN 5 COMPLETE, all 4 gaps closed**. User authorized auto-chaining incl. emergent gaps; RUN 5 ran to exhaustion of the backlog with no new gaps left. Hard-stops: failed self-report, cap, exhaustion, destructive step.
 - **RUN 4 (REOPEN §8, 2026-07-04, AUTO/orchestrated)**: 3D-design craft + optimization (G22-G28) — **RUN 4 COMPLETE**, all 7 gaps covered (B22-B28).
@@ -94,7 +96,7 @@ blocked_open: 0
 | medium | G62 — Mesh simplification via Quadric Error Metrics (Garland-Heckbert): LOD/decimation maths + JS (meshoptimizer/simplifyModifier), fit for the equipment-LOD gap G41 (run 9) | context7 + web | **covered → [Block 49]** (QEM verified in paper; premise CORRECTED — three.js SimplifyModifier is Melax 1998 then a meshopt wrapper, NOT hand-rolled QEM; decimate equipment build-time w/ meshoptimizer) |
 | medium | G63 — Isosurfaces: marching cubes vs dual contouring — three.js MarchingCubes addon, metaballs/scalar-field surfacing for ducts/blobs (run 9) | context7 + web | **covered → [Block 50]** (MC linear-interp `mu=(iso−v0)/(v1−v0)` verified in three.js source; DC=QEF-over-Hermite-normals preserves sharp features; HONEST: no maintained JS dual-contouring lib — surfaceNets is dual but not feature-preserving; isosurface of a temperature/CFD field = real unbuilt HVAC app) |
 | medium | G64 — Curves & surfaces: Bézier / Catmull-Rom / B-spline / NURBS — three.js Curve API, CatmullRomCurve3, NURBSCurve/NURBSSurface addons, pipe/duct centreline sweeping (run 9) | context7 + web | **covered → [Block 51]** (Bernstein/Cox-de Boor/rational-weight maths verified in three.js source; centripetal α=0.5 default proven cusp-free by Yuksel 2011; getPointAt arc-length reparam; computeFrenetFrames = rotation-minimising frame w/ closed-curve twist fix; NURBS is examples/jsm addon, NURBSSurface a bare evaluator) |
-| medium | G66 — Procedural placement: poisson-disk / blue-noise sampling + Wave Function Collapse / L-systems for scattering & layout generation (run 9) | web + corpus | pending |
+| medium | G66 — Procedural placement: poisson-disk / blue-noise sampling + Wave Function Collapse / L-systems for scattering & layout generation (run 9) | web + corpus | **covered → [Block 52]** (Bridson 2007 O(N) blue-noise verified in the SIGGRAPH sketch PDF: grid cell r/√n, active list, k=30 candidates in the r..2r annulus, 2N−1 iters; WFC honestly = constraint solving NOT quantum [mxgmn README], lowest-Shannon-entropy cell + AC-4 propagation + contradiction/restart; L-system = rewriting grammar G=(V,ω,P) + turtle [ ] branching; corpus scatters bushes/grass by UNIFORM-RANDOM-in-rectangle [CERT] = the clustering Bridson names; three.js ships only MeshSurfaceSampler [area-uniform, NOT blue-noise], Poisson/WFC/L-sys are external MIT libs feeding InstancedMesh; decision rule per job) |
 
 ## Iteration history
 
@@ -147,6 +149,7 @@ blocked_open: 0
 | 49 | 2026-08-07 | G62 QEM mesh simplification (run 9); premise CORRECTED — SimplifyModifier is Melax 1998 then a meshopt wrapper, not hand-rolled QEM | B49 | inline (constraint: single-block reopen executor; web-primary DESIGN/APPLIED block, 5 NEW sources preserved+hashed before citing — Garland-Heckbert 1997 paper PDF, three.js SimplifyModifier dev+r160, meshoptimizer README+simplifier.cpp) · scout: CERTIFIABLE-NOW | 0 (forward gaps G63/G64/G66 already queued; documentation half of G41 supplied) |
 | 50 | 2026-08-07 | G63 isosurfaces: marching cubes vs dual contouring (run 9) | B50 | inline (constraint: single-block reopen executor; web-primary DESIGN/APPLIED block, 6 NEW sources preserved+hashed before citing — three.js MarchingCubes.js, Bourke polygonise, Wikipedia MC, Ju-et-al 2002 DC paper PDF, boris-the-brave DC tutorial, isosurface npm README) · scout: CERTIFIABLE-NOW | 0 (forward gaps G64/G66 already queued) |
 | 51 | 2026-08-07 | G64 curves & surfaces: Bézier/Catmull-Rom/NURBS (run 9) | B51 | inline (constraint: single-block reopen executor; source+web-primary DESIGN/APPLIED block, 13 sources preserved+hashed before citing — 9 three.js source files [Curve/Interpolations/CatmullRomCurve3/{Cubic,Quadratic}BezierCurve3/TubeGeometry/NURBS{Curve,Surface,Utils}], Wikipedia Bézier/centripetal-CatmullRom/NURBS, Yuksel-2011 centripetal PDF) · scout: CERTIFIABLE-NOW | 0 (forward gap G66 already queued) |
+| 52 | 2026-08-07 | G66 procedural placement: poisson-disk/blue-noise (Bridson 2007) + WFC + L-systems (run 9 — LAST read-only gap) | B52 | inline (constraint: single-block reopen executor; web+source-primary DESIGN/APPLIED block, 8 NEW sources preserved+hashed before citing — Bridson SIGGRAPH07 PDF, kchapelier poisson-disk-sampling + fast-2d READMEs, mxgmn WaveFunctionCollapse + kchapelier JS-port READMEs, three.js MeshSurfaceSampler.js, nylki lindenmayer README, Wikipedia L-system; corpus scatter grounded [CERT] hotel-realista-ensamblado.html) · scout: CERTIFIABLE-NOW | 0 (RUN 9 read-only set EXHAUSTED = STOP; G41 requires-execution remains) |
 
 **RUN 4 gaps complete** (G22-G28, all covered). **RUN 5 COMPLETE** (G29-G32 — HVAC domain,
 dashboards, terrain, buildings/BIM) — G29 (B29), G30 (B30), G31 (B31), and G32 (B32) all covered,
@@ -159,11 +162,11 @@ iteration) covered, template-as-a-system architecture proposal. 6 gaps remain qu
 
 ## Stop control (primary = read-only-investigable exhaustion, METHODOLOGY §8)
 
-- **Open gaps — read-only investigable**: 1 (G66) — **RUN 9 IN PROGRESS** (reopen §8, new axis; B45+B46+B47+B48+B49+B50+B51). NOT at STOP.
+- **Open gaps — read-only investigable**: **0** — **RUN 9 STOPPED** (reopen §8, new axis; B45+B46+B47+B48+B49+B50+B51+B52; read-only set EXHAUSTED, METHODOLOGY §8 primary criterion). NEXT-ACTION = §19 build phase (apply B45 robust 2D union + B48 snapping to the nave `build-viewer.py`; build G41 equipment-LOD with the B49 meshoptimizer recipe).
 - **Open gaps — requires-execution**: 1 (G41 equipment LOD — needs a build + re-measure, §19; **documentation half now supplied by [Block 49]** — algorithm + meshoptimizer build-time recipe)
 - **Open gaps — blocked**: 0
 - Consecutive iterations with empty backlog (secondary): 0/2
-- Budget cap (safety net): run 1 = 12 blocks (fired). Run 2 (reopen): +7 (B13-B19). Run 7 (reopen): +1 (B40, fired). **Run 9 (reopen): +8 gaps seeded (G59-G66), 7 closed (B45, B46, B47, B48, B49, B50, B51).**
+- Budget cap (safety net): run 1 = 12 blocks (fired). Run 2 (reopen): +7 (B13-B19). Run 7 (reopen): +1 (B40, fired). **Run 9 (reopen): +8 gaps seeded (G59-G66), ALL 8 closed (B45, B46, B47, B48, B49, B50, B51, B52) — RUN 9 read-only set EXHAUSTED = STOP.**
 
 ## Pre-flight source existence (BOOTSTRAP e2)
 
