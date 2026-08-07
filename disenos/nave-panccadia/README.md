@@ -420,8 +420,14 @@ None is a visible defect and none has any geometric consequence, so the model is
 at v13. The roof **form** is confirmed against the three CAD sections (self-test within ±0.26 m of the
 measured apexes).
 
-**Still awaiting confirmation — site-truth only:** (1) the upper storey and (2) that the built roof
-matches the drawn gable. Both need an on-site eye, not the CAD (the drawing has been mined out).
+The **upper storey is confirmed against the CAD** by a plan overlay (model walls in red over the
+DXF `PLANTA ALTA` in grey — `tools/compare-model.py … --upper`, render `build/render/compare-pa.png`,
+probe `…/upper-storey-vs-cad.txt`): the chamfered envelope and every major partition are captured,
+and the only grey-with-no-red is non-wall detail (fixtures, door leaves, furniture) — the same 51 %
+length ratio the ground floor shows.
+
+**Still awaiting confirmation — site-truth only:** that the built upper storey and roof match the
+drawing. That needs an on-site eye, not the CAD (the drawing has been mined out).
 That confirmation is the only oracle this project has that the arithmetic gate cannot provide — it
 has caught three defects that shipped past a green gate, and the roof's V-fold would have been a
 fourth.
