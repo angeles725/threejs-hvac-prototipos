@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesa de trabajo inox — nave Panccadia</title>
+<link rel="icon" href="data:,">                     <!-- favicon 404 pollutes the console sidecar -->
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700} #hud .pass{color:var(--accent)}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0f1622;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:5px 8px;cursor:pointer}
+  #panel button.on{border-color:var(--accent);color:var(--accent)}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Mesa de trabajo inox</div>
+  <div><span class="pass">PASS: materials</span> <span class="dim">· brushed-304 prep bench</span></div>
+  <div class="dim">3.00 × 1.00 × 0.90 m</div>
+</div>
+<div id="panel">
+  <button id="btn-rot">AUTO-ROTATE</button>
+  <button id="btn-shelf" class="on">UNDERSHELF ON-OFF</button>
+</div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 10, 30);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+// hero camera: az42 el24 fov38 (spec camera)
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 5.2, AZ = 42*Math.PI/180, EL = 24*Math.PI/180;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.5 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.5, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.5, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;   // OFF by default (gate captures need a settled frame)
+
+// ---- IBL + house rig + brushed-stainless recipe (env 2.15 + frontal fill) ----
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.15;   // bright IBL so bare metal has something to reflect (else stainless reads black)
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4, 6, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left=-3; sun.shadow.camera.right=3; sun.shadow.camera.top=3; sun.shadow.camera.bottom=-3;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));   // lifts upward-facing stainless
+const fill = new THREE.DirectionalLight(0xf4f7ff, 0.7);
+fill.position.set(1.5, 2.0, 5); scene.add(fill);                // frontal: lights the VERTICAL faces the top rig misses
+
+// ---- brushed-stainless roughness map (shared recipe) ----
+function brushedRoughTex(){
+  const c=document.createElement('canvas'); c.width=512; c.height=512; const g=c.getContext('2d');
+  g.fillStyle='#565656'; g.fillRect(0,0,512,512);
+  for(let i=0;i<2600;i++){ const y=Math.random()*512,len=40+Math.random()*180,x=Math.random()*512,v=120+(Math.random()*40-20);
+    g.strokeStyle=`rgba(${v},${v},${v},0.16)`; g.lineWidth=Math.random()<0.5?1:0.6;
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x+len,y+(Math.random()*2-1)); g.stroke(); }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(3,1); return t;
+}
+const roughMap = brushedRoughTex();
+// attempt2: spec material block (#c6cacc/0.95/0.34) read dark charcoal & FAILED (0.57<0.78);
+// adopt the library brushed-stainless-recipe values — the spec and the recipe disagreed.
+const matTop  = new THREE.MeshStandardMaterial({ color:0xd2d6d8, metalness:0.90, roughness:0.30, roughnessMap: roughMap });
+const matLeg  = new THREE.MeshStandardMaterial({ color:0xc4c8ca, metalness:0.90, roughness:0.34, roughnessMap: roughMap });
+const matFoot = new THREE.MeshStandardMaterial({ color:0x2b2f33, metalness:0.0,  roughness:0.7 });
+
+// ---- ground plane ----
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40),
+  new THREE.MeshStandardMaterial({ color:0x0c1016, metalness:0, roughness:0.95 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ---- mesa-trabajo geometry (from design-spec: 3.0 x 1.0 x 0.90 m) ----
+const L = 3.00, W = 1.00, H = 0.90;
+const root = new THREE.Group(); scene.add(root);
+
+// top: thin 304 skin at work height + turned-down edge apron on all four sides
+const top = new THREE.Group();
+const skin = new THREE.Mesh(new THREE.BoxGeometry(L, 0.020, W), matTop);
+skin.position.y = H - 0.010; skin.castShadow = skin.receiveShadow = true; top.add(skin);
+const apronH = 0.040, apronT = 0.010, apronY = H - 0.010 - apronH/2;
+function apron(w,d,x,z){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,apronH,d), matTop);
+  m.position.set(x,apronY,z); m.castShadow=true; top.add(m); }
+apron(L, apronT, 0,  W/2 - apronT/2);   // front
+apron(L, apronT, 0, -W/2 + apronT/2);   // back
+apron(apronT, W, L/2 - apronT/2, 0);    // right
+apron(apronT, W, -L/2 + apronT/2, 0);   // left
+root.add(top);
+
+// leg frame: 4 tubular legs (0.041 dia) inset from corners, feet, undershelf
+const legFrame = new THREE.Group();
+const legR = 0.0205, footH = 0.03, legTop = H - 0.055, legBot = footH;
+const legLen = legTop - legBot;
+const legX = L/2 - 0.14, legZ = W/2 - 0.14;
+const legGeo = new THREE.CylinderGeometry(legR, legR, legLen, 20);
+const footGeo = new THREE.CylinderGeometry(0.030, 0.026, footH, 16);
+for (const sx of [-1,1]) for (const sz of [-1,1]){
+  const leg = new THREE.Mesh(legGeo, matLeg);
+  leg.position.set(sx*legX, legBot + legLen/2, sz*legZ); leg.castShadow = true; legFrame.add(leg);
+  const foot = new THREE.Mesh(footGeo, matFoot);
+  foot.position.set(sx*legX, footH/2, sz*legZ); foot.castShadow = true; legFrame.add(foot);
+}
+// undershelf tying the legs at 0.20 off floor
+const shelf = new THREE.Mesh(new THREE.BoxGeometry(L - 0.30, 0.015, W - 0.30), matLeg);
+shelf.position.y = 0.20; shelf.castShadow = shelf.receiveShadow = true; shelf.name = 'undershelf';
+legFrame.add(shelf);
+root.add(legFrame);
+
+// ---- interaction ----
+document.getElementById('btn-rot').addEventListener('click', (e)=>{
+  controls.autoRotate = !controls.autoRotate; e.target.classList.toggle('on', controls.autoRotate); });
+document.getElementById('btn-shelf').addEventListener('click', (e)=>{
+  shelf.visible = !shelf.visible; e.target.classList.toggle('on', shelf.visible);
+  renderer.shadowMap.needsUpdate = true; });
+
+// ---- render loop + shadow bake ----
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); });
+let baked = false;
+function animate(){ requestAnimationFrame(animate); controls.update();
+  renderer.render(scene, camera);
+  if(!baked){ renderer.shadowMap.needsUpdate = true; baked = true;
+    document.documentElement.setAttribute('data-app-ready','true'); } }
+animate();
+globalThis.__mesaApp = { runtime: { scene, camera, renderer } };
+</script>
+</body>
+</html>
