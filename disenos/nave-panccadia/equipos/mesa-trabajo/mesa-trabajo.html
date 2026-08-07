@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesa de trabajo inox — nave Panccadia</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Mesa de trabajo — acero inox 304</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· brushed 304 · patas tubulares</span></div>
+  <div class="dim">3.00 × 1.00 m · alto 0.90 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnShelf" class="on">UNDERSHELF ON-OFF</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const DIM = { L:3.00, W:1.00, H:0.90 };
+const TOP_T = 0.03, APRON = 0.05, SHELF_Y = 0.22, FOOT_H = 0.03;
+const LEG_R = 0.021, LEG_INSET = 0.10;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 8, 26);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 4.4;
+camera.position.set(R*Math.cos(0.73)*Math.cos(0.42), 0.5 + R*Math.sin(0.42), R*Math.sin(0.73)*Math.cos(0.42));
+camera.lookAt(0, 0.42, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.42, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;   // OFF by default (gate captures need a settled frame)
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;   // bright IBL so bare metal has something bright to reflect (else stainless reads black)
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4, 6, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left=-3; sun.shadow.camera.right=3; sun.shadow.camera.top=3; sun.shadow.camera.bottom=-3;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));   // lifts upward-facing stainless toward a satin read
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ---- brushed-stainless roughness map (directional satin sheen) ----
+function brushedRoughTex(){
+  const c = document.createElement('canvas'); c.width = 512; c.height = 512;
+  const g = c.getContext('2d');
+  g.fillStyle = '#565656'; g.fillRect(0,0,512,512);           // base roughness ~0.34 (satin, not matte)
+  for(let i=0;i<2600;i++){                                     // fine horizontal brush strokes
+    const y = Math.random()*512, len = 40+Math.random()*180, x = Math.random()*512;
+    const v = 120 + (Math.random()*40-20);
+    g.strokeStyle = `rgba(${v},${v},${v},0.16)`; g.lineWidth = Math.random()<0.5?1:0.6;
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x+len,y+(Math.random()*2-1)); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(6,2);
+  return t;
+}
+const roughMap = brushedRoughTex();
+const matSteel = new THREE.MeshStandardMaterial({ color:0xd2d6d8, metalness:0.9, roughness:0.30, roughnessMap: roughMap });
+const matLeg   = new THREE.MeshStandardMaterial({ color:0xc4c8ca, metalness:0.9, roughness:0.34 });
+const matFoot  = new THREE.MeshStandardMaterial({ color:0x24282c, metalness:0.0,  roughness:0.7 });
+
+const table = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.castShadow=m.receiveShadow=true; return m; };
+
+// TOP: skin + turned-down edge apron (a thin skirt around the perimeter)
+const topY = DIM.H;
+const skin = box(DIM.L, TOP_T, DIM.W, matSteel); skin.position.y = topY - TOP_T/2; table.add(skin);
+for(const [w,d,x,z] of [[DIM.L,0.012,0,DIM.W/2-0.006],[DIM.L,0.012,0,-(DIM.W/2-0.006)],
+                        [0.012,DIM.W,DIM.L/2-0.006,0],[0.012,DIM.W,-(DIM.L/2-0.006),0]]){
+  const ap = box(w,APRON,d,matSteel); ap.position.set(x, topY - TOP_T - APRON/2 + 0.006, z); table.add(ap);
+}
+
+// LEGS: 4 round stainless tubes
+const legTopY = topY - TOP_T - APRON;
+const legH = legTopY - FOOT_H;
+const lx = DIM.L/2 - LEG_INSET, lz = DIM.W/2 - LEG_INSET;
+const legPos = [];
+for(const sx of [-1,1]) for(const sz of [-1,1]){
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(LEG_R, LEG_R, legH, 16), matLeg);
+  leg.castShadow = leg.receiveShadow = true;
+  leg.position.set(sx*lx, FOOT_H + legH/2, sz*lz); table.add(leg);
+  legPos.push([sx*lx, sz*lz]);
+  // adjustable bullet foot
+  const foot = new THREE.Mesh(new THREE.CylinderGeometry(LEG_R*1.2, LEG_R*0.9, FOOT_H, 12), matFoot);
+  foot.position.set(sx*lx, FOOT_H/2, sz*lz); foot.castShadow=true; table.add(foot);
+}
+
+// UNDERSHELF (togglable)
+const shelf = new THREE.Group();
+const sh = box(DIM.L - 2*LEG_INSET + 0.02, 0.016, DIM.W - 2*LEG_INSET + 0.02, matSteel);
+sh.position.y = SHELF_Y; shelf.add(sh);
+// small down-turned lips on the shelf long edges
+for(const sz of [-1,1]){ const lip = box(DIM.L-2*LEG_INSET, 0.03, 0.01, matSteel);
+  lip.position.set(0, SHELF_Y-0.015, sz*(DIM.W/2-LEG_INSET)); shelf.add(lip); }
+table.add(shelf);
+
+scene.add(table);
+renderer.shadowMap.needsUpdate = true;
+
+// ---- UI ----
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); };
+const btnShelf = document.getElementById('btnShelf');
+btnShelf.onclick = ()=>{ shelf.visible = !shelf.visible; btnShelf.classList.toggle('on', shelf.visible); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); });
+
+globalThis.__mesaApp = { runtime:{ scene, renderer, camera, table } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+
+function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene,camera); }
+animate();
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
