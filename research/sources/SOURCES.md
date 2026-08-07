@@ -11,6 +11,11 @@
 | web-snapshots/en.wikipedia.org_Straight_skeleton_2026-08-07.md | web-snapshot | https://en.wikipedia.org/wiki/Straight_skeleton | 2026-08-07T00:00:00Z | 70c0bc53a1c7e452e915f80f7a8086f1053f208648b568685710035b90b6b8cf | B45 |
 | web-snapshots/github_strandedkitty_straight-skeleton_2026-08-07.md | web-snapshot | https://github.com/StrandedKitty/straight-skeleton | 2026-08-07T00:00:00Z | 0dcf407328d87876b7e52d8e988f4eb0cb3f7c48ca2134cac8bcf070edc0b46b | B45 |
 | web-snapshots/npm_clipper2-wasm_polygon-clipping_js-clippers_2026-08-07.md | web-snapshot | https://github.com/xaviergonz/js-angusj-clipper | 2026-08-07T00:00:00Z | 2594113baa7be5807301194d786792732da074de723d2e6bdd8670bb65867c18 | B45 |
+| web-snapshots/github_gkjohnson_three-bvh-csg_README_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/gkjohnson/three-bvh-csg/main/README.md | 2026-08-07T07:52:35Z | 60560ea66845e155816c2e4d3f413dd4a66565eb611ff3b6c680682290277519 | B46 |
+| web-snapshots/github_gkjohnson_three-bvh-csg_packagejson_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/gkjohnson/three-bvh-csg/main/package.json | 2026-08-07T07:52:36Z | 57f1cf5ae9895feec4df52b9f637fc00feef83686b5fabfa34325c09f7179345 | B46 |
+| web-snapshots/github_gkjohnson_three-mesh-bvh_packagejson_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/gkjohnson/three-mesh-bvh/master/package.json | 2026-08-07T07:52:36Z | d5c6a97866c5b2fc84009da322e9304e764e40c35d600c1a3851a3cf590a5edf | B46 |
+| web-snapshots/github_evanw_csgjs_README_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/evanw/csg.js/master/README.md | 2026-08-07T07:52:36Z | 48ded66614ff3f6264ce9cd7d109a9c8cdf3c54e74f946e6691f7b34ad9d675b | B46 |
+| web-snapshots/doc.cgal.org_4.12.1_PolygonMeshProcessing_corefinement_2026-08-07.md | web-snapshot | https://doc.cgal.org/4.12.1/Polygon_mesh_processing/index.html | 2026-08-07T00:00:00Z | 1cb1acf4c1da4ebd6b288d51f569848b4bd93557a7c2974e81a467829cfe73bb | B46 |
 
 ## Structure
 

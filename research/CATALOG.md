@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **45 blocks**
+Total: **46 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -51,3 +51,4 @@ Total: **45 blocks**
 | 43 | [threejs-block43.md](threejs-block43.md) | Casino BMS dashboard (React reference) + consolidated hotel detail-OVERLAY build plan |
 | 44 | [threejs-block44.md](threejs-block44.md) | Prototype module scoping gotcha: inner-scope interaction block + `window.__` exposure (hover-bug post-mortem) |
 | 45 | [threejs-block45.md](threejs-block45.md) | Robust polygon offsetting + straight skeleton: the maths behind wall-union and corner/roof closure |
+| 46 | [threejs-block46.md](threejs-block46.md) | Robust boolean CSG on 3D meshes: three-bvh-csg, its BVH speedup, and the honest robustness ceiling vs BSP and CGAL |

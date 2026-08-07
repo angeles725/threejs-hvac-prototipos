@@ -120,6 +120,7 @@ This index guides through the **40 blocks** of this research. Each block is an i
 | # | Block | File | Key topics |
 |---|--------|---------|------------|
 | 45 | Robust polygon offsetting + straight skeleton | [block45](threejs-block45.md) | the nave build tool's `collapseWalls` union-find collapses only collinear runs, leaving corner/T/X junctions interpenetrating (`[CERT]` file:line); polygon offset = Minkowski-with-disk + join types (Round/Miter/Square/Bevel) + miter_limit acute-angle fallback; boolean union via Vatti + the integer-coordinate robustness trick (Clipper does the maths on scaled ints; pure-JS Martinez uses floats + loop-caps); straight skeleton wavefront + edge/split events + the roof lift (z = slope·time_reached); mature JS libs table (clipper2-wasm Boost/maintained, js-angusj-clipper Clipper1/int-only, StrandedKitty CGAL-WASM skeleton MIT, polygon-clipping Martinez FP); actionable build-tool recommendation (offset→union→straight-skeleton roof, snap to int grid first) |
+| 46 | Robust boolean CSG on 3D meshes: three-bvh-csg | [block46](threejs-block46.md) | three-bvh-csg (gkjohnson) v0.0.18 MIT — the de-facto Three.js mesh-CSG addon (core ships none); API `Brush`/`Evaluator.evaluate(a,b,op)` + ops ADDITION/SUBTRACTION/REVERSE_SUBTRACTION/DIFFERENCE/INTERSECTION + HOLLOW_* non-solid; BVH via three-mesh-bvh v0.9.14 → ">100× faster than BSP-based CSG" (vs legacy CSG.js/ThreeCSG BSP tree); HONEST robustness ceiling: INPUT must be two-manifold/watertight, OUTPUT "may not be correctly completely two-manifold" (float precision; coplanar/missing-triangle issues #68/#164; useCDTClipping experimental; drawRange export gotcha); robustness ladder BSP-float → BVH-float → CGAL exact-predicates+constructions; decision rule for the nave: prismatic walls/openings → 2D Clipper union + extrude / Shape.holes (nave v18 already uses ExtrudeGeometry, 0 CSG `[CERT]`); reserve 3D CSG for oblique roof cuts / angled duct penetrations / curved solids |
 
 ---
 
@@ -192,7 +193,7 @@ This index guides through the **40 blocks** of this research. Each block is an i
 ### RUN 9 — procedural generation & numerical methods for design tools (new axis, 2026-08-07)
 
 - [x] G59 — Robust polygon offsetting + straight skeleton (wall-union, corner/roof closure) → [Block 45]
-- [ ] G60 — Robust boolean CSG on 3D solids (three-bvh-csg) → **pending**
+- [x] G60 — Robust boolean CSG on 3D solids (three-bvh-csg) → [Block 46]
 - [ ] G61 — Triangulation: earcut vs Constrained Delaunay for holed polygons (the cap step) → **pending**
 - [ ] G62 — Mesh simplification via Quadric Error Metrics (LOD/decimation) → **pending**
 - [ ] G63 — Isosurfaces: marching cubes vs dual contouring (three.js MarchingCubes) → **pending**
