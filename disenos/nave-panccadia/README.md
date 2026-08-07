@@ -9,7 +9,7 @@ DesignSpec — it was RECONSTRUCTED from a real CAD drawing under the Research-S
 
 | | |
 |---|---|
-| Viewer | **[`nave-panccadia-3d-v13.html`](nave-panccadia-3d-v13.html)** — the full-sweep build: columns **trimmed to the roof surface** (13 pierced it by up to 2.2 m), doorways **cut back out of the wall-solid union** (no more swallowed jambs), nested double-outline equipment/furniture undrawn, facade **fitted to its face** with a per-depth offset ladder (0 coplanar pairs). A cross-class geometric auditor (`geo-audit.py`) gates the build: 76 findings → 7 named residues. Supersedes `v12` (stretch-solid walls), `v10`, `v9`.<br>[`nave-panccadia-3d-v12.html`](nave-panccadia-3d-v12.html) · [`nave-panccadia-3d-v10.html`](nave-panccadia-3d-v10.html) · [`nave-panccadia-3d-v9.html`](nave-panccadia-3d-v9.html) — self-contained, opens from the filesystem by double-click. |
+| Viewer | **[`nave-panccadia-3d-v13.html`](nave-panccadia-3d-v13.html)** — the full-sweep build: columns **trimmed to the roof surface** (13 pierced it by up to 2.2 m), doorways **cut back out of the wall-solid union** (no more swallowed jambs), nested double-outline equipment/furniture undrawn, facade **fitted to its face** with a per-depth offset ladder (0 coplanar pairs). A cross-class geometric auditor (`geo-audit.py`) gates the build: **0 visible defects, 7 technical residues** — the three "nested equipment" residues are a shorter ring wholly enclosed by a taller opaque machine (occluded from every exterior orbit, `max_bbox_poke = 0.0 mm`), so they are an operator-CAD question, not a collapse target: deleting them would erase a real table and two inner objects the drawing placed. Supersedes `v12` (stretch-solid walls), `v10`, `v9`.<br>[`nave-panccadia-3d-v12.html`](nave-panccadia-3d-v12.html) · [`nave-panccadia-3d-v10.html`](nave-panccadia-3d-v10.html) · [`nave-panccadia-3d-v9.html`](nave-panccadia-3d-v9.html) — self-contained, opens from the filesystem by double-click. |
 | Geometry (new in v4) | [`doors.json`](doors.json) · [`facade-3d.json`](facade-3d.json) · [`grid-full.json`](grid-full.json) · [`sections.json`](sections.json) |
 | Geometry | [`ground-floor.json`](ground-floor.json) · [`upper-floor.json`](upper-floor.json) · [`roof.json`](roof.json) · [`equipment.json`](equipment.json) · [`recovered-blocks.json`](recovered-blocks.json) · [`furniture.json`](furniture.json) · [`rooms.json`](rooms.json) · [`rooms-pa.json`](rooms-pa.json) |
 | Research corpus | `~/investigacion/nave-panccadia` (Research-SDD target #18, **42 cited blocks**, coverage 42/42 — read-only corpus EXHAUSTED; B38/B39 certify the v9 build) |
@@ -394,8 +394,15 @@ Doors recovered from the DWG 2026-07-28 — the DXF never had them.
 Furniture triaged 2026-07-28 — 60 pieces of 4,946 entities.
 Named spaces mapped 2026-07-28 — 10 rooms of 21 ground-floor labels.
 Current gate: **71/71** checks, **22/22** guards proven failing.
+Cross-class geometric audit of v13: **0 visible defects, 7 technical residues** (was reported as
+3 visible + 4 technical until the auditor's severity rule was corrected — it had been calling a
+shorter ring wholly enclosed by a taller opaque machine "visible" on plan-overlap area alone,
+ignoring that an enclosed box is occluded; measured `max_bbox_poke = 0.0 mm` on all three).
 
-**Both the upper storey and the roof are awaiting operator confirmation against the CAD.** That
-confirmation is the only oracle this project has that the arithmetic gate cannot provide — it has
-caught three defects that shipped past a green gate, and the roof's V-fold would have been a
-fourth.
+**Awaiting operator confirmation against the CAD:** (1) the upper storey, (2) the roof, and (3)
+what the three enclosed equipment slivers on the west edge of the two rotary ovens and inside the
+laminadora actually are — a real thin object the drawing placed, or the drawing's own double line.
+The model draws them hidden either way, so there is no visible defect to fix; it is an evidence
+question. That operator confirmation is the only oracle this project has that the arithmetic gate
+cannot provide — it has caught three defects that shipped past a green gate, and the roof's V-fold
+would have been a fourth.
