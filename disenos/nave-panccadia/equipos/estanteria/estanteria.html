@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estantería — nave Panccadia</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700} #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Estantería / anaquel — acero inox 304</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· 4 repisas de alambre + postes</span></div>
+  <div class="dim">~1.20 × 0.45 m · alto 1.80 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 6, 22);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(44, innerWidth/innerHeight, 0.1, 200);
+const Rr = 3.6;
+camera.position.set(Rr*Math.cos(0.72)*Math.cos(0.32), 1.15 + Rr*Math.sin(0.32), Rr*Math.sin(0.72)*Math.cos(0.32));
+camera.lookAt(0, 0.95, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.9, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.8;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.15;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.5, 6, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left=-1.8; sun.shadow.camera.right=1.8; sun.shadow.camera.top=2.4; sun.shadow.camera.bottom=-1;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+const fill = new THREE.DirectionalLight(0xf4f7ff, 0.7); fill.position.set(1.5, 2.0, 5); scene.add(fill);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(18,18),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+const matSteel = new THREE.MeshStandardMaterial({ color:0xcfd3d5, metalness:0.9, roughness:0.32 });
+const matFoot  = new THREE.MeshStandardMaterial({ color:0x24282c, metalness:0.0, roughness:0.7 });
+
+const cyl=(r,h,mat,seg=12)=>{ const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg),mat); m.castShadow=m.receiveShadow=true; return m; };
+const box=(w,h,d,mat)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.castShadow=m.receiveShadow=true; return m; };
+const unit = new THREE.Group();
+const W=1.20, D=0.45, H=1.80;
+const px=W/2-0.04, pz=D/2-0.04;
+
+// 4 posts + feet
+for(const sx of [-1,1]) for(const sz of [-1,1]){
+  const p=cyl(0.02,H,matSteel,14); p.position.set(sx*px, H/2+0.03, sz*pz); unit.add(p);
+  const f=cyl(0.026,0.05,matFoot,10); f.position.set(sx*px,0.025,sz*pz); unit.add(f);
+}
+
+// 4 wire shelves (perimeter frame + grid bars)
+const levels=[0.12, 0.66, 1.20, 1.72];
+for(const y of levels){
+  // perimeter frame
+  for(const sz of [-1,1]){ const fr=box(W-0.04,0.016,0.016,matSteel); fr.position.set(0,y,sz*pz); unit.add(fr); }
+  for(const sx of [-1,1]){ const fr=box(0.016,0.016,D-0.04,matSteel); fr.position.set(sx*px,y,0); unit.add(fr); }
+  // grid bars (along length)
+  for(let i=0;i<7;i++){ const b=cyl(0.005,D-0.04,matSteel,6); b.rotation.x=Math.PI/2; b.position.set(-px+0.06+i*((W-0.12)/6), y, 0); unit.add(b); }
+  // grid bars (across depth)
+  for(let i=0;i<2;i++){ const b=cyl(0.005,W-0.04,matSteel,6); b.rotation.z=Math.PI/2; b.position.set(0, y, -pz+0.12+i*(D-0.28)); unit.add(b); }
+}
+
+scene.add(unit);
+renderer.shadowMap.needsUpdate = true;
+
+const btnRot=document.getElementById('btnRot');
+btnRot.onclick=()=>{ controls.autoRotate=!controls.autoRotate; btnRot.classList.toggle('on',controls.autoRotate); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); });
+
+globalThis.__estanteriaApp = { runtime:{ scene, renderer, camera, unit } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+
+function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene,camera); }
+animate();
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
