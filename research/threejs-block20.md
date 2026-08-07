@@ -28,7 +28,7 @@ and worked on iPhone, PC, and Android. Rule of thumb for the corpus `[INFER]`: a
 GPGPU/LUT/noise DataTexture that needs linear sampling and targets iOS should default to
 HalfFloatType.
 
-**ProMotion 120 Hz frame budgets** (reddit 1ujp6bb — weak signal, single-reply thread):
+**ProMotion 120 Hz frame budgets** (reddit 1ujp6bb, `web-snapshots/old.reddit.com_r_threejs_comments_1ujp6bb_threejs_animation_laggy_on_iphone_17_p.md` — weak signal, single-reply thread):
 animation laggy on iPhone 17 Pro yet smooth on iPhone 12 mini. Diagnosis: React state updates
 inside the render loop (`setState` in R3F's `useFrame`) — tolerable at 60 Hz, jank at 120 Hz
 where render-triggered work doubles per second; fix: write animated values directly to objects,
