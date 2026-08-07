@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Silla + lavabo — nave Panccadia</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700} #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Silla de oficina + lavabo de manos — arquetipos</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· mobiliario baño/oficina</span></div>
+  <div class="dim">silla asiento 0.48 m · lavabo alto 0.85 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 5, 20);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(46, innerWidth/innerHeight, 0.1, 200);
+const Rr = 3.4;
+camera.position.set(Rr*Math.cos(0.7)*Math.cos(0.34), 0.9 + Rr*Math.sin(0.34), Rr*Math.sin(0.7)*Math.cos(0.34));
+camera.lookAt(0, 0.5, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.5, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.8;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.15;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3, 5.5, 2.5); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left=-2; sun.shadow.camera.right=2; sun.shadow.camera.top=2; sun.shadow.camera.bottom=-1;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+const fill = new THREE.DirectionalLight(0xf4f7ff, 0.7); fill.position.set(1.5, 2.0, 5); scene.add(fill);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(16,16),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+const matSteel = new THREE.MeshStandardMaterial({ color:0xd2d6d8, metalness:0.9, roughness:0.30 });
+const matUph   = new THREE.MeshStandardMaterial({ color:0x2a2f36, metalness:0.0, roughness:0.85 });
+const matPlas  = new THREE.MeshStandardMaterial({ color:0x16181c, metalness:0.0, roughness:0.5 });
+
+const box=(w,h,d,mat)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.castShadow=m.receiveShadow=true; return m; };
+const cyl=(rt,rb,h,mat,seg=16)=>{ const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),mat); m.castShadow=m.receiveShadow=true; return m; };
+
+// ---------- LAVABO (left) ----------
+const lav = new THREE.Group();
+// backsplash
+const splash = box(0.5,0.4,0.03,matSteel); splash.position.set(0,0.98,-0.2); lav.add(splash);
+// basin: an open shallow box (walls + floor)
+const bY=0.82;
+lav.add((()=>{const b=box(0.46,0.02,0.34,matSteel); b.position.set(0,bY-0.06,-0.05); return b;})()); // floor
+for(const sz of [-1,1]){ const w=box(0.46,0.12,0.02,matSteel); w.position.set(0,bY,-0.05+sz*0.16); lav.add(w); }
+for(const sx of [-1,1]){ const w=box(0.02,0.12,0.34,matSteel); w.position.set(sx*0.22,bY,-0.05); lav.add(w); }
+const apron = box(0.5,0.14,0.36,matSteel); apron.position.set(0,bY-0.13,-0.05); lav.add(apron);
+// legs
+for(const sx of [-1,1]){ const l=cyl(0.018,0.018,0.7,matSteel,12); l.position.set(sx*0.2,0.35,0.08); lav.add(l); }
+// gooseneck faucet
+const fbase = cyl(0.02,0.025,0.1,matSteel,12); fbase.position.set(0,0.94,-0.18); lav.add(fbase);
+const friser= cyl(0.014,0.014,0.16,matSteel,12); friser.position.set(0,1.06,-0.18); lav.add(friser);
+const fneck = new THREE.Mesh(new THREE.TorusGeometry(0.06,0.012,10,16,Math.PI), matSteel); fneck.position.set(0,1.14,-0.13); fneck.rotation.x=Math.PI/2; fneck.rotation.z=Math.PI/2; lav.add(fneck);
+const fspout= cyl(0.011,0.011,0.06,matSteel,12); fspout.position.set(0,1.11,-0.07); lav.add(fspout);
+for(const sx of [-1,1]){ const h=cyl(0.01,0.01,0.06,matSteel,10); h.rotation.z=Math.PI/2; h.position.set(sx*0.06,0.94,-0.18); lav.add(h); }
+lav.position.set(-0.72,0,0); scene.add(lav);
+
+// ---------- TASK CHAIR (right) ----------
+const chair = new THREE.Group();
+const seatY=0.48;
+// seat (rounded box)
+const seat = box(0.46,0.08,0.46,matUph); seat.position.set(0,seatY,0); chair.add(seat);
+const seatFront = box(0.46,0.05,0.1,matUph); seatFront.position.set(0,seatY-0.02,0.24); chair.add(seatFront);
+// backrest
+const back = box(0.42,0.5,0.06,matUph); back.position.set(0,seatY+0.32,-0.2); back.rotation.x=-0.12; chair.add(back);
+const backPost = cyl(0.02,0.02,0.28,matPlas,10); backPost.position.set(0,seatY+0.12,-0.2); chair.add(backPost);
+// armrests
+for(const sx of [-1,1]){ const arm=box(0.05,0.03,0.28,matPlas); arm.position.set(sx*0.24,seatY+0.2,0.0); chair.add(arm);
+  const armPost=cyl(0.015,0.015,0.18,matPlas,8); armPost.position.set(sx*0.24,seatY+0.11,0.06); chair.add(armPost); }
+// gas column
+const col = cyl(0.03,0.035,0.3,matPlas,14); col.position.set(0,0.28,0); chair.add(col);
+const colHub = cyl(0.05,0.05,0.06,matPlas,14); colHub.position.set(0,0.13,0); chair.add(colHub);
+// 5-star base + casters
+for(let i=0;i<5;i++){ const a=(i/5)*Math.PI*2; const arm=box(0.26,0.03,0.05,matPlas); arm.position.set(Math.cos(a)*0.14,0.11,Math.sin(a)*0.14); arm.rotation.y=-a; chair.add(arm);
+  const caster=cyl(0.035,0.035,0.03,matPlas,12); caster.rotation.x=Math.PI/2; caster.position.set(Math.cos(a)*0.26,0.035,Math.sin(a)*0.26); chair.add(caster); }
+chair.position.set(0.72,0,0.05); scene.add(chair);
+
+renderer.shadowMap.needsUpdate = true;
+
+const btnRot=document.getElementById('btnRot');
+btnRot.onclick=()=>{ controls.autoRotate=!controls.autoRotate; btnRot.classList.toggle('on',controls.autoRotate); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); });
+
+globalThis.__sillaLavaboApp = { runtime:{ scene, renderer, camera } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+
+function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene,camera); }
+animate();
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
