@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **48 blocks**
+Total: **49 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -54,3 +54,4 @@ Total: **48 blocks**
 | 46 | [threejs-block46.md](threejs-block46.md) | Robust boolean CSG on 3D meshes: three-bvh-csg, its BVH speedup, and the honest robustness ceiling vs BSP and CGAL |
 | 47 | [threejs-block47.md](threejs-block47.md) | Triangulating a footprint's cap/floor: earcut (Three.js's built-in) vs Constrained Delaunay, the math, the JS libraries, and when each pays |
 | 48 | [threejs-block48.md](threejs-block48.md) | Robust geometric predicates: why float `orient2d`/`incircle` flip sign near degeneracy, the three fixes (exact adaptive, integer snapping, epsilon), and the snapping rule for a CAD build tool |
+| 49 | [threejs-block49.md](threejs-block49.md) | Mesh simplification by Quadric Error Metrics (Garland-Heckbert 1997): the maths, what three.js `SimplifyModifier` ACTUALLY runs (Melax 1998, then a meshoptimizer wrapper — NOT hand-rolled QEM), and the build-time-decimate rule for equipment LOD |

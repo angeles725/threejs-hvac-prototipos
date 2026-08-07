@@ -29,6 +29,11 @@
 | web-snapshots/github_mrdoob_threejs_BufferGeometryUtils_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/jsm/utils/BufferGeometryUtils.js | 2026-08-07T08:17:12Z | 11645a800387b6db1d690aa3bc8f19518ba06ed84ca0a50a7cc02957180e132b | B48 |
 | web-snapshots/github_mikolalysenko_robust-orientation_README_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/mikolalysenko/robust-orientation/master/README.md | 2026-08-07T08:17:12Z | 345082d198220f3e2ce3cd20cc429f94738e25f95d93d2c048bdee444d8ead53 | B48 |
 | web-snapshots/github_mikolalysenko_robust-in-sphere_README_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/mikolalysenko/robust-in-sphere/master/README.md | 2026-08-07T08:17:12Z | 9646aa1577187073c124fe90d84491852b1b1cf1c87e5c8aa4e30a352c02e19e | B48 |
+| web-snapshots/garland-heckbert-1997-quadrics | web-snapshots | https://www.cs.cmu.edu/~garland/Papers/quadrics.pdf | 2026-08-07T08:26:54Z | 5838ee8a7e3315f592cc2cceb6fee2cdc5b19039351e6a8f3f4da43c24c14a25 | B49 |
+| web-snapshots/github_zeux_meshoptimizer_README_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/zeux/meshoptimizer/master/README.md | 2026-08-07T08:26:55Z | cc14ca68c58e95712b61fac6afadaa7d4f033cd7c4605f70f67e6b9115cf324f | B49 |
+| web-snapshots/github_mrdoob_threejs_SimplifyModifier_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/jsm/modifiers/SimplifyModifier.js | 2026-08-07T08:26:55Z | d1e1482576667e0fe7a3e69779861b69ce52ed308eae68f2cdca78a52334ce64 | B49 |
+| web-snapshots/github_mrdoob_threejs_SimplifyModifier_r160 | web-snapshots | https://raw.githubusercontent.com/mrdoob/three.js/r160/examples/jsm/modifiers/SimplifyModifier.js | 2026-08-07T08:27:59Z | 9e78a3feda98a33d7845ee1875450a90ac9c2dab77725f38c7d622b2a1c373c8 | B49 |
+| web-snapshots/github_zeux_meshoptimizer_simplifier_cpp_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/zeux/meshoptimizer/master/src/simplifier.cpp | 2026-08-07T08:28:41Z | dc40aadb307577ed3f7adb5102a506263de8b9fea1d5582a24c04bff2874a2cc | B49 |
 
 ## Structure
 
