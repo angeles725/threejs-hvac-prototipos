@@ -399,12 +399,25 @@ Cross-class geometric audit of v13: **0 visible defects, 7 technical residues** 
 shorter ring wholly enclosed by a taller opaque machine "visible" on plan-overlap area alone,
 ignoring that an enclosed box is occluded; measured `max_bbox_poke = 0.0 mm` on all three).
 
-The three enclosed equipment slivers were **resolved against the DXF** (`raw/nave-panccadia.dxf`,
-probe `corpus/sources/probes/v13-audit/equipment-slivers-dxf.txt`): they are real geometry — the
-laminadora's `MESA` and each rotary oven's drawn side detail — not the drawing's double line, and
-they are occluded anyway, so there is nothing to fix.
+All seven technical residues are now **understood, not just named** (probes
+`corpus/sources/probes/v13-audit/equipment-slivers-dxf.txt` and `…/technical-residues-resolved.txt`):
 
-**Still awaiting operator confirmation against the CAD:** (1) the upper storey and (2) the roof.
+- **3 equipment** — real geometry (the laminadora's `MESA`, each rotary oven's drawn side detail),
+  wholly enclosed in a taller opaque box and therefore occluded; not the drawing's double line.
+- **3 frames × walls** (jamb lap 22–25 %) — the post touches the wall (gap 0.0 mm) but the wall run
+  ends ~26 mm short of the doorway endpoint, because the walls come from the DXF and these doors
+  were recovered from the DWG. A few-cm cross-source misalignment; closing it would mean inventing
+  DXF geometry to match a DWG door.
+- **1 roof level** — a conflict **inside the drawing**: its level table declares roof +9.20 m
+  (Block 3 §3.2) while its sections draw a ridge apex reaching +9.48 m (Block 13 §13.4). The model
+  faithfully shows both; the 0.284 m gap is the drawing's, not the model's. Overwriting the cited
+  9.20 m would discard one source for the other — an operator call, not a patch.
+
+None is a visible defect and none is fixable without inventing geometry or overwriting a cited CAD
+value, so the model is geometrically stable at v13.
+
+**Still awaiting operator confirmation against the CAD:** (1) the upper storey, (2) the roof form on
+site, and — the one genuine open number — (3) which roof level the drawing intends (9.20 vs 9.48).
 That confirmation is the only oracle this project has that the arithmetic gate cannot provide — it
 has caught three defects that shipped past a green gate, and the roof's V-fold would have been a
 fourth.
