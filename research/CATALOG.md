@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **50 blocks**
+Total: **51 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -56,3 +56,4 @@ Total: **50 blocks**
 | 48 | [threejs-block48.md](threejs-block48.md) | Robust geometric predicates: why float `orient2d`/`incircle` flip sign near degeneracy, the three fixes (exact adaptive, integer snapping, epsilon), and the snapping rule for a CAD build tool |
 | 49 | [threejs-block49.md](threejs-block49.md) | Mesh simplification by Quadric Error Metrics (Garland-Heckbert 1997): the maths, what three.js `SimplifyModifier` ACTUALLY runs (Melax 1998, then a meshoptimizer wrapper — NOT hand-rolled QEM), and the build-time-decimate rule for equipment LOD |
 | 50 | [threejs-block50.md](threejs-block50.md) | Isosurface extraction: Marching Cubes (Lorensen-Cline 1987) vs Dual Contouring (Ju et al. 2002) — the maths, what `three.js/MarchingCubes.js` ACTUALLY runs, the honest JS-ecosystem maturity, and where isosurfaces fit the HVAC prototypes |
+| 51 | [threejs-block51.md](threejs-block51.md) | Curves & surfaces: Bézier (Bernstein basis / De Casteljau), Catmull-Rom (why three.js defaults to **centripetal**), B-spline/NURBS (Cox-de Boor + the rational weight for exact conics) — what the three.js `Curve` API ACTUALLY computes, the arc-length reparametrisation, the Frenet-frame flip, and where curved pipes/ducts fit the HVAC tools |
