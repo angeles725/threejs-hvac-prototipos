@@ -20,6 +20,7 @@
 // Measurement backend: ImageMagick `convert` (mean of the crop). Requires `convert` on PATH.
 
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 
 // ---- CIEDE2000 (adapted from img2threejs color_metrics.py, Apache-2.0 © 2026 hoainho) ----
 const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
@@ -78,6 +79,31 @@ function meanSRGB(png, crop) {
   return parts;
 }
 
+// ---- spec colorTarget parse (loose YAML, same shape gate-state.mjs reads) ----
+// colorTarget:
+//   srgb: [86, 92, 97]
+//   deltaE00Max: 6.0
+//   crop: "500x140+1300+780"
+function parseSpecColorTarget(specText) {
+  // Loose-YAML reads tolerate a trailing `# comment` (matches gate-state.mjs).
+  const srgbM = specText.match(/^\s*srgb:\s*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\](?:\s*#.*)?$/m);
+  const maxM = specText.match(/^\s*deltaE00Max:\s*([\d.]+)(?:\s*#.*)?$/m);
+  const cropM = specText.match(/^\s*crop:\s*["']?([\dx+]+)["']?(?:\s*#.*)?$/m);
+  return {
+    srgb: srgbM ? [Number(srgbM[1]), Number(srgbM[2]), Number(srgbM[3])] : null,
+    deltaE00Max: maxM ? Number(maxM[1]) : null,
+    crop: cropM ? cropM[1] : null,
+  };
+}
+
+// ---- inject mechanical.color_delta_e00 into a review JSON (auto-record, no manual edit) ----
+function writeReview(reviewPath, de) {
+  const j = JSON.parse(fs.readFileSync(reviewPath, 'utf8'));
+  j.mechanical = j.mechanical || {};
+  j.mechanical.color_delta_e00 = de;
+  fs.writeFileSync(reviewPath, JSON.stringify(j, null, 2) + '\n');
+}
+
 // ---- CLI ----
 function argVal(args, flag) { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : null; }
 const args = process.argv.slice(2);
@@ -91,22 +117,30 @@ try {
     process.exit(0);
   }
   const png = args[0];
-  const crop = argVal(args, '--crop');
-  if (!png || !crop) { console.error('usage: material-color-probe.mjs <png> --crop WxH+X+Y (--target R,G,B | --target-png <ref> --target-crop WxH+X+Y) [--max N]'); process.exit(2); }
+  // --spec <design-spec.yaml>: auto-read colorTarget (crop/srgb/deltaE00Max) so no manual typing.
+  const specPath = argVal(args, '--spec');
+  const spec = specPath ? parseSpecColorTarget(fs.readFileSync(specPath, 'utf8')) : {};
+  const crop = argVal(args, '--crop') ?? spec.crop;
+  if (!png || !crop) { console.error('usage: material-color-probe.mjs <png> (--spec <spec.yaml> | --crop WxH+X+Y) [--target R,G,B | --target-png <ref> --target-crop WxH+X+Y] [--max N] [--write-review <review.json>]'); process.exit(2); }
   const measured = meanSRGB(png, crop).map((v) => +v.toFixed(2));
 
   let target, targetSrc;
   const tStr = argVal(args, '--target');
-  if (tStr) { target = tStr.split(',').map(Number); targetSrc = 'spec-declared'; }
-  else {
-    const tpng = argVal(args, '--target-png'), tcrop = argVal(args, '--target-crop');
-    if (!tpng || !tcrop) { console.error('need --target R,G,B OR --target-png <ref> --target-crop WxH+X+Y'); process.exit(2); }
+  const tpng = argVal(args, '--target-png');
+  if (tStr) { target = tStr.split(',').map(Number); targetSrc = 'flag'; }
+  else if (tpng) {
+    const tcrop = argVal(args, '--target-crop');
+    if (!tcrop) { console.error('--target-png needs --target-crop WxH+X+Y'); process.exit(2); }
     target = meanSRGB(tpng, tcrop).map((v) => +v.toFixed(2)); targetSrc = `golden-render:${tpng}`;
-  }
-  const max = Number(argVal(args, '--max') ?? 6.0);
+  } else if (spec.srgb) { target = spec.srgb; targetSrc = `spec:${specPath}`; }
+  else { console.error('need a target: --target R,G,B | --target-png <ref> --target-crop <geom> | --spec <spec with colorTarget.srgb>'); process.exit(2); }
+
+  const max = Number(argVal(args, '--max') ?? spec.deltaE00Max ?? 6.0);
   const de = +deltaE(measured, target).toFixed(4);
   const pass = de <= max;
-  console.log(JSON.stringify({ mode: 'crop', png, crop, measured, target, targetSrc, deltaE00: de, max, pass }, null, 2));
+  const reviewPath = argVal(args, '--write-review');
+  if (reviewPath) writeReview(reviewPath, de);
+  console.log(JSON.stringify({ mode: 'crop', png, crop, measured, target, targetSrc, deltaE00: de, max, pass, wroteReview: reviewPath || null }, null, 2));
   process.exit(pass ? 0 : 1);
 } catch (e) {
   console.error(JSON.stringify({ error: String(e.message || e) }));
