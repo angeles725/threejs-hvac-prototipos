@@ -9,7 +9,7 @@
 > cameras/controls, procedural geometry/textures, versioning) — not the whole library.
 <!-- research-state.v1 -->
 schema: research-state.v1
-covered_blocks: 52
+covered_blocks: 53
 gaps_closed: 48
 known_gaps: 48
 investigable_open: 0
@@ -36,7 +36,7 @@ blocked_open: 0
 - **RUN 8 (REOPEN §8, 2026-07-06, AUTO — build-phase §19, user-driven client-satisfaction loop)**: voxel→realistic parity map + living-environment build on `hotel-realista-ensamblado.html` (G42, [Block 41]). Replaces the flat "infinite plane" ground + static sea with procedural terrain relief + per-vertex biomes (1 draw call), a GPU wave-displaced sea (0 CPU cost), and a gradient sky background. Spawns G43 (vegetation/paths/furniture), G44 (voxel-parity interactions + duct audit), G45 (per-floor temperature) as in-loop requires-execution gaps. Visual QA deferred: WSL headless has no WebGL context — syntax-checked only (`node --check` PASS).
 - **RUN 7 (REOPEN §8, 2026-07-06, supervised — user present)**: applied+measured LOD on the assembled hotel (G40). Cap +1 (B40). Prompted by live implementation of a building LOD in `hotel-realista-ensamblado.html`; documents the before/after with a `[CERT-hw]` browser probe. Emergent G41 (equipment LOD) is **requires-execution**, not read-only → does not reopen the static count.
 - **RUN 6 (REOPEN §8, 2026-07-04, AUTO/orchestrated — queued behind the WORKFLOW.md fix writers)**: design-craft completion from the graphic-designer + 3D-designer lens (G33-G39). Cap +7 (B33-B39). Order per driver recommendation: template-system first (multiplier), then motion/UX, then 2D tokens/accessibility, then art direction/deliverables/dataviz.
-- **Covered blocks**: 52 (B1-B52)
+- **Covered blocks**: 53 (B1-B53). **B53 = DOCUMENT-mode capture (§20)**, not a discovery gap: the design3d material-read gate is measured reviewer-variance-dominated + the CIEDE2000 ΔE00 objective anchor adopted from the img2threejs upstream (validated ΔE00 0.13 vs 11.7). "design tools" axis, sibling of B52. Does not change the RUN 9 read-only=0 STOP.
 - **Coverage metric**: 48 / 48 closed — **RUN 9 STOPPED (read-only-investigable=0). B45+B46+B47+B48+B49+B50+B51+B52 written.** (Runs 7-8 history below; G41 remains as requires-execution §19 build phase.)
 - **RUN 5 STOPPED (2026-07-04): read-only-investigable = 0 — ALL RUNS COMPLETE (32/32 gaps, 5 runs)**
 - **RUN 5 (2026-07-04, AUTO/orchestrated)**: HVAC-domain design (G29-G32) — G29 (HVAC/industrial equipment visualization domain, B29), G30 (dashboards & telemetry, B30), G31 (terrain/relief, B31), and G32 (buildings/BIM, B32) covered — **RUN 5 COMPLETE, all 4 gaps closed**. User authorized auto-chaining incl. emergent gaps; RUN 5 ran to exhaustion of the backlog with no new gaps left. Hard-stops: failed self-report, cap, exhaustion, destructive step.
