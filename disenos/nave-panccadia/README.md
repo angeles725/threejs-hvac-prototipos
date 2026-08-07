@@ -408,16 +408,20 @@ All seven technical residues are now **understood, not just named** (probes
   ends ~26 mm short of the doorway endpoint, because the walls come from the DXF and these doors
   were recovered from the DWG. A few-cm cross-source misalignment; closing it would mean inventing
   DXF geometry to match a DWG door.
-- **1 roof level** — a conflict **inside the drawing**: its level table declares roof +9.20 m
-  (Block 3 §3.2) while its sections draw a ridge apex reaching +9.48 m (Block 13 §13.4). The model
-  faithfully shows both; the 0.284 m gap is the drawing's, not the model's. Overwriting the cited
-  9.20 m would discard one source for the other — an operator call, not a patch.
+- **1 roof level** — the drawing's level table declares roof +9.20 m (Block 3 §3.2) while its
+  sections draw a symmetric-gable ridge apex reaching +9.48 m (Block 13 §13.4). The sections settle
+  it: the roof is a **gable**, not a flat +9.20 slab — the 9.20 is a nominal, and the model correctly
+  draws the section-derived gable. The 9.20 enters the geometry only as the concrete-column carry
+  height, and every column is trimmed down to the measured surface: of 21 concrete columns, **0 stop
+  short and 0 pierce** (the 9.48 apex stands over open floor, not a column). The residue is cosmetic
+  — a single flat "level" printed for a pitched roof — and geometrically inert.
 
-None is a visible defect and none is fixable without inventing geometry or overwriting a cited CAD
-value, so the model is geometrically stable at v13.
+None is a visible defect and none has any geometric consequence, so the model is geometrically stable
+at v13. The roof **form** is confirmed against the three CAD sections (self-test within ±0.26 m of the
+measured apexes).
 
-**Still awaiting operator confirmation against the CAD:** (1) the upper storey, (2) the roof form on
-site, and — the one genuine open number — (3) which roof level the drawing intends (9.20 vs 9.48).
+**Still awaiting confirmation — site-truth only:** (1) the upper storey and (2) that the built roof
+matches the drawn gable. Both need an on-site eye, not the CAD (the drawing has been mined out).
 That confirmation is the only oracle this project has that the arithmetic gate cannot provide — it
 has caught three defects that shipped past a green gate, and the roof's V-fold would have been a
 fourth.
