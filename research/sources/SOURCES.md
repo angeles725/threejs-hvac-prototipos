@@ -16,6 +16,15 @@
 | web-snapshots/github_gkjohnson_three-mesh-bvh_packagejson_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/gkjohnson/three-mesh-bvh/master/package.json | 2026-08-07T07:52:36Z | d5c6a97866c5b2fc84009da322e9304e764e40c35d600c1a3851a3cf590a5edf | B46 |
 | web-snapshots/github_evanw_csgjs_README_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/evanw/csg.js/master/README.md | 2026-08-07T07:52:36Z | 48ded66614ff3f6264ce9cd7d109a9c8cdf3c54e74f946e6691f7b34ad9d675b | B46 |
 | web-snapshots/doc.cgal.org_4.12.1_PolygonMeshProcessing_corefinement_2026-08-07.md | web-snapshot | https://doc.cgal.org/4.12.1/Polygon_mesh_processing/index.html | 2026-08-07T00:00:00Z | 1cb1acf4c1da4ebd6b288d51f569848b4bd93557a7c2974e81a467829cfe73bb | B46 |
+| web-snapshots/github_mrdoob_threejs_ShapeUtils_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/mrdoob/three.js/dev/src/extras/ShapeUtils.js | 2026-08-07T08:04:19Z | 35906703cbb1c4162f5e2b4bb22bda9c8a9ed8ed43306bf9a71b15c4bcab00fe | B47 |
+| web-snapshots/github_mrdoob_threejs_Earcut_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/mrdoob/three.js/dev/src/extras/Earcut.js | 2026-08-07T08:04:19Z | 16c3d0751246cb455d09429a3aa3efb0294564f340a8f525f1638f57d0fdbb13 | B47 |
+| web-snapshots/github_mapbox_earcut_README_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/mapbox/earcut/main/README.md | 2026-08-07T08:04:19Z | 8c0d336c8f21cc7ad01fc5f30b9b8d2244f8498fde24e4a34f241d6a075c8d4d | B47 |
+| web-snapshots/github_jhasse_poly2tri_README_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/jhasse/poly2tri/master/README.md | 2026-08-07T08:04:30Z | c1632660f441dbc910952e0d8c35c5d338b9f41a14b47f8912d8091d5f510d77 | B47 |
+| web-snapshots/github_r3mi_poly2trijs_README_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/r3mi/poly2tri.js/master/README.md | 2026-08-07T08:04:30Z | c9bf5f62528e8e4e9b0f7ddb85a59d97aee2011a969f044fa1b02fbdc7259b0a | B47 |
+| web-snapshots/github_mikolalysenko_cdt2d_README_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/mikolalysenko/cdt2d/master/README.md | 2026-08-07T08:04:31Z | fad4a4b6d7e19f812ecb35203cc5677374eeed16f8861041e4405f310c83ab2f | B47 |
+| web-snapshots/github_mourner_robust-predicates_README_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/mourner/robust-predicates/main/README.md | 2026-08-07T08:04:31Z | 6feda9e9aa15c9717487b1e8035ccdaa8865089639fed9cc56027d172a304fdf | B47 |
+| web-snapshots/github_mapbox_earcut_packagejson_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/mapbox/earcut/main/package.json | 2026-08-07T08:05:09Z | b19a8a937e319ad1a76f05cf934fb8a188a7c9c2ff3e4cebe3dfd980a441b7b2 | B47 |
+| web-snapshots/github_mikolalysenko_cdt2d_packagejson_2026-08-07 | web-snapshots | https://raw.githubusercontent.com/mikolalysenko/cdt2d/master/package.json | 2026-08-07T08:05:09Z | b4879eb3f141f5ba8069e72bb4208f01691cfca625f09995397d9cce342755a4 | B47 |
 
 ## Structure
 
