@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cámara de fermentación — nave Panccadia</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700} #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Cámara de fermentación — 2 puertas · acero inox 304</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· gabinete aislado + carros</span></div>
+  <div class="dim">~1.62 × 1.45 m · alto 2.05 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 8, 28);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(44, innerWidth/innerHeight, 0.1, 200);
+const Rr = 4.8;
+camera.position.set(Rr*Math.cos(0.73)*Math.cos(0.30), 1.35 + Rr*Math.sin(0.30), Rr*Math.sin(0.73)*Math.cos(0.30));
+camera.lookAt(0, 1.1, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.05, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.8;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.15;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4, 7, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left=-2.6; sun.shadow.camera.right=2.6; sun.shadow.camera.top=3.2; sun.shadow.camera.bottom=-1;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+const fill = new THREE.DirectionalLight(0xf4f7ff, 0.7); fill.position.set(1.5, 2.0, 5); scene.add(fill);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(22,22),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+function brushedRoughTex(){
+  const c=document.createElement('canvas'); c.width=512; c.height=512; const g=c.getContext('2d');
+  g.fillStyle='#565656'; g.fillRect(0,0,512,512);
+  for(let i=0;i<2600;i++){ const y=Math.random()*512,len=40+Math.random()*180,x=Math.random()*512,v=120+(Math.random()*40-20);
+    g.strokeStyle=`rgba(${v},${v},${v},0.16)`; g.lineWidth=Math.random()<0.5?1:0.6;
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x+len,y+(Math.random()*2-1)); g.stroke(); }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(3,3); return t;
+}
+const roughMap = brushedRoughTex();
+const matSteel = new THREE.MeshStandardMaterial({ color:0xd2d6d8, metalness:0.9, roughness:0.30, roughnessMap: roughMap });
+const matRack  = new THREE.MeshStandardMaterial({ color:0x9aa0a4, metalness:0.85, roughness:0.45 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x1f2327, metalness:0.0, roughness:0.6 });
+const matGlass = new THREE.MeshStandardMaterial({ color:0x16201f, metalness:0.0, roughness:0.12, transparent:true, opacity:0.4 });
+const matDough = new THREE.MeshStandardMaterial({ color:0xd8c9a8, metalness:0.0, roughness:0.8 });
+
+const box=(w,h,d,mat)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.castShadow=m.receiveShadow=true; return m; };
+const cyl=(rt,rb,h,mat,seg=18)=>{ const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),mat); m.castShadow=m.receiveShadow=true; return m; };
+const unit = new THREE.Group();
+const W=1.62, D=1.45, H=2.05, wt=0.07;
+
+// plinth + short legs
+const plinth = box(W,0.12,D,matDark); plinth.position.y=0.06; unit.add(plinth);
+// cabinet shell (front open)
+unit.add((()=>{const b=box(W,H-0.12,wt,matSteel); b.position.set(0,0.12+(H-0.12)/2,-D/2+wt/2); return b;})());
+unit.add((()=>{const b=box(wt,H-0.12,D,matSteel); b.position.set(-W/2+wt/2,0.12+(H-0.12)/2,0); return b;})());
+unit.add((()=>{const b=box(wt,H-0.12,D,matSteel); b.position.set(W/2-wt/2,0.12+(H-0.12)/2,0); return b;})());
+unit.add((()=>{const b=box(W,wt,D,matSteel); b.position.set(0,H-wt/2,0); return b;})());
+// insulated panel ribs on the side (vertical seams)
+for(let i=0;i<4;i++){ const rib=box(0.02,H-0.4,0.03,matDark); rib.position.set(-W/2+0.02, 0.3+(H-0.5)/2, -D/2+0.2+i*0.28); unit.add(rib); }
+// center mullion between the two doors
+const mullion = box(0.09,H-0.2,0.1,matSteel); mullion.position.set(0,0.12+(H-0.12)/2,D/2-0.05); unit.add(mullion);
+// top + bottom rails
+unit.add((()=>{const b=box(W,0.14,0.1,matSteel); b.position.set(0,H-0.18,D/2-0.05); return b;})());
+unit.add((()=>{const b=box(W,0.16,0.1,matSteel); b.position.set(0,0.2,D/2-0.05); return b;})());
+
+// two rack trolleys inside
+function trolley(cx){
+  const t=new THREE.Group();
+  for(const sx of [-1,1]) for(const sz of [-1,1]){ const u=cyl(0.018,0.018,1.55,matRack,8); u.position.set(cx+sx*0.28,0.95,sz*0.4); t.add(u); }
+  for(let i=0;i<14;i++){ const tray=box(0.62,0.012,0.82,matRack); tray.position.set(cx,0.3+i*0.11,0); t.add(tray);
+    if(i%2===0){ const d=box(0.5,0.05,0.6,matDough); d.position.set(cx,0.33+i*0.11,0); t.add(d); } }
+  for(const sx of [-1,1]) for(const sz of [-1,1]){ const wl=cyl(0.045,0.045,0.03,matDark,10); wl.rotation.x=Math.PI/2; wl.position.set(cx+sx*0.28,0.17,sz*0.4); t.add(wl); }
+  return t;
+}
+unit.add(trolley(-0.4)); unit.add(trolley(0.4));
+
+// two glass doors + frames + handles
+function door(cx){
+  const dr=new THREE.Group();
+  const g=box(0.68,1.66,0.02,matGlass); g.position.set(cx,1.08,D/2-0.02); dr.add(g);
+  const fT=box(0.74,0.06,0.05,matSteel); fT.position.set(cx,1.93,D/2-0.02); dr.add(fT);
+  const fB=box(0.74,0.06,0.05,matSteel); fB.position.set(cx,0.26,D/2-0.02); dr.add(fB);
+  const fO=box(0.05,1.72,0.05,matSteel); fO.position.set(cx+(cx<0?-0.36:0.36),1.08,D/2-0.02); dr.add(fO);
+  const h=cyl(0.02,0.02,1.3,matSteel,10); h.position.set(cx+(cx<0?0.3:-0.3),1.08,D/2+0.05); dr.add(h);
+  for(const yy of [0.55,1.6]){ const br=cyl(0.012,0.012,0.08,matSteel,8); br.rotation.x=Math.PI/2; br.position.set(cx+(cx<0?0.3:-0.3),yy,D/2+0.02); dr.add(br); }
+  return dr;
+}
+unit.add(door(-0.42)); unit.add(door(0.42));
+
+// top control panel with humidity + temp display
+const cpanel = box(0.5,0.2,0.05,matDark); cpanel.position.set(0.4, H+0.02, D/2-0.02); unit.add(cpanel);
+const disp = new THREE.Mesh(new THREE.PlaneGeometry(0.4,0.13), new THREE.MeshStandardMaterial({color:0x0a1a14,emissive:0x00d4aa,emissiveIntensity:0.9,roughness:0.4}));
+disp.position.set(0.4, H+0.03, D/2+0.008); unit.add(disp);
+
+scene.add(unit);
+renderer.shadowMap.needsUpdate = true;
+
+const btnRot=document.getElementById('btnRot');
+btnRot.onclick=()=>{ controls.autoRotate=!controls.autoRotate; btnRot.classList.toggle('on',controls.autoRotate); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); });
+
+globalThis.__camaraFermApp = { runtime:{ scene, renderer, camera, unit } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+
+function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene,camera); }
+animate();
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
