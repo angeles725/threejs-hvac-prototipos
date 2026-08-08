@@ -1,0 +1,24 @@
+{ "name": "@turf/buffer", "version": "7.4.0", "description": "Creates a
+buffer around a GeoJSON feature.", "author": "Turf Authors",
+"contributors": \[ "Tom MacWright \<@tmcw\>", "Denis Carriere
+\<@DenisCarriere\>", "Stefano Borghi \<@stebogit\>" \], "license":
+"MIT", "bugs": { "url": "https://github.com/Turfjs/turf/issues" },
+"homepage": "https://github.com/Turfjs/turf", "repository": { "type":
+"git", "url": "git://github.com/Turfjs/turf.git" }, "funding":
+"https://opencollective.com/turf", "publishConfig": { "access": "public"
+}, "keywords": \[ "buffer", "offset", "polygon", "linestring", "point",
+"geojson", "turf" \], "type": "module", "exports": { "./package.json":
+"./package.json", ".": { "types": "./dist/index.d.ts", "default":
+"./dist/index.js" } }, "sideEffects": false, "files": \[ "dist",
+"!\*\*/\*.tsbuildinfo" \], "scripts": { "bench": "tsx bench.ts",
+"build": "tsc --build", "test": "pnpm run /test:.\*/", "test:tape": "tsx
+test.ts", "test:types": "tstyche" }, "devDependencies": {
+"@turf/truncate": "workspace:\*", "@types/benchmark": "catalog:",
+"@types/d3-geo": "^2.0.7", "@types/tape": "catalog:", "benchmark":
+"catalog:", "load-json-file": "^7.0.1", "tape": "catalog:", "tstyche":
+"catalog:", "tsx": "catalog:", "typescript": "catalog:",
+"write-json-file": "catalog:" }, "dependencies": { "@turf/bbox":
+"workspace:\*", "@turf/center": "workspace:\*", "@turf/helpers":
+"workspace:\*", "@turf/jsts": "^2.7.1", "@turf/meta": "workspace:\*",
+"@turf/projection": "workspace:\*", "@types/geojson": "catalog:",
+"d3-geo": "^2.0.2" }, "engines": { "node": "\>=22" } }

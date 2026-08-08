@@ -1,0 +1,33 @@
+\# @turf/union \## union Takes a collection of input polygons and
+returns a combined polygon. If the input polygons are not contiguous,
+this function returns a multi-polygon feature. \### Parameters \*
+\`features\` \*\*\[FeatureCollection\]\[1\]\<(\[Polygon\]\[2\] \|
+\[MultiPolygon\]\[3\])\>\*\* input polygon features \* \`options\`
+\*\*\[Object\]\[4\]\*\* Optional Parameters (optional, default \`{}\`)
+\* \`options.properties\` \*\*\[GeoJsonProperties\]\[5\]\*\* properties
+to assign to output feature (optional, default \`{}\`) \### Examples
+\`\`\`javascript const poly1 = turf.polygon( \[ \[ \[-82.574787,
+35.594087\], \[-82.574787, 35.615581\], \[-82.545261, 35.615581\],
+\[-82.545261, 35.594087\], \[-82.574787, 35.594087\], \], \], { fill:
+"#0f0" } ); const poly2 = turf.polygon( \[ \[ \[-82.560024, 35.585153\],
+\[-82.560024, 35.602602\], \[-82.52964, 35.602602\], \[-82.52964,
+35.585153\], \[-82.560024, 35.585153\], \], \], ); const union =
+turf.union(turf.featureCollection(\[poly1, poly2\])); //addToMap const
+addToMap = { poly1, poly2, union }; poly1.properties.fill = "#0f0";
+poly2.properties.fill = "#00f"; union.properties.stroke = "red";
+union.properties\["stroke-width"\] = 4; union.properties.fill =
+"transparent"; \`\`\` Returns \*\*(\[Feature\]\[5\]\<(\[Polygon\]\[2\]
+\| \[MultiPolygon\]\[3\])\> \| null)\*\* a combined polygon or
+multi-polygon feature, or null if there were no input polygons to
+combine \[1\]: https://tools.ietf.org/html/rfc7946#section-3.3 \[2\]:
+https://tools.ietf.org/html/rfc7946#section-3.1.6 \[3\]:
+https://tools.ietf.org/html/rfc7946#section-3.1.7 \[4\]:
+https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object
+\[5\]: https://tools.ietf.org/html/rfc7946#section-3.2 --- This module
+is part of the \[Turfjs project\](https://turfjs.org/), an open source
+module collection dedicated to geographic algorithms. It is maintained
+in the \[Turfjs/turf\](https://github.com/Turfjs/turf) repository, where
+you can create PRs and issues. \### Installation Install this single
+module individually: \`\`\`sh \$ npm install @turf/union \`\`\` Or
+install the all-encompassing @turf/turf module that includes all modules
+as functions: \`\`\`sh \$ npm install @turf/turf \`\`\`

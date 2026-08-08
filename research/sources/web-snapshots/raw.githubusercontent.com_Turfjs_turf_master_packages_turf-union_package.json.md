@@ -1,0 +1,20 @@
+{ "name": "@turf/union", "version": "7.4.0", "description": "Combines
+two or more polygons into a single polygon.", "author": "Turf Authors",
+"license": "MIT", "bugs": { "url":
+"https://github.com/Turfjs/turf/issues" }, "homepage":
+"https://github.com/Turfjs/turf", "repository": { "type": "git", "url":
+"git://github.com/Turfjs/turf.git" }, "funding":
+"https://opencollective.com/turf", "publishConfig": { "access": "public"
+}, "keywords": \[ "turf", "gif" \], "type": "module", "exports": {
+"./package.json": "./package.json", ".": { "types": "./dist/index.d.ts",
+"default": "./dist/index.js" } }, "sideEffects": false, "files": \[
+"dist", "!\*\*/\*.tsbuildinfo" \], "scripts": { "bench": "tsx bench.ts",
+"build": "tsc --build", "test": "pnpm run /test:.\*/", "test:tape": "tsx
+test.ts", "test:types": "tsc --ignoreConfig --esModuleInterop --module
+node16 --moduleResolution node16 --noEmit --strict types.ts" },
+"devDependencies": { "@types/benchmark": "catalog:", "@types/tape":
+"catalog:", "benchmark": "catalog:", "load-json-file": "^7.0.1", "tape":
+"catalog:", "tsx": "catalog:", "typescript": "catalog:",
+"write-json-file": "catalog:" }, "dependencies": { "@turf/helpers":
+"workspace:\*", "@turf/meta": "workspace:\*", "@types/geojson":
+"catalog:", "polyclip-ts": "^0.16.8" }, "engines": { "node": "\>=22" } }
