@@ -125,4 +125,33 @@ DXF→mesh tool:** offset with `js-angusj-clipper` (integer-scaled), boolean wit
 `martinez` when profiling shows clipping is the bottleneck), triangulate the resulting rings with earcut
 (the cap step already in the pipeline, [Block 47]), and compute area/centroid by shoelace. Reserve `jsts`
 for the one-dependency convenience case, minding its Eclipse license. Do **not** adopt Turf.js as the
-geometry layer.
+geometry layer. **BUT first read §7 — for the pipeline that exists today, adopt NEITHER: the offset/boolean
+already runs in Python on GEOS.**
+
+## 7. Applicability check — the pipeline that exists is Python + GEOS, so this §4 JS recommendation does NOT apply to it `[CERT]`
+
+The whole block (and the "which JS clipper lib?" question that seeded it) silently assumed the offset/boolean
+runs in **JavaScript**. Scoping the real code (2026-08-07) shows it does not: the DXF→mesh reconstruction is
+`investigacion/nave-panccadia/tools/build-viewer.py` — **Python**, and it already depends on and deeply uses
+**`shapely`** (the Python binding to **GEOS**, the reference planar-geometry engine, more mature than Clipper
+for exactly these ops):
+
+- **boolean union of walls** — `unary_union(rects)` `[CERT]` (`build-viewer.py:702`)
+- **boolean difference (subtract openings/cuts)** — `u.difference(unary_union(cuts[low]))` `[CERT]` (`:706`)
+- **offset / validity buffer** — `.buffer(...)` `[CERT]` (`:442`, `:495`, `:1035`)
+- **polygons WITH holes** — `Polygon(rings[0], rings[1:])` `[CERT]` (`:492`, `:733`)
+- **intersection (nesting test)** — `p.intersection(q).area` `[CERT]` (`:1079`); plus `STRtree` + `orient`.
+
+The dependency is deliberate, not incidental: *"shapely is in this .venv and ezdxf … imported at the top
+rather than behind a try/except: a build that quietly fell back to per-wall boxes would look almost right and
+be wrong at every junction"* `[CERT]` (`build-viewer.py:57-63`). The one hand-rolled offset (`inset_polygon`,
+a 20 mm `SLAB_INSET` bisector) is a documented micro-choice for a single simple slab, **not** a missing
+capability `[CERT]` (`:96-127`).
+
+**Consequence:** for the current architecture, adopt no clipper library. GEOS already covers offset + boolean
++ holes + intersection, and the Three.js viewers only *consume* the precomputed JSON (no runtime geometry).
+The §4 JS libraries (`js-angusj-clipper`, `polygon-clipping`, `martinez`) become relevant ONLY if offset/
+boolean ever moves to **browser runtime** (interactive re-cutting in the viewer), which the precompute-to-JSON
+architecture avoids by design `[INFER]`. If a Python-side need ever exceeds GEOS (it is hard to), the peer is
+`pyclipper` (Clipper for Python), not a JS port. **Net: block stands as a JS-context reference; the live
+pipeline needs nothing from it.**
