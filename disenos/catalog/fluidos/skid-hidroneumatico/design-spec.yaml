@@ -1,0 +1,303 @@
+# DesignSpec — grupo hidroneumático de presurización: 2 bombas EN 733 + tanque a membrana 500 L
+# Familia `fluidos` (worktree catalog-proceso).
+# Reglas de autoría: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+#
+# CONFIANZA MIXTA A PROPÓSITO, y es lo que distingue a este asset de su hermano bomba-vertical-pozo:
+# las BOMBAS no son sin ficha. Sus cotas están establecidas con ficha real en fluidos/bomba-centrifuga
+# ([CERT-doc], EN 733 65/160), la envolvente del recipiente a presión de 500 L sale de una página de
+# fabricante preservada en el corpus, y las mariposas wafer DN100 PN16 también. Lo que va `low` es el
+# ARREGLO: el patín, las alturas de colector y la disposición, que son ingeniería de conjunto y no
+# vienen en ninguna hoja.
+
+design: skid-hidroneumatico
+family: fluidos
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # la membrana de 28 mm de holgura es material, no vóxel
+
+complexity:
+  # Evaluación previa de 8 ejes (0-3 cada uno). Suma 18 -> complex.
+  scores: {silhouette: 2, components: 3, hierarchy: 2, repetition: 2,
+           material_layers: 3, detail: 3, occlusion: 3, action_readiness: 0}
+  tier: complex
+  notes: >
+    occlusion 3 aquí NO es "hay algo dentro de una carcasa": son DOS envolventes CONCÉNTRICAS, casco y
+    vejiga, y esa es la lección de diseño del asset. components 3 porque son seis subconjuntos que se
+    leen por separado (patín, dos trenes de bombeo, dos colectores con su tren de válvulas, tanque,
+    tablero). action_readiness 0: nada se mueve, así que la sombra congelada del shell es correcta.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    bomba_en733: >
+      disenos/catalog/fluidos/bomba-centrifuga/ — MISMA bomba, con ficha. Se heredan h2, longitud de
+      voluta, DN de bocas, diámetro de rodete y marco IEC. Reutilizarlas es lo que hace que el skid y
+      la bomba suelta de la familia sean la misma máquina en dos escenas, no dos dibujos parecidos.
+    valvula_wafer: >
+      research/sources/B59-proceso-dims/wafer-butterfly-dn100-pn16.md — la mariposa wafer del tren de
+      aspiración; el mismo documento que ya usa fluidos/valvula-motorizada.
+    corte_no_destructivo: >
+      disenos/catalog/fluidos/bomba-vertical-pozo/ — de ahí viene shellCyl/shellCap. Aquí se
+      GENERALIZAN para recibir material, porque hay dos envolventes y no una.
+    disposicion_duty_standby: >
+      disenos/catalog/hvac/skid-bombas/ — el precedente de la casa: la pareja duty/standby va LADO A
+      LADO. Con succión AXIAL, ponerlas en línea mete la boca de una dentro del motor de la otra.
+
+references:
+  - source: "fluidos/bomba-centrifuga design-spec — cotas EN 733 65/160 ya establecidas con ficha"
+    evidences: >
+      [CERT-doc] De research/sources/B59-proceso-dims/kop-kdin-en733.pdf y pedrollo-fg-en733.pdf, vía
+      el asset hermano: eje sobre la cara inferior de la placa base h2 = 200 mm, boca de aspiración
+      DN80, boca de impulsión DN65, rodete Ø160 (el "160" de 65/160 ES el rodete), marco IEC 160.
+      Bridas EN 1092-2 PN16: DN80 OD 200, DN65 OD 185, DN100 OD 220.
+    suitability: good
+  - source: "research/sources/B59-proceso-dims/atlas-copco-lv511-500l-receiver.md — envolvente del recipiente"
+    evidences: >
+      [CERT-a] Recipiente vertical de 500 L a 11 bar: Ø 600 mm, altura total 2185 mm, fondos DIN 28011
+      Klöpper (nudillo 0.1 D, casquete 1.0 D, profundidad 0.1935 D). ES UN CALDERÍN DE AIRE, no un
+      tanque a membrana: se usa su ENVOLVENTE, que es la misma clase de recipiente a presión simple y
+      el mismo volumen, y NO su paquete de conexiones (el original tiene dos bocas a 799 y 1799 mm;
+      un tanque a membrana tiene UNA sola conexión hidráulica inferior).
+      VERIFICADO ARITMÉTICAMENTE antes de usarlo, para no extrapolar una forma más allá de su
+      evidencia: con Ø0.600, dos fondos Klöpper de 0.116 m de profundidad y una virola de 1.616 m, el
+      volumen sale 0.283 x 1.616 + 2 x ~0.021 = 0.500 m3 = 500 L, y 0.116 + 1.616 + 0.116 + 0.337 de
+      patas = 2.185 m de altura total. Las tres cifras publicadas cierran entre sí; por eso se heredan.
+      El modelo mide 2.185 m desde la cara del patín (medido en escena: 0.477 -> 2.325 m).
+    suitability: partial
+  - source: "SIN FICHA para el ARREGLO del skid — es ingeniería de conjunto"
+    evidences: >
+      [INFER] Patín, alturas de colector, separación entre ejes de bomba, tablero y el tren concreto de
+      válvulas no vienen en ninguna hoja: se dimensionan para alojar los dos trenes EN 733 heredados y
+      dejar paso de mantenimiento. Todas esas cotas van `low`.
+    suitability: partial
+
+dimensions_real:
+  # Bombas: [CERT-doc] heredado. Tanque: [CERT-a] con la aritmética verificada arriba. Skid: [INFER].
+  pump_shaft_h2_m:     {value: 0.200, confidence: high}  # [CERT-doc] eje sobre la cara inferior de la base
+  pump_suction_dn:     {value: 80,    confidence: high}  # [CERT-doc] DN1
+  pump_discharge_dn:   {value: 65,    confidence: high}  # [CERT-doc] DN2
+  impeller_d_m:        {value: 0.160, confidence: high}  # [CERT-doc]
+  motor_frame:         {value: "IEC 160", confidence: med}  # [CERT-doc] forzado por h2
+  motor_body_d_m:      {value: 0.300, confidence: low}   # [INFER] heredado del asset hermano
+  motor_len_m:         {value: 0.620, confidence: low}   # [INFER] cuerpo + capota
+  volute_r_out_m:      {value: 0.145, confidence: low}   # [INFER] heredado del asset hermano
+  flange_od_dn80_m:    {value: 0.200, confidence: med}   # [CERT-a] EN 1092-2 PN16
+  flange_od_dn65_m:    {value: 0.185, confidence: med}   # [CERT-a]
+  flange_od_dn100_m:   {value: 0.220, confidence: med}   # [CERT-a]
+  manifold_od_m:       {value: 0.1143, confidence: med}  # [CERT-a] tubo DN100 OD 114.3
+  pumps:               {value: 2,     confidence: low}   # duty/standby
+  pump_axis_pitch_m:   {value: 0.520, confidence: low}   # [INFER] separación entre ejes (2 x 0.26)
+  tank_volume_l:       {value: 500,   confidence: med}   # [CERT-a]
+  tank_od_m:           {value: 0.600, confidence: med}   # [CERT-a]
+  tank_head_depth_m:   {value: 0.116, confidence: med}   # [CERT-a] 0.1935 D, DIN 28011 Klöpper
+  tank_shell_len_m:    {value: 1.616, confidence: med}   # [CERT-a] derivado y verificado contra 500 L
+  tank_leg_h_m:        {value: 0.337, confidence: low}   # [INFER] cuadra la altura total publicada
+  tank_total_h_m:      {value: 2.185, confidence: high}  # [CERT] medido en escena: 0.477 -> 2.325
+  bladder_clearance_m: {value: 0.028, confidence: low}   # [INFER] holgura de precarga vejiga/casco
+  skid_m:              {value: [2.30, 1.05], confidence: low}  # [INFER] para alojar ambos trenes
+  skid_frame_h_m:      {value: 0.140, confidence: low}   # [INFER] perfil en U
+  suction_header_y_m:  {value: 0.300, confidence: low}   # [INFER]
+  discharge_header_y_m: {value: 0.950, confidence: low}  # [INFER] libra la capota del motor
+
+hierarchy:
+  - name: root
+    children:
+      - name: skid           # 2 largueros en U, 3 travesaños, 4 placas de anclaje (instanciadas)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: pumps          # 2 trenes EN 733 idénticos: base, voluta, bocas, linterna, motor, bornera
+        pivot: [0, 0, 0]     # 10 aletas por motor -> InstancedMesh (repetición real)
+        animation: none
+      - name: manifolds      # aspiración + impulsión, mariposas wafer, retenciones, instrumentos,
+        pivot: [0, 0, 0]     # 24 pernos de brida instanciados (togglable)
+        animation: none
+      - name: tank           # 3 patas + fondo Klöpper + virola + tapa Klöpper + válvula de precarga
+        pivot: [0, 0, 0]
+        animation: none
+      - name: bladder        # vejiga de butilo (fondo + cuerpo + cúpula) — SEGUNDA envolvente
+        pivot: [0, 0, 0]
+        animation: none
+      - name: water          # agua dentro de la vejiga + superficie libre; siempre presente, sin par
+        pivot: [0, 0, 0]
+        animation: none
+      - name: cabinet        # tablero sobre postes, HMI, pilotos, seccionador, visera (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: cut            # las 6 MITADES que sustituyen a casco Y vejiga en CORTE (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: skid-paint
+    family: painted-metal
+    color: "#2b3440"
+    metalness: 0.0
+    roughness: 0.62
+    evidence: "HANDBOOK §3.1 pintado -> dieléctrico; el patín va oscuro para que no compita con el equipo"
+    confidence: 0.8
+  - id: pump-paint
+    family: painted-metal
+    color: "#2f6a86"
+    metalness: 0.0
+    roughness: 0.46
+    evidence: "HANDBOOK §3.1 — mismo azul de cuerpo que fluidos/medidor-flujo y bomba-centrifuga"
+    confidence: 0.8
+  - id: motor-paint
+    family: painted-metal
+    color: "#445a6b"
+    metalness: 0.0
+    roughness: 0.52
+    evidence: "HANDBOOK §3.1 pintado — carcasa IEC"
+    confidence: 0.78
+  - id: tank-paint
+    family: painted-metal
+    color: "#35566b"
+    metalness: 0.0
+    roughness: 0.50
+    evidence: "HANDBOOK §3.1 pintado — recipiente a presión recubierto"
+    confidence: 0.8
+  - id: pipe-steel
+    family: bare-metal
+    color: "#b8bdc1"
+    metalness: 0.92
+    roughness: 0.38
+    evidence: "HANDBOOK §3.1 metal desnudo 0.9-1.0 — colectores"
+    confidence: 0.85
+  - id: flange-steel
+    family: bare-metal
+    color: "#a9aeb3"
+    metalness: 0.92
+    roughness: 0.44
+    evidence: "HANDBOOK §3.1 — cara mecanizada, más mate que el tubo"
+    confidence: 0.8
+  - id: valve-body
+    family: painted-metal
+    color: "#8d5a2b"
+    metalness: 0.0
+    roughness: 0.48
+    evidence: >
+      [INFER] Cuerpo de válvula con recubrimiento epoxi -> dieléctrico. El tono cálido es deliberado:
+      contra el azul del equipo y el gris de los colectores, el tren de válvulas se cuenta de un
+      vistazo. Sin ese contraste, seis válvulas sobre tubo gris se leen como más tubo.
+    confidence: 0.75
+  - id: bladder-butyl
+    family: rubber
+    color: "#1c1f24"
+    metalness: 0.0
+    roughness: 0.80
+    evidence: >
+      Elastómero -> DIELÉCTRICO (HANDBOOK §3.1). DoubleSide porque el corte enseña su cara interior.
+    confidence: 0.78
+  - id: tank-water
+    family: liquid
+    color: "#bfe6f5"
+    metalness: 0.0
+    roughness: 0.10
+    evidence: >
+      [INFER] transmission 0.78 con opacity 0.38, no 0.96: a transmisión alta el agua desaparece del
+      render (gotcha del ONBOARD) y el volumen almacenado —la razón de ser del tanque— no se leería.
+    confidence: 0.7
+  - id: panel-paint
+    family: painted-metal
+    color: "#3d4a55"
+    metalness: 0.0
+    roughness: 0.44
+    evidence: "HANDBOOK §3.1 pintado — envolvente de tablero"
+    confidence: 0.78
+  - id: hmi-emissive
+    family: emissive
+    color: "#0a1a16"
+    metalness: 0.0
+    roughness: 0.30
+    evidence: >
+      Emisivo SOLO como carátula: no ilumina el entorno (gotcha del ONBOARD, una tira emisiva no
+      alumbra nada). No hay producto tras cristal que necesite luz real, así que no se añade PointLight.
+    confidence: 0.75
+
+critical_features:
+  - id: dos-envolventes-concentricas
+    desc: >
+      LA LECCIÓN DEL ASSET. Cortar el casco NO abre el tanque: deja ver el EXTERIOR de la vejiga, que
+      es una segunda envolvente cerrada, y el recipiente se lee macizo. Es la trampa de la "tapa
+      invisible" con un cuerpo más, y el gate no la ve: 226 draws, ready true, 0 excepciones sobre un
+      corte que no enseñaba nada. Se cazó en la CAPTURA DE ESTADO, no en los conteos.
+      Por eso shellCyl/shellCap reciben MATERIAL y se aplican a las DOS envolventes: la disciplina de
+      pares no es del tanque, es de toda envolvente. El AGUA en cambio va siempre presente y SIN par,
+      porque no envuelve nada; así el corte solo ABRE envolventes y nunca CREA geometría.
+      VALIDADO POR MEDICIÓN en ambos estados: casco 3 piezas span [0.477, 2.325] y vejiga 3 piezas
+      span [0.477, 1.526]; los 2 huecos internos de cada una = 0.00000 m en los dos estados. Y la
+      medición DISCRIMINA: por defecto las 6 son WHOLE (2pi) y en CORTE las 6 son HALF (pi), con los
+      12 uuid disjuntos entre estados.
+    threshold: 0.85
+  - id: vejiga-hasta-el-nivel
+    desc: >
+      En un tanque a membrana el agua va DENTRO de la vejiga y el aire de precarga FUERA, entre vejiga
+      y casco. Una primera versión dibujó la vejiga a toda altura con el agua a media altura, lo que
+      encierra AIRE DENTRO de la vejiga: el circuito al revés, y perfectamente verde en el gate. La
+      vejiga llega hasta el nivel y su cúpula lo remata; lo que se expande y contrae es ella, así que
+      su altura ES la lectura del nivel, y el hueco de arriba es el colchón de aire.
+    threshold: 0.82
+  - id: duty-standby-lado-a-lado
+    desc: >
+      Las dos bombas van LADO A LADO, no en línea. Con succión AXIAL, ponerlas en línea mete la boca de
+      aspiración de una dentro del motor de la otra — disposición físicamente imposible que ningún
+      conteo detecta. Precedente de la casa: hvac/skid-bombas.
+    threshold: 0.80
+  - id: la-linea-no-atraviesa-el-recipiente
+    desc: >
+      La línea de impulsión baja FUERA de la envolvente del tanque y entra por su boca inferior. Una
+      primera versión bajaba sobre el EJE del recipiente, o sea con el montante metido dentro del
+      tanque: pasó el gate con 224 draws y se cazó abriendo el PNG. Un tanque a membrana tiene UNA
+      sola conexión hidráulica; dos bocas serían un acumulador de paso, que es otro equipo.
+    threshold: 0.80
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 220
+    tris: 30000
+  measured:             # captura headless SwiftShader 1280x800 — los CONTEOS valen, el frame time NO
+    draws: 190
+    tris: 16032
+    geometries: 95
+    root_meshes: 99
+    # Eran 226 draws hasta instanciar las 10 aletas por motor (block54 §2.3: instancing SOLO donde hay
+    # repetición real). En las piezas únicas —voluta, cabezal, casco, vejiga— no aplica y no se fuerza.
+
+camera:
+  azimuth_deg: 47.0       # AZ 0.82 rad
+  elevation_deg: 11.5     # EL 0.20 rad
+  fov: 38
+  target_y_m: 1.12
+  radius_m: 4.95
+  # Encuadre VERIFICADO proyectando la bbox mundo del root a NDC (el gate no ve el encuadre; ver
+  # fluidos/bomba-vertical-pozo, donde un motor recortado pasó con exit 0): ndcY [-0.959, 0.811],
+  # ndcX [-0.393, 0.458], ningún grupo fuera de [-1, 1].
+
+lighting: house-rig + fill lateral, environmentIntensity 2.3
+  # DESVIACIÓN DOCUMENTADA, la misma de la familia: colectores, bridas y pernos son metal DESNUDO sobre
+  # cilindros. El especular de una cara vertical no puede venir de una luz elevada, así que lo da el
+  # IBL: environmentIntensity 2.3. El fill lateral (0.9) solo aporta al término DIFUSO del acero
+  # pintado. Metalness/roughness sin tocar (HANDBOOK §3.1). No se usa la variante ESTUDIO: el casco es
+  # acero PINTADO (dieléctrico), no metal desnudo curvo, así que no cae en ese caso.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "CORTE DEL TANQUE"    # casco Y vejiga -> sus mitades; deja ver el agua y el colchón de aire
+  - "TABLERO"             # encendido por defecto
+  - "COLECTORES"          # encendido por defecto; apagarlo deja los dos trenes a la vista
+
+colorTarget:
+  # MEDIDO sobre la virola del tanque en la captura headless SwiftShader 1280x800. El crop está
+  # ANCLADO POR GEOMETRÍA PROYECTADA, no por tono: se proyectó la malla del casco a píxeles
+  # (caja 692,131 - 930,604), se recortó hacia dentro y por encima de la costura de virola, y dentro
+  # de esa región se barrieron ventanas 6x24. Parche más plano: desviación media por canal 0.20.
+  # Anclar por color habría podido premiar un parche plano de otra pieza.
+  srgb: [81, 127, 156]
+  deltaE00Max: 8
+  crop: "6x24+762+286"
