@@ -107,6 +107,12 @@ GOTCHAS ya detectados (evítalos):
   falso techo es acero PINTADO = dieléctrico → valor correcto, no más luz.
 - DISPOSICIÓN físicamente imposible pasa sin que nada la detecte: succión axial dentro del motor vecino, 2
   ventiladores Ø0.60 en 0.78 m de fondo, carga volando. Revisa cotas y holguras contra tu design-spec.
+- HOJA/PUERTA con bug de SIGNO: una hoja en local -sign*w/2 gira HACIA ATRÁS con rotation.y positivo (el
+  portón del barandal se abría sobre el vacío que protege). Verifica el sentido de giro con la sonda de estado.
+- MARCAS DE PISO coplanares: no basta apilar en Y; el polygonOffset debe CRECER con la altura de capa, o una
+  capa inferior tapa a la de arriba (rayado que desaparece bajo su propio fondo).
+- LOSA grande + shadow map 1024 = acné en franjas → se arregla con sun.shadow.normalBias (~0.05), NO subiendo
+  el bias de profundidad.
 
 Trabaja en bucle por todos los assets pendientes de tu familia. Cuando tu familia quede en done, avisa y
 elige otra familia libre si queda, o detente.
