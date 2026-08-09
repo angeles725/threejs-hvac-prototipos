@@ -130,6 +130,9 @@ GOTCHAS ya detectados (evítalos):
 - INFRA (no es fallo de asset): con varias sesiones corriendo QA a la vez, chrome-headless-shell se cae
   intermitente ("unsettled top-level await", exit 13) → REINTENTA, da exit 0. Junto con exit 2 (servidor
   caído) son los dos casos de "no concluyente"; nunca los trates como asset roto.
+- Bajo alta CONTENCIÓN (muchas sesiones con chrome a la vez) la captura puede salir VACÍA (HUD presente,
+  canvas NEGRO) en un asset que en la corrida siguiente renderiza perfecto — y el gate da ready=undefined.
+  Si auditas o integras POR CAPTURA, REINTENTA antes de reportar/rechazar; una captura vacía aislada es infra.
 - "TAPA INVISIBLE" (regla fuerte para cualquier asset con INTERIOR): tres cosas tapan la boca sin verse en
   los conteos — (1) el gabinete como BOX macizo (su cara frontal queda tras el hueco) → constrúyelo como
   cascarón de 5 paneles; (2) la cara de sellado con CylinderGeometry = disco lleno → RingGeometry; (3) el
@@ -142,8 +145,11 @@ GOTCHAS ya detectados (evítalos):
   · cuerpo CURVO de metal (tanque, silo, tubo) → NUNCA el fill plano (lo aplana) y tampoco basta con nada
     (sale negro): usa la VARIANTE ESTUDIO de HANDBOOK §3.3 — RectAreaLight key+fill grandes, con
     RectAreaLightUniformsLib.init() UNA vez antes de renderizar. Resuelve el degradado vertical del casco.
-  · superficie INCLINADA hacia abajo (tolva 60°) → además una tarjeta de rebote baja apuntando hacia ARRIBA
-    (es un espejo inclinado que refleja el suelo → si no, negro aunque las normales estén bien).
+  · superficie INCLINADA hacia abajo (tolva 60°, cono, cara inferior) → normalmente NO tiene arreglo por luz
+    (medido: R = 2(N·V)N − V con normal de Y negativa y cámara sobre el horizonte deja la fuente BAJO el suelo;
+    una tarjeta de rebote en la escena PMREM da efecto CERO, o revienta el mapa si la subes). Documéntalo como
+    LÍMITE MEDIDO y elige el crop del colorTarget en una cara representativa que mire hacia arriba/afuera.
+    (Si en algún asset se resolvió, fue con luz colocada BAJO el horizonte o un environment propio, no RoomEnvironment.)
 - METALNESS casi BINARIO (HANDBOOK §3.1): en superficie sólida SIN textura, un metalness intermedio
   (0.2-0.55) es artefacto del shader, no autoría válida. Usa 0 (dieléctrico: pintado, plástico) o ~1 (metal
   desnudo). No dejes 0.35/0.4/0.7 en paneles lisos.
@@ -174,5 +180,28 @@ elige otra familia libre si queda, o detente.
 - Un pixel-diff que NO cambia solo prueba AUSENCIA si ANTES demuestras que el objeto era visible en ese estado.
   Si vive tras una tapa/puerta CERRADA, "ocultarlo no cambia el hash" es tautológico. Orden correcto: abre la
   tapa que lo cubre → confirma que aporta píxeles → recién entonces el diff prueba ausencia.
+- RAYCAST al CENTRO de una instancia NO es prueba de visibilidad: el rayo choca con la carátula/manija del
+  PROPIO dispositivo (autooclusión) → 0 hits aunque el cuerpo SÍ renderice. Da falsos positivos en casi todo
+  (cualquier asset con detalle frontal). Trátalo como PISTA, nunca veredicto; excluye el objeto y sus
+  accesorios, o muestrea la cara frontal, no el centro.
+- MÉTODO DE AUDITORÍA (orden estricto, obligatorio antes de reportar un defecto de visibilidad):
+  1) identidad por geometry.parameters (nunca count ni orden de traversal);
+  2) probar PRESENCIA: abre lo que lo cubra y confirma que el hash del canvas CAMBIA;
+  3) solo entonces un hash que NO cambia significa ausencia;
+  4) raycast como pista, con el objeto y sus accesorios excluidos.
 - Todo hallazgo de auditoría se REFUTA (verificación adversarial de la sesión dueña) ANTES de aplicarse como
   fix. Un reporte medido pero con la identidad de malla mal anclada parece sólido y no lo es.
+- HERRAMIENTAS DE AUDITORÍA (read-only, en tools/): audit-asset.mjs (inventario por geometry.type+parameters
+  + diff por botón + PNG por estado) y hole-probe.mjs (FONDO CENTINELA: repinta scene.background/fog a magenta
+  y fuerza un render; todo píxel magenta = la cámara atraviesa el modelo → distingue PANEL oscuro de AGUJERO,
+  cosa que el pixel-diff no puede). Úsalas para medir, no opinar.
+- RECORRE Object3D COMPLETOS, no solo mallas: una animación casi siempre rota un GROUP, no una malla; un
+  inventario solo-de-mallas dirá "el botón no hace nada" (falso). La identidad y el ALCANCE del recorrido
+  importan tanto como el criterio.
+- PUNTO CIEGO gate+sonda: ambos recorren `root`. Un objeto colgado de `scene` (no de root) no aparece en la
+  cuenta. Cuelga todo de root salvo el plano de suelo.
+- LA SEÑAL VIENE DE MEDIR EL ESTADO CONCRETO, casi nunca de un patrón general. Los chequeos ESTÁTICOS/de-patrón
+  fallan por ruido en este catálogo: "botón sin requestRender()" (24 falsos: el wiring usa helpers variados),
+  cruce cita↔título (cruces legítimos), regex de geometría (casa dentro de Math.PI/2). El wiring y la geometría
+  varían de forma legítima entre assets. Audita midiendo el estado específico (pixel-diff sobre el área del
+  modelo excluyendo HUD/panel), no con un patrón sintáctico que "discrimine" sin medir.

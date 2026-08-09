@@ -1,0 +1,290 @@
+<!doctype html>
+<!--
+  secador-aire — catalog asset, family `utilities`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Evidence: research/sources/B59-proceso-dims/hertz-hrd-refrigerated-dryer.pdf, row HRD 70
+  Spec: ./design-spec.yaml
+  NOTE: sized for TRAIN COHERENCE — HRD 70 is rated 3.30 m3/min, the smallest model that covers the
+  3.245 m3/min of utilities/compresor-tornillo, and it feeds utilities/tanque-pulmon. The three are
+  a real compressed-air train, not three unrelated boxes in one folder.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Secador frigorífico de aire — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Secador frigorífico de aire comprimido — HRD 70, 3.30 m³/min</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· gabinete pintado · cobre y aluminio desnudos</span></div>
+  <div class="dim">553 × 503 × 874 mm · G 1½″ · 16 bar · R-134a · 78 kg</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnPan" class="on">PANELES</button>
+  <button id="btnCirc">CIRCUITO</button>
+  <button id="btnDim">COTAS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · Hertz HRD 70) ----------
+const L = 0.553, W = 0.503, H = 0.874;   // [CERT-doc] the exact catalogue cabinet
+const BASE_H = 0.070;                    // [INFER] plinth
+const WALL = 0.016;                      // [INFER] sheet panel thickness
+const HL = L/2, HW = W/2;
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 5, 18);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.02, 80);
+const R = 2.30, AZ = 0.803, EL = 0.244;                         // 46° azimuth / 14° elevation (spec camera)
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.45 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.45, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.45, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;      // house value — flat painted faces, as compresor-tornillo
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(1.6, 2.4, 1.4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-1.0; sun.shadow.camera.right=1.0; sun.shadow.camera.top=1.2; sun.shadow.camera.bottom=-1.2;
+sun.shadow.camera.far = 7;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(18,18),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. Cabinet PAINTED (dielectric); only the coil copper and fin aluminium are bare.
+// ============================================================================
+const matCab  = new THREE.MeshStandardMaterial({ color:0xaeb4b8, metalness:0.0,  roughness:0.52 });
+const matTrim = new THREE.MeshStandardMaterial({ color:0x2b3136, metalness:0.0,  roughness:0.60 });
+const matComp = new THREE.MeshStandardMaterial({ color:0x26292d, metalness:0.0,  roughness:0.50 });
+const matCu   = new THREE.MeshStandardMaterial({ color:0x9a6b45, metalness:0.85, roughness:0.45 });
+const matFin  = new THREE.MeshStandardMaterial({ color:0xa9aeb1, metalness:0.90, roughness:0.45 });
+const matPipe = new THREE.MeshStandardMaterial({ color:0x9ea4a7, metalness:0.88, roughness:0.40 });
+const matFace = new THREE.MeshStandardMaterial({ color:0xe6e4de, metalness:0.0,  roughness:0.60 });
+const matDim  = new THREE.MeshStandardMaterial({ color:0x00d4aa, metalness:0.0,  roughness:0.6,
+                                                 emissive:0x0b3b32, emissiveIntensity:1.0 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Instanced: louvre slats and condenser fins. Everything else unique.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xf, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xf.length);
+  im.castShadow = im.receiveShadow = true;
+  xf.forEach((t,i)=>{ _p.set(t[0],t[1],t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0)); _s.set(1,1,1);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s)); });
+  im.instanceMatrix.needsUpdate = true; parent.add(im); return im;
+}
+function mesh(geo, mat, parent){ const m = new THREE.Mesh(geo, mat);
+  m.castShadow = m.receiveShadow = true; if(parent) parent.add(m); return m; }
+const box = (w,h,d)=> new THREE.BoxGeometry(w,h,d);
+function cylX(r, len, seg=20){ const g = new THREE.CylinderGeometry(r, r, len, seg); g.rotateZ(Math.PI/2); return g; }
+
+// --- plinth ---
+const base = new THREE.Group();
+mesh(box(L, BASE_H - 0.012, W), matTrim, base).position.y = (BASE_H - 0.012)/2;
+mesh(box(L, 0.012, W), matCab, base).position.y = BASE_H - 0.006;
+for(const sx of [-1,1]) for(const sz of [-1,1])
+  mesh(new THREE.CylinderGeometry(0.016, 0.018, 0.014, 10), matTrim, base)
+    .position.set(sx*(HL - 0.06), 0.007, sz*(HW - 0.06));
+root.add(base);
+
+// --- cabinet: roof, back, ends, posts, and the condenser louvre on the -X end ---
+const cabinet = new THREE.Group();
+const panels = new THREE.Group();          // declared early so fascia can join it (compresor lesson)
+const TOP = BASE_H, CH = H - BASE_H;
+mesh(box(L, WALL, W), matCab, cabinet).position.y = H - WALL/2;
+mesh(box(L - 2*WALL, CH - WALL, WALL), matCab, cabinet).position.set(0, TOP + (CH-WALL)/2, -(HW - WALL/2));
+for(const sx of [-1,1])
+  mesh(box(WALL, CH - WALL, W), matCab, cabinet).position.set(sx*(HL - WALL/2), TOP + (CH-WALL)/2, 0);
+for(const sx of [-1,1]) for(const sz of [-1,1])
+  mesh(box(0.024, CH, 0.024), matTrim, cabinet).position.set(sx*(HL-0.014), TOP + CH/2, sz*(HW-0.014));
+// louvres, proud of the end walls (the compresor-tornillo lesson: recessed = invisible)
+function louvre(sx, y0, y1, n){
+  const xf = [];
+  mesh(box(0.006, y1 - y0 + 0.024, W - 0.10), matTrim, cabinet).position.set(sx*(HL + 0.002), (y0+y1)/2, 0);
+  for(let k=0;k<n;k++) xf.push([sx*(HL + 0.010), y0 + (k+0.5)*(y1-y0)/n, 0, 0, 0, 0.35*sx]);
+  instanced(box(0.012, 0.020, W - 0.12), matCab, xf, cabinet);
+}
+louvre(-1, TOP + 0.10, TOP + 0.62, 11);    // condenser air in
+louvre( 1, TOP + 0.34, TOP + 0.68, 7);     // condenser air out
+root.add(cabinet);
+
+// --- control fascia, ON the removable front panel ---
+const fascia = new THREE.Group();
+mesh(box(0.180, 0.120, 0.014), matTrim, fascia).position.set(0.10, TOP + 0.66, HW - 0.004);
+mesh(box(0.120, 0.052, 0.008), matFace, fascia).position.set(0.10, TOP + 0.685, HW + 0.006);
+for(let k=0;k<3;k++)
+  mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.008, 10).rotateX(Math.PI/2), matCab, fascia)
+    .position.set(0.06 + k*0.04, TOP + 0.625, HW + 0.006);
+panels.add(fascia);
+
+// --- internals: hermetic compressor, condenser + fan, exchanger block, separator ---
+const internals = new THREE.Group();
+const FLOOR = BASE_H + 0.014;
+const refr = new THREE.Group();            // the refrigerant circuit, highlighted by CIRCUITO
+mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.170, 20), matComp, refr).position.set(-0.10, FLOOR + 0.085, -0.10);
+mesh(new THREE.CylinderGeometry(0.078, 0.078, 0.020, 20), matComp, refr).position.set(-0.10, FLOOR + 0.180, -0.10);
+mesh(box(0.028, 0.420, W - 0.16), matCu, refr).position.set(-(HL - 0.075), TOP + 0.36, 0);   // condenser
+// Fins must stand PROUD of the coil block. Sharing its x centre buries a 24 mm fin inside a 28 mm
+// slab and the condenser renders as a plain copper plate — same class of mistake as the recessed
+// louvre on compresor-tornillo, one axis further in.
+const fins = [];
+for(let k=0;k<26;k++) fins.push([-(HL - 0.075) + 0.027, TOP + 0.165 + k*0.015, 0]);
+instanced(box(0.026, 0.004, W - 0.17), matFin, fins, refr);
+const fan = new THREE.Group();
+fan.position.set(-(HL - 0.150), TOP + 0.36, 0);
+mesh(cylX(0.022, 0.030, 12), matTrim, fan);
+for(let k=0;k<5;k++){
+  const b = mesh(box(0.012, 0.110, 0.034), matTrim, fan);
+  b.position.set(0, Math.cos(k*Math.PI*2/5)*0.070, Math.sin(k*Math.PI*2/5)*0.070);
+  b.rotation.x = k*Math.PI*2/5; b.rotation.z = 0.5;
+}
+refr.add(fan);
+for(const [x,y,z,len] of [[-0.02, FLOOR + 0.20, -0.10, 0.16],[0.06, TOP + 0.30, -0.06, 0.22]])
+  mesh(new THREE.CylinderGeometry(0.008, 0.008, len, 10), matCu, refr).position.set(x, y, z);
+internals.add(refr);
+// air path: exchanger block + condensate separator
+mesh(box(0.180, 0.420, 0.200), matPipe, internals).position.set(0.14, TOP + 0.30, -0.02);
+mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.140, 18), matPipe, internals).position.set(0.16, FLOOR + 0.085, 0.14);
+mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.060, 10), matPipe, internals).position.set(0.16, FLOOR + 0.010, 0.14);
+root.add(internals);
+
+// --- piping: both G 1 1/2" connections on the same face, drain at the bottom ---
+const piping = new THREE.Group();
+for(const z of [-0.10, 0.10]){
+  mesh(cylX(0.026, 0.110, 14), matPipe, piping).position.set(HL + 0.055, TOP + 0.70, z);
+  mesh(cylX(0.036, 0.016, 14), matPipe, piping).position.set(HL + 0.100, TOP + 0.70, z);
+}
+mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.090, 10), matPipe, piping).position.set(0.16, BASE_H - 0.045, 0.14);
+root.add(piping);
+
+// --- removable service panels ---
+mesh(box(L - 2*WALL - 0.012, CH - WALL - 0.012, WALL), matCab, panels)
+  .position.set(0, TOP + (CH-WALL)/2, HW - WALL/2);
+for(const sx of [-1,1])
+  mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.010, 10).rotateX(Math.PI/2), matTrim, panels)
+    .position.set(sx*(HL - 0.07), TOP + 0.06, HW + 0.004);
+root.add(panels);
+
+// --- COTAS ---
+const dims = new THREE.Group(); dims.visible = false;
+const bar = (w,h,d,x,y,z)=> mesh(box(w,h,d), matDim, dims).position.set(x,y,z);
+bar(L, 0.008, 0.008, 0, 0.004, HW + 0.09);
+bar(0.008, 0.008, W, HL + 0.09, 0.004, 0);
+bar(0.008, H, 0.008, HL + 0.09, H/2, HW + 0.09);
+for(const sx of [-1,1]) bar(0.006, 0.050, 0.006, sx*HL, 0.026, HW + 0.09);
+for(const sz of [-1,1]) bar(0.050, 0.006, 0.006, HL + 0.09, 0.026, sz*HW);
+root.add(dims);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let circ = false;
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnPan = document.getElementById('btnPan');
+btnPan.onclick = ()=>{ panels.visible = !panels.visible; btnPan.classList.toggle('on', panels.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+// CIRCUITO dims the air-side hardware so the refrigerant loop reads on its own. It also opens the
+// panels, because otherwise the control does nothing visible from outside.
+const airSide = [];
+internals.children.forEach(o=>{ if(o !== refr) airSide.push(o); });
+const btnCirc = document.getElementById('btnCirc');
+btnCirc.onclick = ()=>{ circ = !circ; btnCirc.classList.toggle('on', circ);
+  if(circ && panels.visible){ panels.visible = false; btnPan.classList.remove('on'); }
+  for(const o of airSide){ o.visible = !circ; }
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnDim = document.getElementById('btnDim');
+btnDim.onclick = ()=>{ dims.visible = !dims.visible; btnDim.classList.toggle('on', dims.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__secadorAireApp = __app;
+globalThis['__secador-aireApp'] = __app;           // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

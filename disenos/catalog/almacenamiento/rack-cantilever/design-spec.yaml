@@ -1,0 +1,139 @@
+# DesignSpec — single-sided cantilever racking (1.20 m arms, asymmetric base)
+# Dimensional evidence: [Block 64]. Adequately sourced but NOT corroborated — one vendor spec
+# (B64 §64.6). The load path is the opposite of rack-pallet's: an arm is a lever, not a beam span.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: rack-cantilever
+family: almacenamiento
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  scores: {silhouette: 2, components: 2, hierarchy: 1, repetition: 3,
+           material_layers: 1, detail: 1, occlusion: 0, action_readiness: 0}
+  tier: simple
+  notes: >
+    repetition 3 (3 columns x 4 arm levels + long load) so arms and load are instanced. The
+    silhouette is a slim spine with long horizontal fingers — the inverse proportion of rack-pallet.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/threejs-block64.md
+  reuse_pointers:
+    contrast_asset: "disenos/catalog/almacenamiento/rack-pallet/ — beam-span load path, not a lever"
+
+references:
+  - source: "sources/B64-cantilever-dims/ntl-cantilever-specs (fetched 2026-08-08)"
+    evidences: >
+      Arm lengths 600 / 750 / 900 / 1,000 / 1,200 / 1,500 / 1,800 mm; column 100 x 100 mm to
+      150 x 150 mm tube or rolled H-section; single-sided base extends 600-900 mm forward on the
+      load side with a 200-400 mm back leg; minimum arm pitch usually 300 mm (400 mm more
+      practical); deflection limit L/200 — a 1,200 mm arm should not sag more than 6 mm at the tip;
+      load ratings 250 / 500 / 750 / 1,000 / 1,500 / 2,000 kg per arm; column capacity 3-12 tonnes.
+      All eight strings token-checked against the preserved copy (B64 §64.1).
+    suitability: pass
+  - source: "sources/B64-cantilever-dims/cogan-cantilever-spec.pdf"
+    evidences: "REJECTED — 1,369 bytes of extractable text, no dimension tokens (B64 §64.3)."
+    suitability: fail
+
+dimensions_real:
+  arm_len_m:        {value: 1.20,  confidence: high}   # [CERT-web] a published length
+  arm_pitch_m:      {value: 0.80,  confidence: med}    # [INFER] a multiple of the 400 mm practical pitch
+  arm_min_pitch_m:  {value: 0.40,  confidence: high}   # [CERT-web] "400 mm more practical"
+  column_w_m:       {value: 0.12,  confidence: high}   # [CERT-web] inside the 100-150 mm band
+  base_front_m:     {value: 0.80,  confidence: high}   # [CERT-web] inside 600-900 mm — LOAD side
+  base_back_m:      {value: 0.30,  confidence: high}   # [CERT-web] inside 200-400 mm — short leg
+  arm_capacity_kg:  {value: 1000,  confidence: high}   # [CERT-web] a published rating
+  deflection_max_m: {value: 0.006, confidence: high}   # [CERT-web] L/200 at 1.20 m
+  columns:          {value: 3,     confidence: med}    # [INFER] by analogy with DGUV in [Block 58]
+  column_h_m:       {value: 3.60,  confidence: low}    # [INFER] heights not enumerated
+  bay_m:            {value: 1.50,  confidence: low}    # [INFER] column spacing not published
+
+hierarchy:
+  - name: root
+    children:
+      - name: columns      # 3 uprights, each on an ASYMMETRIC base
+        pivot: [0, 0, 0]
+        animation: none
+      - name: arms         # 4 levels x 3 columns, instanced, slight upward tilt
+        pivot: [0, 0, 0]
+        animation: none
+      - name: bracing      # horizontal + diagonal ties between columns
+        pivot: [0, 0, 0]
+        animation: none
+      - name: load         # long stock spanning all three columns
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: column-orange
+    family: painted-metal
+    color: "#c2622b"
+    metalness: 0.0            # painted structural steel — dielectric per HANDBOOK §3.1
+    roughness: 0.58
+    evidence: "cantilever columns are painted; colour is a trade convention, not a datasheet value"
+    confidence: 0.55
+  - id: arm-steel
+    family: painted-metal
+    color: "#9aa0a4"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "painted arm; HANDBOOK §3.1 painted = dielectric"
+    confidence: 0.6
+  - id: stock-timber
+    family: wood
+    color: "#9d7c52"
+    metalness: 0.0
+    roughness: 0.85
+    evidence: "long stock (timber/pipe) — the load class cantilever exists for; a scale cue"
+    confidence: 0.5
+
+critical_features:
+  - id: asymmetric-base
+    desc: >
+      Each column stands on a base that is LONG forward under the load (800 mm) and SHORT behind
+      (300 mm). A symmetric cross base is the obvious error and would tip under the very loads the
+      rack exists to carry.
+    threshold: 0.80
+  - id: lever-not-beam-span
+    desc: >
+      Arms are cantilevered from one column each — there is no front upright and no beam spanning
+      between two frames. Reusing the pallet-rack rectangle with the front post removed is wrong.
+    threshold: 0.78
+  - id: slim-spine-proportion
+    desc: "A 120 mm column carrying 1,200 mm arms: the column is far slimmer than the arms are long."
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 40                 # measured 39 (arms/gussets/stops/load each one InstancedMesh)
+    tris: 40000               # measured 3030
+
+camera:
+  view: exterior
+  azimuth_deg: 42
+  elevation_deg: 14
+  fov: 38
+  target_y_m: 1.70
+  radius_m: 8.5
+
+lighting: house-rig
+  # Painted dielectric throughout — the vertical bare-metal rescue does NOT apply here.
+  # Recorded as a deliberate non-deviation, like estanteria-industrial.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "LOAD"                  # long stock across the arms
+  - "ARMS"                  # strip to the bare spine, exposing the asymmetric base
+  - "SCALE 1.8 m"
+
+colorTarget:
+  srgb: [201, 128, 80]      # MEASURED on a painted column
+  deltaE00Max: 8
+  crop: "15x110+505+150"   # a front column, at 1280x800

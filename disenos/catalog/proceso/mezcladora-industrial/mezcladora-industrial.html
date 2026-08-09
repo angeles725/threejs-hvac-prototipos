@@ -1,0 +1,316 @@
+<!doctype html>
+<!--
+  mezcladora-industrial — catalog asset, family `proceso`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Evidence: research/sources/B59-proceso-dims/ribbon-blender-proportions.md
+  Spec: ./design-spec.yaml
+  NOTE: the defining fact is not a dimension, it is a HANDEDNESS. The outer ribbon drives material
+  from both ends toward the centre discharge and the inner ribbon drives it back out — so the outer
+  helix reverses hand at mid-length and the inner is wound against it. Four segments, not two.
+  Two same-hand helices look entirely plausible and would just auger everything to one end.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mezcladora de cintas helicoidales — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Mezcladora de cintas helicoidales — artesa en U, ~1 m³</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· inox 304 · accionamiento pintado</span></div>
+  <div class="dim">paso = diámetro (1.10 m) · cinta exterior 10 % de Ø · holgura 4 mm · cintas contrapasadas</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnMix">MEZCLANDO</button>
+  <button id="btnLid" class="on">TAPA</button>
+  <button id="btnCut">CORTE</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · ribbon-blender proportions) ----------
+const TR_R   = 0.550;                 // [INFER] trough radius (Ø1.10)
+const TR_L   = 1.800;                 // [INFER] trough length
+const AXIS_Y = 1.050;                 // [INFER] agitator centreline
+const CLEAR  = 0.004;                 // [CERT-web] 3-5 mm ribbon-to-wall clearance
+const OUT_R  = TR_R - CLEAR;          // [CERT-web] outer ribbon tip radius = 0.546
+const OUT_W  = 0.110;                 // [CERT-web] ~10 % of diameter
+const IN_R   = 0.270;                 // [CERT-web] "halfway between the outer ribbon and the shaft"
+const IN_W   = 0.120;                 // [CERT-web] proportionally wider than the outer
+const PITCH  = 1.100;                 // [CERT-web] pitch : diameter = 1 : 1
+const SHAFT_R= 0.045;                 // [INFER]
+const WALL_TOP = AXIS_Y + 0.300;      // straight sides above the U
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 8, 32);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.05, 120);
+const R = 4.60, AZ = 0.803, EL = 0.279;                         // 46° azimuth / 16° elevation (spec camera)
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.00 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.00, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.00, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.4;      // DEVIATION (spec §lighting): large bright metal surfaces.
+                                       // Unlike tolva-dosificador the working surface is concave and
+                                       // faces UP, so it catches the key — no downward-face limit here.
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.8, 4.2, 2.4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-2.0; sun.shadow.camera.right=2.0; sun.shadow.camera.top=2.0; sun.shadow.camera.bottom=-2.0;
+sun.shadow.camera.far = 12;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xdfe9f5, 0.7);
+fill.position.set(3.2, 1.8, 3.6); scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(32,32),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS.
+// ============================================================================
+const matShell = new THREE.MeshStandardMaterial({ color:0xc6cbcd, metalness:0.92, roughness:0.32,
+                                                  side:THREE.DoubleSide });
+const matShellCut = new THREE.MeshStandardMaterial({ color:0xc6cbcd, metalness:0.92, roughness:0.32,
+                                                     transparent:true, opacity:0.15, side:THREE.DoubleSide,
+                                                     depthWrite:false });
+const matRibbon= new THREE.MeshStandardMaterial({ color:0xb8bec1, metalness:0.92, roughness:0.34,
+                                                  side:THREE.DoubleSide });
+const matDrive = new THREE.MeshStandardMaterial({ color:0x4e565c, metalness:0.0,  roughness:0.55 });
+const matFrame = new THREE.MeshStandardMaterial({ color:0x343b40, metalness:0.0,  roughness:0.60 });
+const matGuard = new THREE.MeshStandardMaterial({ color:0xd8a413, metalness:0.0,  roughness:0.60 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+function mesh(geo, mat, parent){ const m = new THREE.Mesh(geo, mat);
+  m.castShadow = m.receiveShadow = true; if(parent) parent.add(m); return m; }
+function cylX(r, len, seg=28){ const g = new THREE.CylinderGeometry(r, r, len, seg); g.rotateZ(Math.PI/2); return g; }
+
+// A ribbon is a swept BAND, not a tube: for each station along X take two points at radius r0 and
+// r1 on the same helix angle and stitch the strip. TubeGeometry here would produce round bar, which
+// is a different machine (see critical feature "ribbons-are-bands-not-rods").
+function ribbon(r0, r1, x0, x1, pitch, hand, phase){
+  const N = Math.max(24, Math.round(Math.abs(x1-x0)/pitch*48));
+  const pos = [], idx = [];
+  for(let i=0;i<=N;i++){
+    const t = i/N, x = x0 + (x1-x0)*t;
+    const a = phase + hand * (x - x0)/pitch * Math.PI*2;
+    const c = Math.cos(a), s = Math.sin(a);
+    pos.push(x, c*r0, s*r0);
+    pos.push(x, c*r1, s*r1);
+  }
+  for(let i=0;i<N;i++){
+    const b = i*2;
+    idx.push(b, b+1, b+3,  b, b+3, b+2);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+// --- trough: U-shell (half cylinder) + straight sides + end walls + discharge ---
+const trough = new THREE.Group();
+// thetaStart = PI selects the LOWER half. With thetaStart 0 the surface generated is the upper
+// half, and rotating the object to compensate swings the opening sideways instead of up — the
+// trough then holds nothing. Pick the half in the geometry, do not rotate it afterwards.
+const uShell = mesh(new THREE.CylinderGeometry(TR_R, TR_R, TR_L, 48, 1, true, Math.PI, Math.PI).rotateZ(Math.PI/2),
+                    matShell, trough);
+uShell.position.set(0, AXIS_Y, 0);
+const sides = [];
+for(const sz of [-1,1]){
+  const w = mesh(new THREE.BoxGeometry(TR_L, WALL_TOP - AXIS_Y, 0.008), matShell, trough);
+  w.position.set(0, (AXIS_Y + WALL_TOP)/2, sz*TR_R);
+  sides.push(w);
+}
+const ends = [];
+for(const sx of [-1,1]){
+  const e = mesh(new THREE.CircleGeometry(TR_R, 40, 0, Math.PI).rotateZ(Math.PI).rotateY(Math.PI/2), matShell, trough);
+  e.position.set(sx*TR_L/2, AXIS_Y, 0);
+  const p = mesh(new THREE.BoxGeometry(0.008, WALL_TOP - AXIS_Y, TR_R*2), matShell, trough);
+  p.position.set(sx*TR_L/2, (AXIS_Y + WALL_TOP)/2, 0);
+  ends.push(e, p);
+}
+// central discharge — where the outer ribbon drives the product from BOTH ends
+mesh(new THREE.BoxGeometry(0.260, 0.090, 0.200), matShell, trough).position.set(0, AXIS_Y - TR_R - 0.040, 0);
+mesh(new THREE.BoxGeometry(0.300, 0.070, 0.240), matDrive, trough).position.set(0, AXIS_Y - TR_R - 0.115, 0);
+mesh(cylX(0.026, 0.240, 12), matDrive, trough).position.set(0.240, AXIS_Y - TR_R - 0.115, 0);
+mesh(new THREE.TorusGeometry(0.070, 0.010, 6, 20).rotateY(Math.PI/2), matGuard, trough)
+  .position.set(0.370, AXIS_Y - TR_R - 0.115, 0);
+root.add(trough);
+
+// --- lid with two inspection hatches ---
+const lid = new THREE.Group();
+mesh(new THREE.BoxGeometry(TR_L, 0.010, TR_R*2 + 0.020), matShell, lid).position.set(0, WALL_TOP, 0);
+for(const sx of [-1,1]){
+  mesh(new THREE.CylinderGeometry(0.150, 0.150, 0.030, 28), matShell, lid).position.set(sx*0.45, WALL_TOP + 0.020, 0.12);
+  mesh(new THREE.BoxGeometry(0.070, 0.028, 0.030), matShell, lid).position.set(sx*0.45 - 0.170, WALL_TOP + 0.020, 0.12);
+}
+mesh(new THREE.BoxGeometry(0.220, 0.040, 0.220), matShell, lid).position.set(0, WALL_TOP + 0.020, -0.24);  // charge port
+root.add(lid);
+
+// --- agitator: shaft + FOUR counter-wound ribbons + support arms ---
+const agitator = new THREE.Group();
+agitator.position.set(0, AXIS_Y, 0);
+const halfL = TR_L/2 - 0.070;
+mesh(cylX(SHAFT_R, TR_L + 0.320, 24), matRibbon, agitator);
+// At the evidenced 1:1 pitch a 0.83 m half is only 0.75 of a turn, so a SINGLE helix per half reads
+// as a bare hoop. Real outer ribbons are double-start (two helices 180 deg apart), which is both
+// correct and what makes the sweep legible.
+// OUTER: both halves drive INWARD toward the centre discharge -> opposite hands either side of x=0
+for(const ph of [0, Math.PI]){
+  mesh(ribbon(OUT_R - OUT_W, OUT_R, -halfL, 0, PITCH, +1, ph), matRibbon, agitator);
+  mesh(ribbon(OUT_R - OUT_W, OUT_R,  halfL, 0, PITCH, +1, ph + Math.PI), matRibbon, agitator);
+}
+// INNER: wound AGAINST the outer, so it carries product back out toward the ends
+for(const ph of [Math.PI/2, -Math.PI/2]){
+  mesh(ribbon(IN_R, IN_R + IN_W, -halfL, 0, PITCH, -1, ph), matRibbon, agitator);
+  mesh(ribbon(IN_R, IN_R + IN_W,  halfL, 0, PITCH, -1, -ph), matRibbon, agitator);
+}
+// support arms: shaft -> inner ribbon -> outer ribbon, every half turn
+for(let k=0;k<=8;k++){
+  const x = -halfL + (2*halfL)*k/8;
+  const a = (x + halfL)/PITCH * Math.PI*2 * (x < 0 ? 1 : -1);
+  const arm = mesh(new THREE.BoxGeometry(0.016, OUT_R - SHAFT_R, 0.040), matRibbon, agitator);
+  arm.position.set(x, Math.cos(a)*(OUT_R + SHAFT_R)/2, Math.sin(a)*(OUT_R + SHAFT_R)/2);
+  arm.rotation.x = -a;
+}
+root.add(agitator);
+
+// --- drive train + bearings/seals at both ends ---
+const drive = new THREE.Group();
+for(const sx of [-1,1]){
+  mesh(cylX(0.075, 0.080, 20), matDrive, drive).position.set(sx*(TR_L/2 + 0.045), AXIS_Y, 0);
+  mesh(new THREE.BoxGeometry(0.110, 0.190, 0.190), matDrive, drive).position.set(sx*(TR_L/2 + 0.130), AXIS_Y, 0);
+}
+mesh(new THREE.BoxGeometry(0.230, 0.300, 0.290), matDrive, drive).position.set(-(TR_L/2 + 0.360), AXIS_Y, 0);
+mesh(cylX(0.115, 0.360, 24), matDrive, drive).position.set(-(TR_L/2 + 0.640), AXIS_Y, 0);
+mesh(cylX(0.090, 0.100, 20), matDrive, drive).position.set(-(TR_L/2 + 0.860), AXIS_Y, 0);
+mesh(new THREE.BoxGeometry(0.130, 0.100, 0.120), matDrive, drive).position.set(-(TR_L/2 + 0.640), AXIS_Y + 0.170, 0);
+for(const sz of [-1,1])                                            // coupling guard between motor and shaft
+  mesh(new THREE.BoxGeometry(0.180, 0.220, 0.004), matGuard, drive)
+    .position.set(-(TR_L/2 + 0.245), AXIS_Y, sz*0.105);
+mesh(new THREE.BoxGeometry(0.180, 0.004, 0.214), matGuard, drive)
+  .position.set(-(TR_L/2 + 0.245), AXIS_Y + 0.110, 0);
+root.add(drive);
+
+// --- frame ---
+const frame = new THREE.Group();
+for(const sx of [-1,1]) for(const sz of [-1,1]){
+  mesh(new THREE.BoxGeometry(0.080, AXIS_Y - TR_R - 0.010, 0.080), matFrame, frame)
+    .position.set(sx*0.72, (AXIS_Y - TR_R - 0.010)/2, sz*0.42);
+  mesh(new THREE.BoxGeometry(0.170, 0.016, 0.170), matFrame, frame).position.set(sx*0.72, 0.008, sz*0.42);
+}
+for(const sz of [-1,1])
+  mesh(new THREE.BoxGeometry(1.60, 0.070, 0.060), matFrame, frame)
+    .position.set(0, AXIS_Y - TR_R - 0.045, sz*0.42);
+for(const sx of [-1,1])
+  mesh(new THREE.BoxGeometry(0.060, 0.070, 0.900), matFrame, frame)
+    .position.set(sx*0.72, AXIS_Y - TR_R - 0.045, 0);
+root.add(frame);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let mixing = false, cut = false;
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnMix = document.getElementById('btnMix');
+btnMix.onclick = ()=>{ mixing = !mixing; btnMix.classList.toggle('on', mixing); requestRender(); };
+
+const btnLid = document.getElementById('btnLid');
+btnLid.onclick = ()=>{ lid.visible = !lid.visible; btnLid.classList.toggle('on', lid.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const cutTargets = [uShell, ...sides, ...ends];
+const btnCut = document.getElementById('btnCut');
+btnCut.onclick = ()=>{ cut = !cut; btnCut.classList.toggle('on', cut);
+  for(const m of cutTargets){ m.material = cut ? matShellCut : matShell; m.castShadow = !cut; }
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(mixing){ agitator.rotation.x += 0.03; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__mezcladoraIndustrialApp = __app;
+globalThis['__mezcladora-industrialApp'] = __app;   // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

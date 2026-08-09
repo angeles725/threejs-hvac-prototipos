@@ -1,0 +1,313 @@
+<!doctype html>
+<!--
+  filtro-arena — catalog asset, family `fluidos`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Evidence: research/sources/B59-proceso-dims/sand-filter-vessel.md
+  Spec: ./design-spec.yaml
+  NOTE: the vessel is about TWICE the height of its media, and that is not slack. Backwash runs at
+  up to 4x the filtration rate, fluidising and expanding the bed, so the empty upper volume is the
+  expansion room the cycle needs. A filter drawn full of sand to the top head cannot be backwashed.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Filtro de arena a presión — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Filtro de arena a presión — Ø 900 mm, válvula multivía superior</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· envolvente pintada · medios mates</span></div>
+  <div class="dim">lecho 800 mm sobre 200 mm de grava en 3 capas · freeboard 600 mm · 6 bar</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnCut">CORTE</button>
+  <button id="btnInt" class="on">INTERNOS</button>
+  <button id="btnDim">COTAS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const D = 0.900, RAD = D/2;
+const BARREL = 1.600;                 // [CERT-web] within the 1000-2000 mm shell range
+const STAND  = 0.300;                 // [INFER]
+const CROWN_R = 1.00*D, KNUCK_R = 0.10*D;
+const SAND_H   = 0.800;               // [CERT-web] within the 600-1200 mm range
+const GRAVEL_H = 0.200;               // [CERT-web] 3-4 graded layers
+const GRAVEL_LAYERS = 3;              // [CERT-web]
+
+// Klopper solver (validated on utilities/tanque-pulmon)
+const dc = CROWN_R - KNUCK_R, dx = RAD - KNUCK_R;
+const dy = Math.sqrt(dc*dc - dx*dx);
+const END_D  = CROWN_R - dy;
+const TAN_LO = STAND + END_D;
+const TAN_HI = TAN_LO + BARREL;
+const TOP_Y  = TAN_HI + END_D;
+const BOT_IN = TAN_LO - END_D;                    // inside floor
+const BED_TOP = TAN_LO + GRAVEL_H + SAND_H;   // graded layers are measured from the tangent line,
+                                              // since the dished floor below it is gravel-filled
+const FREEBOARD = TAN_HI - BED_TOP;               // the number the spec is really about
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 8, 30);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.05, 120);
+const R = 4.20, AZ = 0.768, EL = 0.192;                         // 44° azimuth / 11° elevation (spec camera)
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.10 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.10, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.10, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.4;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.4, 3.8, 2.1); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-1.6; sun.shadow.camera.right=1.6; sun.shadow.camera.top=2.2; sun.shadow.camera.bottom=-2.2;
+sun.shadow.camera.far = 11;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xdfe9f5, 0.7);
+fill.position.set(2.8, 1.5, 3.2); scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. Media are MATT dielectrics (roughness ~0.98): shiny sand is the giveaway of
+// a material copied from the vessel.
+// ============================================================================
+const matShell = new THREE.MeshStandardMaterial({ color:0x1f4e6e, metalness:0.0, roughness:0.50 });
+const matShellCut = new THREE.MeshStandardMaterial({ color:0x1f4e6e, metalness:0.0, roughness:0.50,
+                                                     transparent:true, opacity:0.16, side:THREE.DoubleSide,
+                                                     depthWrite:false });
+const matSand   = new THREE.MeshStandardMaterial({ color:0xc2a878, metalness:0.0, roughness:0.98 });
+// Graded layers only read as GRADED if the steps are visible. The first pass used three tones
+// within 25 sRGB of each other and the support bed read as one band, which quietly loses the
+// "3-4 graded layers" the evidence states. Index 0 = finest (sits under the sand), 2 = coarsest.
+const matGravel = [
+  new THREE.MeshStandardMaterial({ color:0xb0a692, metalness:0.0, roughness:0.96 }),
+  new THREE.MeshStandardMaterial({ color:0x8d8474, metalness:0.0, roughness:0.95 }),
+  new THREE.MeshStandardMaterial({ color:0x6a6357, metalness:0.0, roughness:0.94 }),
+];
+const matValve = new THREE.MeshStandardMaterial({ color:0x5a6168, metalness:0.0, roughness:0.45 });
+const matPipe  = new THREE.MeshStandardMaterial({ color:0x9ea4a7, metalness:0.88, roughness:0.40 });
+const matGauge = new THREE.MeshStandardMaterial({ color:0xe8e6df, metalness:0.0, roughness:0.9 });
+const matDim   = new THREE.MeshStandardMaterial({ color:0x00d4aa, metalness:0.0, roughness:0.6,
+                                                  emissive:0x0b3b32, emissiveIntensity:1.0 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+function mesh(geo, mat, parent){ const m = new THREE.Mesh(geo, mat);
+  m.castShadow = m.receiveShadow = true; if(parent) parent.add(m); return m; }
+
+// --- shell: one lathe over the Klopper profile ---
+const TANG = Math.atan2(-dy, dx);
+const prof = [];
+(function lowerEnd(yTan){
+  const cy = yTan + dy;
+  for(let i=0;i<=12;i++){ const t = -Math.PI/2 + (TANG + Math.PI/2)*(i/12);
+    prof.push(new THREE.Vector2(CROWN_R*Math.cos(t), cy + CROWN_R*Math.sin(t))); }
+  for(let i=1;i<=6;i++){ const t = TANG + (0 - TANG)*(i/6);
+    prof.push(new THREE.Vector2(RAD - KNUCK_R + KNUCK_R*Math.cos(t), yTan + KNUCK_R*Math.sin(t))); }
+})(TAN_LO);
+prof.push(new THREE.Vector2(RAD, TAN_LO), new THREE.Vector2(RAD, TAN_HI));
+(function upperEnd(yTan){
+  const cy = yTan - dy;
+  for(let i=1;i<=6;i++){ const t = 0 + (TANG - 0)*(i/6);
+    prof.push(new THREE.Vector2(RAD - KNUCK_R + KNUCK_R*Math.cos(t), yTan - KNUCK_R*Math.sin(t))); }
+  for(let i=1;i<=12;i++){ const t = TANG + (-Math.PI/2 - TANG)*(i/12);
+    prof.push(new THREE.Vector2(CROWN_R*Math.cos(t), cy - CROWN_R*Math.sin(t))); }
+})(TAN_HI);
+const shell = mesh(new THREE.LatheGeometry(prof, 56), matShell, root);
+for(const y of [TAN_LO, TAN_HI])
+  mesh(new THREE.TorusGeometry(RAD + 0.002, 0.006, 6, 44).rotateX(Math.PI/2), matShell, root).position.y = y;
+
+// --- media stack: 3 graded gravel layers then the sand bed. Slightly under-radius so the
+//     translucent shell still reads as a wall around them. ---
+// The vessel floor is DISHED, so a cylindrical bottom layer punches straight through it and the
+// media appear outside the shell. The lowest (coarsest) layer therefore reuses the shell's own head
+// profile, pulled inboard; only the layers above the tangent line can be plain cylinders.
+const media = new THREE.Group();
+const mr = RAD - 0.012;
+const bedProf = prof.slice(0, 19).map(v => new THREE.Vector2(v.x * (mr/RAD), v.y + 0.006));
+bedProf.push(new THREE.Vector2(mr, TAN_LO + 0.006));
+mesh(new THREE.LatheGeometry(bedProf, 44), matGravel[2], media);
+const gUp = GRAVEL_H/2;                                            // graded layers above the tangent
+mesh(new THREE.CylinderGeometry(mr, mr, gUp, 44), matGravel[1], media).position.y = TAN_LO + gUp/2;
+mesh(new THREE.CylinderGeometry(mr, mr, gUp, 44), matGravel[0], media).position.y = TAN_LO + gUp*1.5;
+mesh(new THREE.CylinderGeometry(mr, mr, SAND_H, 44), matSand, media)
+  .position.y = TAN_LO + GRAVEL_H + SAND_H/2;
+root.add(media);
+
+// --- internals: top distributor, underdrain laterals buried in the gravel ---
+const internals = new THREE.Group();
+mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.220, 16), matPipe, internals)
+  .position.y = TAN_HI - 0.110;                                   // distributor downcomer
+mesh(new THREE.CylinderGeometry(0.170, 0.170, 0.020, 28), matPipe, internals)
+  .position.y = TAN_HI - 0.215;                                   // splash plate
+for(let k=0;k<6;k++){ const a = k*Math.PI/3;                      // underdrain laterals
+  const lat = mesh(new THREE.CylinderGeometry(0.018, 0.018, RAD - 0.09, 12), matPipe, internals);
+  lat.position.set(Math.cos(a)*(RAD - 0.09)/2, BOT_IN + 0.045, Math.sin(a)*(RAD - 0.09)/2);
+  lat.rotation.z = Math.PI/2; lat.rotation.y = -a;
+  for(let j=1;j<=3;j++)                                           // strainers along each lateral
+    mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.020, 8), matPipe, internals)
+      .position.set(Math.cos(a)*(RAD-0.09)*j/3.5, BOT_IN + 0.065, Math.sin(a)*(RAD-0.09)*j/3.5);
+}
+mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.090, 16), matPipe, internals).position.y = BOT_IN + 0.045;
+root.add(internals);
+
+// --- top-mounted multiport valve + gauge ---
+const valve = new THREE.Group();
+mesh(new THREE.CylinderGeometry(0.115, 0.130, 0.060, 24), matValve, valve).position.y = TOP_Y + 0.030;
+mesh(new THREE.CylinderGeometry(0.100, 0.100, 0.120, 24), matValve, valve).position.y = TOP_Y + 0.120;
+mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.070, 12), matValve, valve).position.y = TOP_Y + 0.215;
+const lever = mesh(new THREE.BoxGeometry(0.026, 0.026, 0.190), matValve, valve);
+lever.position.set(0, TOP_Y + 0.245, 0.070);
+mesh(new THREE.CylinderGeometry(0.020, 0.020, 0.026, 12), matValve, valve).position.set(0, TOP_Y + 0.245, 0.165);
+for(const [a, r] of [[0.6, 0.130],[2.6, 0.130]]){                  // side ports
+  const p = mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.110, 16), matPipe, valve);
+  p.position.set(Math.cos(a)*r, TOP_Y + 0.120, Math.sin(a)*r);
+  p.rotation.z = Math.PI/2; p.rotation.y = -a;
+}
+const gauge = mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.024, 20), matValve, valve);
+gauge.position.set(-0.075, TOP_Y + 0.185, 0.075); gauge.rotation.x = Math.PI/2.6;
+mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.004, 20), matGauge, valve)
+  .position.set(-0.079, TOP_Y + 0.196, 0.083);
+root.add(valve);
+
+// --- piping + stand ---
+const piping = new THREE.Group();
+for(const [a, y] of [[0.6, TOP_Y + 0.120], [2.6, TOP_Y + 0.120]]){
+  const p = mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.300, 16), matPipe, piping);
+  p.position.set(Math.cos(a)*0.290, y, Math.sin(a)*0.290);
+  p.rotation.z = Math.PI/2; p.rotation.y = -a;
+}
+mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.130, 14), matPipe, piping).position.y = BOT_IN - 0.065;
+mesh(new THREE.BoxGeometry(0.070, 0.060, 0.060), matValve, piping).position.y = BOT_IN - 0.150;
+root.add(piping);
+
+const stand = new THREE.Group();
+for(let k=0;k<3;k++){
+  const a = k*Math.PI*2/3 + Math.PI/6, cx = Math.cos(a)*0.330, cz = Math.sin(a)*0.330;
+  const leg = mesh(new THREE.BoxGeometry(0.070, 0.520, 0.012), matShell, stand);
+  leg.position.set(cx, 0.260, cz); leg.rotation.y = -a;
+  const web = mesh(new THREE.BoxGeometry(0.012, 0.520, 0.070), matShell, stand);
+  web.position.set(cx, 0.260, cz); web.rotation.y = -a;
+  mesh(new THREE.BoxGeometry(0.140, 0.012, 0.140), matShell, stand).position.set(cx, 0.006, cz);
+}
+root.add(stand);
+
+// --- COTAS: bed against freeboard, which is the point of the asset ---
+const dims = new THREE.Group(); dims.visible = false;
+const markY = [TAN_LO, TAN_LO + GRAVEL_H, BED_TOP, TAN_HI];
+for(const y of markY)
+  mesh(new THREE.TorusGeometry(RAD + 0.014, 0.005, 6, 44).rotateX(Math.PI/2), matDim, dims).position.y = y;
+mesh(new THREE.BoxGeometry(0.008, BED_TOP - TAN_LO, 0.008), matDim, dims)
+  .position.set(RAD + 0.014, (TAN_LO + BED_TOP)/2, 0);
+mesh(new THREE.BoxGeometry(0.008, FREEBOARD, 0.008), matDim, dims)
+  .position.set(-(RAD + 0.014), (BED_TOP + TAN_HI)/2, 0);
+root.add(dims);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let cut = false;
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnCut = document.getElementById('btnCut');
+btnCut.onclick = ()=>{ cut = !cut; btnCut.classList.toggle('on', cut);
+  shell.material = cut ? matShellCut : matShell; shell.castShadow = !cut;
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnInt = document.getElementById('btnInt');
+btnInt.onclick = ()=>{ internals.visible = !internals.visible; btnInt.classList.toggle('on', internals.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnDim = document.getElementById('btnDim');
+btnDim.onclick = ()=>{ dims.visible = !dims.visible; btnDim.classList.toggle('on', dims.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root },
+                bed:{ sand:SAND_H, gravel:GRAVEL_H, freeboard:FREEBOARD } };
+globalThis.__filtroArenaApp = __app;
+globalThis['__filtro-arenaApp'] = __app;           // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

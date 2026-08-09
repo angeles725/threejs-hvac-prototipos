@@ -1,0 +1,134 @@
+# DesignSpec — site office in a 20 ft ISO container
+# Fifth asset of my run in the catalog `estructuras` family.
+# EVIDENCE: the 20 ft ISO envelope (6.058 x 2.438 x 2.591 m) is a published standard series, but
+# NO standard document is preserved in research/sources/, so it is recorded as [INFER] with a
+# note rather than cited. A future session should preserve ISO 668 and re-anchor it.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: oficina-modular
+family: estructuras
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  scores: {silhouette: 1, components: 3, hierarchy: 2, repetition: 3,
+           material_layers: 2, detail: 3, occlusion: 2, action_readiness: 1}
+  tier: moderate
+  notes: >
+    silhouette 1: it is a box, and that is correct — a container IS a box. All the identity is in
+    the corrugation, the corner castings and the rails, which is why the ribs are modelled rather
+    than textured and why they are skipped where an opening interrupts the wall.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    aperture_method: "disenos/catalog/hvac/manejadora-ahu (wall built AROUND its openings)"
+
+references:
+  - source: "research/HANDBOOK.md §3.1"
+    evidences: "[CERT] A painted container is a DIELECTRIC; only the corner castings and door hardware are bare metal."
+    suitability: pass
+  - source: "research/HANDBOOK.md §3.0"
+    evidences: "[CERT] Storey height ~3 m and the 1.8 m person: a 2.59 m container is a low single storey, and the door at 2.05 m reads correctly against it."
+    suitability: pass
+  - source: "NEGATIVE — ISO 668 not preserved"
+    evidences: "The 20 ft envelope is quoted from general knowledge, not from a preserved document."
+    suitability: fail
+
+dimensions_real:
+  length_m: {value: 6.06, confidence: med}    # [INFER] 20 ft ISO nominal
+  width_m:  {value: 2.44, confidence: med}
+  height_m: {value: 2.59, confidence: med}
+  corner_casting_m: {value: 0.16, confidence: low}
+  corrugation_pitch_m: {value: 0.28, confidence: low}
+  door_m:   {value: [0.90, 2.05], confidence: low}
+  window_m: {value: [1.10, 0.95], confidence: low}
+
+hierarchy:
+  - name: root
+    children:
+      - name: plinth     # four bearing blocks
+      - name: shell      # floor, roof, end walls, blind long wall, and the SERVICE long wall built around door + 2 windows
+      - name: ribs       # instanced corrugation on both long walls and both ends, skipped at the openings
+      - name: castings   # 8 ISO corner castings + top and bottom rails
+      - name: doorFrame / doorPivot   # hinged personnel door with a vision panel
+        animation: swing
+      - name: windows    # frames, glass, mullions
+      - name: interior   # desk, monitor, cabinet — visible through the glazing because the room is lit
+      - name: ac         # through-wall condenser on the +X END wall (fan spins) + electrical box
+      - name: steps      # entrance platform, two treads, handrail
+
+materials:
+  - id: container-paint
+    family: painted-metal
+    color: "#2f6a7a"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1 painted -> 0.0-0.05"
+    confidence: 0.9
+  - id: corner-casting
+    family: bare-metal
+    color: "#9aa1a6"
+    metalness: 0.95
+    roughness: 0.50
+    evidence: "HANDBOOK §3.1 bare metal — castings are unpainted"
+    confidence: 0.85
+  - id: window-glass
+    family: glass
+    color: "#cfe2e8"
+    metalness: 0.0
+    roughness: 0.06
+    evidence: "HANDBOOK §3.1 dielectric; MeshPhysicalMaterial with transmission so the lit interior is genuinely visible"
+    confidence: 0.85
+
+critical_features:
+  - id: corrugation-identity
+    desc: "Modelled corrugation ribs on every elevation, interrupted where an opening cuts the wall — not a flat painted box."
+    threshold: 0.82
+  - id: iso-corner-grammar
+    desc: "Eight corner castings and continuous top and bottom rails: what makes it a container and not a portacabin."
+    threshold: 0.78
+  - id: openings-are-real
+    desc: "The service wall is built AROUND the door and both windows, so the door swings into a real hole and the windows show the interior."
+    threshold: 0.80
+  - id: visible-services
+    desc: >
+      The condenser sits on the +X END wall so it is actually in frame at the review camera. On
+      the blind long side it was invisible — the same class of mistake as burying geometry behind
+      a toggle nobody presses.
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 160    # measured 139 at the review camera; the corrugation is 4 InstancedMeshes, the rest is trim
+    tris: 8000    # measured ~2,840
+
+camera: {azimuth_deg: 45, elevation_deg: 15, fov: 38, target_y_m: 1.40, radius_m: 11.0}
+
+lighting: house-rig + FLAT-panel fill + interior lamp
+  # This is the FLAT case of the family decision tree: flat painted steel walls take a camera-side
+  # DirectionalLight fill. The curved bodies (tanque, silo) take the §3.3 studio rig instead, and
+  # a downward-tilted surface additionally takes a bounce card. Same family, three different fixes.
+
+ui_controls: ["AUTO-ROTATE", "PUERTA", "ESCALERA", "AIRE"]
+
+instancing:
+  - {what: "corrugation ribs, service wall", count: "~15 (openings skipped)", draws_saved: "-> 1"}
+  - {what: "corrugation ribs, blind wall", count: "~19", draws_saved: "-> 1"}
+  - {what: "corrugation ribs, both ends", count: "~14", draws_saved: "-> 1"}
+  - {what: "condenser fan blades", count: 3, draws_saved: "-> 1"}
+
+colorTarget:
+  srgb: [67, 132, 151]
+  deltaE00Max: 8
+  crop: "60x30+600+560"     # clean container paint between ribs, at 1280x800
+  secondary_observed:
+    lit_upper_wall: [119, 172, 186]   # 50x40+520+330 — the same paint under the fill; the pair
+                                      # documents the gradient the flat fill is there to create
