@@ -221,6 +221,15 @@ elige otra familia libre si queda, o detente.
   sigue igual = NO-PIXELS (el estado no aporta píxeles desde la cámara default → candidato a known_view_limit,
   NO defecto). El control prueba que los píxeles SÍ diferirían, así que un hash que no cambia es un render que
   falta, no un objeto ausente.
+- FIRMA DE ESCENA CIEGA A TRANSFORMACIONES (si desempatas DEAD-HANDLER de NO-PIXELS por firma del grafo, no por
+  el control de render de arriba): la firma DEBE incluir position/rotation/scale, no solo visibilidad + material.
+  Un toggle que arranca una animación (ventilador que gira) no cambia visibilidad ni material, así que una firma
+  sin transformaciones concluye "el grafo no cambió" y degrada NO-PIXELS a DEAD-HANDLER = FALSO POSITIVO
+  (generador-diesel/btnFan: handler correcto, gira fuera de la cámara default). Tercer defecto de sonda de la
+  misma familia — canvas negro, hash de página completa, firma sin transforms — todos se veían bien en el código
+  y solo los cazó medir contra un espécimen de respuesta conocida. Límite del arreglo: en un asset con animación
+  continua independiente del toggle la firma cambia sola, así que un handler MUERTO sale NO-PIXELS (falso
+  negativo) — se acepta: mejor perder un hallazgo que mandar ruido.
 - HERRAMIENTAS DE AUDITORÍA (read-only, en tools/): audit-asset.mjs (inventario por geometry.type+parameters
   + diff por botón + PNG por estado) y hole-probe.mjs (FONDO CENTINELA: repinta scene.background/fog a magenta
   y fuerza un render; todo píxel magenta = la cámara atraviesa el modelo → distingue PANEL oscuro de AGUJERO,
