@@ -1,0 +1,176 @@
+# DesignSpec — pedestal operator station with a 15" touch HMI
+# Catalog family `instrumentacion` (worktree catalog-retail-lab).
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: estacion-hmi
+family: instrumentacion
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # a 29 mm pushbutton head is material, not a voxel
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 12 -> moderate.
+  scores: {silhouette: 2, components: 2, hierarchy: 2, repetition: 1,
+           material_layers: 2, detail: 2, occlusion: 0, action_readiness: 3}
+  tier: moderate
+  notes: >
+    action_readiness 3: three independent states — screen on/off, E-stop armed/latched (the mushroom
+    TRAVELS and lights), keyboard tray stowed/deployed on its own hinge. The console tilt is real
+    geometry: everything on the face lives inside the rotated head group, not offset by hand.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    two_state_indicator: "disenos/catalog/laboratorio/refrigerador-lab/ (alarm lamp with real states)"
+    bare_metal_ibl: "disenos/catalog/laboratorio/refrigerador-lab/ (metal is lit by environmentIntensity)"
+
+references:
+  - source: "pedestal operator station class (tilted console head on a floor column)"
+    evidences: >
+      [INFER] No manufacturer datasheet is preserved in sources/ — treat every value as inference.
+      The layout modelled: a bolted base plate and a column bringing the console to standing eye
+      height, a head tilted ~20° so the screen faces the operator, a 15" panel, a latching E-stop on
+      a yellow backing plate, a row of illuminated pushbuttons, a selector switch, a legend strip,
+      a cable gland at the base and a fold-down keyboard tray.
+    suitability: partial
+
+dimensions_real:
+  column_mm:     {value: 140,  confidence: low}   # [INFER] square pedestal
+  column_h_m:    {value: 1.06, confidence: low}   # [INFER]
+  head_w_m:      {value: 0.58, confidence: low}   # [INFER] console head
+  head_h_m:      {value: 0.46, confidence: low}   # [INFER]
+  head_d_m:      {value: 0.17, confidence: low}   # [INFER]
+  tilt_deg:      {value: 20,   confidence: med}   # [INFER] the standing-operator angle
+  screen_in:     {value: 15,   confidence: med}   # [INFER] 0.34 x 0.205 m active area
+  screen_y_m:    {value: 1.35, confidence: med}   # [INFER] centre height
+  estop_head_mm: {value: 52,   confidence: med}   # [INFER] mushroom head
+  buttons:       {value: 4,    confidence: low}   # [INFER] illuminated pushbutton row
+  base_plate_m:  {value: 0.30, confidence: low}   # [INFER] bolted footprint
+
+hierarchy:
+  - name: root
+    children:
+      - name: base            # plate + 4 anchor bolts
+        pivot: [0, 0, 0]
+        animation: none
+      - name: column          # pedestal + cable gland
+        pivot: [0, 0, 0]
+        animation: none
+      - name: head            # TILTED group: shell, top cap, bezel, screen, controls, legend
+        pivot: [0, 1.34, 0]
+        animation: none
+      - name: estop           # yellow plate + mushroom; the mushroom translates when latched
+        pivot: [-0.205, -0.115, 0.085]
+        animation: latch
+      - name: buttons         # InstancedMesh, illuminated pushbutton row
+        pivot: [0, 0, 0]
+        animation: none
+      - name: trayPivot       # keyboard tray, own hinge under the console
+        pivot: [0, 1.01, 0.06]
+        animation: fold
+
+materials:
+  - id: pedestal-304
+    family: bare-metal
+    color: "#c4c8cb"
+    metalness: 0.93
+    roughness: 0.32
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0"
+    confidence: 0.85
+  - id: console-304
+    family: bare-metal
+    color: "#ccd0d3"
+    metalness: 0.93
+    roughness: 0.28
+    evidence: "HANDBOOK §3.1"
+    confidence: 0.85
+  - id: screen
+    family: glass
+    color: "#0a1622"
+    metalness: 0.0
+    roughness: 0.14
+    evidence: >
+      [INFER] Emissive when powered, dark when off. The PANTALLA toggle drives both the screen and
+      the pushbutton illumination, so "powered" is one coherent state.
+    confidence: 0.75
+  - id: estop-red
+    family: plastic
+    color: "#b02a1e"
+    metalness: 0.0
+    roughness: 0.42
+    evidence: >
+      [INFER] Mushroom head on a yellow backing plate. Latched, it sits 9 mm lower AND lights: a
+      safety control with a single frozen appearance is a decal, not a control.
+    confidence: 0.8
+  - id: estop-yellow
+    family: plastic
+    color: "#d8b41e"
+    metalness: 0.0
+    roughness: 0.45
+    evidence: "[INFER] the mandatory yellow backing plate behind an emergency stop"
+    confidence: 0.8
+  - id: pushbutton
+    family: plastic
+    color: "#2f6fb0"
+    metalness: 0.0
+    roughness: 0.42
+    evidence: "[INFER] illuminated pushbutton lens"
+    confidence: 0.75
+
+critical_features:
+  - id: real-tilt
+    desc: >
+      The console head is a rotated group, so the screen, bezel, E-stop, buttons and legend strip all
+      share the same 20° plane. A faked tilt shows up immediately as controls floating off the face.
+    threshold: 0.78
+  - id: estop-latches
+    desc: >
+      The mushroom travels into the collar and lights when latched — two distinct states, captured
+      in review-accionada.png.
+    threshold: 0.75
+  - id: standing-ergonomics
+    desc: >
+      Screen centre at ~1.35 m over a bolted pedestal, with the keyboard tray folding below it: the
+      station reads as sized for a standing operator, not as a desk monitor on a pole.
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 40
+    tris: 10000
+  measured:             # SwiftShader headless capture, 1280x800 — COUNTS are valid, frame time is NOT
+    draws: 22
+    tris: 786
+    geometries: 23
+    root_meshes: 21
+
+camera:
+  azimuth_deg: 71
+  elevation_deg: 6.9
+  fov: 38
+  target_y_m: 0.88
+  radius_m: 3.15
+
+lighting: house-rig + camera-side fill, environmentIntensity 2.0
+  # DOCUMENTED DEVIATION: bare 304 on a vertical column and a vertical console face — the IBL is
+  # what lights a metal, so environmentIntensity goes to 2.0 with a camera-side fill at 1.05.
+  # Metalness/roughness untouched (HANDBOOK §3.1).
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "PANTALLA"             # screen + button illumination as one powered state
+  - "PARO DE EMERGENCIA"   # mushroom travels and lights
+  - "TECLADO"              # tray folds down on its hinge
+
+colorTarget:
+  # MEASURED from the rendered console shell (headless SwiftShader capture at 1280x800): flattest
+  # 18x18 patch found by scan, per-channel std ~0.5.
+  srgb: [239, 240, 241]
+  deltaE00Max: 8
+  crop: "18x18+648+284"   # console shell at 1280x800
