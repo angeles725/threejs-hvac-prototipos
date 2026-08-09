@@ -146,10 +146,24 @@ function lintAsset(fam, slug) {
 
 const results = [];
 for (const fam of families) {
+  if (fam.includes('/')) {                       // accept familia/slug like the other catalog tools
+    const [f, slug] = fam.split('/');
+    if (!isDir(join(ROOT, f, slug))) { console.error(`(asset inexistente: ${fam})`); continue; }
+    results.push(lintAsset(f, slug));
+    continue;
+  }
   const fdir = join(ROOT, fam);
   if (!isDir(fdir)) { console.error(`(familia inexistente: ${fam})`); continue; }
   for (const slug of readdirSync(fdir).filter(s => isDir(join(fdir, s))).sort())
     results.push(lintAsset(fam, slug));
+}
+
+// FAIL CLOSED on an empty specimen: 0 assets scanned is NOT "clean", it is a check that measured
+// nothing (usually a bad arg — e.g. familia/slug that resolved to no dir). A green here would let a
+// session record "source linted, clean" in its RESUME and hand an un-linted asset to the next one.
+if (results.length === 0) {
+  console.error('lint estático: 0 assets escaneados — NADA medido (¿argumento equivocado?). NO CONCLUYENTE, no es "limpio".');
+  process.exit(2);
 }
 
 const bad = results.filter(r => r.issues.length);
