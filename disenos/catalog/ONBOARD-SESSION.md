@@ -191,6 +191,18 @@ elige otra familia libre si queda, o detente.
   4) raycast como pista, con el objeto y sus accesorios excluidos.
 - Todo hallazgo de auditoría se REFUTA (verificación adversarial de la sesión dueña) ANTES de aplicarse como
   fix. Un reporte medido pero con la identidad de malla mal anclada parece sólido y no lo es.
+- TRAMPA CRÍTICA — readback del CANVAS devuelve NEGRO: three.js crea el WebGLRenderer con
+  preserveDrawingBuffer=false, así que hashear el canvas dentro de la página (drawImage(renderer.domElement)
+  + getImageData) da píxeles TODOS NEGROS → el hash es CONSTANTE para CUALQUIER escena. Un checker así da
+  veredictos idénticos y confiados sin medir nada (gate verde sobre su propio defecto). SIEMPRE hashea
+  Page.captureScreenshot (que sí compone), NUNCA el canvas. Si alguien reportó ausencias con canvas-hash,
+  DESCARTA esos reportes, no los revises.
+- MÉTODO NO-RENDER vs NO-PIXELS (distingue defecto de límite de vista, con control): por cada botón NO-default-on:
+  hash → clic → hash. Si cambió = ok. Si NO cambió, CONTROL: fuerza renderer.render(scene,camera) y re-hashea;
+  si ahora cambia = NO-RENDER (la escena mutó pero no se dibujó → falta requestRender(), DEFECTO decisivo); si
+  sigue igual = NO-PIXELS (el estado no aporta píxeles desde la cámara default → candidato a known_view_limit,
+  NO defecto). El control prueba que los píxeles SÍ diferirían, así que un hash que no cambia es un render que
+  falta, no un objeto ausente.
 - HERRAMIENTAS DE AUDITORÍA (read-only, en tools/): audit-asset.mjs (inventario por geometry.type+parameters
   + diff por botón + PNG por estado) y hole-probe.mjs (FONDO CENTINELA: repinta scene.background/fog a magenta
   y fuerza un render; todo píxel magenta = la cámara atraviesa el modelo → distingue PANEL oscuro de AGUJERO,
