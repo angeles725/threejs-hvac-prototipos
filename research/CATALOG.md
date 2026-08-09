@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **65 blocks**
+Total: **66 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -71,3 +71,4 @@ Total: **65 blocks**
 | 63 | [threejs-block63.md](threejs-block63.md) | The automotive family: the four numbers a modeller cannot invent (body envelope, frame section, robot reach, guard height) |
 | 64 | [threejs-block64.md](threejs-block64.md) | Cantilever racking, and the token-check that almost rejected a good source |
 | 65 | [threejs-block65.md](threejs-block65.md) | Platform guard-rails per EN ISO 14122-3, and the token-check that lied in the other direction |
+| 66 | [threejs-block66.md](threejs-block66.md) | Steel lockers per BS 4680:1996: a size ladder and three derived-dimension rules |
