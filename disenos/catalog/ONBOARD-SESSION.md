@@ -229,6 +229,15 @@ elige otra familia libre si queda, o detente.
   con tres paquetes flotando fuera de la banda (empacadora-flowwrap). Usa `console.error` para toda salvaguarda de
   layout/geometría que quieras que el gate haga fallar; un assert es invisible para el instrumento. (Aparte: `SHOT_DIR`
   debe EXISTIR o el gate muere con ENOENT y parece fallo del asset — créalo antes de correr.)
+- UNA AFIRMACIÓN DE COMPORTAMIENTO HAY QUE ACCIONARLA, NO LEERLA: si lo que define al asset es su comportamiento
+  (un enclavamiento forzado, una secuencia, un tope), la EVIDENCIA también debe serlo. No basta leer el handler y
+  decir "está forzado": PÚLSALO en secuencia (p.ej. abrir puerta B con A abierta) con un `console.error` en el build
+  que dispare si la regla se viola, y confirma que la lista de errores vuelve VACÍA (esclusa-personal). Leer el código
+  prueba intención; accionarlo prueba comportamiento — y es lo que el gate puede recoger. Va junto a "captura cada estado".
+- EL PREFLIGHT GANA SU SITIO en el PASO 0: caza un `ReferenceError` de zona muerta temporal (una llamada en CARGA a un
+  `const` antes de inicializarse) que solo aparece en assets que ejecutan algo al cargar (arrancar en el estado de la
+  URL), no al hacer clic. El módulo lanza, `data-app-ready` nunca cambia, y el gate reporta asset roto DESPUÉS de
+  gastar el intento. Corre preflight antes de la corrida cara.
 - EL GATE NO VE EL BORDE DEL CUADRO: un sujeto puede salir RECORTADO con exit 0, ready true, 0 excepciones y
   conteos verdes — el gate mide que la escena renderiza, no que ENCUADRA. Confirmado por dos sesiones (bomba: el
   motor a ndcY 1.172; rack-drive-in: el arriostramiento superior por encima del HUD). Chequeo barato y que
