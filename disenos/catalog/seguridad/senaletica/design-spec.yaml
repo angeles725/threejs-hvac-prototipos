@@ -1,0 +1,177 @@
+# DesignSpec — floor safety marking set: pedestrian aisle, crossing, hatched keep-clear, bollards, sign post
+# Catalog family `seguridad` (worktree catalog-retail-lab).
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: senaletica
+family: seguridad
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # markings are paint film: they have area, not volume
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 11 -> moderate.
+  scores: {silhouette: 1, components: 2, hierarchy: 1, repetition: 3,
+           material_layers: 2, detail: 2, occlusion: 0, action_readiness: 0}
+  tier: moderate
+  notes: >
+    The hard part of this asset is not geometry, it is DEPTH: every marking is coplanar with the
+    slab and with the markings it crosses. The solution is a stack — each layer has both a y offset
+    AND a polygonOffset that GROWS with that height. A layer with a smaller offset wins over a layer
+    physically above it, which is how the hatch bars vanished under their own field in the first pass.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    coplanar_geometry: "disenos/catalog/retail/gondola/ (the canopy z-fight and its fix)"
+
+references:
+  - source: "workplace floor marking practice (aisle demarcation, hatched keep-clear zones)"
+    evidences: >
+      [INFER] No standard document is preserved in sources/ — treat every value as inference. The
+      conventions modelled: a pedestrian aisle bounded by continuous lines around 0.05-0.10 m wide,
+      an aisle clear width of about 1.2-1.5 m, a zebra crossing where the aisle meets traffic, a
+      yellow/black hatched zone marking floor that must stay clear, and bollards protecting it.
+    suitability: partial
+
+dimensions_real:
+  aisle_w_m:   {value: 1.50, confidence: low}    # [INFER] clear pedestrian width
+  line_w_m:    {value: 0.10, confidence: low}    # [INFER] marking line
+  marked_run_m:{value: 7.00, confidence: low}    # [INFER] length shown
+  crossing_w_m:{value: 1.10, confidence: low}    # [INFER] crossing width along the aisle
+  crossing_stripes: {value: 7, confidence: low}  # [INFER]
+  hatch_zone_m:{value: [1.60, 1.40], confidence: low}   # [INFER] keep-clear rectangle
+  hatch_pitch_m:{value: 0.26, confidence: low}   # [INFER] diagonal bar pitch
+  bollard_d_m: {value: 0.11, confidence: low}    # [INFER]
+  bollard_h_m: {value: 0.95, confidence: low}    # [INFER]
+  sign_post_h_m:{value: 2.20, confidence: low}   # [INFER]
+  slab_m:      {value: [9.0, 7.0], confidence: low}     # [INFER] concrete slab shown
+
+hierarchy:
+  - name: root
+    children:
+      - name: slab            # concrete the markings live on — a marking without a floor is not a marking
+        pivot: [0, 0, 0]
+        animation: none
+      - name: aisle_lines     # two continuous lines (y 0.004, offset 2)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: arrows          # instanced shafts + cone heads (y 0.010, offset 6)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: crossing        # instanced zebra stripes (y 0.008, offset 4) — togglable
+        pivot: [0, 0, 0]
+        animation: none
+      - name: hatch           # field (y 0.005/3) + CLIPPED diagonal bars (y 0.007/5) + border (y 0.011/7)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: bollards        # 3 posts with bands, caps and base flanges (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: signPost        # flanged post + warning triangle + mandatory disc
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: marking-yellow
+    family: paint
+    color: "#e0c02a"
+    metalness: 0.0
+    roughness: 0.80
+    evidence: "HANDBOOK §3.1 — floor paint is dielectric and matte; polygonOffset carries the depth"
+    confidence: 0.8
+  - id: marking-white
+    family: paint
+    color: "#e8e6e0"
+    metalness: 0.0
+    roughness: 0.80
+    evidence: "HANDBOOK §3.1"
+    confidence: 0.8
+  - id: hatch-black
+    family: paint
+    color: "#24282d"
+    metalness: 0.0
+    roughness: 0.80
+    evidence: "HANDBOOK §3.1"
+    confidence: 0.8
+  - id: concrete-slab
+    family: concrete
+    color: "#4b5158"
+    metalness: 0.0
+    roughness: 0.92
+    evidence: "HANDBOOK §3.1 dielectric mineral surface"
+    confidence: 0.8
+  - id: bollard-yellow
+    family: painted-metal
+    color: "#d8b41e"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1 painted/coated 0.0-0.05"
+    confidence: 0.8
+  - id: sign-blue
+    family: painted-metal
+    color: "#1c56a8"
+    metalness: 0.0
+    roughness: 0.44
+    evidence: "[INFER] mandatory-sign blue (ISO 7010 family colour)"
+    confidence: 0.7
+
+critical_features:
+  - id: layered-markings-do-not-tear
+    desc: >
+      The crossing crosses the aisle lines and the hatch bars sit on the hatch field, with no
+      z-fighting and no layer swallowing another. This is the asset's real difficulty.
+    threshold: 0.80
+  - id: hatch-clipped-to-its-zone
+    desc: >
+      The diagonal bars are clipped to the keep-clear rectangle — each bar's length is computed from
+      where its 45 degree line enters and leaves the zone, not drawn at a constant length that
+      overhangs the field.
+    threshold: 0.78
+  - id: marking-vocabulary
+    desc: >
+      Aisle, direction arrows, crossing, hatched zone, bollards and a sign post read as ONE
+      coherent floor-safety language rather than as unrelated decals.
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 50
+    tris: 20000
+  measured:             # SwiftShader headless capture, 1280x800 — COUNTS are valid, frame time is NOT
+    draws: 34
+    tris: 1835
+    geometries: 35
+    root_meshes: 33
+
+camera:
+  azimuth_deg: 58
+  elevation_deg: 25      # deliberately HIGH: the subject is the floor, not an elevation
+  fov: 38
+  target_y_m: 0.35
+  radius_m: 10.2
+
+lighting: house-rig, no extra fill (+ shadow normalBias)
+  # DOCUMENTED DEVIATION: no camera-side fill here — the subject is horizontal, which is exactly
+  # what the house rig was calibrated for. What it DID need is sun.shadow.normalBias 0.05: a 9 x 7 m
+  # slab under a 1024 map self-shadowed in stripes, and a plain depth bias only trades acne for
+  # peter-panning. The scene ground also sits 20 mm BELOW the slab so the two do not share a plane.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "CRUCE PEATONAL"
+  - "ZONA RAYADA"
+  - "BOLARDOS"
+
+colorTarget:
+  # MEASURED from a rendered yellow marking (headless SwiftShader capture at 1280x800): flattest
+  # 10x4 patch found by scan inside the hatch field, per-channel std 0.0. The window is small
+  # because every marking here is a thin band seen at a shallow angle.
+  srgb: [236, 225, 137]
+  deltaE00Max: 8
+  crop: "10x4+650+318"   # hatch field at 1280x800
