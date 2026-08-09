@@ -1,0 +1,323 @@
+<!doctype html>
+<!--
+  tanque-almacenamiento — catalog asset, family `estructuras`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Vertical storage tank on a skirt, with a caged access ladder and a railed roof.
+  LIGHTING NOTE: this is a CURVED subject. The flat-panel fill used by camara-frigorifica and
+  puerta-cuarto-frio is deliberately NOT applied — a cylinder already gets a reflection gradient
+  from the environment, and a hard camera-side fill would flatten exactly the curvature that
+  makes it read as a tank.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tanque de almacenamiento — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Tanque de almacenamiento vertical — faldón, escalera enjaulada</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· techo cónico · boquillas bridadas · indicador de nivel</span></div>
+  <div class="dim">Ø 3.00 × 6.85 m total (virola 5.20 m sobre faldón 0.90 m)</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnLad">ESCALERA</button>
+  <button id="btnRail">BARANDA</button>
+  <button id="btnNoz">BOQUILLAS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const D = 3.00, RAD = D/2;
+const SKIRT_H = 0.90;                       // skirt support under the bottom head
+const SHELL_H = 5.20;                       // cylindrical shell (3 courses)
+const ROOF_RISE = 0.55;                     // conical roof
+const Y0 = SKIRT_H, Y1 = Y0 + SHELL_H;      // shell bottom / top
+const TOP = Y1 + ROOF_RISE;
+const COURSE = SHELL_H / 3;                 // weld-seam pitch: 3 courses
+const LAD_A = -0.62;                        // ladder azimuth on the shell (radians)
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 16, 52);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 12.5, AZ = 0.86, EL = 0.24;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 3.10 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 3.10, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 3.10, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// CURVED BARE-METAL SUBJECT (design-spec.yaml `lighting`). Two things are true at once and the
+// first capture proved it: a cylinder DOES resolve the IBL into a gradient, and it still renders
+// near-black if there is nothing bright around it to reflect. Raising environmentIntensity alone
+// was not enough. The remedy is the HANDBOOK §3.3 STUDIO VARIANT, which exists for exactly this
+// case — large soft area sources reveal curvature on binary metal, where a point highlight only
+// makes a hot spot. This is NOT the flat-panel camera-side fill used on the sandwich-panel
+// assets; that one would flatten the gradient this asset depends on.
+scene.environmentIntensity = 2.6;
+RectAreaLightUniformsLib.init();                 // required once before any RectAreaLight renders
+const keyPanel = new THREE.RectAreaLight(0xffffff, 5.5, 7.0, 9.0);
+keyPanel.position.set(-6.5, 4.6, 7.5); keyPanel.lookAt(0, 3.0, 0);
+scene.add(keyPanel);
+const fillPanel = new THREE.RectAreaLight(0xdfe8f2, 1.8, 5.0, 7.0);
+fillPanel.position.set(7.5, 3.4, 3.0); fillPanel.lookAt(0, 3.0, 0);
+scene.add(fillPanel);
+// RectAreaLight casts no shadow (§3.3), so the sun below stays as the contact-shadow source.
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(7, 11, 5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0005;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-6; sun.shadow.camera.right=6; sun.shadow.camera.top=8; sun.shadow.camera.bottom=-3;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(50,50),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Shell, roof, ladder and rails are bare stainless/galvanised (0.9-1.0). The plinth is
+//   concrete and the gauge board is painted — both dielectrics.
+// ============================================================================
+const matShell  = new THREE.MeshStandardMaterial({ color:0xc4cacd, metalness:0.95, roughness:0.34 });
+const matShellD = new THREE.MeshStandardMaterial({ color:0xa9b0b4, metalness:0.95, roughness:0.44 });
+const matWeld   = new THREE.MeshStandardMaterial({ color:0x9aa1a6, metalness:0.95, roughness:0.58 });
+const matGalv   = new THREE.MeshStandardMaterial({ color:0xb7bec2, metalness:0.95, roughness:0.46 });
+const matRail   = new THREE.MeshStandardMaterial({ color:0xc6ccd0, metalness:0.95, roughness:0.38 });
+const matNozzle = new THREE.MeshStandardMaterial({ color:0xb2b9bd, metalness:0.95, roughness:0.40 });
+const matConc   = new THREE.MeshStandardMaterial({ color:0x8e8d88, metalness:0.0,  roughness:0.95 });
+const matBoard  = new THREE.MeshStandardMaterial({ color:0xd8dcdf, metalness:0.0,  roughness:0.55 });
+const matDark   = new THREE.MeshStandardMaterial({ color:0x1b1f23, metalness:0.0,  roughness:0.72 });
+const matValve  = new THREE.MeshStandardMaterial({ color:0x8f3b2a, metalness:0.0,  roughness:0.50 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=28)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+const at = (a, r)=> [Math.cos(a)*r, Math.sin(a)*r];   // shell surface helper: azimuth -> x,z
+
+// --- foundation + skirt ---
+const base = new THREE.Group();
+cyl(base, RAD + 0.35, 0.22, matConc, 0, 0.11, 0, 0, 0, 32);                 // concrete ring plinth
+{ // the skirt is a RING, not a solid cylinder: it is a hollow support, and a solid one would
+  // also hide the bottom head behind it in any cutaway.
+  const sk = new THREE.Mesh(new THREE.CylinderGeometry(RAD - 0.04, RAD - 0.04, SKIRT_H, 30, 1, true),
+    new THREE.MeshStandardMaterial({ color:0xa9b0b4, metalness:0.95, roughness:0.44, side:THREE.DoubleSide }));
+  sk.position.set(0, 0.22 + SKIRT_H/2 - 0.11, 0);
+  sk.castShadow = sk.receiveShadow = true; base.add(sk); }
+cyl(base, RAD + 0.06, 0.05, matShellD, 0, Y0, 0, 0, 0, 30);                 // base ring / bottom head flange
+for(let i=0;i<6;i++){                                                        // skirt vents + anchor chairs
+  const a = i * Math.PI/3, [x, z] = at(a, RAD - 0.05);
+  put(base, 0.20, 0.22, 0.05, matDark, x, 0.42, z).rotation.y = -a;
+  const [ax, az] = at(a + Math.PI/6, RAD + 0.14);
+  put(base, 0.14, 0.16, 0.10, matGalv, ax, 0.28, az).rotation.y = -(a + Math.PI/6);
+}
+root.add(base);
+
+// --- shell: 3 welded courses + circumferential weld seams + a shell manway ---
+const shell = new THREE.Group();
+cyl(shell, RAD, SHELL_H, matShell, 0, Y0 + SHELL_H/2, 0, 0, 0, 30);
+for(let i=1;i<3;i++)                                                         // horizontal weld seams
+  cyl(shell, RAD + 0.012, 0.035, matWeld, 0, Y0 + i*COURSE, 0, 0, 0, 30);
+{ const [mx, mz] = at(0.55, RAD - 0.02);                                     // shell manway
+  const mw = cyl(shell, 0.28, 0.10, matShellD, mx, Y0 + 0.85, mz, Math.PI/2, 0, 20);
+  mw.rotation.set(Math.PI/2, 0, 0); mw.position.set(mx, Y0 + 0.85, mz);
+  const hold = new THREE.Group(); hold.rotation.y = -0.55; shell.add(hold);
+  hold.add(mw); mw.position.set(RAD - 0.02, Y0 + 0.85, 0); mw.rotation.set(0, 0, Math.PI/2);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.30, 0.022, 8, 20), matGalv);
+  ring.position.set(RAD + 0.03, Y0 + 0.85, 0); ring.rotation.y = Math.PI/2;
+  ring.castShadow = true; hold.add(ring); }
+root.add(shell);
+
+// --- conical roof + roof manway + vent ---
+const roof = new THREE.Group();
+{ const cone = new THREE.Mesh(new THREE.ConeGeometry(RAD + 0.03, ROOF_RISE, 30), matShellD);
+  cone.position.set(0, Y1 + ROOF_RISE/2, 0);
+  cone.castShadow = cone.receiveShadow = true; roof.add(cone); }
+cyl(roof, RAD + 0.05, 0.04, matWeld, 0, Y1 + 0.01, 0, 0, 0, 30);            // roof-to-shell curb angle
+cyl(roof, 0.30, 0.12, matShellD, 0.55, Y1 + 0.42, 0.30, 0, 0, 20);          // roof manway
+cyl(roof, 0.33, 0.03, matGalv, 0.55, Y1 + 0.49, 0.30, 0, 0, 20);
+cyl(roof, 0.11, 0.34, matNozzle, -0.50, Y1 + 0.55, -0.35, 0, 0, 16);        // free vent
+cyl(roof, 0.16, 0.05, matNozzle, -0.50, Y1 + 0.72, -0.35, 0, 0, 16);
+root.add(roof);
+
+// --- roof handrail: posts + two rails around the roof perimeter (instanced posts) ---
+const rails = new THREE.Group();
+{ const N = 14, RR = RAD - 0.10;
+  const post = new THREE.InstancedMesh(new THREE.BoxGeometry(0.05, 1.10, 0.05), matRail, N);
+  for(let i=0;i<N;i++){
+    const a = i * Math.PI*2 / N, [x, z] = at(a, RR);
+    _q.setFromEuler(new THREE.Euler(0, -a, 0));
+    _p.set(x, Y1 + 0.55, z);
+    post.setMatrixAt(i, _m.compose(_p, _q, _s));
+  }
+  post.instanceMatrix.needsUpdate = true; post.castShadow = true; rails.add(post);
+  for(const h of [1.10, 0.55]){
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(RR, 0.018, 6, 34), matRail);
+    ring.position.set(0, Y1 + h, 0); ring.rotation.x = Math.PI/2;
+    ring.castShadow = true; rails.add(ring);
+  }
+}
+root.add(rails);
+
+// --- caged access ladder on the shell: stringers, instanced rungs, instanced cage hoops ---
+const ladder = new THREE.Group();
+{
+  const [lx, lz] = at(LAD_A, RAD + 0.16);
+  const g = new THREE.Group();
+  g.position.set(lx, 0, lz); g.rotation.y = -LAD_A;
+  const H = Y1 + 0.50;
+  for(const sz of [-1, 1]) put(g, 0.04, H - 0.30, 0.04, matGalv, 0, (H + 0.30)/2, sz*0.24);
+  { const N = Math.floor((H - 0.60) / 0.28);
+    const rung = new THREE.InstancedMesh(new THREE.BoxGeometry(0.03, 0.028, 0.48), matGalv, N);
+    for(let i=0;i<N;i++){
+      _q.setFromEuler(new THREE.Euler(0,0,0));
+      _p.set(0, 0.42 + i*0.28, 0);
+      rung.setMatrixAt(i, _m.compose(_p, _q, _s)); }
+    rung.instanceMatrix.needsUpdate = true; rung.castShadow = true; g.add(rung); }
+  // safety cage: hoops start ~2.2 m up, plus vertical straps
+  { const N = 8;
+    const hoop = new THREE.InstancedMesh(new THREE.TorusGeometry(0.38, 0.014, 6, 18, Math.PI*1.35), matGalv, N);
+    // lay the ring FLAT (rotate -90 deg about X) and then swing it about Y so the gap faces the
+    // shell. Composing the two axis rotations explicitly avoids depending on an Euler order.
+    const qFlat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), -Math.PI/2);
+    const qSpin = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), -Math.PI*0.675);  // = -half the 243 deg sweep, so the MISSING sector is centred on the shell side
+    const qHoop = qSpin.clone().multiply(qFlat);
+    for(let i=0;i<N;i++){
+      _p.set(0.06, 2.20 + i*0.52, 0);
+      hoop.setMatrixAt(i, _m.compose(_p, qHoop, _s)); }
+    hoop.instanceMatrix.needsUpdate = true; hoop.castShadow = true; g.add(hoop);
+    for(const sz of [-1, 1])                                   // cage straps tying the hoops together
+      put(g, 0.02, 8*0.52, 0.02, matGalv, 0.42, 2.20 + 4*0.52 - 0.26, sz*0.26);
+    put(g, 0.02, 8*0.52, 0.02, matGalv, 0.44, 2.20 + 4*0.52 - 0.26, 0);
+  }
+  put(g, 0.06, 0.05, 0.62, matGalv, 0, Y1 + 0.52, 0);                        // landing at the roof rail
+  ladder.add(g);
+}
+root.add(ladder);
+
+// --- nozzles: bottom outlet with valve, top inlet, drain, and a level gauge board ---
+const nozzles = new THREE.Group();
+{ const [ox, oz] = at(2.0, RAD);                                             // bottom outlet
+  const g = new THREE.Group(); g.rotation.y = -2.0; nozzles.add(g);
+  cyl(g, 0.085, 0.42, matNozzle, RAD + 0.21, Y0 + 0.35, 0, 0, Math.PI/2, 16);
+  cyl(g, 0.125, 0.035, matNozzle, RAD + 0.42, Y0 + 0.35, 0, 0, Math.PI/2, 16);
+  put(g, 0.16, 0.20, 0.16, matValve, RAD + 0.30, Y0 + 0.35, 0);
+  cyl(g, 0.14, 0.03, matValve, RAD + 0.30, Y0 + 0.53, 0, 0, 0, 14);
+  cyl(g, 0.05, 0.30, matNozzle, RAD - 0.10, 0.30, 0, 0, 0, 12); }
+{ const g = new THREE.Group(); g.rotation.y = -3.6; nozzles.add(g);          // top inlet
+  cyl(g, 0.075, 0.36, matNozzle, RAD + 0.18, Y1 - 0.30, 0, 0, Math.PI/2, 16);
+  cyl(g, 0.11, 0.03, matNozzle, RAD + 0.36, Y1 - 0.30, 0, 0, Math.PI/2, 16);
+  cyl(g, 0.075, 1.10, matNozzle, RAD + 0.34, Y1 - 0.86, 0, 0, 0, 16); }
+{ const g = new THREE.Group(); g.rotation.y = -1.15; nozzles.add(g);         // level gauge board
+  put(g, 0.03, SHELL_H - 0.90, 0.16, matBoard, RAD + 0.10, Y0 + SHELL_H/2, 0);
+  cyl(g, 0.014, SHELL_H - 0.90, matDark, RAD + 0.13, Y0 + SHELL_H/2, 0, 0, 0, 8);
+  put(g, 0.05, 0.09, 0.09, matValve, RAD + 0.13, Y0 + 1.90, 0); }
+root.add(nozzles);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnLad = document.getElementById('btnLad');
+btnLad.onclick = ()=>{ ladder.visible = !ladder.visible; btnLad.classList.toggle('on', !ladder.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnRail = document.getElementById('btnRail');
+btnRail.onclick = ()=>{ rails.visible = !rails.visible; btnRail.classList.toggle('on', !rails.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnNoz = document.getElementById('btnNoz');
+btnNoz.onclick = ()=>{ nozzles.visible = !nozzles.visible; btnNoz.classList.toggle('on', !nozzles.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__tanqueAlmacenamientoApp = __app;
+globalThis['__tanque-almacenamientoApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
