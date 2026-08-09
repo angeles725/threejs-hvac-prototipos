@@ -1,0 +1,297 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — seguridad/hidrante · dry-barrel pillar fire hydrant with traffic flange.
+  Built from disenos/catalog/shell-template.html. Contract: __hidranteApp.runtime + __qaRenderInfo +
+  data-app-ready, render-on-demand, shadows frozen (autoUpdate=false, 1024), DPR<=2.
+  Instancing (block54 §2.3): the breakaway bolt circles and the ~45 chain links repeat for real.
+  The barrel, bonnet and the three nozzles are unique meshes.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hidrante de columna — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">HIDRANTE DE COLUMNA SECA — fundición pintada</div>
+  <div><span class="dim">0.90 m sobre nivel · 1 toma de bombeo 115 mm + 2 tomas de manguera 64 mm</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnCap">TAPAS</button>
+  <button id="btnChain" class="on">CADENAS</button>
+  <button id="btnBol" class="on">BOLARDOS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const GRADE = 0.0;
+const BARREL_R = 0.105;                 // upper barrel radius
+const FLANGE_Y = 0.14;                  // traffic (breakaway) flange, just above grade
+const FLANGE_R = 0.165, FLANGE_T = 0.022;
+const BONNET_Y = 0.74;                  // top of the barrel / underside of the bonnet
+const TOTAL_H = 0.90;                   // top of the operating nut above grade
+const PUMPER_R = 0.0575, PUMPER_Y = 0.56;   // 115 mm pumper outlet
+const HOSE_R = 0.032, HOSE_Y = 0.47;        // 64 mm hose outlets, one each side
+const OUT_LEN = 0.10;
+const BOLTS = 6;
+const PAD = 1.05;
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 5, 16);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.10;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 2.3, AZ = 0.78, EL = 0.24;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.52 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.48, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.48, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.6;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.5, 4.5, 2.5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-1.4; sun.shadow.camera.right=1.4; sun.shadow.camera.top=1.4; sun.shadow.camera.bottom=-1.4;
+scene.add(sun);
+// VERTICAL-SUBJECT FILL: the barrel is a vertical cylinder; without a camera-side fill its lit half
+// is the only thing that reads and the casting looks flat.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 0.85);
+fill.position.set(-2.4, 1.6, 3.0);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(14,14),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: a hydrant is PAINTED cast iron (dielectric). Only the bolts,
+// the chains and the exposed outlet threads are bare metal.
+// ============================================================================
+const matBody   = new THREE.MeshStandardMaterial({ color:0xb4231a, metalness:0.0, roughness:0.52 });
+const matBonnet = new THREE.MeshStandardMaterial({ color:0xd8b41e, metalness:0.0, roughness:0.50 });
+const matCap    = new THREE.MeshStandardMaterial({ color:0xd8b41e, metalness:0.0, roughness:0.52 });
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xb9bec2, metalness:0.92, roughness:0.36 });
+const matChain  = new THREE.MeshStandardMaterial({ color:0x8f959a, metalness:0.90, roughness:0.42 });
+const matPad    = new THREE.MeshStandardMaterial({ color:0x40454b, metalness:0.0, roughness:0.94 });
+const matBoll   = new THREE.MeshStandardMaterial({ color:0xd8b41e, metalness:0.0, roughness:0.56 });
+const matBollB  = new THREE.MeshStandardMaterial({ color:0x1c1f23, metalness:0.0, roughness:0.7 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const dummy = new THREE.Object3D();
+const cyl = (parent, r0, r1, h, seg, mat, x,y,z)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, h, seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); parent.add(m); return m;
+};
+
+// --- concrete pad ---
+const pad = new THREE.Mesh(new THREE.BoxGeometry(PAD, 0.05, PAD), matPad);
+pad.receiveShadow = true; pad.position.set(0, 0.025, 0); root.add(pad);
+
+// --- lower barrel + traffic flange pair. The breakaway flange is the identity of a DRY-barrel
+// hydrant: a vehicle shears the bolts and the shoe below grade keeps the main sealed.
+cyl(root, 0.125, 0.135, FLANGE_Y - 0.02, 20, matBody, 0, 0.05 + (FLANGE_Y - 0.02)/2, 0);
+cyl(root, FLANGE_R, FLANGE_R, FLANGE_T, 24, matBody, 0, FLANGE_Y, 0);
+cyl(root, FLANGE_R, FLANGE_R, FLANGE_T, 24, matBody, 0, FLANGE_Y + FLANGE_T + 0.006, 0);
+{
+  const boltGeo = new THREE.CylinderGeometry(0.011, 0.011, FLANGE_T*2 + 0.024, 6);
+  const bolts = new THREE.InstancedMesh(boltGeo, matSteel, BOLTS);
+  bolts.castShadow = bolts.receiveShadow = true;
+  for(let i=0;i<BOLTS;i++){
+    const a = (i/BOLTS)*Math.PI*2;
+    dummy.position.set(Math.cos(a)*(FLANGE_R - 0.028), FLANGE_Y + FLANGE_T/2 + 0.003, Math.sin(a)*(FLANGE_R - 0.028));
+    dummy.rotation.set(0,0,0); dummy.updateMatrix();
+    bolts.setMatrixAt(i, dummy.matrix);
+  }
+  bolts.instanceMatrix.needsUpdate = true;
+  root.add(bolts);
+}
+
+// --- upper barrel: slight taper, cast ribs at the outlet band ---
+cyl(root, BARREL_R*0.94, BARREL_R, BONNET_Y - (FLANGE_Y + 0.05), 24, matBody,
+    0, (BONNET_Y + FLANGE_Y + 0.05)/2, 0);
+cyl(root, BARREL_R + 0.012, BARREL_R + 0.012, 0.028, 24, matBody, 0, PUMPER_Y + 0.10, 0);
+
+// --- bonnet: dome + weather cap + pentagon operating nut ---
+const dome = new THREE.Mesh(new THREE.SphereGeometry(BARREL_R + 0.008, 24, 12, 0, Math.PI*2, 0, Math.PI/2), matBonnet);
+dome.castShadow = dome.receiveShadow = true; dome.position.set(0, BONNET_Y, 0); root.add(dome);
+cyl(root, BARREL_R + 0.018, BARREL_R + 0.018, 0.022, 24, matBonnet, 0, BONNET_Y, 0);
+cyl(root, 0.030, 0.036, 0.05, 5, matBonnet, 0, TOTAL_H - 0.02, 0);          // pentagon operating nut
+
+// --- outlets: one pumper facing the camera, two hose outlets on the sides ---
+// Each is a spigot + a threaded collar + a cap; the cap group can be removed to expose the thread.
+const caps = new THREE.Group();
+const outlets = [
+  { r: PUMPER_R, y: PUMPER_Y, dir: new THREE.Vector3(0,0,1) },
+  { r: HOSE_R,   y: HOSE_Y,   dir: new THREE.Vector3(1,0,0) },
+  { r: HOSE_R,   y: HOSE_Y,   dir: new THREE.Vector3(-1,0,0) },
+];
+const capAnchors = [];
+for(const o of outlets){
+  const base = o.dir.clone().multiplyScalar(BARREL_R*0.9);
+  const spigot = new THREE.Mesh(new THREE.CylinderGeometry(o.r + 0.010, o.r + 0.016, OUT_LEN, 18), matBody);
+  spigot.castShadow = spigot.receiveShadow = true;
+  spigot.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), o.dir);
+  spigot.position.copy(base).add(o.dir.clone().multiplyScalar(OUT_LEN/2)).setY(o.y);
+  root.add(spigot);
+  // exposed thread ring, visible only once the cap is off
+  const thread = new THREE.Mesh(new THREE.CylinderGeometry(o.r, o.r, 0.030, 18), matSteel);
+  thread.castShadow = true;
+  thread.quaternion.copy(spigot.quaternion);
+  thread.position.copy(base).add(o.dir.clone().multiplyScalar(OUT_LEN + 0.012)).setY(o.y);
+  root.add(thread);
+  // cap + its lug ring
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(o.r + 0.014, o.r + 0.012, 0.045, 18), matCap);
+  cap.castShadow = cap.receiveShadow = true;
+  cap.quaternion.copy(spigot.quaternion);
+  cap.position.copy(base).add(o.dir.clone().multiplyScalar(OUT_LEN + 0.026)).setY(o.y);
+  caps.add(cap);
+  const lug = new THREE.Mesh(new THREE.BoxGeometry(o.r*2 + 0.05, 0.014, 0.020), matCap);
+  lug.castShadow = true; lug.quaternion.copy(spigot.quaternion);
+  lug.position.copy(cap.position);
+  caps.add(lug);
+  capAnchors.push({ o, capPos: cap.position.clone() });
+}
+root.add(caps);
+
+// --- retaining chains: a slack catenary of instanced links from each cap to the barrel band ---
+const chains = new THREE.Group();
+{
+  const linkGeo = new THREE.TorusGeometry(0.011, 0.0032, 6, 10);
+  const perChain = 15;
+  const im = new THREE.InstancedMesh(linkGeo, matChain, perChain*capAnchors.length);
+  im.castShadow = im.receiveShadow = true;
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0,1,0);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), p = new THREE.Vector3(), d = new THREE.Vector3();
+  let li = 0;
+  for(const {o, capPos} of capAnchors){
+    a.copy(capPos);
+    b.copy(o.dir).multiplyScalar(BARREL_R*0.75); b.y = o.y + 0.085;
+    for(let k=0;k<perChain;k++){
+      const t = k/(perChain-1);
+      p.lerpVectors(a, b, t);
+      p.y -= Math.sin(Math.PI*t) * 0.085;                 // slack sag
+      // orient each link along the local chain direction, alternating 90° like a real chain
+      d.subVectors(b, a).normalize();
+      q.setFromUnitVectors(up, d);
+      const twist = new THREE.Quaternion().setFromAxisAngle(d, (k % 2) * Math.PI/2);
+      q.premultiply(twist);
+      m.compose(p, q, new THREE.Vector3(1,1,1));
+      im.setMatrixAt(li++, m);
+    }
+  }
+  im.instanceMatrix.needsUpdate = true;
+  chains.add(im);
+}
+root.add(chains);
+
+// --- protective bollards (context) ---
+const bollards = new THREE.Group();
+for(const [bx,bz] of [[-0.72,-0.52],[0.72,-0.52]]){   // set BACK: at 0.62/-0.30 they crowded the
+                                                       // subject and read as the main object
+  const b = cyl(bollards, 0.055, 0.055, 0.95, 16, matBoll, bx, 0.475, bz);
+  cyl(bollards, 0.058, 0.058, 0.10, 16, matBollB, bx, 0.24, bz);
+  cyl(bollards, 0.058, 0.058, 0.10, 16, matBollB, bx, 0.62, bz);
+  const domeB = new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 8, 0, Math.PI*2, 0, Math.PI/2), matBoll);
+  domeB.castShadow = true; domeB.position.set(bx, 0.95, bz); bollards.add(domeB);
+}
+root.add(bollards);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot   = document.getElementById('btnRot');
+const btnCap   = document.getElementById('btnCap');
+const btnChain = document.getElementById('btnChain');
+const btnBol   = document.getElementById('btnBol');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+// TAPAS starts "on" as caps fitted; pressing it strips them to expose the threads.
+btnCap.classList.add('on');
+btnCap.onclick = ()=>{ caps.visible = !caps.visible; btnCap.classList.toggle('on', caps.visible);
+  chains.visible = caps.visible && btnChain.classList.contains('on');
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+btnChain.onclick = ()=>{ const on = !chains.visible; chains.visible = on && caps.visible;
+  btnChain.classList.toggle('on', on); renderer.shadowMap.needsUpdate = true; requestRender(); };
+toggle(btnBol, bollards);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__hidranteApp = { runtime:{ scene, renderer, camera, root } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

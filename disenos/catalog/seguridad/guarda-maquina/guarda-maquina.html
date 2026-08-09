@@ -1,0 +1,311 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — seguridad/guarda-maquina · welded-mesh machine guarding with an interlocked door.
+  Built from disenos/catalog/shell-template.html. Contract: __guardaMaquinaApp.runtime +
+  __qaRenderInfo + data-app-ready, render-on-demand, shadows frozen (autoUpdate=false, 1024), DPR<=2.
+  Instancing (block54 §2.3): the mesh IS the repetition — ~300 wires in two batches for the fixed
+  panels plus two more for the door leaf. Posts, frames, the interlock and the sign are unique.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guarda de máquina (malla) — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">GUARDA DE MÁQUINA — malla electrosoldada 40 mm + perfil</div>
+  <div><span class="dim">2.00 m de alto · claro inferior 50 mm · puerta con enclavamiento</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">ABRIR PUERTA</button>
+  <button id="btnMach" class="on">MÁQUINA</button>
+  <button id="btnSign" class="on">SEÑALIZACIÓN</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const BAY = 1.00;                   // panel width
+const H = 2.00;                     // guard height
+const GAP = 0.05;                   // floor gap — small on purpose: a large gap defeats the guard
+const MESH_PITCH = 0.04;            // 40 mm aperture; the aperture is what sets the safety distance
+const WIRE = 0.0042;
+const POST = 0.045;                 // 45 mm profile post
+const FRAME = 0.028;                // panel frame stock
+const DOOR_BAY = 1;                 // which bay along X carries the door (0-based)
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 9, 28);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 5.6, AZ = 0.96, EL = 0.22;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.15 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.05, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.05, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.75;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4, 6, 3.5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-3.5; sun.shadow.camera.right=3.5; sun.shadow.camera.top=3; sun.shadow.camera.bottom=-3;
+scene.add(sun);
+// VERTICAL-SUBJECT FILL: a wire mesh has no flat face; without a camera-side fill it reads as a
+// grey haze instead of a grid. Metalness untouched (HANDBOOK §3.1).
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.05);
+fill.position.set(-4.0, 2.8, 5.0);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(22,22),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: guard systems are POWDER-COATED (dielectric); only the mesh
+// wire is left bare/galvanised, and the interlock body is polymer.
+// ============================================================================
+const matPost  = new THREE.MeshStandardMaterial({ color:0xd8b41e, metalness:0.0,  roughness:0.50 });
+const matFrame = new THREE.MeshStandardMaterial({ color:0x2f3439, metalness:0.0,  roughness:0.55 });
+const matWire  = new THREE.MeshStandardMaterial({ color:0x3b4147, metalness:0.0,  roughness:0.58 });
+const matDoor  = new THREE.MeshStandardMaterial({ color:0xd8b41e, metalness:0.0,  roughness:0.50 });
+const matLock  = new THREE.MeshStandardMaterial({ color:0xe8a317, metalness:0.0,  roughness:0.45 });
+const matLockB = new THREE.MeshStandardMaterial({ color:0x22262b, metalness:0.0,  roughness:0.6 });
+const matSteel = new THREE.MeshStandardMaterial({ color:0xb9bec2, metalness:0.92, roughness:0.36 });
+const matSign  = new THREE.MeshStandardMaterial({ color:0xd8b41e, metalness:0.0,  roughness:0.42 });
+const matMach  = new THREE.MeshStandardMaterial({ color:0x39424b, metalness:0.0,  roughness:0.55 });
+const matMachM = new THREE.MeshStandardMaterial({ color:0xc0c5c9, metalness:0.9,  roughness:0.32 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const dummy = new THREE.Object3D();
+const box = (parent,w,h,d,mat,x,y,z)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); parent.add(m); return m; };
+
+// --- panel layout: 4 bays along X and one corner return along -Z at the right end ---
+const BAYS = 4;
+const X0 = -BAYS*BAY/2;
+const panels = [];      // {cx, cz, ry, isDoor}
+for(let i=0;i<BAYS;i++) panels.push({ cx: X0 + BAY*(i+0.5), cz: 0, ry: 0, isDoor: i === DOOR_BAY });
+panels.push({ cx: X0 + BAYS*BAY, cz: -BAY/2, ry: Math.PI/2, isDoor: false });   // corner return
+
+// --- posts: one at every panel joint, plus the corner and the return end ---
+const postXs = [];
+for(let i=0;i<=BAYS;i++) postXs.push(X0 + i*BAY);
+for(const x of postXs){
+  box(root, POST, H, POST, matPost, x, H/2, 0);
+  box(root, 0.13, 0.010, 0.13, matPost, x, 0.005, 0);
+  for(const sz of [-1,1]){
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.008,0.008,0.026,8), matSteel);
+    b.castShadow = true; b.position.set(x, 0.018, sz*0.045); root.add(b);
+  }
+}
+box(root, POST, H, POST, matPost, X0 + BAYS*BAY, H/2, -BAY);
+box(root, 0.13, 0.010, 0.13, matPost, X0 + BAYS*BAY, 0.005, -BAY);
+
+// --- mesh builder: pushes wire matrices into a shared pair of batches -------------------------
+// Each panel is a local grid in its own XY plane, then rotated into place. Keeping the batches
+// shared is the point of instancing here: 5 panels of ~74 wires would otherwise be 5-10 draws.
+const vert = [], horz = [];
+function meshPanel(cx, cz, ry, w, y0, y1, out){
+  const cos = Math.cos(ry), sin = Math.sin(ry);
+  const nV = Math.floor((w - 2*FRAME) / MESH_PITCH);
+  const nH = Math.floor((y1 - y0) / MESH_PITCH);
+  for(let i=1;i<=nV;i++){
+    const lx = -w/2 + FRAME + MESH_PITCH*i - MESH_PITCH/2;
+    out.v.push({ x: cx + lx*cos, z: cz - lx*sin, y: (y0 + y1)/2, h: y1 - y0, ry });
+  }
+  for(let j=1;j<=nH;j++){
+    const ly = y0 + MESH_PITCH*j - MESH_PITCH/2;
+    out.h.push({ x: cx, z: cz, y: ly, w: w - 2*FRAME, ry });
+  }
+}
+const acc = { v: [], h: [] };
+for(const p of panels){
+  if(p.isDoor) continue;                       // the door carries its own mesh inside its pivot
+  meshPanel(p.cx, p.cz, p.ry, BAY - POST, GAP, H - FRAME, acc);
+}
+{
+  const vGeo = new THREE.BoxGeometry(WIRE, 1, WIRE);
+  const vMesh = new THREE.InstancedMesh(vGeo, matWire, acc.v.length);
+  vMesh.castShadow = vMesh.receiveShadow = true;
+  acc.v.forEach((s,i)=>{ dummy.position.set(s.x, s.y, s.z); dummy.rotation.set(0, s.ry, 0);
+    dummy.scale.set(1, s.h, 1); dummy.updateMatrix(); vMesh.setMatrixAt(i, dummy.matrix); });
+  vMesh.instanceMatrix.needsUpdate = true;
+  const hGeo = new THREE.BoxGeometry(1, WIRE, WIRE);
+  const hMesh = new THREE.InstancedMesh(hGeo, matWire, acc.h.length);
+  hMesh.castShadow = hMesh.receiveShadow = true;
+  acc.h.forEach((s,i)=>{ dummy.position.set(s.x, s.y, s.z); dummy.rotation.set(0, s.ry, 0);
+    dummy.scale.set(s.w, 1, 1); dummy.updateMatrix(); hMesh.setMatrixAt(i, dummy.matrix); });
+  hMesh.instanceMatrix.needsUpdate = true;
+  dummy.scale.set(1,1,1);
+  root.add(vMesh, hMesh);
+}
+
+// --- panel frames (the coated border every mesh panel is welded into) ---
+for(const p of panels){
+  if(p.isDoor) continue;
+  const g = new THREE.Group(); g.position.set(p.cx, 0, p.cz); g.rotation.y = p.ry;
+  box(g, BAY - POST, FRAME, FRAME, matFrame, 0, GAP + FRAME/2, 0);
+  box(g, BAY - POST, FRAME, FRAME, matFrame, 0, H - FRAME/2, 0);
+  for(const sx of [-1,1]) box(g, FRAME, H - GAP - FRAME, FRAME, matFrame, sx*(BAY - POST)/2, (H + GAP)/2, 0);
+  root.add(g);
+}
+
+// --- the door: its own frame, its own mesh batches, hinged AWAY from the machine ---
+const doorPanel = panels[DOOR_BAY];
+const doorPivot = new THREE.Group();
+doorPivot.position.set(doorPanel.cx - (BAY - POST)/2, 0, 0);
+const door = new THREE.Group();
+door.position.set((BAY - POST)/2, 0, 0);
+box(door, BAY - POST, FRAME, FRAME, matDoor, 0, GAP + FRAME/2, 0);
+box(door, BAY - POST, FRAME, FRAME, matDoor, 0, H - FRAME/2, 0);
+for(const sx of [-1,1]) box(door, FRAME, H - GAP - FRAME, FRAME, matDoor, sx*(BAY - POST)/2, (H + GAP)/2, 0);
+{
+  const dAcc = { v: [], h: [] };
+  meshPanel(0, 0, 0, BAY - POST, GAP + FRAME, H - FRAME, dAcc);
+  const vGeo = new THREE.BoxGeometry(WIRE, 1, WIRE);
+  const vMesh = new THREE.InstancedMesh(vGeo, matWire, dAcc.v.length);
+  vMesh.castShadow = true;
+  dAcc.v.forEach((s,i)=>{ dummy.position.set(s.x, s.y, s.z); dummy.rotation.set(0,0,0);
+    dummy.scale.set(1, s.h, 1); dummy.updateMatrix(); vMesh.setMatrixAt(i, dummy.matrix); });
+  vMesh.instanceMatrix.needsUpdate = true;
+  const hGeo = new THREE.BoxGeometry(1, WIRE, WIRE);
+  const hMesh = new THREE.InstancedMesh(hGeo, matWire, dAcc.h.length);
+  hMesh.castShadow = true;
+  dAcc.h.forEach((s,i)=>{ dummy.position.set(s.x, s.y, s.z); dummy.rotation.set(0,0,0);
+    dummy.scale.set(s.w, 1, 1); dummy.updateMatrix(); hMesh.setMatrixAt(i, dummy.matrix); });
+  hMesh.instanceMatrix.needsUpdate = true;
+  dummy.scale.set(1,1,1);
+  door.add(vMesh, hMesh);
+}
+// handle + the tongue of the interlock, both on the free edge
+box(door, 0.035, 0.16, 0.030, matFrame, (BAY - POST)/2 - 0.06, 1.05, 0.045);
+const tongue = box(door, 0.09, 0.012, 0.020, matSteel, (BAY - POST)/2 - 0.03, 1.28, 0.030);
+doorPivot.add(door);
+root.add(doorPivot);
+
+// --- safety interlock switch on the closing post: the head that the tongue enters ---
+const lock = new THREE.Group();
+const lockX = doorPanel.cx + (BAY - POST)/2 + 0.02;
+box(lock, 0.045, 0.13, 0.040, matLock, lockX, 1.28, 0.030);
+box(lock, 0.030, 0.030, 0.016, matLockB, lockX, 1.36, 0.052);
+box(lock, 0.016, 0.05, 0.016, matLockB, lockX, 1.13, 0.030);          // cable gland
+root.add(lock);
+
+// --- warning sign on the panel next to the door ---
+const signs = new THREE.Group();
+box(signs, 0.26, 0.26, 0.006, matSign, X0 + BAY*0.5, 1.45, 0.026);
+box(signs, 0.18, 0.18, 0.004, matLockB, X0 + BAY*0.5, 1.45, 0.031);
+root.add(signs);
+
+// --- the machine the guard exists for (context) ---
+const machine = new THREE.Group();
+box(machine, 1.5, 0.9, 0.9, matMach, 0.35, 0.45, -1.05);
+box(machine, 1.1, 0.25, 0.7, matMachM, 0.35, 1.02, -1.05);
+const spindle = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,0.35,16), matMachM);
+spindle.castShadow = true; spindle.position.set(0.35, 1.30, -1.05); machine.add(spindle);
+box(machine, 0.30, 0.42, 0.10, matLockB, 1.22, 1.20, -0.62);            // operator panel
+root.add(machine);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. render is GATED: every handler and the swing call requestRender().
+// ============================================================================
+const btnRot  = document.getElementById('btnRot');
+const btnDoor = document.getElementById('btnDoor');
+const btnMach = document.getElementById('btnMach');
+const btnSign = document.getElementById('btnSign');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+let doorTarget = 0, doorAngle = 0;
+btnDoor.onclick = ()=>{ doorTarget = doorTarget ? 0 : 1; btnDoor.classList.toggle('on', !!doorTarget); requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(btnMach, machine);
+toggle(btnSign, signs);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  if(Math.abs(doorAngle - doorTarget) > 0.001){                 // per-frame branch -> keep rendering
+    doorAngle += (doorTarget - doorAngle) * 0.12;
+    // The leaf hangs at local +X, so a NEGATIVE rotation swings it toward +Z: out of the guarded
+    // zone. Swinging it inward would put the door inside the danger area it encloses.
+    doorPivot.rotation.y = -1.3 * doorAngle;
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__guardaMaquinaApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__guarda-maquinaApp'] = globalThis.__guardaMaquinaApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
