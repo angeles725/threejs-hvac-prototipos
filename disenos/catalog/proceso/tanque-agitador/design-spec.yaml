@@ -1,0 +1,195 @@
+# DesignSpec — baffled process tank with top-mounted Rushton agitator, T = 1.60 m (~3.5 m3)
+# First asset of the catalog `proceso` family. Unlike the two previous assets this one has NO
+# manufacturer table: an agitated tank is not a catalogue item, it is a DESIGNED vessel. What is
+# standardised is its PROPORTIONS, and those are what the preserved source pins down:
+#   research/sources/B59-proceso-dims/arpn-stirred-tank-rushton.pdf  (Table-1)
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: tanque-agitador
+family: proceso
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  scores: {silhouette: 3, components: 3, hierarchy: 2, repetition: 2,
+           material_layers: 2, detail: 2, occlusion: 2, action_readiness: 2}
+  tier: moderate
+  notes: >
+    Occlusion scores 2 because the defining geometry — impeller and baffles — lives INSIDE the
+    vessel. That is a lesson already paid for on bomba-centrifuga: a cut that reveals nothing is
+    worse than no cut, so CORTE here uses a depthWrite-off translucent shell and the internals sit
+    on the tank axis where nothing else can hide them.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/sources/B59-proceso-dims/arpn-stirred-tank-rushton.pdf
+  reuse_pointers:
+    palette: "research/HANDBOOK.md §3 — brushed 304 stainless: metalness 0.9-1.0, roughness 0.30-0.34"
+    sibling_spec: "disenos/catalog/utilities/tanque-pulmon/design-spec.yaml — same Klöpper profile solver"
+    lighting_precedent: "memory: vertical-subject-lighting"
+
+references:
+  - source: "research/sources/B59-proceso-dims/arpn-stirred-tank-rushton.pdf :Table-1 + §Geometric modelling"
+    evidences: >
+      Standard baffled-vessel proportions: impeller diameter D = T/3; blade width D/5; impeller
+      clearance C = T/3; baffle width T/10; four baffles; six-bladed Rushton turbine; blade and disc
+      thickness 2 mm in the modelled case.
+    suitability: pass
+  - source: "canonical Rushton geometry, cross-checked against the same source"
+    evidences: >
+      DISCREPANCY, recorded rather than smoothed over: Table-1 lists "Disc diameter D/4", which
+      contradicts the canonical Rushton disc of 0.75 D — a disc smaller than the blades it carries
+      is not buildable. D/4 is the canonical BLADE LENGTH (0.25 D), so the row reads as a mislabel.
+      Modelled as disc 0.75 D, blade 0.25 D long x 0.2 D high, keeping the two ratios the source
+      states unambiguously (blade width D/5, D = T/3).
+    suitability: partial
+  - source: "DIN 28011 torispherical (Klöpper) end — same solver as disenos/catalog/utilities/tanque-pulmon"
+    evidences: >
+      Crown 1.0 D, knuckle 0.1 D, depth 0.1935 D. On T = 1.60 m that gives a 310 mm dished end.
+      Reused because it was already validated on the receiver, where two published dimensions plus
+      the nameplate capacity all closed on it.
+    suitability: pass
+  - source: "vessel sizing, chosen not measured"
+    evidences: >
+      T = 1.60 m and a 1.75 m barrel are a DESIGN CHOICE (H/T ~ 1, the standard agitated aspect
+      ratio), giving ~3.5 m3. Nothing in the sources fixes an absolute size — only the ratios. This
+      is stated so no later reader mistakes the metre values for measured evidence.
+    suitability: partial
+
+dimensions_real:
+  tank_T_m:        {value: 1.600, confidence: low}    # [INFER] design choice; only RATIOS are evidenced
+  barrel_h_m:      {value: 1.750, confidence: low}    # [INFER] H/T ~ 1 standard agitated aspect ratio
+  end_depth_m:     {value: 0.310, confidence: med}    # [INFER] DIN 28011 Klöpper 0.1935 T
+  knuckle_r_m:     {value: 0.160, confidence: med}    # [INFER] 0.1 T
+  crown_r_m:       {value: 1.600, confidence: med}    # [INFER] 1.0 T
+  stand_h_m:       {value: 0.550, confidence: low}    # [INFER] leg height for bottom-discharge access
+  impeller_d_m:    {value: 0.533, confidence: high}   # [CERT-doc] D = T/3
+  impeller_c_m:    {value: 0.533, confidence: high}   # [CERT-doc] C = T/3, off the inside bottom
+  blade_h_m:       {value: 0.107, confidence: high}   # [CERT-doc] blade width D/5
+  blade_l_m:       {value: 0.133, confidence: med}    # [CERT-doc] D/4 — see the discrepancy note
+  disc_d_m:        {value: 0.400, confidence: med}    # [CERT-a] canonical 0.75 D, NOT the D/4 in Table-1
+  blades:          {value: 6, confidence: high}       # [CERT-doc] six-bladed Rushton
+  baffles:         {value: 4, confidence: high}       # [CERT-doc] four baffles
+  baffle_w_m:      {value: 0.160, confidence: high}   # [CERT-doc] T/10
+  baffle_gap_m:    {value: 0.022, confidence: low}    # [INFER] wall gap ~T/72, standard practice
+  shaft_d_m:       {value: 0.055, confidence: low}    # [INFER] sized to the drive, not published
+
+hierarchy:
+  - name: root
+    children:
+      - name: shell          # one LatheGeometry: Klöpper bottom + barrel + Klöpper top
+        pivot: [0, 0, 0]
+        animation: none
+      - name: stand          # 4 legs + base plates
+        pivot: [0, 0, 0]
+        animation: none
+      - name: baffles        # 4 wall baffles, T/10 wide, standing off the wall
+        pivot: [0, 0, 0]
+        animation: none
+      - name: agitator       # shaft + Rushton turbine; spins when AGITADOR is on
+        pivot: [0, 0, 0]
+        animation: spin-y
+      - name: drive          # lantern pedestal + gearbox + motor, top-mounted
+        pivot: [0, 0, 0]
+        animation: none
+      - name: nozzles        # manway, feed, vent, bottom discharge valve
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: shell-stainless
+    family: bare-metal
+    color: "#c6cbcd"
+    metalness: 0.92
+    roughness: 0.30
+    evidence: "HANDBOOK §3 brushed 304 stainless: metalness 0.9-1.0, roughness 0.30-0.34"
+    confidence: 0.9
+  - id: internals-stainless
+    family: bare-metal
+    color: "#b9bfc2"
+    metalness: 0.92
+    roughness: 0.34
+    evidence: "shaft, turbine and baffles are the same 304 as the shell, slightly duller (not polished)"
+    confidence: 0.85
+  - id: gearbox-grey
+    family: painted-metal
+    color: "#4e565c"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "painted cast gearbox housing — dielectric; HANDBOOK §3.1"
+    confidence: 0.8
+  - id: motor-blue
+    family: painted-metal
+    color: "#26536e"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "painted motor frame — dielectric, and a different hue from the gearbox so the drive train reads as two bodies"
+    confidence: 0.75
+  - id: gasket-dark
+    family: rubber
+    color: "#23262a"
+    metalness: 0.0
+    roughness: 0.85
+    evidence: "manway gasket / sight-glass surround"
+    confidence: 0.7
+
+critical_features:
+  - id: rushton-at-standard-proportions
+    desc: >
+      Six-bladed disc turbine of diameter T/3, blades 0.2 D high, set one T/3 off the inside bottom.
+      Those three ratios ARE the standard configuration; get any of them wrong and it stops being
+      the geometry the literature describes.
+    threshold: 0.80
+  - id: four-baffles-off-the-wall
+    desc: >
+      Four T/10 baffles standing off the wall on a small gap, not welded flush. The gap is what stops
+      solids settling behind them, and a flush baffle is the usual modelling error.
+    threshold: 0.75
+  - id: dished-both-ends-bottom-discharge
+    desc: >
+      Both ends dished, and the discharge at the LOW point of the bottom end so the vessel can drain.
+      Same reasoning as the receiver: the dish exists to make the vessel emptiable.
+    threshold: 0.75
+  - id: stainless-reads-as-metal
+    desc: >
+      The shell reads as bare polished stainless with a horizon-side gradient, and the painted drive
+      reads as dielectric against it. Flat grey = the vertical-metal failure.
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 75          # measured 72; nothing instanced (4 legs / 4 baffles / 6 blades are under threshold)
+    tris: 160000       # measured 10,730
+
+camera:
+  azimuth_deg: 44
+  elevation_deg: 12
+  fov: 38
+  target_y_m: 1.90
+  radius_m: 7.60
+
+lighting: house-rig-plus-fill
+  # Same deviation as tanque-pulmon and for the same reason: a large vertical cylinder of bare metal.
+  # environmentIntensity 2.7 + a camera-side fill. metalness stays 0.92.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "AGITADOR"                 # spins shaft + turbine (gated per-frame animation)
+  - "DEFLECTORES"              # the four baffles
+  - "CORTE"                    # translucent shell to expose the internals
+
+colorTarget:
+  # MEASURED from the rendered stainless barrel (headless SwiftShader capture at 1280x800).
+  srgb: [91, 96, 99]
+  deltaE00Max: 8
+  crop: "24x24+560+400"   # barrel flank at 1280x800, default camera
+  # Gradient corroboration from the same capture (the claim is a gradient, not a colour):
+  # lit 91,96,99 · mid 94,100,105 · shadow side 49,52,55. The barrel reads darker than the polished
+  # top head because the head catches the key light — that contrast IS the stainless read.

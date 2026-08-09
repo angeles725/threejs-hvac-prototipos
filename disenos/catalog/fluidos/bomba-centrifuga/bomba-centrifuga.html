@@ -1,0 +1,407 @@
+<!doctype html>
+<!--
+  bomba-centrifuga — catalog asset, family `fluidos`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/sources/B59-proceso-dims/pedrollo-fg-en733.pdf, row FG 65/160
+  Spec: ./design-spec.yaml
+  NOTE: the casing is a REAL spiral (extruded Archimedean volute), not a cylinder — a concentric
+  drum reads as a tank on a frame, not as a pump. The 40 mm baseplate is not styling either: it is
+  h2 - h1 = 200 - 160 from the catalogue table, and it is what makes the motor an IEC 160 frame.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bomba centrífuga EN 733 65/160 — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Bomba centrífuga normalizada EN 733 — 65/160</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· fundición pintada · eje acero desnudo</span></div>
+  <div class="dim">aspiración DN80 axial · descarga DN65 radial · eje a 200 mm · bancada 40 mm</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnRun">RUNNING</button>
+  <button id="btnGuard" class="on">GUARD</button>
+  <button id="btnCut">CORTE</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence: Pedrollo FG table, row 65/160) ----------
+// Axis convention: +X = shaft axis (pump at -X, motor at +X), +Y = up, +Z = across the machine.
+const H2       = 0.200;   // [CERT-doc] shaft centreline over the baseplate underside (= over the floor)
+const BASE_T   = 0.040;   // [CERT-doc] derived h2 - h1 = 200 - 160: the baseplate thickness
+const SUCT_X   = -0.620;  // suction flange FACE — the datum every other x is measured from
+const A_DIM    = 0.100;   // [CERT-doc] column a: suction face → discharge centreline
+const F_DIM    = 0.360;   // [CERT-doc] column f: suction face → shaft end
+const VOL_X    = SUCT_X + A_DIM;      // -0.520 — volute mid-plane = discharge centreline
+const SHAFT_END= SUCT_X + F_DIM;      // -0.260
+const VOL_W    = 0.105;   // [INFER] casing width
+const R_IN     = 0.098;   // [INFER] volute passage at the cutwater
+const R_OUT    = 0.145;   // [INFER] volute outer radius (impeller 160 + passage + wall)
+const IMP_R    = 0.080;   // [CERT-doc] the "160" in 65/160 IS the impeller diameter
+const NOZ_Y    = 0.235;   // discharge flange face over the shaft centreline
+const DN80_OD  = 0.200, DN80_PCD = 0.160;   // [CERT-a] EN 1092-2 PN16 DN80, 8 x M16
+const DN65_OD  = 0.185, DN65_PCD = 0.145;   // [CERT-a] EN 1092-2 PN16 DN65, 4 x M16
+const SHAFT_D  = 0.024;   // [CERT-doc] d (k6)
+const M1 = 0.125, M2 = 0.095;               // [CERT-doc] pump foot bolt pattern
+const N1 = 0.280, N2 = 0.212;               // [CERT-doc] baseplate bolt pattern
+const BASE_L = 1.25, BASE_W = 0.40;         // [INFER] plate sized to carry both feet
+const BASE_X = -0.075;                      // plate centre: -0.70 .. +0.55
+const MOT_D  = 0.300, MOT_X0 = -0.080, MOT_LEN = 0.420;   // [INFER] IEC 160 frame, forced by H2 - BASE_T
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 6, 22);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.05, 100);
+const R = 2.55, AZ = 0.803, EL = 0.244;                         // 46° azimuth / 14° elevation (spec camera)
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.26 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.26, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.26, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.4;      // DEVIATION (spec §lighting): lifted from the house 1.9 —
+                                       // the volute and motor are big curved bodies that otherwise
+                                       // reflect the dark horizon and read flat grey.
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(1.7, 2.5, 1.4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-1.3; sun.shadow.camera.right=1.3; sun.shadow.camera.top=1.3; sun.shadow.camera.bottom=-1.3;
+sun.shadow.camera.far = 8;
+scene.add(sun);
+// fill FROM THE CAMERA SIDE — the house gotcha for curved/vertical metal. Light, not metalness.
+const fill = new THREE.DirectionalLight(0xdfe9f5, 0.6);
+fill.position.set(1.8, 0.9, 2.1); scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Castings and motor frame are PAINTED → dielectric (0.0). Only the shaft, coupling and machined
+//   flange faces are BARE METAL. Painting the casting as metal-blue is the predictable error here.
+// ============================================================================
+const matCast   = new THREE.MeshStandardMaterial({ color:0x1d5f8a, metalness:0.0,  roughness:0.50 });
+// CORTE material: depthWrite MUST be off. The volute is a closed double-sided solid, so with depth
+// writes on it stacks 3-4 translucent layers over the impeller and the "cut" reveals nothing.
+const matCastCut= new THREE.MeshStandardMaterial({ color:0x1d5f8a, metalness:0.0,  roughness:0.50,
+                                                   transparent:true, opacity:0.16, side:THREE.DoubleSide,
+                                                   depthWrite:false });
+const matMotor  = new THREE.MeshStandardMaterial({ color:0x5f676c, metalness:0.0,  roughness:0.55 });
+const matBase   = new THREE.MeshStandardMaterial({ color:0x3d444a, metalness:0.0,  roughness:0.62 });
+const matShaft  = new THREE.MeshStandardMaterial({ color:0xc9ced1, metalness:0.92, roughness:0.28 });
+const matFlange = new THREE.MeshStandardMaterial({ color:0xb3b8ba, metalness:0.88, roughness:0.42 });
+const matGuard  = new THREE.MeshStandardMaterial({ color:0xd8a413, metalness:0.0,  roughness:0.60 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Repetition is genuinely low ([Block 54] caveat), so only the two real runs
+//          are instanced: motor cooling fins and flange bolting. Every casting is a unique mesh.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xforms, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = im.receiveShadow = true;
+  xforms.forEach((t,i)=>{
+    _p.set(t[0], t[1], t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0));
+    _s.set(t[6]===undefined?1:t[6], t[7]===undefined?1:t[7], t[8]===undefined?1:t[8]);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s));
+  });
+  im.instanceMatrix.needsUpdate = true;
+  parent.add(im);
+  return im;
+}
+function mesh(geo, mat, parent){ const m = new THREE.Mesh(geo, mat);
+  m.castShadow = m.receiveShadow = true; if(parent) parent.add(m); return m; }
+const box = (w,h,d)=> new THREE.BoxGeometry(w,h,d);
+// a cylinder whose axis lies along X (the machine axis)
+function cylX(rt, rb, len, seg=28){ const g = new THREE.CylinderGeometry(rt, rb, len, seg);
+  g.rotateZ(Math.PI/2); return g; }
+// bolt ring on a flange face
+function boltRing(cx, cy, cz, pcd, n, axis, mat, parent){
+  const xf = [];
+  for(let k=0;k<n;k++){ const a = (k/n)*Math.PI*2 + Math.PI/n;
+    if(axis==='x') xf.push([cx, cy + Math.cos(a)*pcd/2, cz + Math.sin(a)*pcd/2, 0,0,Math.PI/2]);
+    else           xf.push([cx + Math.cos(a)*pcd/2, cy, cz + Math.sin(a)*pcd/2, 0,0,0]);
+  }
+  instanced(new THREE.CylinderGeometry(0.010, 0.010, 0.026, 6), mat, xf, parent);
+}
+
+// ---------- baseplate: folded steel, 40 mm — the h2 - h1 datum ----------
+const baseG = new THREE.Group();
+mesh(box(BASE_L, 0.010, BASE_W), matBase, baseG).position.set(BASE_X, BASE_T - 0.005, 0);
+for(const z of [-BASE_W/2 + 0.006, BASE_W/2 - 0.006])
+  mesh(box(BASE_L, BASE_T - 0.010, 0.012), matBase, baseG).position.set(BASE_X, (BASE_T-0.010)/2, z);
+for(const x of [BASE_X - BASE_L/2 + 0.006, BASE_X + BASE_L/2 - 0.006])
+  mesh(box(0.012, BASE_T - 0.010, BASE_W - 0.024), matBase, baseG).position.set(x, (BASE_T-0.010)/2, 0);
+// anchor holes, at the catalogue n1 x n2 pattern
+const anchors = [];
+for(const sx of [-1,1]) for(const sz of [-1,1]) anchors.push([BASE_X + sx*N1/2, BASE_T - 0.004, sz*N2/2]);
+instanced(new THREE.CylinderGeometry(0.009, 0.009, 0.014, 10), matFlange, anchors, baseG);
+root.add(baseG);
+
+// ---------- pump end ----------
+const pumpEnd = new THREE.Group();
+
+// volute: a TRUE spiral. The section is built in the plane normal to the shaft (local XY) and
+// extruded along the shaft (local Z), then the whole thing is turned so local +Z becomes global +X.
+// r grows linearly from R_IN at the cutwater right round to R_OUT at the discharge throat.
+const THROAT = 0.55;                                   // rad of arc taken by the discharge mouth
+const shape = new THREE.Shape();
+const spiralPt = (phi)=>{ const r = R_IN + (R_OUT - R_IN) * (phi/(Math.PI*2));
+  return [ r*Math.sin(phi), r*Math.cos(phi) ]; };      // phi from +Y, sweeping toward +X
+{
+  const N = 84, endPhi = Math.PI*2 - THROAT;
+  let p = spiralPt(0); shape.moveTo(p[0], p[1]);       // cutwater lip
+  for(let i=1;i<=N;i++){ p = spiralPt(endPhi*i/N); shape.lineTo(p[0], p[1]); }
+  shape.lineTo(-0.085, NOZ_Y);                         // up the far side of the diffuser
+  shape.lineTo( 0.005, NOZ_Y);                         // flange face
+  shape.closePath();                                   // back down to the cutwater
+}
+const volG = new THREE.ExtrudeGeometry(shape, { depth: VOL_W - 0.010, bevelEnabled:true,
+  bevelThickness:0.005, bevelSize:0.005, bevelSegments:2, curveSegments:24 });
+volG.translate(0, 0, -(VOL_W - 0.010)/2);
+const volute = mesh(volG, matCast, pumpEnd);
+volute.rotation.y = Math.PI/2;                         // local +Z → global +X (the shaft axis)
+volute.position.set(VOL_X, H2, 0);
+
+// discharge flange: sits over the mouth, whose centre is offset ~40 mm across the machine —
+// that offset is real, the volute mouth is not concentric with the impeller.
+const NOZ_Z = 0.040;
+const discFl = mesh(new THREE.CylinderGeometry(DN65_OD/2, DN65_OD/2, 0.020, 32), matFlange, pumpEnd);
+discFl.position.set(VOL_X, H2 + NOZ_Y + 0.010, NOZ_Z);
+boltRing(VOL_X, H2 + NOZ_Y + 0.010, NOZ_Z, DN65_PCD, 4, 'y', matFlange, pumpEnd);
+
+// suction: AXIAL, concentric with the shaft — the defining end-suction feature.
+// Everything CORTE hides goes INSIDE its group, bolting included: a bolt ring parented to pumpEnd
+// keeps drawing after its flange disappears, and reads as bolts floating in mid-air.
+const suction = new THREE.Group(); pumpEnd.add(suction);
+const suctCone = mesh(cylX(0.075, 0.052, VOL_X - VOL_W/2 - SUCT_X - 0.022), matCast, suction);
+suctCone.position.set((SUCT_X + 0.022 + VOL_X - VOL_W/2)/2, H2, 0);
+const suctFl = mesh(cylX(DN80_OD/2, DN80_OD/2, 0.022), matFlange, suction);
+suctFl.position.set(SUCT_X + 0.011, H2, 0);
+boltRing(SUCT_X + 0.011, H2, 0, DN80_PCD, 8, 'x', matFlange, suction);
+
+// casing cover on the suction side + its bolting — one group, same reason
+const cover = new THREE.Group(); pumpEnd.add(cover);
+mesh(cylX(0.152, 0.152, 0.014), matCast, cover).position.set(VOL_X - VOL_W/2 - 0.007, H2, 0);
+boltRing(VOL_X - VOL_W/2 - 0.007, H2, 0, 0.270, 8, 'x', matFlange, cover);
+
+// impeller, inside the volute — only visible with CORTE on
+const impeller = new THREE.Group();
+impeller.rotation.y = Math.PI/2; impeller.position.set(VOL_X, H2, 0);
+mesh(new THREE.CylinderGeometry(IMP_R, IMP_R, 0.008, 32).rotateX(Math.PI/2), matShaft, impeller)
+  .position.set(0, 0, 0.030);                                        // back shroud
+mesh(new THREE.CylinderGeometry(0.030, 0.036, 0.050, 20).rotateX(Math.PI/2), matShaft, impeller)
+  .position.set(0, 0, 0.050);                                        // hub
+function bladeShape(rIn, rOut, arc, th){
+  const s = new THREE.Shape(), N = 10;
+  const pt = (t, off)=>{ const r = rIn + (rOut-rIn)*t + off, a = arc*t;
+    return [ r*Math.cos(a), r*Math.sin(a) ]; };
+  let p = pt(0, -th/2); s.moveTo(p[0], p[1]);
+  for(let i=1;i<=N;i++){ p = pt(i/N, -th/2); s.lineTo(p[0], p[1]); }
+  for(let i=N;i>=0;i--){ p = pt(i/N,  th/2); s.lineTo(p[0], p[1]); }
+  s.closePath(); return s;
+}
+const bladeG = new THREE.ExtrudeGeometry(bladeShape(0.034, IMP_R, 1.15, 0.005),
+  { depth:0.030, bevelEnabled:false, curveSegments:8 });
+for(let k=0;k<6;k++){
+  const b = mesh(bladeG, matShaft, impeller);
+  b.rotation.z = k*Math.PI/3; b.position.z = -0.002;
+}
+pumpEnd.add(impeller);
+
+// bearing bracket + lantern ribs + pump foot (foot base sits on the plate: h1 = 160 below the shaft)
+const brkX0 = VOL_X + VOL_W/2, brkX1 = SHAFT_END - 0.055;
+mesh(cylX(0.062, 0.078, brkX1 - brkX0), matCast, pumpEnd).position.set((brkX0+brkX1)/2, H2, 0);
+mesh(cylX(0.088, 0.088, 0.026), matCast, pumpEnd).position.set(brkX0 + 0.013, H2, 0);
+for(const sz of [-1,1]){                                   // lantern ribs
+  const r = mesh(box(brkX1 - brkX0 - 0.03, 0.052, 0.010), matCast, pumpEnd);
+  r.position.set((brkX0+brkX1)/2 + 0.015, H2 - 0.052, sz*0.030);
+}
+const footTop = H2 - 0.100;
+mesh(box(M1 + 0.055, 0.055, M2 + 0.060), matCast, pumpEnd).position.set(brkX0 + 0.075, BASE_T + 0.0275, 0);
+mesh(box(0.070, footTop - BASE_T - 0.055, 0.060), matCast, pumpEnd)
+  .position.set(brkX0 + 0.075, (BASE_T + 0.055 + footTop)/2, 0);
+const footBolts = [];
+for(const sx of [-1,1]) for(const sz of [-1,1]) footBolts.push([brkX0 + 0.075 + sx*M1/2, BASE_T + 0.058, sz*M2/2]);
+instanced(new THREE.CylinderGeometry(0.008, 0.008, 0.016, 8), matFlange, footBolts, pumpEnd);
+root.add(pumpEnd);
+
+// ---------- coupling: pump hub + spacer + motor hub, and the shaft they sit on ----------
+const coupling = new THREE.Group();
+mesh(cylX(SHAFT_D/2, SHAFT_D/2, 0.240), matShaft, coupling).position.set(SHAFT_END - 0.070, H2, 0);
+mesh(cylX(0.046, 0.046, 0.050), matShaft, coupling).position.set(SHAFT_END - 0.025, H2, 0);
+mesh(cylX(0.036, 0.036, 0.100), matShaft, coupling).position.set(SHAFT_END + 0.050, H2, 0);
+mesh(cylX(0.046, 0.046, 0.050), matShaft, coupling).position.set(SHAFT_END + 0.125, H2, 0);
+const couBolts = [];                                    // the spacer bolting — reads as a coupling
+for(let k=0;k<6;k++){ const a = k*Math.PI/3;
+  couBolts.push([SHAFT_END + 0.050, H2 + Math.cos(a)*0.030, Math.sin(a)*0.030, 0,0,Math.PI/2]); }
+instanced(new THREE.CylinderGeometry(0.005, 0.005, 0.104, 6), matFlange, couBolts, coupling);
+root.add(coupling);
+
+// ---------- coupling guard (a rotating coupling must be guarded) ----------
+const guard = new THREE.Group();
+// Sized to the coupling it guards, not to the gap between the machines: a full-height slab reads
+// as a panel bolted to the set. Open bottom, closed top, slotted flanks.
+const gX0 = SHAFT_END - 0.065, gX1 = SHAFT_END + 0.150, gLen = gX1 - gX0, gCx = (gX0+gX1)/2;
+const gH = 0.170, gCy = H2 - 0.012;
+for(const sz of [-1,1]) mesh(box(gLen, gH, 0.004), matGuard, guard).position.set(gCx, gCy, sz*0.072);
+mesh(box(gLen, 0.004, 0.148), matGuard, guard).position.set(gCx, gCy + gH/2, 0);
+for(const sz of [-1,1])                                 // return lip along the open bottom edge
+  mesh(box(gLen, 0.004, 0.022), matGuard, guard).position.set(gCx, gCy - gH/2, sz*0.061);
+const slots = [];                                       // ventilation slots, both flanks
+for(let k=0;k<4;k++) for(const sz of [-1,1])
+  slots.push([gCx - 0.066 + k*0.044, gCy + 0.012, sz*0.074]);
+instanced(box(0.016, 0.078, 0.006), matBase, slots, guard);
+root.add(guard);
+
+// ---------- motor: IEC 160 frame (forced by H2 - BASE_T = 160 mm shaft height) ----------
+const motor = new THREE.Group();
+const motCx = MOT_X0 + MOT_LEN/2;
+mesh(cylX(MOT_D/2, MOT_D/2, MOT_LEN, 40), matMotor, motor).position.set(motCx, H2, 0);
+mesh(cylX(0.150, 0.150, 0.030, 32), matMotor, motor).position.set(MOT_X0 - 0.015, H2, 0);   // drive-end shield
+mesh(cylX(0.062, 0.062, 0.040, 20), matMotor, motor).position.set(MOT_X0 - 0.045, H2, 0);   // bearing boss
+mesh(cylX(SHAFT_D/2, SHAFT_D/2, 0.090), matShaft, motor).position.set(MOT_X0 - 0.090, H2, 0);
+// Fins run round the frame but STOP where the feet and the terminal box land — a real IEC frame
+// has no fins there, and fins sweeping the full circle hang down between the feet.
+const fins = [];
+for(let k=0;k<30;k++){
+  const a = k*Math.PI*2/30;
+  const fromBottom = Math.abs(Math.PI - a), fromTop = Math.min(a, Math.PI*2 - a);
+  if(fromBottom < 1.05 || fromTop < 0.34) continue;     // feet arc / terminal-box arc
+  fins.push([motCx, H2 + Math.cos(a)*0.156, Math.sin(a)*0.156, a, 0, 0]);
+}
+instanced(box(MOT_LEN - 0.02, 0.024, 0.007), matMotor, fins, motor);
+// fan cowl + its grille (a bare drum reads as a tank end, not a cooling cowl)
+const cowlX = MOT_X0 + MOT_LEN + 0.058;
+mesh(cylX(0.128, 0.146, 0.115, 32), matMotor, motor).position.set(cowlX, H2, 0);
+mesh(cylX(0.124, 0.124, 0.006, 28), matBase, motor).position.set(cowlX + 0.058, H2, 0);
+const grille = [];
+for(let k=0;k<6;k++) grille.push([cowlX + 0.061, H2, 0, k*Math.PI/6, 0, 0]);
+instanced(box(0.005, 0.240, 0.012), matMotor, grille, motor);
+// terminal box on a short pedestal, so it sits on the frame instead of into the fins
+mesh(box(0.150, 0.030, 0.120), matMotor, motor).position.set(MOT_X0 + 0.140, H2 + 0.163, 0);
+mesh(box(0.170, 0.110, 0.140), matMotor, motor).position.set(MOT_X0 + 0.140, H2 + 0.233, 0);
+mesh(box(0.150, 0.008, 0.120), matBase, motor).position.set(MOT_X0 + 0.140, H2 + 0.292, 0);
+// feet: two LONGITUDINAL rails at the IEC bolt gauge, rising to meet the frame — not a crossbar
+for(const sz of [-1,1]){
+  mesh(box(0.300, 0.085, 0.048), matMotor, motor).position.set(MOT_X0 + 0.160, BASE_T + 0.0425, sz*0.127);
+  mesh(box(0.240, 0.070, 0.014), matMotor, motor).position.set(MOT_X0 + 0.160, BASE_T + 0.105, sz*0.100);
+}
+const motBolts = [];
+for(const x of [MOT_X0 + 0.055, MOT_X0 + 0.265]) for(const sz of [-1,1])
+  motBolts.push([x, BASE_T + 0.089, sz*0.127]);
+instanced(new THREE.CylinderGeometry(0.008, 0.008, 0.018, 8), matFlange, motBolts, motor);
+root.add(motor);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let running = false, cut = false;
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnRun = document.getElementById('btnRun');
+btnRun.onclick = ()=>{ running = !running; btnRun.classList.toggle('on', running); requestRender(); };
+
+const btnGuard = document.getElementById('btnGuard');
+btnGuard.onclick = ()=>{ guard.visible = !guard.visible; btnGuard.classList.toggle('on', guard.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+// CORTE also reframes to the SUCTION side. Not a flourish: the impeller sits behind the bearing
+// bracket from the default (motor-side) view, so a cut taken from there reveals nothing at all.
+const homeCam = camera.position.clone(), homeTgt = controls.target.clone();
+const btnCut = document.getElementById('btnCut');
+btnCut.onclick = ()=>{ cut = !cut; btnCut.classList.toggle('on', cut);
+  volute.material = cut ? matCastCut : matCast;
+  volute.castShadow = !cut;
+  cover.visible = !cut; suction.visible = !cut;
+  if(cut){ camera.position.set(-1.30, 0.62, 1.05); controls.target.set(VOL_X, H2, 0); }
+  else   { camera.position.copy(homeCam); controls.target.copy(homeTgt); }
+  controls.update();
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(running){ coupling.rotation.x += 0.14; impeller.rotation.z -= 0.14; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__bombaCentrifugaApp = __app;
+globalThis['__bomba-centrifugaApp'] = __app;        // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
