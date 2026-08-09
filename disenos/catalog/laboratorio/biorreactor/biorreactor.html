@@ -1,0 +1,294 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — laboratorio/biorreactor · pilot-scale glass-vessel stirred bioreactor on a skid.
+  Built from disenos/catalog/shell-template.html. Contract: __biorreactorApp.runtime + __qaRenderInfo +
+  data-app-ready, render-on-demand, shadows frozen (autoUpdate=false, 1024), DPR<=2.
+  Instancing (block54 §2.3): the two Rushton turbines share one instanced blade batch, and the four
+  baffles share another. The vessel, head plate, drive and cabinet are unique meshes.
+  The whole point of a glass vessel is that the INTERNALS read through it — so the shaft, turbines,
+  baffles and sparger are modelled, not implied.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Biorreactor de vidrio — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">BIORREACTOR PILOTO — vaso de vidrio + agitación Rushton</div>
+  <div><span class="dim">vaso Ø 0.30 × 0.50 m · 2 turbinas de 6 palas · 4 deflectores · skid con tablero</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnStir">AGITADOR</button>
+  <button id="btnMedium" class="on">MEDIO</button>
+  <button id="btnProbes" class="on">SONDAS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const V_R = 0.15, V_H = 0.50;          // glass vessel: inner radius / cylindrical height
+const BASE_Y = 0.78;                   // vessel base plate height on the skid
+const HEAD_Y = BASE_Y + V_H;           // head plate
+const FILL = 0.62;                     // working volume as a fraction of the cylinder
+const IMP_R = V_R * 0.36;              // Rushton turbine radius ~ 1/3 of the vessel
+const BLADES = 6;
+const IMP_Y = [BASE_Y + 0.10, BASE_Y + 0.26];
+const BAFFLES = 4;
+const SHAFT_R = 0.010;
+const CAB = { w: 0.46, d: 0.40, h: 1.05, x: 0.72 };
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 5, 18);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.10;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 3.45, AZ = 1.00, EL = 0.20;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.90 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0.14, 0.82, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0.14, 0.82, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.5, 5, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+sun.shadow.camera.left=-1.6; sun.shadow.camera.right=1.6; sun.shadow.camera.top=1.8; sun.shadow.camera.bottom=-1.8;
+scene.add(sun);
+// The vessel internals are BACKLIT through glass: this fill sits behind-left of the vessel so the
+// turbines and baffles read as silhouettes instead of dissolving into the glass.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.0);
+fill.position.set(-2.6, 2.0, 3.2);
+scene.add(fill);
+const backLight = new THREE.PointLight(0xdfeaff, 1.1, 2.0, 2);
+backLight.position.set(-0.30, BASE_Y + 0.28, -0.34);
+scene.add(backLight);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(14,14),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: the vessel is borosilicate glass, the wetted parts are bare
+// 316L, the skid and cabinet are coated (dielectric), the medium is a turbid liquid.
+// ============================================================================
+const matGlass = new THREE.MeshPhysicalMaterial({ color:0xdff0f6, metalness:0.0, roughness:0.03,
+                                                  transmission:0.82, thickness:0.01, ior:1.47,
+                                                  transparent:true, opacity:0.30, side:THREE.DoubleSide });
+const matSteel = new THREE.MeshStandardMaterial({ color:0xc8ccd0, metalness:0.93, roughness:0.28 });
+const matWet   = new THREE.MeshStandardMaterial({ color:0xd6dadd, metalness:0.93, roughness:0.22 });
+const matSkid  = new THREE.MeshStandardMaterial({ color:0xb9bec2, metalness:0.90, roughness:0.40 });
+const matCab   = new THREE.MeshStandardMaterial({ color:0xdfe2e5, metalness:0.0,  roughness:0.45 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x22262b, metalness:0.0,  roughness:0.55 });
+const matScreen= new THREE.MeshStandardMaterial({ color:0x0b2130, metalness:0.0,  roughness:0.3,
+                                                  emissive:0x1663a0, emissiveIntensity:1.2 });
+const matMotor = new THREE.MeshStandardMaterial({ color:0x2f3f52, metalness:0.0,  roughness:0.5 });
+const matMedium= new THREE.MeshPhysicalMaterial({ color:0xc9a86a, metalness:0.0, roughness:0.28,
+                                                  transmission:0.55, thickness:0.12, ior:1.34,
+                                                  transparent:true, opacity:0.72 });
+const matTube  = new THREE.MeshStandardMaterial({ color:0xe3e6e6, metalness:0.0,  roughness:0.35 });
+const matProbe = new THREE.MeshStandardMaterial({ color:0x8d949a, metalness:0.85, roughness:0.35 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const dummy = new THREE.Object3D();
+const box = (parent,w,h,d,mat,x,y,z)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); parent.add(m); return m; };
+const cyl = (parent, r0, r1, h, seg, mat, x,y,z, rx=0, rz=0, open=false)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, h, seg, 1, open), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz);
+  parent.add(m); return m;
+};
+
+// --- skid: framed base with levelling feet ---
+for(const sx of [-1,1]) for(const sz of [-1,1]){
+  cyl(root, 0.022, 0.028, 0.06, 10, matSkid, 0.12 + sx*0.42, 0.03, sz*0.24);
+}
+box(root, 1.16, 0.05, 0.58, matSkid, 0.12, 0.085, 0);
+for(const sx of [-1,1]) box(root, 0.05, BASE_Y - 0.16, 0.05, matSkid, sx*0.26, 0.11 + (BASE_Y - 0.16)/2, 0.22);
+for(const sx of [-1,1]) box(root, 0.05, BASE_Y - 0.16, 0.05, matSkid, sx*0.26, 0.11 + (BASE_Y - 0.16)/2, -0.22);
+box(root, 0.70, 0.04, 0.56, matSkid, 0, BASE_Y - 0.03, 0);      // vessel deck
+
+// --- vessel: borosilicate cylinder on a stainless base plate ---
+cyl(root, V_R + 0.012, V_R + 0.012, 0.03, 32, matSteel, 0, BASE_Y - 0.005, 0);
+const vessel = new THREE.Mesh(new THREE.CylinderGeometry(V_R, V_R, V_H, 40, 1, true), matGlass);
+vessel.position.set(0, BASE_Y + V_H/2, 0); vessel.castShadow = true; root.add(vessel);
+
+// --- medium: the working volume, a shorter cylinder inside the glass ---
+const medium = new THREE.Mesh(new THREE.CylinderGeometry(V_R - 0.004, V_R - 0.004, V_H*FILL, 36), matMedium);
+medium.position.set(0, BASE_Y + V_H*FILL/2, 0);
+root.add(medium);
+
+// --- baffles: four vertical strips against the wall, one instanced batch ---
+{
+  const geo = new THREE.BoxGeometry(0.016, V_H - 0.06, V_R*0.20);
+  const im = new THREE.InstancedMesh(geo, matWet, BAFFLES);
+  im.castShadow = im.receiveShadow = true;
+  for(let i=0;i<BAFFLES;i++){
+    const a = (i/BAFFLES)*Math.PI*2 + Math.PI/4;
+    dummy.position.set(Math.cos(a)*(V_R - V_R*0.12), BASE_Y + V_H/2 - 0.01, Math.sin(a)*(V_R - V_R*0.12));
+    dummy.rotation.set(0, -a, 0); dummy.updateMatrix();
+    im.setMatrixAt(i, dummy.matrix);
+  }
+  im.instanceMatrix.needsUpdate = true;
+  root.add(im);
+}
+
+// --- agitator: shaft + two Rushton turbines (disc + 6 flat blades), all under one rotating group ---
+const stirrer = new THREE.Group();
+cyl(stirrer, SHAFT_R, SHAFT_R, V_H + 0.16, 14, matWet, 0, BASE_Y + V_H/2 + 0.06, 0);
+for(const y of IMP_Y){
+  cyl(stirrer, IMP_R*0.66, IMP_R*0.66, 0.010, 20, matWet, 0, y, 0);       // turbine disc
+  cyl(stirrer, 0.020, 0.020, 0.030, 12, matWet, 0, y, 0);                 // hub
+}
+{
+  const geo = new THREE.BoxGeometry(IMP_R*0.5, IMP_R*0.5, 0.006);
+  const im = new THREE.InstancedMesh(geo, matWet, BLADES*IMP_Y.length);
+  im.castShadow = im.receiveShadow = true;
+  let k = 0;
+  for(const y of IMP_Y) for(let i=0;i<BLADES;i++){
+    const a = (i/BLADES)*Math.PI*2;
+    dummy.position.set(Math.cos(a)*IMP_R*0.78, y, Math.sin(a)*IMP_R*0.78);
+    dummy.rotation.set(0, -a, 0); dummy.updateMatrix();
+    im.setMatrixAt(k++, dummy.matrix);
+  }
+  im.instanceMatrix.needsUpdate = true;
+  stirrer.add(im);
+}
+root.add(stirrer);
+
+// --- sparger ring under the lower turbine ---
+const sparger = new THREE.Mesh(new THREE.TorusGeometry(IMP_R*1.05, 0.005, 8, 28), matWet);
+sparger.rotation.x = Math.PI/2; sparger.position.set(0, BASE_Y + 0.045, 0);
+sparger.castShadow = true; root.add(sparger);
+cyl(root, 0.005, 0.005, 0.10, 8, matWet, IMP_R*1.05, BASE_Y + 0.095, 0);
+
+// --- head plate with its port ring, drive motor and gearbox ---
+cyl(root, V_R + 0.03, V_R + 0.03, 0.030, 32, matSteel, 0, HEAD_Y + 0.015, 0);
+for(let i=0;i<6;i++){
+  const a = (i/6)*Math.PI*2;
+  cyl(root, 0.016, 0.016, 0.045, 12, matSteel, Math.cos(a)*V_R*0.72, HEAD_Y + 0.05, Math.sin(a)*V_R*0.72);
+}
+cyl(root, 0.055, 0.055, 0.05, 16, matSteel, 0, HEAD_Y + 0.06, 0);        // stirrer seal housing
+cyl(root, 0.070, 0.070, 0.13, 18, matMotor, 0, HEAD_Y + 0.145, 0);       // drive motor
+box(root, 0.10, 0.05, 0.10, matDark, 0, HEAD_Y + 0.235, 0);              // motor terminal box
+
+// --- probes and addition tubing (togglable) ---
+const probes = new THREE.Group();
+for(const [i, col] of [[0, matProbe], [1, matProbe]]){
+  const a = Math.PI*0.25 + i*Math.PI*0.5;
+  const px = Math.cos(a)*V_R*0.55, pz = Math.sin(a)*V_R*0.55;
+  cyl(probes, 0.011, 0.011, 0.34, 12, col, px, HEAD_Y - 0.12, pz);        // probe body into the medium
+  cyl(probes, 0.018, 0.018, 0.05, 12, matSteel, px, HEAD_Y + 0.05, pz);   // port fitting
+  cyl(probes, 0.007, 0.007, 0.16, 8, matDark, px, HEAD_Y + 0.14, pz);     // cable stub
+}
+// addition line from a bottle on the deck to the head plate
+cyl(probes, 0.045, 0.050, 0.16, 16, matGlass, -0.28, BASE_Y + 0.05, 0.16);
+cyl(probes, 0.005, 0.005, 0.34, 8, matTube, -0.20, BASE_Y + 0.30, 0.12, 0, -0.55);
+root.add(probes);
+
+// --- control cabinet with touchscreen and peristaltic pumps ---
+box(root, CAB.w, CAB.h, CAB.d, matCab, CAB.x, 0.11 + CAB.h/2, 0);
+box(root, CAB.w - 0.06, 0.20, 0.02, matScreen, CAB.x, 0.11 + CAB.h - 0.20, CAB.d/2 + 0.011);
+for(let i=0;i<3;i++){
+  const py = 0.11 + CAB.h - 0.46 - i*0.16;
+  cyl(root, 0.045, 0.045, 0.05, 16, matDark, CAB.x - 0.10, py, CAB.d/2 + 0.026, Math.PI/2);
+  cyl(root, 0.022, 0.022, 0.055, 12, matSteel, CAB.x - 0.10, py, CAB.d/2 + 0.030, Math.PI/2);
+  box(root, 0.16, 0.03, 0.02, matDark, CAB.x + 0.08, py, CAB.d/2 + 0.012);
+}
+box(root, 0.10, 0.02, 0.02, matDark, CAB.x, 0.11 + CAB.h + 0.01, 0);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. render is GATED: the stirrer sets needsRender only WHILE it spins.
+// ============================================================================
+const btnRot    = document.getElementById('btnRot');
+const btnStir   = document.getElementById('btnStir');
+const btnMedium = document.getElementById('btnMedium');
+const btnProbes = document.getElementById('btnProbes');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+let stirring = false;
+btnStir.onclick = ()=>{ stirring = !stirring; btnStir.classList.toggle('on', stirring); requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(btnMedium, medium);
+toggle(btnProbes, probes);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  if(stirring){ stirrer.rotation.y += 0.16; needsRender = true; }   // gated: idle costs nothing
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__biorreactorApp = { runtime:{ scene, renderer, camera, root } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
