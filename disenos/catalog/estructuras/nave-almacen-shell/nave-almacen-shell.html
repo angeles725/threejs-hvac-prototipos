@@ -1,0 +1,247 @@
+<!doctype html>
+<!-- Warehouse shell — steel portal-frame nave. Catalog/estructuras. Built from shell-template.html.
+     QA contract: globalThis.__naveAlmacenApp.runtime + __qaRenderInfo + data-app-ready.
+     Render-on-demand (block56): render gated behind needsRender; door animation sets it while easing. -->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nave almacén — shell portal-frame</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Nave almacén — portal-frame steel shell</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· galvanized frame · trapezoidal cladding</span></div>
+  <div class="dim">24.0 × 12.0 m · alero 6.0 m · cumbrera 8.0 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnClad" class="on">CLADDING ON-OFF</button>
+  <button id="btnDoor">DOOR OPEN-CLOSE</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---- envelope ----
+const L=24, W=12, EAVE=6, RIDGE=8;
+const HALF_L=L/2, HALF_W=W/2;
+const frameXs = [];
+for(let x=-HALF_L; x<=HALF_L+0.001; x+=4) frameXs.push(+x.toFixed(2));   // 7 frames
+const roofY = z => RIDGE - Math.abs(z)/HALF_W*(RIDGE-EAVE);              // y of roof surface at given z
+const PITCH = Math.atan2(RIDGE-EAVE, HALF_W);                            // rafter incline
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 34, 95);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.1, 400);
+camera.position.set(19, 13, 25);
+camera.lookAt(0, 3.5, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 3.5, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.6;
+controls.maxPolarAngle = Math.PI*0.5 - 0.02;   // stay above the floor
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.5;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(20, 30, 16); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;
+sun.shadow.camera.left=-20; sun.shadow.camera.right=20; sun.shadow.camera.top=20; sun.shadow.camera.bottom=-20;
+sun.shadow.camera.near=1; sun.shadow.camera.far=80;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.35));
+scene.add(new THREE.AmbientLight(0xffffff, 0.28));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(90,90),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ---- materials (design-spec) ----
+const matStruct  = new THREE.MeshStandardMaterial({ color:0x8b939a, metalness:0.8, roughness:0.45 });
+const matClad    = new THREE.MeshStandardMaterial({ color:0xd6d9db, metalness:0.30, roughness:0.6, side:THREE.DoubleSide });
+const matRoof    = new THREE.MeshStandardMaterial({ color:0xb8bcc0, metalness:0.35, roughness:0.55, side:THREE.DoubleSide });
+const matFloor   = new THREE.MeshStandardMaterial({ color:0x9a9a95, metalness:0.0,  roughness:0.95 });
+const matDoor    = new THREE.MeshStandardMaterial({ color:0xc8ccce, metalness:0.35, roughness:0.5 });
+const matTrim    = new THREE.MeshStandardMaterial({ color:0x2a2e33, metalness:0.4,  roughness:0.6 });
+
+const root = new THREE.Group();
+const claddingGroup = new THREE.Group();   // toggled off to reveal structure
+const structGroup = new THREE.Group();
+
+// concrete slab
+const slab = new THREE.Mesh(new THREE.BoxGeometry(L+1, 0.15, W+1), matFloor);
+slab.position.y = 0.075; slab.receiveShadow = true; root.add(slab);
+
+// ---- strut helper: a box member spanning A→B (local Y = length) ----
+const UP = new THREE.Vector3(0,1,0);
+function strut(a,b,w,mat,group){
+  const A=new THREE.Vector3(...a), B=new THREE.Vector3(...b);
+  const dir=new THREE.Vector3().subVectors(B,A); const len=dir.length();
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,len,w), mat);
+  m.position.copy(A).add(B).multiplyScalar(0.5);
+  m.quaternion.setFromUnitVectors(UP, dir.normalize());
+  m.castShadow=m.receiveShadow=true; (group||structGroup).add(m); return m;
+}
+
+// ---- columns (instanced) ----
+const colGeo = new THREE.BoxGeometry(0.28, EAVE, 0.28);
+const cols = new THREE.InstancedMesh(colGeo, matStruct, frameXs.length*2);
+cols.castShadow = cols.receiveShadow = true;
+{ const d=new THREE.Object3D(); let i=0;
+  for(const x of frameXs) for(const z of [-HALF_W,HALF_W]){ d.position.set(x,EAVE/2,z); d.updateMatrix(); cols.setMatrixAt(i++, d.matrix); } }
+structGroup.add(cols);
+
+// ---- rafters (14 struts) + ridge + eave beams ----
+for(const x of frameXs){
+  strut([x,EAVE,-HALF_W],[x,RIDGE,0],0.2,matStruct);   // -Z rafter
+  strut([x,EAVE, HALF_W],[x,RIDGE,0],0.2,matStruct);   // +Z rafter
+}
+strut([-HALF_L,RIDGE,0],[HALF_L,RIDGE,0],0.22,matStruct);          // ridge beam
+strut([-HALF_L,EAVE,-HALF_W],[HALF_L,EAVE,-HALF_W],0.2,matStruct); // eave -Z
+strut([-HALF_L,EAVE, HALF_W],[HALF_L,EAVE, HALF_W],0.2,matStruct); // eave +Z
+
+// ---- purlins (instanced, along X on both slopes) ----
+const purlinZs=[-4.5,-3,-1.5,1.5,3,4.5];
+const purGeo=new THREE.BoxGeometry(L,0.12,0.12);
+const purlins=new THREE.InstancedMesh(purGeo, matStruct, purlinZs.length);
+purlins.castShadow=purlins.receiveShadow=true;
+{ const d=new THREE.Object3D(); let i=0;
+  for(const z of purlinZs){ d.position.set(0, roofY(z)+0.14, z); d.rotation.set(0,0,0); d.updateMatrix(); purlins.setMatrixAt(i++, d.matrix); } }
+structGroup.add(purlins);
+
+// ---- side-wall girts (instanced) ----
+const girtYs=[1.5,3,4.5]; const girtGeo=new THREE.BoxGeometry(L,0.1,0.1);
+const girts=new THREE.InstancedMesh(girtGeo, matStruct, girtYs.length*2);
+girts.castShadow=girts.receiveShadow=true;
+{ const d=new THREE.Object3D(); let i=0;
+  for(const z of [-HALF_W,HALF_W]) for(const y of girtYs){ d.position.set(0,y,z); d.updateMatrix(); girts.setMatrixAt(i++, d.matrix); } }
+structGroup.add(girts);
+
+root.add(structGroup);
+
+// ---- cladding: side walls (pushed just outside the structure so it fully wraps it) ----
+const CLAD_OUT=0.2;
+const sideGeo=new THREE.BoxGeometry(L,EAVE,0.05);
+for(const z of [-HALF_W,HALF_W]){ const m=new THREE.Mesh(sideGeo,matClad);
+  m.position.set(0,EAVE/2, z + Math.sign(z)*CLAD_OUT); m.castShadow=m.receiveShadow=true; claddingGroup.add(m); }
+
+// ---- cladding: gable ends (pentagon shape; -X has door hole) ----
+function gableShape(withDoor){
+  const s=new THREE.Shape();
+  s.moveTo(-HALF_W,0); s.lineTo(HALF_W,0); s.lineTo(HALF_W,EAVE);
+  s.lineTo(0,RIDGE); s.lineTo(-HALF_W,EAVE); s.lineTo(-HALF_W,0);
+  if(withDoor){ const h=new THREE.Path();
+    h.moveTo(-2,0); h.lineTo(2,0); h.lineTo(2,4.5); h.lineTo(-2,4.5); h.lineTo(-2,0); s.holes.push(h); }
+  return new THREE.ShapeGeometry(s);
+}
+{ const back=new THREE.Mesh(gableShape(false),matClad);   // +X gable
+  back.position.set(HALF_L+CLAD_OUT,0,0); back.rotation.y=Math.PI/2; back.castShadow=back.receiveShadow=true; claddingGroup.add(back);
+  const front=new THREE.Mesh(gableShape(true),matClad);    // -X gable with door opening
+  front.position.set(-HALF_L-CLAD_OUT,0,0); front.rotation.y=Math.PI/2; front.castShadow=front.receiveShadow=true; claddingGroup.add(front); }
+
+// ---- roof slopes (2 slabs) ----
+const slantL=Math.hypot(HALF_W,RIDGE-EAVE);
+const roofGeo=new THREE.BoxGeometry(L,0.08,slantL);
+for(const s of [-1,1]){ const m=new THREE.Mesh(roofGeo,matRoof);
+  m.position.set(0,(EAVE+RIDGE)/2, s*HALF_W/2);
+  m.rotation.x = s*PITCH;               // tilt each slope up to the ridge
+  m.castShadow=m.receiveShadow=true; claddingGroup.add(m); }
+// ridge cap + eave gutters
+{ const cap=new THREE.Mesh(new THREE.BoxGeometry(L,0.16,0.5),matTrim); cap.position.set(0,RIDGE+0.06,0); cap.castShadow=true; claddingGroup.add(cap);
+  for(const z of [-HALF_W,HALF_W]){ const g=new THREE.Mesh(new THREE.BoxGeometry(L,0.16,0.28),matTrim); g.position.set(0,EAVE,z); g.castShadow=true; claddingGroup.add(g); } }
+
+root.add(claddingGroup);
+
+// ---- sectional door (-X gable, slides up) ----
+const doorGroup=new THREE.Group();
+const DOOR_W=4, DOOR_H=4.5, PANEL=DOOR_H/5;
+const DOOR_X=-HALF_L-0.28;
+for(let i=0;i<5;i++){ const p=new THREE.Mesh(new THREE.BoxGeometry(0.1,PANEL*0.96,DOOR_W),matDoor);
+  p.position.set(DOOR_X, PANEL*(i+0.5), 0); p.castShadow=p.receiveShadow=true; doorGroup.add(p); }
+for(const z of [-2,2]){ const t=new THREE.Mesh(new THREE.BoxGeometry(0.14,DOOR_H,0.14),matTrim);
+  t.position.set(DOOR_X, DOOR_H/2, z); t.castShadow=true; doorGroup.add(t); }
+root.add(doorGroup);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ---- UI ----
+const btnRot=document.getElementById('btnRot');
+btnRot.onclick=()=>{ controls.autoRotate=!controls.autoRotate; btnRot.classList.toggle('on',controls.autoRotate); requestRender(); };
+const btnClad=document.getElementById('btnClad');
+btnClad.onclick=()=>{ claddingGroup.visible=!claddingGroup.visible; btnClad.classList.toggle('on',claddingGroup.visible);
+  renderer.shadowMap.needsUpdate=true; requestRender(); };
+const btnDoor=document.getElementById('btnDoor');
+let doorOpen=false, doorT=0;
+btnDoor.onclick=()=>{ doorOpen=!doorOpen; btnDoor.classList.toggle('on',doorOpen); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---- render-on-demand (block56) ----
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  const target = doorOpen ? DOOR_H-PANEL*0.5 : 0;
+  doorT += (target-doorT)*0.12;
+  doorGroup.position.y = doorT;
+  if(Math.abs(target-doorT)>0.001){ renderer.shadowMap.needsUpdate = true; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---- QA contract ----
+globalThis.__naveAlmacenApp = { runtime:{ scene, renderer, camera, root } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
