@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compresor de Tornillo · Aire — realista</title>
+<link rel="icon" href="data:,">                     <!-- favicon 404 pollutes the console sidecar -->
+<!-- SCALE: 1 unit = 1 m (original voxel scale was 1 vox = 0.10 m; re-authored as smooth geometry) -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700} #hud .pass{color:var(--accent)}
+  #hud .dim{color:var(--text-muted)}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Compresor de Tornillo · Aire — realista</div>
+  <div><span class="pass">PASS: rounded-equipment</span> <span class="dim">· canopy abierto (cutaway) · RoundedBox + lathe + superquadric + swept-tube toolkit</span></div>
+  <div class="dim">Canopy 2.0 × 1.70 × 1.20 m · Separador aire/aceite Ø0.30 × 1.0 m · Airend + motor TEFC · Aftercooler</div>
+</div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { makeLatheBody } from '../showcase-rounded/lib/lathe-body.mjs';
+import { makeSweptTube } from '../showcase-rounded/lib/rmf-frames.mjs';
+import { makeSuperquadric } from '../showcase-rounded/lib/superquadric.mjs';
+import { makeProceduralMetalRough } from '../showcase-rounded/lib/procedural-pbr-canvas.mjs';
+import { makeRoundEdgeNormalMap } from '../showcase-rounded/lib/round-edge-normal.mjs';
+
+// ---------------------------------------------------------------- scene / renderer
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 44);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;              // geometry added after boot needs one forced bake
+document.body.appendChild(renderer.domElement);
+
+// hero camera — framed on the whole `machine` group (built below). Subject AABB ≈ x[-1,1],
+// y[0,1.70], z[-0.6,0.6]; center ≈ (0, 0.82, 0). 3/4 front-right so we look INTO the open (front,
+// +Z) cutaway. fov 40, occupancy ~0.4, no crop (framing gate requires fullyVisible AND rejects too-wide).
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(2.62, 2.42, 3.48);
+camera.lookAt(0, 0.80, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.80, 0);
+controls.autoRotate = false;                        // OFF — gate captures need a settled frame
+controls.maxPolarAngle = Math.PI * 0.495;
+
+// ---------------------------------------------------------------- IBL + house light rig
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// NOTE r160: scene.environmentIntensity is INERT here. Push bare metal per-material with
+// material.envMapIntensity (set to ~1.4 below).
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.4, 6.0, 3.0); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left = -2.8; sun.shadow.camera.right = 2.8;
+sun.shadow.camera.top = 2.8;   sun.shadow.camera.bottom = -2.8;
+sun.shadow.camera.near = 0.1;  sun.shadow.camera.far = 18;
+sun.target.position.set(0, 0.80, 0);
+scene.add(sun); scene.add(sun.target);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));                    // cool fill
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));                    // accent rim
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));           // lifts upward-facing steel
+const frontFill = new THREE.DirectionalLight(0xffffff, 0.6);            // lights the open-front internals
+frontFill.position.set(1.6, 1.9, 4.0);
+scene.add(frontFill);
+
+// ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  new THREE.MeshStandardMaterial({ color: 0x0a0d12, roughness: 0.95, metalness: 0.0 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.001;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ---------------------------------------------------------------- materials
+const steelTex = await makeProceduralMetalRough({ roughnessBase: 0.5, metalness: 0.85 });  // higher roughness = satin, not mirror
+// roughness/metalness are MULTIPLIERS over the packed map (three multiplies), so keep them at 1 and
+// let the map's painted values drive — else 0.32*0.32 reads mirror-glossy (playbook multiplier rule).
+const steelMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ab, metalness: 1, roughness: 1 });
+steelMat.roughnessMap = steelTex;                   // packed: roughness from GREEN
+steelMat.metalnessMap = steelTex;                   // packed: metalness from BLUE
+steelMat.envMapIntensity = 1.0;
+
+// aftercooler radiator — brushed aluminium, same packed-map multiplier idiom.
+const coolerMat = new THREE.MeshStandardMaterial({ color: 0xc0c4c8, metalness: 1, roughness: 1 });
+coolerMat.roughnessMap = steelTex; coolerMat.metalnessMap = steelTex;
+coolerMat.envMapIntensity = 1.0;
+
+// TEFC motor — dark cast metal, same idiom.
+const motorMat = new THREE.MeshStandardMaterial({ color: 0x2c2c32, metalness: 1, roughness: 1 });
+motorMat.roughnessMap = steelTex; motorMat.metalnessMap = steelTex;
+motorMat.envMapIntensity = 0.9;
+
+// airend rotors — bright machined steel.
+const rotorMat = new THREE.MeshStandardMaterial({ color: 0xb8c0c6, metalness: 1, roughness: 1 });
+rotorMat.roughnessMap = steelTex; rotorMat.metalnessMap = steelTex;
+rotorMat.envMapIntensity = 1.0;
+
+// CANOPY panels — PAINTED ENAMEL (safety blue-grey, matching original CANOPY 0x33506e). Enamel is a
+// soft dielectric coat: low metalness, medium roughness, NO packed map. Round-edge normalMap gives the
+// panel edges subtle relief up close.
+const panelMat = new THREE.MeshStandardMaterial({ color: 0x33506e, metalness: 0.10, roughness: 0.62 });
+panelMat.normalMap = await makeRoundEdgeNormalMap({ bevel: 0.12 });
+panelMat.normalScale = new THREE.Vector2(0.6, 0.6);
+panelMat.envMapIntensity = 0.7;
+
+// OIL/AIR SEPARATOR — red/orange enamel vessel (original SEPARATOR 0xc0552e).
+const sepMat = new THREE.MeshStandardMaterial({ color: 0xc0552e, metalness: 0.15, roughness: 0.6 });
+sepMat.envMapIntensity = 0.85;
+
+const pipeMat = new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 0.85, roughness: 0.5 });
+pipeMat.envMapIntensity = 1.0;
+const trimMat = new THREE.MeshStandardMaterial({ color: 0x22303f, metalness: 0.3, roughness: 0.6 });
+trimMat.envMapIntensity = 0.9;
+const darkMat = new THREE.MeshStandardMaterial({ color: 0x1a1d22, metalness: 0.4, roughness: 0.55 });
+const grilleMat = new THREE.MeshStandardMaterial({ color: 0x0d0f12, metalness: 0.2, roughness: 0.85 });
+
+// ---------------------------------------------------------------- subject root
+const machine = new THREE.Group();
+scene.add(machine);
+
+// vessel profile for LatheGeometry (revolve around Y; x = radius, y = height).
+// dished BOTTOM head -> straight WALL -> dished TOP head, with shared wall points deduped.
+function vesselProfile({ R, H, hHead, seg = 12 }) {
+  const pts = [];
+  for (let k = 0; k <= seg; k++) {                          // bottom head: (0,0) -> (R,hHead)
+    const a = (Math.PI / 2) * (k / seg);
+    pts.push({ x: R * Math.sin(a), y: hHead * (1 - Math.cos(a)) });
+  }
+  pts.push({ x: R, y: H - hHead });                         // wall top (bottom already at (R,hHead))
+  for (let k = 1; k <= seg; k++) {                          // top head: (R,H-hHead) -> (0,H); skip dup a=0
+    const a = (Math.PI / 2) * (k / seg);
+    pts.push({ x: R * Math.cos(a), y: (H - hHead) + hHead * Math.sin(a) });
+  }
+  return pts;
+}
+
+// ============================================================================================
+// FRAME OF REFERENCE (world = metres). Canopy footprint x[-1,1], z[-0.6,0.6], height y[0,1.70].
+// Front (open cutaway) = +Z. Motor end = +X. Aftercooler end = -X. Numbers ported straight from the
+// voxel original (voxel × 0.10 m).
+// ============================================================================================
+const HW = 1.0, HD = 0.6, HT = 1.70, PT = 0.03;            // half-width, half-depth, height, panel thickness
+
+// ---------------------------------------------------------------- 0) BASE / SKID (RoundedBox pad)
+const pad = new THREE.Mesh(new RoundedBoxGeometry(2.0, 0.10, 1.20, 1, 0.02), trimMat);
+pad.position.set(0, 0.05, 0); pad.castShadow = pad.receiveShadow = true;
+machine.add(pad);
+// forklift channels — two dark tunnels across the skid (front-to-back), read as openings under the frame
+for (const cx of [-0.5, 0.5]) {
+  const ch = new THREE.Mesh(new RoundedBoxGeometry(0.28, 0.05, 1.24, 1, 0.015), darkMat);
+  ch.position.set(cx, 0.035, 0); machine.add(ch);
+}
+// anti-vibration feet at the four corners
+for (const fx of [-0.9, 0.9]) for (const fz of [-0.5, 0.5]) {
+  const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.04, 16), steelMat);
+  foot.position.set(fx, 0.02, fz); foot.castShadow = true; machine.add(foot);
+}
+
+// ---------------------------------------------------------------- 1) CANOPY panels (front REMOVED)
+// Each acoustic panel is a RoundedBox with the round-edge normalMap enamel. The FRONT (+Z) panel is
+// omitted so the internals read as an open cutaway.
+function panel(w, h, d, x, y, z) {
+  const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 1, 0.03), panelMat);
+  m.position.set(x, y, z); m.castShadow = m.receiveShadow = true;
+  machine.add(m); return m;
+}
+panel(2.0, 0.06, 1.20, 0, HT - 0.03, 0);                   // ROOF
+panel(2.0, 1.60, PT, 0, 0.90, -HD + PT / 2);               // BACK wall (-Z)
+panel(PT, 1.60, 1.20, -HW + PT / 2, 0.90, 0);              // SIDE -X (aftercooler end)
+panel(PT, 1.60, 1.20,  HW - PT / 2, 0.90, 0);              // SIDE +X (motor end)
+// front sill + top header stubs (frame the open front without closing it)
+panel(2.0, 0.16, PT, 0, 0.18, HD - PT / 2);                // low front sill
+panel(2.0, 0.16, PT, 0, HT - 0.11, HD - PT / 2);           // top front header
+// dark ventilation louver bank recessed into the +X side (motor fan grille)
+const louver = new THREE.Mesh(new RoundedBoxGeometry(PT, 0.5, 0.5, 1, 0.01), grilleMat);
+louver.position.set(HW - PT, 0.62, 0.05); machine.add(louver);
+
+// ---------------------------------------------------------------- 2) OIL/AIR SEPARATOR (lathe vessel)
+// vertical red enamel vessel with domed heads, back-left. Original box x[-0.7,-0.4] y[0.2,1.2] z[-0.5,-0.2].
+const SEP_R = 0.15, SEP_H = 1.0, SEP_BASE = 0.14;
+const separator = await makeLatheBody(vesselProfile({ R: SEP_R, H: SEP_H, hHead: 0.10 }), { segments: 36 }, sepMat);
+separator.position.set(-0.55, SEP_BASE, -0.34);
+machine.add(separator);
+const SEP_TOP = SEP_BASE + SEP_H;
+// minimum-pressure / outlet fitting on the dome
+const sepFitting = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.10, 16), steelMat);
+sepFitting.position.set(-0.55, SEP_TOP + 0.04, -0.34); sepFitting.castShadow = true; machine.add(sepFitting);
+// oil sight glass on the wall
+const sight = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.05, 14), darkMat);
+sight.rotation.x = Math.PI / 2; sight.position.set(-0.55, 0.45, -0.19); machine.add(sight);
+
+// ---------------------------------------------------------------- 3) AFTERCOOLER (superquadric block)
+// rounded finned block at the -X end. Original slab x[-0.8,-0.7] y[0.4,1.3] z[-0.4,0.4].
+const aftercooler = await makeSuperquadric(
+  { a: 0.055, b: 0.44, c: 0.40, e1: 0.30, e2: 0.40, uSeg: 24, vSeg: 18 }, coolerMat);
+aftercooler.position.set(-0.78, 0.86, 0.0);
+machine.add(aftercooler);
+// cooling fins — thin vertical plates across the radiator face
+for (let z = -0.34; z <= 0.34 + 1e-6; z += 0.085) {
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.82, 0.012), coolerMat);
+  fin.position.set(-0.72, 0.86, z); fin.castShadow = true; machine.add(fin);
+}
+
+// ---------------------------------------------------------------- 4) AIREND + MOTOR (cylinder barrels)
+// two-rotor airend = two parallel cylinders along X; motor barrel along X at the +X end; a coupling between.
+const AIR_Y = 0.60, AIR_Z = 0.15;
+const maleRotor = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.52, 24), steelMat);
+maleRotor.rotation.z = Math.PI / 2;                        // axis along X
+maleRotor.position.set(0.18, AIR_Y, AIR_Z); maleRotor.castShadow = maleRotor.receiveShadow = true;
+machine.add(maleRotor);
+const femaleRotor = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.50, 24), steelMat);
+femaleRotor.rotation.z = Math.PI / 2;
+femaleRotor.position.set(0.18, AIR_Y + 0.155, AIR_Z + 0.02); femaleRotor.castShadow = true;
+machine.add(femaleRotor);
+// exposed machined rotor stub (money shot of the cutaway)
+const rotorStub = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.10, 20), rotorMat);
+rotorStub.rotation.z = Math.PI / 2; rotorStub.position.set(-0.12, AIR_Y, AIR_Z); rotorStub.castShadow = true;
+machine.add(rotorStub);
+// suction flange (torus) on the -X end of the airend
+const suction = new THREE.Mesh(new THREE.TorusGeometry(0.10, 0.02, 12, 24), steelMat);
+suction.rotation.y = Math.PI / 2; suction.position.set(-0.09, AIR_Y, AIR_Z); suction.castShadow = true;
+machine.add(suction);
+// coupling guard between airend and motor
+const coupling = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.09, 20), darkMat);
+coupling.rotation.z = Math.PI / 2; coupling.position.set(0.52, AIR_Y, AIR_Z); coupling.castShadow = true;
+machine.add(coupling);
+// MOTOR barrel (TEFC) at +X
+const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.30, 28), motorMat);
+motor.rotation.z = Math.PI / 2; motor.position.set(0.75, AIR_Y, AIR_Z); motor.castShadow = motor.receiveShadow = true;
+machine.add(motor);
+// TEFC cooling fins — a few rings around the motor barrel
+for (const mx of [0.64, 0.72, 0.80, 0.88]) {
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.152, 0.008, 8, 28), motorMat);
+  ring.rotation.y = Math.PI / 2; ring.position.set(mx, AIR_Y, AIR_Z); machine.add(ring);
+}
+// terminal (junction) box on top of the motor
+const jbox = new THREE.Mesh(new RoundedBoxGeometry(0.12, 0.08, 0.10, 2, 0.015), darkMat);
+jbox.position.set(0.75, AIR_Y + 0.18, AIR_Z); jbox.castShadow = true; machine.add(jbox);
+
+// ---------------------------------------------------------------- 5) COOLING FAN (shroud + hub + blades)
+// axial fan at the -X end, in front of the aftercooler. Torus shroud (axis along X) + hub + blades.
+const fan = new THREE.Group();
+fan.position.set(-0.93, 0.86, 0.0);
+const shroud = new THREE.Mesh(new THREE.TorusGeometry(0.40, 0.035, 12, 40), steelMat);
+shroud.rotation.y = Math.PI / 2;                           // torus normal -> X
+shroud.castShadow = true; fan.add(shroud);
+const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.10, 20), steelMat);
+hub.rotation.z = Math.PI / 2; hub.castShadow = true; fan.add(hub);
+for (let i = 0; i < 6; i++) {
+  const a = i / 6 * Math.PI * 2;
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.30, 0.11), steelMat);
+  blade.position.set(0, Math.cos(a) * 0.22, Math.sin(a) * 0.22);
+  blade.rotation.x = a + 0.5;                              // slight pitch
+  blade.castShadow = true; fan.add(blade);
+}
+machine.add(fan);
+
+// ---------------------------------------------------------------- 6) PIPES / HOSES (swept tubes)
+// airend discharge -> separator top
+const airLine = await makeSweptTube(
+  [[0.30, AIR_Y + 0.15, AIR_Z], [-0.05, 1.00, 0.02], [-0.45, SEP_TOP + 0.02, -0.22], [-0.55, SEP_TOP + 0.02, -0.34], [-0.55, SEP_TOP - 0.16, -0.34]],
+  { radius: 0.026, targetEdgeLength: 0.04 }, pipeMat);
+airLine.receiveShadow = true; machine.add(airLine);
+// separator bottom -> aftercooler (air out to cooler)
+const coolLine = await makeSweptTube(
+  [[-0.55, 0.30, -0.26], [-0.66, 0.42, -0.06], [-0.76, 0.52, 0.04], [-0.82, 0.55, 0.05]],
+  { radius: 0.026, targetEdgeLength: 0.04 }, pipeMat);
+coolLine.receiveShadow = true; machine.add(coolLine);
+// oil return: separator -> airend (thin line)
+const oilLine = await makeSweptTube(
+  [[-0.55, 0.24, -0.30], [-0.28, 0.30, -0.08], [0.02, 0.40, AIR_Z], [0.16, 0.46, AIR_Z]],
+  { radius: 0.018, targetEdgeLength: 0.04 }, pipeMat);
+oilLine.receiveShadow = true; machine.add(oilLine);
+
+// ---------------------------------------------------------------- QA hooks (install AFTER all awaits)
+globalThis.__qaRenderInfo = () => renderer.info.render;
+
+const SUBJECT = machine;
+globalThis.__qaFraming = () => {
+  camera.updateMatrixWorld(); camera.updateProjectionMatrix();
+  const mvp = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  const b = new THREE.Box3().setFromObject(SUBJECT, true);
+  const mn = b.min, mx = b.max;
+  const corners = [
+    [mn.x, mn.y, mn.z], [mx.x, mn.y, mn.z], [mn.x, mx.y, mn.z], [mx.x, mx.y, mn.z],
+    [mn.x, mn.y, mx.z], [mx.x, mn.y, mx.z], [mn.x, mx.y, mx.z], [mx.x, mx.y, mx.z],
+  ];
+  const hudEl = document.querySelector('#hud');
+  const hud = hudEl ? (r => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }))(hudEl.getBoundingClientRect()) : null;
+  return { mvpElements: Array.from(mvp.elements), corners, W: innerWidth, H: innerHeight, hud };
+};
+
+// ---------------------------------------------------------------- render loop (starts after the build)
+renderer.shadowMap.needsUpdate = true;                     // one forced bake for post-boot geometry
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+document.documentElement.dataset.appReady = 'true';        // ready LAST
+</script>
+</body>
+</html>
