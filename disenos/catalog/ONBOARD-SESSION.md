@@ -188,7 +188,10 @@ elige otra familia libre si queda, o detente.
   suavizador-agua/btnCut ocultaba shell+domo pero el grupo `cut` solo reponía medio casco → cabezal flotando con
   0.117 m de hueco. Regla: cualquier asset con CORTE, tapa desmontable o panel retirable se audita midiendo los
   MISMOS puntos de referencia en AMBOS estados, no solo en el sospechoso. Un comentario en el código que promete
-  "no se borra geometría" NO es evidencia; la medición sí.
+  "no se borra geometría" NO es evidencia; la medición sí. CRITERIO BARATO Y MEDIBLE = CONTINUIDAD: el cuerpo
+  visible debe TOCAR a su vecino (hueco <= 0) en ambos estados; "lo que se oculta" y "lo que se repone" son dos
+  listas distintas y su asimetría no la ven ni el gate ni los conteos (suavizador: gapBajoCuello contra el cuello;
+  medidor-flujo: huecoHastaBrida contra la brida — el mismo defecto, cazado a propósito con esta regla).
 - LA MEDICIÓN DE UN DEFECTO DE ESTADO DEBE DISCRIMINAR entre estados. Si tu consulta da el MISMO número en el
   estado normal y en el sospechoso, la sonda está mal ANTES que el reporte: casi seguro tu filtro agarró la pieza
   equivocada (una válvula en vez del casco). Un resultado idéntico no refuta el defecto, lo OCULTA — habrías
