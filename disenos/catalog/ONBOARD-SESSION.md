@@ -213,6 +213,15 @@ elige otra familia libre si queda, o detente.
 - Identifica una InstancedMesh por `geometry.parameters` (width/height/depth), NUNCA por `count` ni por índice
   de traversal: varias mallas comparten conteo por casualidad (24 aisladores vs 28 MCCB) y el orden de
   traversal cambia con cualquier edición → agarras la malla de al lado y reportas un defecto que no existe.
+- SOMBRA CONGELADA (autoUpdate=false) vs MOVIMIENTO: el criterio es la CLASE DE MOVIMIENTO, NO la convención de
+  la familia. (a) Movimiento CONTINUO e indefinido (una traslación de MARCHA): la sombra congelada nunca se
+  corrige mientras dure → re-hornea CADA frame DENTRO de la rama de movimiento (`if(moving){ ...needsUpdate=true }`).
+  (b) Transición ACOTADA que converge (una pose con easing hacia un target): la sombra queda desfasada ~1 s y se
+  corrige sola al asentarse → basta el settle-edge (`if(wasMoving && !moving){ needsUpdate=true }`), NO toques eso.
+  Defecto real: robot-agv trasladaba en MARCHA pero solo re-horneaba al parar → sombra aparcada al inicio. TRAMPA
+  DE JUSTIFICACIÓN: NO reportes "los hermanos lo hacen distinto" — los 5 hermanos usan settle-edge correctamente
+  porque sus movimientos son transiciones que convergen; si escribes "inconsistencia de familia" alguien
+  "corregirá" los 5 y pagará un horneado por frame sin necesidad. Distingue la CLASE, no cuentes hermanos.
 - CONTAR una InstancedMesh: lee `.count`, NUNCA su caja envolvente. Una InstancedMesh tiene UNA sola geometría,
   así que su bounding box es la del prototipo, no la del conjunto → contar por bbox/geometría siempre da 1 y
   reportas "2 filas de 6 racks" como si hubiera uno. (contencion-pasillo: bbox=1, `.count`=12, correcto.)
