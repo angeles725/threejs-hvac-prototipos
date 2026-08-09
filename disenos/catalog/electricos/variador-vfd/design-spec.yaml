@@ -1,0 +1,187 @@
+# DesignSpec — variable-frequency drive cabinet (VFD)
+# Fifth asset of the catalog `electricos` family.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+#
+# EVIDENCE DISCIPLINE: no manufacturer datasheet was preserved. Every dimension is [INFER] from
+# drive-cabinet practice at confidence <= 0.7. Nothing here is presented as [CERT-doc].
+
+design: variador-vfd
+family: electricos
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+
+complexity:
+  scores: {silhouette: 1, components: 3, hierarchy: 2, repetition: 2,
+           material_layers: 3, detail: 3, occlusion: 3, action_readiness: 2}
+  tier: complex
+  notes: >
+    occlusion 3: everything that makes this a DRIVE rather than a cupboard is behind one door.
+    action_readiness 2 because the cabinet has two independent moving things — a door swing and a
+    fan spin — and they exercise different halves of the render-on-demand contract: an eased
+    transition that settles, and a continuous rotation that must stay gated on a state flag.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    isa101_states: "research/HANDBOOK.md §3.4"
+    render_on_demand: "disenos/catalog/shell-template.html (block56 gating)"
+
+references:
+  - source: "research/HANDBOOK.md §3.1 (PBR palette) + §3.4 (ISA-101)"
+    evidences: >
+      [CERT] near-binary metalness; extruded aluminium is bare metal, coated cabinet sheet is a
+      dielectric; corrected warm copper; neutral grey as the normal state.
+    suitability: pass
+  - source: "drive-cabinet practice (no document preserved in sources/)"
+    evidences: >
+      [INFER] roughly 3% of throughput dissipated in the drive, hence a forced convection path of
+      filtered bottom intake -> finned heatsink -> top exhaust fans under a cowl; a line reactor
+      ahead of the rectifier; a DC bus capacitor bank on a link bar; an HMI keypad on the door.
+    suitability: partial
+
+dimensions_real:
+  cabinet_w_m: {value: 0.80, confidence: low}
+  cabinet_d_m: {value: 0.60, confidence: low}
+  body_h_m:    {value: 2.00, confidence: low}
+  plinth_h_m:  {value: 0.10, confidence: low}
+  overall_h_m: {value: 2.10, confidence: low}   # excludes the 0.16 m roof cowl
+  cowl_h_m:    {value: 0.16, confidence: low}
+  heatsink_h_m:{value: 0.94, confidence: low}
+  fin_pitch_m: {value: 0.028, confidence: low}
+  fan_dia_m:   {value: 0.17, confidence: low}
+
+hierarchy:
+  - name: root
+    children:
+      - name: carcass         # plinth, rear, sides, roof, floor, front frame around the door opening
+        pivot: [0, 0, 0]
+        animation: none
+      - name: intake          # recessed louvre bank + filter pad (bottom of the thermal path)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: drive           # mounting plate, finned heatsink, power stack, DC caps, link bar, control card
+        pivot: [0, 0, 0]
+        animation: none
+      - name: cowl_fans       # roof cowl, discharge louvres, 2 fan hubs, grille bars
+        pivot: per-hub, spin about Y
+        animation: rotate
+        notes: >
+          The spin is gated on a state flag and only then holds needsRender true. A free-running
+          rotation would render every frame forever and defeat render-on-demand for the whole asset.
+      - name: door            # hinged leaf carrying the HMI keypad, lamps, selector, handle, label
+        pivot: left stile
+        animation: swing
+
+materials:
+  - id: paint-ral7035
+    family: painted-metal
+    color: "#cfd2cc"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1 'panelBox -> 0.0-0.05'"
+    confidence: 0.9
+  - id: heatsink-aluminium
+    family: bare-metal
+    color: "#c2c7ca"
+    metalness: 0.95
+    roughness: 0.40
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0 — extruded aluminium"
+    confidence: 0.85
+  - id: capacitor-sleeve
+    family: plastic
+    color: "#2b3a6a"
+    metalness: 0.0             # the can under it IS aluminium, which is exactly why this is easy to
+    roughness: 0.46            # get wrong — the visible surface is a printed PVC sleeve, dielectric
+    evidence: "HANDBOOK §3.1 dielectric metalness 0"
+    confidence: 0.75
+  - id: pcb-fr4
+    family: plastic
+    color: "#1d4536"
+    metalness: 0.0
+    roughness: 0.70
+    evidence: "HANDBOOK §3.1 dielectric"
+    confidence: 0.8
+  - id: copper-dc-link
+    family: bare-metal
+    color: "#f0a67a"
+    metalness: 1.0
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1 copper correction"
+    confidence: 0.9
+  - id: lamp-isa101
+    family: emissive
+    color: "#5a6878"
+    metalness: 0.0
+    roughness: 0.40
+    evidence: "HANDBOOK §3.4 — unlit neutral is normal; red only on fault"
+    confidence: 0.9
+
+critical_features:
+  - id: thermal-path-complete
+    desc: >
+      Filtered bottom intake, finned heatsink, top exhaust fans under a louvred cowl — the whole
+      chain present and in order. A sealed VFD cabinet is not a styling choice, it is a thermal
+      impossibility.
+    threshold: 0.82
+  - id: heatsink-stays-visible
+    desc: >
+      The power stack is shorter and narrower than the fin block, so fins read above, below and
+      either side of it. Sized flush the heatsink vanishes behind the module and the asset's whole
+      thermal story becomes invisible from the only angle it is ever viewed at.
+    threshold: 0.78
+  - id: drive-not-cupboard
+    desc: >
+      HMI keypad with screen and key cluster on the door; DC bus capacitor bank on a copper link
+      bar; control card; line reactor. Without these the cabinet is a generic enclosure.
+    threshold: 0.80
+  - id: gated-fan-animation
+    desc: >
+      The fan spin runs only while its toggle is on and only then holds needsRender true; the door
+      swing re-bakes the frozen shadow map once on settle rather than every frame.
+    threshold: 0.80
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 120          # measured 89
+    tris: 8000          # measured 2,222
+
+camera:
+  azimuth_deg: 42
+  elevation_deg: 11
+  fov: 38
+  target_y_m: 1.08
+  radius_m: 4.4
+
+lighting: house-rig + vertical-subject fill
+  # DOCUMENTED DEVIATION: the cabinet front is a VERTICAL coated plane; the house rig was calibrated
+  # on horizontal equipment tops, so it reflects the dark lower hemisphere and reads flat. Fix is
+  # LIGHT: DirectionalLight(0xdce6f2, 0.85) along the panel normal (+Z), environmentIntensity 2.2.
+  # metalness/roughness unchanged per HANDBOOK §3.1.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ABRIR PUERTA"
+  - "VENTILADORES"      # gated per-frame spin — the shell's continuous-animation case
+  - "FALLA (ISA-101)"
+
+colorTarget:
+  srgb: [231, 232, 231]
+  deltaE00Max: 8
+  crop: "20x16+593+260"   # clean cabinet door face at 1280x800, per-channel std 0.00
+
+verification:
+  gate: "node disenos/catalog/tools/verify-catalog-asset.mjs electricos/variador-vfd"
+  measured: {ready: true, calls: 89, triangles: 2222, console_errors: 0, shadowAuto: false}
+  # Caught only by capturing the door-open state: the power stack was sized flush with the fin
+  # block and hid the heatsink completely, so the cabinet's defining thermal feature was present in
+  # the scene graph, counted in the draw calls, and invisible in every view anyone would look at.
+  known_flake: >
+    The gate fetches three.js from unpkg. A CDN hiccup surfaces as ready:false / error:'no-renderer'
+    with an EMPTY console-error list and zero __ globals — infra failure dressed as a broken asset.
+    Re-run before believing it.
