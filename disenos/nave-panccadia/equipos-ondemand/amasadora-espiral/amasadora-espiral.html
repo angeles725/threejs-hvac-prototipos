@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amasadora espiral — nave Panccadia</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700} #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Amasadora espiral — acero inox 304</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· gancho espiral + tazón</span></div>
+  <div class="dim">0.95 × 0.76 m · alto 1.05 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnMix">MIX</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 6, 22);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 200);
+const R = 2.6;
+camera.position.set(R*Math.cos(0.7)*Math.cos(0.38), 0.75 + R*Math.sin(0.38), R*Math.sin(0.7)*Math.cos(0.38));
+camera.lookAt(0, 0.55, 0.08);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.55, 0.08);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.15;   // stainless recipe
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3, 5, 2.5); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left=-1.5; sun.shadow.camera.right=1.5; sun.shadow.camera.top=2; sun.shadow.camera.bottom=-1;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+const fill = new THREE.DirectionalLight(0xf4f7ff, 0.7); fill.position.set(1.5, 2.0, 5); scene.add(fill);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(16,16),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+function brushedRoughTex(){
+  const c=document.createElement('canvas'); c.width=512; c.height=512; const g=c.getContext('2d');
+  g.fillStyle='#565656'; g.fillRect(0,0,512,512);
+  for(let i=0;i<2600;i++){ const y=Math.random()*512,len=40+Math.random()*180,x=Math.random()*512,v=120+(Math.random()*40-20);
+    g.strokeStyle=`rgba(${v},${v},${v},0.16)`; g.lineWidth=Math.random()<0.5?1:0.6;
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x+len,y+(Math.random()*2-1)); g.stroke(); }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(2,2); return t;
+}
+const roughMap = brushedRoughTex();
+const matSteel = new THREE.MeshStandardMaterial({ color:0xd2d6d8, metalness:0.9, roughness:0.30, roughnessMap: roughMap });
+const matBody  = new THREE.MeshStandardMaterial({ color:0x3a4048, metalness:0.0, roughness:0.5 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x1f2327, metalness:0.0, roughness:0.6 });
+const matFoot  = new THREE.MeshStandardMaterial({ color:0x24282c, metalness:0.0, roughness:0.7 });
+
+const box=(w,h,d,mat)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.castShadow=m.receiveShadow=true; return m; };
+const cyl=(rt,rb,h,mat,seg=24)=>{ const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),mat); m.castShadow=m.receiveShadow=true; return m; };
+const unit = new THREE.Group();
+const BOWL_Z = 0.16;
+
+// base plinth
+const plinth = box(0.52, 0.12, 0.62, matBody); plinth.position.set(0,0.06,-0.06); unit.add(plinth);
+// feet
+for(const sx of [-1,1]) for(const sz of [-1,1]){ const f=cyl(0.03,0.024,0.03,matFoot,10); f.position.set(sx*0.22,0.015,-0.06+sz*0.26); unit.add(f); }
+// motor body (angled stainless housing at back)
+const body = box(0.46, 0.72, 0.42, matSteel); body.position.set(0, 0.12+0.36, -0.18); unit.add(body);
+// front sloped fascia (a thin steel panel angled)
+const fascia = box(0.46, 0.5, 0.03, matSteel); fascia.position.set(0, 0.5, 0.04); fascia.rotation.x = -0.20; unit.add(fascia);
+// control panel + display
+const panel = box(0.2,0.14,0.03,matDark); panel.position.set(0.12,0.72,0.06); panel.rotation.x=-0.20; unit.add(panel);
+const disp = new THREE.Mesh(new THREE.PlaneGeometry(0.13,0.06), new THREE.MeshStandardMaterial({color:0x0a1a14,emissive:0x00d4aa,emissiveIntensity:0.9,roughness:0.4}));
+disp.position.set(0.12,0.735,0.078); disp.rotation.x=-0.20; unit.add(disp);
+// head arm projecting forward over the bowl
+const head = box(0.34, 0.16, 0.5, matSteel); head.position.set(0, 0.9, 0.0); unit.add(head);
+const headNose = box(0.30, 0.14, 0.16, matSteel); headNose.position.set(0, 0.88, BOWL_Z); unit.add(headNose);
+
+// bowl (open stainless cylinder on a pedestal) — spins
+const bowlPed = cyl(0.16,0.20,0.10,matSteel,24); bowlPed.position.set(0,0.17,BOWL_Z); unit.add(bowlPed);
+const bowl = new THREE.Group();
+const bowlWall = new THREE.Mesh(new THREE.CylinderGeometry(0.26,0.24,0.34,40,1,true), matSteel);
+bowlWall.castShadow=bowlWall.receiveShadow=true; bowl.add(bowlWall);
+const bowlBottom = cyl(0.24,0.22,0.02,matSteel,40); bowlBottom.position.y=-0.16; bowl.add(bowlBottom);
+const rim = new THREE.Mesh(new THREE.TorusGeometry(0.26,0.012,8,40), matSteel); rim.rotation.x=Math.PI/2; rim.position.y=0.17; bowl.add(rim);
+bowl.position.set(0, 0.20+0.17, BOWL_Z); unit.add(bowl);
+
+// breaker bar (fixed vertical bar in bowl center, hangs from head)
+const breaker = cyl(0.018,0.018,0.34,matSteel,12); breaker.position.set(-0.02, 0.20+0.18, BOWL_Z); unit.add(breaker);
+
+// spiral hook (helix) hanging from head, offset to the side — spins
+class Helix extends THREE.Curve{ constructor(r,h,turns,cx,cz){super();this.r=r;this.h=h;this.turns=turns;this.cx=cx;this.cz=cz;}
+  getPoint(t,tv=new THREE.Vector3()){ const a=t*this.turns*2*Math.PI; return tv.set(this.cx+this.r*Math.cos(a), this.h*(0.5-t), this.cz+this.r*Math.sin(a)); } }
+const hookGroup = new THREE.Group();
+const helix = new Helix(0.11, 0.30, 2.3, 0, 0);
+const hook = new THREE.Mesh(new THREE.TubeGeometry(helix,80,0.018,10,false), matSteel);
+hook.castShadow=true; hookGroup.add(hook);
+// hook shaft up to head
+const shaft = cyl(0.02,0.02,0.14,matSteel,12); shaft.position.set(0.11,0.20,0); hookGroup.add(shaft);
+hookGroup.position.set(0.07, 0.20+0.20, BOWL_Z); unit.add(hookGroup);
+
+scene.add(unit);
+renderer.shadowMap.needsUpdate = true;
+
+const btnRot=document.getElementById('btnRot');
+btnRot.onclick=()=>{ controls.autoRotate=!controls.autoRotate; btnRot.classList.toggle('on',controls.autoRotate); requestRender(); };
+let mixing=false; const btnMix=document.getElementById('btnMix');
+btnMix.onclick=()=>{ mixing=!mixing; btnMix.classList.toggle('on',mixing); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+globalThis.__amasadoraApp = { runtime:{ scene, renderer, camera, unit } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){ requestAnimationFrame(animate);
+  if(mixing){ bowl.rotation.y += 0.03; hookGroup.rotation.y -= 0.06; needsRender=true; }
+  controls.update(); if(needsRender){ renderer.render(scene,camera); needsRender=false; } }
+animate();
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

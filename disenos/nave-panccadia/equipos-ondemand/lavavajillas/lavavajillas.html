@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lavavajillas comercial — nave Panccadia</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Lavavajillas comercial — tipo campana</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· acero inox 304 · hood lift</span></div>
+  <div class="dim">0.95 × 0.54 m · alto 1.42 m (hood abajo)</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnHood">HOOD UP-DOWN</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 6, 22);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 200);
+const R = 3.0;
+camera.position.set(R*Math.cos(0.7)*Math.cos(0.38), 0.9 + R*Math.sin(0.38), R*Math.sin(0.7)*Math.cos(0.38));
+camera.lookAt(0, 0.75, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.75, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.15;   // stainless recipe: bright IBL so metal has something to reflect
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3, 5, 2.5); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left=-2; sun.shadow.camera.right=2; sun.shadow.camera.top=2.5; sun.shadow.camera.bottom=-1;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+const fill = new THREE.DirectionalLight(0xf4f7ff, 0.7); fill.position.set(1.5, 2.0, 5); scene.add(fill);  // frontal fill: lights VERTICAL stainless faces (boxy equipment) that reflect the dark horizon
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(16,16),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ---- brushed-stainless roughness map (shared recipe) ----
+function brushedRoughTex(){
+  const c=document.createElement('canvas'); c.width=512; c.height=512; const g=c.getContext('2d');
+  g.fillStyle='#565656'; g.fillRect(0,0,512,512);
+  for(let i=0;i<2600;i++){ const y=Math.random()*512,len=40+Math.random()*180,x=Math.random()*512,v=120+(Math.random()*40-20);
+    g.strokeStyle=`rgba(${v},${v},${v},0.16)`; g.lineWidth=Math.random()<0.5?1:0.6;
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x+len,y+(Math.random()*2-1)); g.stroke(); }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(2,2); return t;
+}
+const roughMap = brushedRoughTex();
+const matSteel = new THREE.MeshStandardMaterial({ color:0xd2d6d8, metalness:0.9, roughness:0.30, roughnessMap: roughMap });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x1f2327, metalness:0.0, roughness:0.6 });
+const matFoot  = new THREE.MeshStandardMaterial({ color:0x24282c, metalness:0.0, roughness:0.7 });
+const matGlow  = new THREE.MeshStandardMaterial({ color:0x0a1a14, emissive:0x00d4aa, emissiveIntensity:0.9, roughness:0.4, metalness:0 });
+
+const box=(w,h,d,mat)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.castShadow=m.receiveShadow=true; return m; };
+const W=0.95, D=0.54, LEG_H=0.13, BODY_H=0.85;
+const unit = new THREE.Group();
+
+// legs + feet
+for(const sx of [-1,1]) for(const sz of [-1,1]){
+  const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,LEG_H,12),matSteel);
+  leg.position.set(sx*(W/2-0.07), LEG_H/2, sz*(D/2-0.07)); leg.castShadow=true; unit.add(leg);
+  const foot=new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.02,0.03,10),matFoot);
+  foot.position.set(sx*(W/2-0.07),0.015,sz*(D/2-0.07)); unit.add(foot);
+}
+// body
+const bodyY = LEG_H + BODY_H/2;
+const body = box(W, BODY_H, D, matSteel); body.position.y = bodyY; unit.add(body);
+// wash-chamber front opening (recessed dark)
+const chamber = box(0.6, 0.5, 0.02, matDark); chamber.position.set(0, bodyY+0.02, D/2-0.01); unit.add(chamber);
+// control panel (front-right upper)
+const panel = box(0.26, 0.22, 0.03, matDark); panel.position.set(W/2-0.18, LEG_H+BODY_H-0.16, D/2-0.005); unit.add(panel);
+const disp = box(0.14,0.06,0.012,matGlow); disp.position.set(W/2-0.18, LEG_H+BODY_H-0.12, D/2+0.008); unit.add(disp);
+for(let i=0;i<3;i++){ const b=new THREE.Mesh(new THREE.CylinderGeometry(0.014,0.014,0.012,12),matFoot);
+  b.rotation.x=Math.PI/2; b.position.set(W/2-0.28+i*0.06, LEG_H+BODY_H-0.22, D/2+0.006); unit.add(b); }
+
+// lift-hood (signature): square cover on top, can raise
+const hood = new THREE.Group();
+const hoodH=0.5, hoodW=0.66, hoodD=0.5;
+const hoodTopY = LEG_H+BODY_H;
+const hbox = box(hoodW, hoodH, hoodD, matSteel); hbox.position.set(0, hoodTopY+hoodH/2, 0); hood.add(hbox);
+// slight domed top rib + front handle bar
+const rib = box(hoodW*0.9, 0.03, hoodD*0.9, matSteel); rib.position.set(0, hoodTopY+hoodH+0.015, 0); hood.add(rib);
+const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.016,0.016,hoodW*0.7,12), matSteel);
+handle.rotation.z=Math.PI/2; handle.position.set(0, hoodTopY+0.12, hoodD/2+0.03); hood.add(handle);
+for(const sx of [-1,1]){ const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.01,0.01,0.09,8),matSteel);
+  arm.position.set(sx*hoodW*0.32, hoodTopY+0.12, hoodD/2+0.015); arm.rotation.x=Math.PI/2; hood.add(arm); }
+unit.add(hood);
+
+scene.add(unit);
+renderer.shadowMap.needsUpdate = true;
+
+// ---- UI ----
+const btnRot=document.getElementById('btnRot');
+btnRot.onclick=()=>{ controls.autoRotate=!controls.autoRotate; btnRot.classList.toggle('on',controls.autoRotate); requestRender(); };
+let hoodUp=false, hoodT=0;
+const btnHood=document.getElementById('btnHood');
+btnHood.onclick=()=>{ hoodUp=!hoodUp; btnHood.classList.toggle('on',hoodUp); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+globalThis.__lavavajillasApp = { runtime:{ scene, renderer, camera, unit } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){ requestAnimationFrame(animate);
+  const target = hoodUp?0.35:0; hoodT += (target-hoodT)*0.15;
+  hood.position.y = hoodT;
+  if(Math.abs(target-hoodT)>0.001){ renderer.shadowMap.needsUpdate = true; needsRender=true; }
+  controls.update(); if(needsRender){ renderer.render(scene,camera); needsRender=false; } }
+animate();
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

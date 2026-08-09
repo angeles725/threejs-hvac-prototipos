@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Freidora — nave Panccadia</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700} #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Freidora comercial — acero inox 304</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· tanque + canastilla</span></div>
+  <div class="dim">~0.45 × 0.75 m · alto 0.88 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 5, 20);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.1, 200);
+const Rr = 2.7;
+camera.position.set(Rr*Math.cos(0.72)*Math.cos(0.38), 0.95 + Rr*Math.sin(0.38), Rr*Math.sin(0.72)*Math.cos(0.38));
+camera.lookAt(0, 0.6, 0.05);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.6, 0.05);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.8;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.15;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3, 5.5, 2.5); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left=-1.3; sun.shadow.camera.right=1.3; sun.shadow.camera.top=2; sun.shadow.camera.bottom=-1;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+const fill = new THREE.DirectionalLight(0xf4f7ff, 0.7); fill.position.set(1.5, 2.0, 5); scene.add(fill);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(16,16),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+function brushedRoughTex(){
+  const c=document.createElement('canvas'); c.width=512; c.height=512; const g=c.getContext('2d');
+  g.fillStyle='#565656'; g.fillRect(0,0,512,512);
+  for(let i=0;i<2600;i++){ const y=Math.random()*512,len=40+Math.random()*180,x=Math.random()*512,v=120+(Math.random()*40-20);
+    g.strokeStyle=`rgba(${v},${v},${v},0.16)`; g.lineWidth=Math.random()<0.5?1:0.6;
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x+len,y+(Math.random()*2-1)); g.stroke(); }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(2,2); return t;
+}
+const roughMap = brushedRoughTex();
+const matSteel = new THREE.MeshStandardMaterial({ color:0xd2d6d8, metalness:0.9, roughness:0.30, roughnessMap: roughMap });
+const matWire  = new THREE.MeshStandardMaterial({ color:0xc4c8ca, metalness:0.88, roughness:0.38 });
+const matOil   = new THREE.MeshStandardMaterial({ color:0x3a2c10, metalness:0.0, roughness:0.22 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x1f2327, metalness:0.0, roughness:0.6 });
+
+const box=(w,h,d,mat)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.castShadow=m.receiveShadow=true; return m; };
+const cyl=(rt,rb,h,mat,seg=16)=>{ const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),mat); m.castShadow=m.receiveShadow=true; return m; };
+const unit = new THREE.Group();
+const W=0.45, D=0.75, H=0.86;
+
+// legs + feet
+for(const sx of [-1,1]) for(const sz of [-1,1]){ const l=box(0.04,0.18,0.04,matSteel); l.position.set(sx*(W/2-0.06),0.09,sz*(D/2-0.06)); unit.add(l);
+  const f=cyl(0.026,0.02,0.03,matDark,10); f.position.set(sx*(W/2-0.06),0.015,sz*(D/2-0.06)); unit.add(f); }
+// body
+const body = box(W, H-0.18, D, matSteel); body.position.set(0,0.18+(H-0.18)/2,0); unit.add(body);
+// rear splash
+const splash = box(W,0.2,0.04,matSteel); splash.position.set(0,H+0.1,-D/2+0.02); unit.add(splash);
+// top with tank recess
+const top = box(W,0.03,D,matSteel); top.position.set(0,H,0); unit.add(top);
+// oil tank (recessed) + oil surface
+const tankRim = box(W-0.08,0.05,D-0.24,matSteel); tankRim.position.set(0,H+0.01,0.04); unit.add(tankRim);
+const oil = box(W-0.14,0.02,D-0.32,matOil); oil.position.set(0,H-0.02,0.04); unit.add(oil);
+
+// wire fry basket (a clean rectangular cage) + attached handle
+// basket local frame: origin at the basket's TOP-RIM centre, cage hangs DOWN from y=0 to y=-bh
+const basket = new THREE.Group();
+const bw=W-0.20, bd=D-0.36, bh=0.13;
+const wireBar=(len,mat)=>new THREE.Mesh(new THREE.CylinderGeometry(0.006,0.006,len,6),mat);
+// bottom grid (at y=-bh)
+for(let i=0;i<=3;i++){ const b=wireBar(bd,matWire); b.rotation.x=Math.PI/2; b.position.set(-bw/2+i*(bw/3),-bh,0); basket.add(b); }
+for(let i=0;i<=3;i++){ const b=wireBar(bw,matWire); b.rotation.z=Math.PI/2; b.position.set(0,-bh,-bd/2+i*(bd/3)); basket.add(b); }
+// 4 corner posts (short, y=-bh..0)
+for(const sx of [-1,1]) for(const sz of [-1,1]){ const p=wireBar(bh,matWire); p.position.set(sx*bw/2,-bh/2,sz*bd/2); basket.add(p); }
+// a couple of mid side verticals so the walls read
+for(const sz of [-1,1]){ const p=wireBar(bh,matWire); p.position.set(0,-bh/2,sz*bd/2); basket.add(p); }
+for(const sx of [-1,1]){ const p=wireBar(bh,matWire); p.position.set(sx*bw/2,-bh/2,0); basket.add(p); }
+// TOP RIM frame (closes the cage at y=0)
+basket.add((()=>{const fr=box(bw+0.012,0.012,0.012,matWire); fr.position.set(0,0,bd/2); return fr;})());
+basket.add((()=>{const fr=box(bw+0.012,0.012,0.012,matWire); fr.position.set(0,0,-bd/2); return fr;})());
+basket.add((()=>{const fr=box(0.012,0.012,bd,matWire); fr.position.set(bw/2,0,0); return fr;})());
+basket.add((()=>{const fr=box(0.012,0.012,bd,matWire); fr.position.set(-bw/2,0,0); return fr;})());
+// handle: a bail from the front rim, angled up-forward, ending in a horizontal grip — attached to the rim
+const bail=wireBar(0.30,matWire); bail.position.set(0, 0.10, bd/2+0.10); bail.rotation.x=-0.8; basket.add(bail);
+const grip=new THREE.Mesh(new THREE.CylinderGeometry(0.014,0.014,0.16,10),matDark); grip.rotation.z=Math.PI/2; grip.position.set(0,0.20,bd/2+0.20); basket.add(grip);
+// basket sits with its rim just above the oil, slightly forward
+basket.position.set(0, H+0.11, 0.04); unit.add(basket);
+
+// front control panel + thermostat dial + display
+const cpanel = box(W-0.04,0.28,0.03,matDark); cpanel.position.set(0,0.62,D/2-0.005); unit.add(cpanel);
+const dial = cyl(0.05,0.05,0.02,matSteel,20); dial.rotation.x=Math.PI/2; dial.position.set(-0.1,0.58,D/2+0.02); unit.add(dial);
+const dmark = box(0.006,0.03,0.006,matDark); dmark.position.set(-0.1,0.6,D/2+0.03); unit.add(dmark);
+const disp = new THREE.Mesh(new THREE.PlaneGeometry(0.12,0.07), new THREE.MeshStandardMaterial({color:0x0a1a14,emissive:0x00d4aa,emissiveIntensity:0.9,roughness:0.4}));
+disp.position.set(0.08,0.66,D/2+0.008); unit.add(disp);
+
+scene.add(unit);
+renderer.shadowMap.needsUpdate = true;
+
+const btnRot=document.getElementById('btnRot');
+btnRot.onclick=()=>{ controls.autoRotate=!controls.autoRotate; btnRot.classList.toggle('on',controls.autoRotate); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+globalThis.__freidoraApp = { runtime:{ scene, renderer, camera, unit } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){ requestAnimationFrame(animate); controls.update(); if(needsRender){ renderer.render(scene,camera); needsRender=false; } }
+animate();
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
