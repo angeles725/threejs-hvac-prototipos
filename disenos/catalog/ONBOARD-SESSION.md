@@ -40,6 +40,9 @@ PASO 1 — CONTRATO (cada asset, o no integra):
 PASO 2 — QA OBLIGATORIA antes de cada commit (mismo gate que usa la integración):
     python3 -m http.server 8899 --bind 127.0.0.1 &
     SHOT_DIR=/tmp/shots disenos/catalog/tools/qa-lock.sh node disenos/catalog/tools/verify-catalog-asset.mjs <familia>/<slug>
+  OJO PUERTO: 8899 suele estar OCUPADO por un servidor que sirve OTRO root — si lo levantas y "funciona", mides el
+  repo equivocado sin enterarte. Usa un PUERTO PROPIO, pasa `BASE_URL`/`BASE` explícito a las sondas, y confirma con
+  `curl` contra una ruta que solo exista en TU worktree antes de fiarte. Y `SHOT_DIR` debe EXISTIR (si no, ENOENT y parece fallo del asset).
   ENVUELVE SIEMPRE la sonda en qa-lock.sh (una invocación por vez): serializa con flock entre TODAS las
   sesiones y mata la contención (~70 chrome en 16 núcleos = exit 13). No sirve si solo lo usa una sesión;
   es un contrato compartido, úsalo aunque creas que estás sola. Transparente: stdout y exit code pasan tal cual.
@@ -185,8 +188,9 @@ GOTCHAS ya detectados (evítalos):
   puerta perforada con barras de 10 mm de fondo se apila visualmente en vista 3/4 y se vuelve OPACA (tapó 42U
   de equipo con exit 0); una perforada real es chapa ~1.5 mm → baja el fondo a ~2.5 mm y transparenta.
 - OFFSETS encadenados que se salen de su base (alternador colgando fuera del patín, barras 90 mm fuera del
-  gabinete): pon `console.assert` sobre la extensión resultante en vez de confiar en la aritmética; atrapa el
-  error en el primer render, barato.
+  gabinete): pon `console.error` sobre la extensión resultante en vez de confiar en la aritmética; atrapa el
+  error en el primer render, barato. NO uses `console.assert`: el gate NO lo lee (ver el gotcha "una salvaguarda
+  que el instrumento no lee no es salvaguarda" más abajo), así que un assert que falla deja pasar exit 0.
 - FALSO NEGATIVO del gate (no es asset roto): `ready:false` + `error:'no-renderer'` + lista de errores VACÍA
   + cero globals `__` = infra (unpkg tosió). Un asset roto DE VERDAD deja rastro en `errors`. Reintenta.
 
