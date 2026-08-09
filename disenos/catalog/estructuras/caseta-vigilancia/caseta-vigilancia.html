@@ -1,0 +1,296 @@
+<!doctype html>
+<!--
+  caseta-vigilancia — catalog asset, family `estructuras`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Guard booth: glazed on three sides over a spandrel, door on the fourth, roof overhang with a
+  soffit luminaire. The asset only works if you can SEE IN — a guard booth is defined by sightlines.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caseta de vigilancia — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Caseta de vigilancia — acristalada en tres caras</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· alero con luminaria · mostrador · consola de monitoreo</span></div>
+  <div class="dim">2.10 × 2.10 × 2.75 m (alero 2.60 × 2.60 m)</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">PUERTA</button>
+  <button id="btnLight">LUZ</button>
+  <button id="btnRoof">TECHO</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const S = 2.10, HS = S/2;                   // square plan
+const PL_H = 0.15;                          // plinth
+const SPAN_H = 0.95;                        // spandrel (solid) height above the floor
+const EAVE = 2.55;                          // underside of the roof slab
+const OVER = 0.25;                          // roof overhang all round
+const MUL = 0.06;                           // mullion section
+const DOOR_W = 0.85, DOOR_H = 2.05;
+const Y0 = PL_H;
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 40);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 6.6, AZ = 0.82, EL = 0.22;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.35 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.35, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.35, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.0;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+sun.position.set(4, 7, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-3; sun.shadow.camera.right=3; sun.shadow.camera.top=4; sun.shadow.camera.bottom=-2;
+scene.add(sun);
+// FLAT-PANEL DEVIATION: the spandrel and fascia are flat coated panels, so the flat remedy
+// applies here (camera-side DirectionalLight fill), not the §3.3 studio rig used by the curved
+// bodies in this family. PBR values unchanged (HANDBOOK §3.1).
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.0);
+fill.position.set(-3.5, 2.6, 5.5);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.26));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+// The booth interior is the subject: it is glazed, so it must be lit from inside or the glass
+// reads as a dark panel. LUZ drives this lamp and the luminaire emissive together.
+const roomLamp = new THREE.PointLight(0xffe9c4, 5.5, 4.2, 2);
+roomLamp.position.set(0, EAVE - 0.35, 0);
+scene.add(roomLamp);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Coated panel and painted mullions are dielectrics; the handrail-grade hardware is bare metal.
+//   Glass is MeshPhysicalMaterial with transmission, so the interior is genuinely visible.
+// ============================================================================
+const matPanel  = new THREE.MeshStandardMaterial({ color:0xdfe3e6, metalness:0.0,  roughness:0.55 });
+const matAccent = new THREE.MeshStandardMaterial({ color:0x24506b, metalness:0.0,  roughness:0.50 });
+const matMull   = new THREE.MeshStandardMaterial({ color:0xb9bfc3, metalness:0.0,  roughness:0.45 });
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xbcc3c7, metalness:0.95, roughness:0.42 });
+const matGlass  = new THREE.MeshPhysicalMaterial({ color:0xd4e6ec, metalness:0.0, roughness:0.04,
+                                                   transmission:0.92, thickness:0.012,
+                                                   transparent:true, opacity:0.5 });
+const matConc   = new THREE.MeshStandardMaterial({ color:0x8e8d88, metalness:0.0,  roughness:0.95 });
+const matFloor  = new THREE.MeshStandardMaterial({ color:0x9aa0a2, metalness:0.0,  roughness:0.90 });
+const matDark   = new THREE.MeshStandardMaterial({ color:0x1b1f23, metalness:0.0,  roughness:0.72 });
+const matWood   = new THREE.MeshStandardMaterial({ color:0x8a6a45, metalness:0.0,  roughness:0.80 });
+const matLampOff= new THREE.MeshStandardMaterial({ color:0xd8dcdf, metalness:0.0,  roughness:0.40 });
+const matLampOn = new THREE.MeshStandardMaterial({ color:0xfff3d6, metalness:0.0,  roughness:0.30,
+                                                   emissive:0xffe6b0, emissiveIntensity:1.6 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=14)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+// the four elevations: +Z carries the door, the other three are glazed
+const SIDES = [{a:0, nx:0, nz:1, door:true}, {a:Math.PI/2, nx:1, nz:0, door:false},
+               {a:Math.PI, nx:0, nz:-1, door:false}, {a:-Math.PI/2, nx:-1, nz:0, door:false}];
+
+// --- plinth + floor ---
+put(root, S + 0.30, PL_H, S + 0.30, matConc, 0, PL_H/2, 0);
+put(root, S, 0.02, S, matFloor, 0, Y0 + 0.01, 0);
+
+// --- spandrel band + corner posts + head beam ---
+const shellG = new THREE.Group();
+for(const {nx, nz, door} of SIDES){
+  if(door){
+    // the door elevation: spandrel only beside the door opening
+    const side = (S - DOOR_W)/2;
+    for(const s of [-1, 1])
+      put(shellG, side, SPAN_H, 0.06, matPanel, s*(DOOR_W/2 + side/2), Y0 + SPAN_H/2, HS - 0.03);
+  } else {
+    put(shellG, nz ? S : 0.06, SPAN_H, nz ? 0.06 : S, matPanel,
+        nx*(HS - 0.03), Y0 + SPAN_H/2, nz*(HS - 0.03));
+  }
+}
+for(const sx of [-1,1]) for(const sz of [-1,1])
+  put(shellG, 0.09, EAVE - Y0, 0.09, matMull, sx*(HS - 0.045), Y0 + (EAVE - Y0)/2, sz*(HS - 0.045));
+put(shellG, S + 0.02, 0.10, S + 0.02, matAccent, 0, EAVE - 0.05, 0);              // head beam / signage band
+root.add(shellG);
+
+// --- glazing: three elevations fully glazed above the spandrel, with mullions ---
+const glazing = new THREE.Group();
+for(const {a, nx, nz, door} of SIDES){
+  const g = new THREE.Group(); g.rotation.y = -a; glazing.add(g);
+  const hGlass = EAVE - 0.10 - (Y0 + SPAN_H);
+  const yc = (Y0 + SPAN_H + EAVE - 0.10)/2;
+  if(door){
+    const side = (S - DOOR_W)/2;
+    for(const s of [-1, 1]){
+      put(g, side - 0.02, hGlass, 0.012, matGlass, s*(DOOR_W/2 + side/2), yc, HS - 0.03);
+      put(g, 0.04, hGlass, 0.05, matMull, s*(DOOR_W/2), yc, HS - 0.03);
+    }
+    put(g, DOOR_W + 0.10, 0.06, 0.06, matMull, 0, Y0 + DOOR_H + 0.03, HS - 0.03);
+    put(g, DOOR_W, EAVE - 0.10 - (Y0 + DOOR_H) - 0.06, 0.012, matGlass, 0,
+        (Y0 + DOOR_H + 0.06 + EAVE - 0.10)/2, HS - 0.03);                          // transom over the door
+  } else {
+    put(g, S - 0.06, hGlass, 0.012, matGlass, 0, yc, HS - 0.03);
+    put(g, 0.04, hGlass, 0.05, matMull, 0, yc, HS - 0.03);                         // central mullion
+    put(g, S - 0.04, 0.05, 0.05, matMull, 0, Y0 + SPAN_H + 0.02, HS - 0.03);       // transom at the sill
+  }
+}
+root.add(glazing);
+
+// --- roof slab with overhang, fascia, soffit luminaire and a small rooftop condenser ---
+const roof = new THREE.Group();
+put(roof, S + 2*OVER, 0.10, S + 2*OVER, matPanel, 0, EAVE + 0.05, 0);
+for(const {nx, nz} of SIDES)
+  put(roof, nz ? S + 2*OVER : 0.04, 0.14, nz ? 0.04 : S + 2*OVER, matAccent,
+      nx*(HS + OVER - 0.02), EAVE + 0.03, nz*(HS + OVER - 0.02));                   // fascia
+const lamp = put(roof, 0.55, 0.05, 0.16, matLampOff, 0, EAVE - 0.03, HS + 0.10);    // soffit luminaire
+put(roof, 0.62, 0.34, 0.50, matPanel, 0.35, EAVE + 0.27, -0.25);                    // rooftop condenser
+cyl(roof, 0.16, 0.03, matDark, 0.35, EAVE + 0.45, -0.25, 0, 0, 16);
+root.add(roof);
+
+// --- interior: counter, monitor console, chair, cabinet — the reason the booth is glazed ---
+const interior = new THREE.Group();
+put(interior, S - 0.30, 0.05, 0.52, matWood, 0, Y0 + 0.92, -(HS - 0.34));           // counter
+for(const sx of [-1, 1]) put(interior, 0.05, 0.90, 0.46, matPanel, sx*(S/2 - 0.24), Y0 + 0.46, -(HS - 0.34));
+put(interior, 0.46, 0.30, 0.04, matDark, -0.28, Y0 + 1.12, -(HS - 0.20));           // monitor
+put(interior, 0.10, 0.06, 0.14, matDark, -0.28, Y0 + 0.96, -(HS - 0.22));
+put(interior, 0.26, 0.16, 0.20, matDark, 0.34, Y0 + 1.03, -(HS - 0.26));            // radio / intercom
+put(interior, 0.42, 0.06, 0.40, matDark, 0.30, Y0 + 0.46, 0.24);                    // chair seat
+put(interior, 0.42, 0.44, 0.06, matDark, 0.30, Y0 + 0.70, 0.42);                    // chair back
+cyl(interior, 0.04, 0.44, matSteel, 0.30, Y0 + 0.24, 0.24, 0, 0, 10);
+put(interior, 0.44, 0.80, 0.38, matPanel, -(HS - 0.30), Y0 + 0.40, 0.42);           // cabinet
+root.add(interior);
+
+// --- door: frame + hinged glazed leaf with a lever handle ---
+const doorFrame = new THREE.Group();
+put(doorFrame, 0.05, DOOR_H, 0.08, matMull, -(DOOR_W/2 + 0.025), Y0 + DOOR_H/2, HS - 0.02);
+put(doorFrame, 0.05, DOOR_H, 0.08, matMull,  (DOOR_W/2 + 0.025), Y0 + DOOR_H/2, HS - 0.02);
+root.add(doorFrame);
+const doorPivot = new THREE.Group();
+doorPivot.position.set(-DOOR_W/2, 0, HS + 0.01);            // hinge on the -X edge
+const leaf = new THREE.Group();
+leaf.position.set(DOOR_W/2, Y0, 0.02);
+put(leaf, DOOR_W, 0.30, 0.045, matPanel, 0, 0.15, 0);                                // bottom rail
+put(leaf, DOOR_W, 0.08, 0.045, matPanel, 0, DOOR_H - 0.04, 0);                       // top rail
+for(const s of [-1,1]) put(leaf, 0.06, DOOR_H, 0.045, matPanel, s*(DOOR_W/2 - 0.03), DOOR_H/2, 0);
+put(leaf, DOOR_W - 0.12, DOOR_H - 0.42, 0.014, matGlass, 0, (0.30 + DOOR_H - 0.08)/2, 0);
+put(leaf, 0.05, 0.16, 0.09, matSteel, DOOR_W/2 - 0.12, 1.02, 0.05);                  // lever handle
+doorPivot.add(leaf);
+root.add(doorPivot);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const DOOR_OPEN = -1.30;
+let doorTarget = 0, lightOn = true;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnDoor = document.getElementById('btnDoor');
+btnDoor.onclick = ()=>{ doorTarget = doorTarget === 0 ? DOOR_OPEN : 0;
+  btnDoor.classList.toggle('on', doorTarget !== 0); requestRender(); };
+
+const btnLight = document.getElementById('btnLight');
+btnLight.classList.add('on');
+btnLight.onclick = ()=>{ lightOn = !lightOn;
+  roomLamp.intensity = lightOn ? 5.5 : 0.0;
+  lamp.material = lightOn ? matLampOn : matLampOff;
+  btnLight.classList.toggle('on', lightOn); requestRender(); };
+lamp.material = matLampOn;
+
+const btnRoof = document.getElementById('btnRoof');
+btnRoof.onclick = ()=>{ roof.visible = !roof.visible; btnRoof.classList.toggle('on', !roof.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const d = doorTarget - doorPivot.rotation.y;
+  if(Math.abs(d) > 0.0008){ doorPivot.rotation.y += d * 0.12; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__casetaVigilanciaApp = __app;
+globalThis['__caseta-vigilanciaApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

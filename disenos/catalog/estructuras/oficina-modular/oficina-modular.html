@@ -1,0 +1,344 @@
+<!doctype html>
+<!--
+  oficina-modular — catalog asset, family `estructuras`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Site office in a 20 ft ISO container shell. The identity is the CORRUGATION plus the corner
+  castings and rails: without them a container is just a box with a door.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oficina modular en contenedor — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Oficina modular — contenedor 20 ft acondicionado</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· corrugado instanciado · cantoneras ISO · minisplit pasamuro</span></div>
+  <div class="dim">6.06 × 2.44 × 2.59 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">PUERTA</button>
+  <button id="btnStep">ESCALERA</button>
+  <button id="btnAC">AIRE</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const L = 6.06, W = 2.44, H = 2.59;         // 20 ft ISO external envelope
+const SILL = 0.14;                          // bottom rail / floor structure
+const CORNER = 0.16;                        // corner casting cube
+const RIB_PITCH = 0.28;                     // corrugation pitch on the long walls
+const DOOR_W = 0.90, DOOR_H = 2.05;         // personnel door on the +Z long side
+const DOOR_X = -1.75;                       // its centre along the length
+const WIN_W = 1.10, WIN_H = 0.95, WIN_Y = 1.55;
+const WIN_X = [0.10, 2.10];                 // two windows on the same elevation
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 16, 50);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 11.0, AZ = 0.78, EL = 0.26;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.40 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.40, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.40, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.0;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(6, 9, 5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-6; sun.shadow.camera.right=6; sun.shadow.camera.top=5; sun.shadow.camera.bottom=-3;
+scene.add(sun);
+// FLAT-PANEL DEVIATION (design-spec.yaml `lighting`): the container walls are flat PAINTED steel
+// — the flat case, so a camera-side DirectionalLight fill is the right remedy here, unlike the
+// curved bodies in this family (tanque, silo) which take the §3.3 studio rig instead.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.05);
+fill.position.set(-5.0, 3.2, 7.0);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+// Interior lamp (shadowless): the office is lit inside, which is what makes the windows read as
+// windows instead of as dark rectangles.
+const roomLamp = new THREE.PointLight(0xffeecc, 6, 5.0, 2);
+roomLamp.position.set(0.6, 1.90, 0);
+scene.add(roomLamp);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(44,44),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   A container is PAINTED corten steel -> dielectric. Corner castings and the door hardware are
+//   bare metal. Glass is a MeshPhysicalMaterial, not a tinted opaque plane.
+// ============================================================================
+const matBody   = new THREE.MeshStandardMaterial({ color:0x2f6a7a, metalness:0.0,  roughness:0.55 });
+const matRib    = new THREE.MeshStandardMaterial({ color:0x2a5f6e, metalness:0.0,  roughness:0.58 });
+const matRail   = new THREE.MeshStandardMaterial({ color:0x27515e, metalness:0.0,  roughness:0.60 });
+const matCast   = new THREE.MeshStandardMaterial({ color:0x9aa1a6, metalness:0.95, roughness:0.50 });
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xbcc3c7, metalness:0.95, roughness:0.42 });
+const matFrame  = new THREE.MeshStandardMaterial({ color:0xd7dade, metalness:0.0,  roughness:0.50 });
+const matGlass  = new THREE.MeshPhysicalMaterial({ color:0xcfe2e8, metalness:0.0, roughness:0.06,
+                                                   transmission:0.86, thickness:0.02,
+                                                   transparent:true, opacity:0.6 });
+const matDark   = new THREE.MeshStandardMaterial({ color:0x1b1f23, metalness:0.0,  roughness:0.72 });
+const matAC     = new THREE.MeshStandardMaterial({ color:0xd8dcde, metalness:0.0,  roughness:0.52 });
+const matBlade  = new THREE.MeshStandardMaterial({ color:0x2b3138, metalness:0.0,  roughness:0.45 });
+const matFloorIn= new THREE.MeshStandardMaterial({ color:0x7a6a52, metalness:0.0,  roughness:0.90 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=14)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+
+// --- plinth blocks the container sits on ---
+const plinth = new THREE.Group();
+for(const sx of [-1,1]) for(const sz of [-1,1])
+  put(plinth, 0.42, 0.18, 0.34, matDark, sx*(L/2 - 0.30), 0.09, sz*(W/2 - 0.22));
+root.add(plinth);
+const Y0 = 0.18;
+
+// --- shell: floor, roof, end walls, and the two long walls built AROUND their openings ---
+const shell = new THREE.Group();
+put(shell, L, SILL, W, matRail, 0, Y0 + SILL/2, 0);                       // floor structure / bottom rail
+put(shell, L - 0.20, 0.02, W - 0.20, matFloorIn, 0, Y0 + SILL + 0.01, 0); // internal floor
+put(shell, L, 0.10, W, matRail, 0, Y0 + H - 0.05, 0);                     // roof + top rail
+for(const sx of [-1,1]) put(shell, 0.05, H - SILL - 0.10, W - 0.10, matBody, sx*(L/2 - 0.025), Y0 + (H + SILL - 0.10)/2, 0);
+// the -Z long wall is solid; the +Z long wall carries the door and two windows
+put(shell, L - 0.10, H - SILL - 0.10, 0.05, matBody, 0, Y0 + (H + SILL - 0.10)/2, -(W/2 - 0.025));
+{
+  const yb = Y0 + SILL, yt = Y0 + H - 0.10;
+  const openings = [
+    [DOOR_X - DOOR_W/2, DOOR_X + DOOR_W/2, yb, yb + DOOR_H],
+    [WIN_X[0] - WIN_W/2, WIN_X[0] + WIN_W/2, WIN_Y - WIN_H/2, WIN_Y + WIN_H/2],
+    [WIN_X[1] - WIN_W/2, WIN_X[1] + WIN_W/2, WIN_Y - WIN_H/2, WIN_Y + WIN_H/2],
+  ].sort((a,b)=>a[0]-b[0]);
+  // solid piers between openings, then the header/sill strips over and under each one
+  const edges = [-L/2 + 0.05, ...openings.flatMap(o=>[o[0], o[1]]), L/2 - 0.05];
+  for(let i=0;i<edges.length;i+=2){
+    const x0 = edges[i], x1 = edges[i+1];
+    if(x1 - x0 > 0.002) put(shell, x1 - x0, yt - yb, 0.05, matBody, (x0+x1)/2, (yb+yt)/2, W/2 - 0.025);
+  }
+  for(const [x0, x1, oy0, oy1] of openings){
+    if(yt - oy1 > 0.002) put(shell, x1 - x0, yt - oy1, 0.05, matBody, (x0+x1)/2, (oy1 + yt)/2, W/2 - 0.025);
+    if(oy0 - yb > 0.002) put(shell, x1 - x0, oy0 - yb, 0.05, matBody, (x0+x1)/2, (yb + oy0)/2, W/2 - 0.025);
+  }
+}
+root.add(shell);
+
+// --- corrugation: instanced ribs on both long walls and both ends (the container's signature) ---
+const ribs = new THREE.Group();
+{
+  const yb = Y0 + SILL + 0.02, yt = Y0 + H - 0.12, hR = yt - yb;
+  // the +Z wall is interrupted by openings, so ribs are only placed where the wall is solid
+  const blocked = [[DOOR_X - DOOR_W/2, DOOR_X + DOOR_W/2], [WIN_X[0] - WIN_W/2, WIN_X[0] + WIN_W/2],
+                   [WIN_X[1] - WIN_W/2, WIN_X[1] + WIN_W/2]];
+  const xs = [];
+  for(let x = -L/2 + 0.30; x <= L/2 - 0.30; x += RIB_PITCH) xs.push(x);
+  const front = xs.filter(x => !blocked.some(([a,b]) => x > a - 0.06 && x < b + 0.06));
+  const geo = new THREE.BoxGeometry(0.09, hR, 0.035);
+  const imF = new THREE.InstancedMesh(geo, matRib, front.length);
+  front.forEach((x, i)=>{ _q.setFromEuler(new THREE.Euler(0,0,0));
+    _p.set(x, (yb + yt)/2, W/2 - 0.002); imF.setMatrixAt(i, _m.compose(_p, _q, _s)); });
+  imF.instanceMatrix.needsUpdate = true; imF.castShadow = true; ribs.add(imF);
+  const imB = new THREE.InstancedMesh(geo, matRib, xs.length);
+  xs.forEach((x, i)=>{ _q.setFromEuler(new THREE.Euler(0,0,0));
+    _p.set(x, (yb + yt)/2, -(W/2 - 0.002)); imB.setMatrixAt(i, _m.compose(_p, _q, _s)); });
+  imB.instanceMatrix.needsUpdate = true; imB.castShadow = true; ribs.add(imB);
+  // end walls
+  const zs = [];
+  for(let z = -W/2 + 0.28; z <= W/2 - 0.28; z += RIB_PITCH) zs.push(z);
+  const geoE = new THREE.BoxGeometry(0.035, hR, 0.09);
+  const imE = new THREE.InstancedMesh(geoE, matRib, zs.length * 2);
+  let k = 0;
+  for(const sx of [-1, 1]) for(const z of zs){
+    _q.setFromEuler(new THREE.Euler(0,0,0));
+    _p.set(sx*(L/2 - 0.002), (yb + yt)/2, z);
+    imE.setMatrixAt(k++, _m.compose(_p, _q, _s));
+  }
+  imE.instanceMatrix.needsUpdate = true; imE.castShadow = true; ribs.add(imE);
+}
+root.add(ribs);
+
+// --- ISO corner castings + top and bottom rails at every edge ---
+const castings = new THREE.Group();
+for(const sx of [-1,1]) for(const sz of [-1,1]) for(const sy of [0, 1]){
+  put(castings, CORNER, CORNER, CORNER, matCast,
+      sx*(L/2 - CORNER/2 + 0.01), Y0 + (sy ? H - CORNER/2 : CORNER/2), sz*(W/2 - CORNER/2 + 0.01));
+}
+for(const sz of [-1,1]){
+  put(castings, L - 0.30, 0.10, 0.07, matRail, 0, Y0 + H - 0.06, sz*(W/2 + 0.005));
+  put(castings, L - 0.30, 0.12, 0.07, matRail, 0, Y0 + SILL/2 + 0.02, sz*(W/2 + 0.005));
+}
+root.add(castings);
+
+// --- door: frame, hinged leaf with a vision panel, lever handle ---
+const doorFrame = new THREE.Group();
+put(doorFrame, 0.06, DOOR_H + 0.06, 0.10, matFrame, DOOR_X - DOOR_W/2 - 0.03, Y0 + SILL + (DOOR_H + 0.06)/2, W/2 - 0.02);
+put(doorFrame, 0.06, DOOR_H + 0.06, 0.10, matFrame, DOOR_X + DOOR_W/2 + 0.03, Y0 + SILL + (DOOR_H + 0.06)/2, W/2 - 0.02);
+put(doorFrame, DOOR_W + 0.12, 0.06, 0.10, matFrame, DOOR_X, Y0 + SILL + DOOR_H + 0.03, W/2 - 0.02);
+root.add(doorFrame);
+const doorPivot = new THREE.Group();
+doorPivot.position.set(DOOR_X - DOOR_W/2, 0, W/2 + 0.01);        // hinge on the -X edge
+const leaf = new THREE.Group();
+leaf.position.set(DOOR_W/2, Y0 + SILL, 0.02);
+put(leaf, DOOR_W, DOOR_H, 0.045, matFrame, 0, DOOR_H/2, 0);
+put(leaf, 0.34, 0.44, 0.05, matGlass, 0, DOOR_H - 0.42, 0.004);   // vision panel
+put(leaf, 0.05, 0.16, 0.09, matSteel, DOOR_W/2 - 0.10, 1.02, 0.05);
+for(const hy of [0.30, DOOR_H - 0.30]) cyl(leaf, 0.018, 0.10, matSteel, -DOOR_W/2 + 0.02, hy, 0.0, 0, 0, 10);
+doorPivot.add(leaf);
+root.add(doorPivot);
+
+// --- windows: frames, glass, and an internal desk that the lit interior reveals ---
+const windows = new THREE.Group();
+for(const wx of WIN_X){
+  put(windows, WIN_W + 0.08, 0.05, 0.10, matFrame, wx, WIN_Y + WIN_H/2 + 0.025, W/2 - 0.02);
+  put(windows, WIN_W + 0.08, 0.05, 0.10, matFrame, wx, WIN_Y - WIN_H/2 - 0.025, W/2 - 0.02);
+  for(const s of [-1,1]) put(windows, 0.05, WIN_H, 0.10, matFrame, wx + s*(WIN_W/2 + 0.025), WIN_Y, W/2 - 0.02);
+  put(windows, WIN_W, WIN_H, 0.02, matGlass, wx, WIN_Y, W/2 - 0.02);
+  put(windows, 0.03, WIN_H, 0.03, matFrame, wx, WIN_Y, W/2 - 0.02);      // central mullion
+}
+root.add(windows);
+const interior = new THREE.Group();
+put(interior, 1.60, 0.05, 0.65, matFrame, 1.10, Y0 + SILL + 0.74, -0.35);   // desk
+for(const dx of [0.40, 1.80]) put(interior, 0.06, 0.72, 0.60, matFrame, dx, Y0 + SILL + 0.38, -0.35);
+put(interior, 0.34, 0.30, 0.05, matDark, 1.10, Y0 + SILL + 0.92, -0.62);    // monitor
+put(interior, 0.50, 0.85, 0.50, matDark, -0.60, Y0 + SILL + 0.43, -0.45);   // cabinet
+root.add(interior);
+
+// --- through-wall split AC + electrical box, and a steel entrance step ---
+// The condenser sits on the +X END wall, not on the blind long side: mounted at the back it is
+// invisible at the review camera, which is the same mistake as burying a feature behind a toggle.
+const ac = new THREE.Group();
+const ACX = L/2 + 0.16;
+put(ac, 0.30, 0.52, 0.86, matAC, ACX, Y0 + 1.80, 0.10);
+put(ac, 0.02, 0.04, 0.78, matDark, ACX + 0.15, Y0 + 1.62, 0.10);
+const acFan = new THREE.Group(); acFan.position.set(ACX + 0.16, Y0 + 1.82, 0.10);
+{ const bl = new THREE.InstancedMesh(new THREE.BoxGeometry(0.11, 0.012, 0.22), matBlade, 3);
+  for(let i=0;i<3;i++){ const a = i*Math.PI*2/3;
+    _q.setFromEuler(new THREE.Euler(a + 0.3, 0, 0));
+    _p.set(0, Math.sin(a)*0.14, Math.cos(a)*0.14);
+    bl.setMatrixAt(i, _m.compose(_p, _q, _s)); }
+  bl.instanceMatrix.needsUpdate = true; bl.castShadow = true; acFan.add(bl); }
+ac.add(acFan);
+cyl(ac, 0.22, 0.03, matDark, ACX + 0.18, Y0 + 1.82, 0.10, 0, Math.PI/2, 18);   // fan guard
+put(ac, 0.16, 0.46, 0.34, matFrame, ACX - 0.08, Y0 + 0.90, -0.62);             // electrical box
+root.add(ac);
+
+const steps = new THREE.Group();
+put(steps, 1.20, 0.05, 0.70, matSteel, DOOR_X, Y0 + SILL - 0.02, W/2 + 0.42);
+for(const i of [0, 1]) put(steps, 1.20, 0.04, 0.30, matSteel, DOOR_X, Y0 + SILL - 0.11 - i*0.11, W/2 + 0.62 + i*0.16);
+for(const sx of [-1,1]) put(steps, 0.05, 1.05, 0.05, matSteel, DOOR_X + sx*0.58, Y0 + SILL + 0.45, W/2 + 0.74);
+put(steps, 1.20, 0.04, 0.04, matSteel, DOOR_X, Y0 + SILL + 0.95, W/2 + 0.74);
+root.add(steps);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const DOOR_OPEN = -1.25;                  // opens outward, away from the review camera side
+let doorTarget = 0, acOn = false;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnDoor = document.getElementById('btnDoor');
+btnDoor.onclick = ()=>{ doorTarget = doorTarget === 0 ? DOOR_OPEN : 0;
+  btnDoor.classList.toggle('on', doorTarget !== 0); requestRender(); };
+
+const btnStep = document.getElementById('btnStep');
+btnStep.onclick = ()=>{ steps.visible = !steps.visible; btnStep.classList.toggle('on', !steps.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnAC = document.getElementById('btnAC');
+btnAC.onclick = ()=>{ acOn = !acOn; btnAC.classList.toggle('on', acOn); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const d = doorTarget - doorPivot.rotation.y;
+  if(Math.abs(d) > 0.0008){ doorPivot.rotation.y += d * 0.12; needsRender = true; }
+  if(acOn){ acFan.rotation.z += 0.18; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__oficinaModularApp = __app;
+globalThis['__oficina-modularApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
