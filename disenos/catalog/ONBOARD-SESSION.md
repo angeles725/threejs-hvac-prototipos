@@ -137,6 +137,23 @@ GOTCHAS ya detectados (evítalos):
   y el gabinete NUNCA es box macizo. Se detecta SOLO abriendo la puerta/tapa en la captura de estado.
 - GUILLOTINA (campana, cortina): la cenefa/caja debe ser al menos tan alta como el RECORRIDO de la hoja, o
   al subir sale por el techo.
+- ILUMINACIÓN DE METAL — árbol de decisión (corrige y completa el gotcha del plano vertical):
+  · superficie PLANA de metal desnudo → fill direccional del lado de la cámara.
+  · cuerpo CURVO de metal (tanque, silo, tubo) → NUNCA el fill plano (lo aplana) y tampoco basta con nada
+    (sale negro): usa la VARIANTE ESTUDIO de HANDBOOK §3.3 — RectAreaLight key+fill grandes, con
+    RectAreaLightUniformsLib.init() UNA vez antes de renderizar. Resuelve el degradado vertical del casco.
+  · superficie INCLINADA hacia abajo (tolva 60°) → además una tarjeta de rebote baja apuntando hacia ARRIBA
+    (es un espejo inclinado que refleja el suelo → si no, negro aunque las normales estén bien).
+- METALNESS casi BINARIO (HANDBOOK §3.1): en superficie sólida SIN textura, un metalness intermedio
+  (0.2-0.55) es artefacto del shader, no autoría válida. Usa 0 (dieléctrico: pintado, plástico) o ~1 (metal
+  desnudo). No dejes 0.35/0.4/0.7 en paneles lisos.
+- ConeGeometry pone el ÁPICE en +Y → un cono de descarga (silo, tolva) se angosta hacia ABAJO y sale al
+  revés; voltearlo con rotation.x=PI voltea también las NORMALES (sale carbón). Constrúyelo como TRONCO
+  (CylinderGeometry con radio inferior), que además es lo real.
+- Rotación desde un orden de Euler ADIVINADO falla en silencio (aros de jaula de escalera a un costado sin
+  rodear nada) → compón desde rotaciones de EJE explícitas.
+- Un CORTE que solo quita el techo NO es corte: el muro cercano sigue tapando el interior. El toggle CORTE
+  quita techo + muro cercano + puerta JUNTOS.
 
 Trabaja en bucle por todos los assets pendientes de tu familia. Cuando tu familia quede en done, avisa y
 elige otra familia libre si queda, o detente.
