@@ -21,6 +21,8 @@ PASO 0 — ELIGE WORKTREE Y FAMILIA (tú solo):
 4. TRABAJA CON RUTAS ABSOLUTAS dentro de ESE worktree: /home/cristian/prototipos/three.js-worktrees/<worktree>/...
    Antes de empezar corre `git -C <worktree> merge --ff-only master` para estar al día.
    Si TODOS los worktrees están ocupados, dímelo y detente.
+5. Si tu worktree tiene un `RESUME.md`, LÉELO PRIMERO: una sesión anterior cerró a medias por contexto.
+   Continúa desde lo que FALTA (asset en progreso puede estar untracked en disco); no rehagas ni reaudites lo ya hecho.
 
 PASO 1 — CONTRATO (cada asset, o no integra):
 - Ruta: <worktree>/disenos/catalog/<familia>/<slug>/{design-spec.yaml, <slug>.html}
@@ -59,6 +61,17 @@ PASO 3 — COMMIT + STATUS:
 - Marca status de TUS assets en catalog.yaml (pending→done). NO toques otras familias.
 - session-A mergea tu rama a master con revisión. Cuando termines un lote, avísale por SendMessage
   (busca su nombre con ListAgents; suele ser la sesión en el worktree principal / master).
+
+PASO 4 — HANDOFF AL 70% DE CONTEXTO (obligatorio; no llegues al 100%):
+- Cuando tu contexto llegue a ~70%, PARA de empezar asset nuevo. Al 100% pierdes el cierre limpio.
+- Commitea TODO asset que ya pase QA. El que esté a medias déjalo UNTRACKED (sigue en disco, no lo pierdes);
+  no lo commitees a medias y deja su status en `pending` (la verdad).
+- ESCRIBE/actualiza `RESUME.md` en la raíz de tu worktree con: integrado (no retrabajar), asset EN PROGRESO
+  con qué está HECHO y qué FALTA exactamente (paso por paso), qué queda untracked, bloques BLOCK-REGISTRY
+  consumidos, y pendientes del bloque. Sé específico: el objetivo es que la sesión nueva NO reaudite ni rehaga.
+- Avisa a session-A en una línea (asset en progreso, untracked sí/no, bloques consumidos) y cierra.
+- Una sesión nueva retoma leyendo `RESUME.md` + `catalog.yaml` + este ONBOARD. El estado vive en el disco y el
+  manifiesto, nunca solo en la memoria de la sesión que cierra.
 
 FAMILIAS needs-research (robotica, transporte, automotriz): corre /research-sdd PRIMERO para la técnica
 dura (jerarquía de joints/IK; scroll de textura para banda). Sincroniza con
