@@ -188,3 +188,8 @@ elige otra familia libre si queda, o detente.
   4) raycast como pista, con el objeto y sus accesorios excluidos.
 - Todo hallazgo de auditoría se REFUTA (verificación adversarial de la sesión dueña) ANTES de aplicarse como
   fix. Un reporte medido pero con la identidad de malla mal anclada parece sólido y no lo es.
+- LA SEÑAL VIENE DE MEDIR EL ESTADO CONCRETO, casi nunca de un patrón general. Los chequeos ESTÁTICOS/de-patrón
+  fallan por ruido en este catálogo: "botón sin requestRender()" (24 falsos: el wiring usa helpers variados),
+  cruce cita↔título (cruces legítimos), regex de geometría (casa dentro de Math.PI/2). El wiring y la geometría
+  varían de forma legítima entre assets. Audita midiendo el estado específico (pixel-diff sobre el área del
+  modelo excluyendo HUD/panel), no con un patrón sintáctico que "discrimine" sin medir.
