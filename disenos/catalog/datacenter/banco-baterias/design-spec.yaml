@@ -1,0 +1,186 @@
+# DesignSpec — VRLA battery bank, three cabinets wired as one string
+# Fifth and final asset of the catalog `datacenter` family.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+#
+# EVIDENCE DISCIPLINE: no manufacturer datasheet was preserved. Every dimension is [INFER] from
+# battery-room practice at confidence <= 0.7. Nothing here is presented as [CERT-doc].
+#
+# SCOPE BOUNDARY vs electricos/ups — that asset is the POWER cabinet, with a single battery cabinet
+# attached only to show where the DC link goes. THIS one is the BANK: the inter-cabinet links, the
+# string disconnect and the per-block monitoring only exist once there is more than one cabinet,
+# and there is no power conversion anywhere in it.
+
+design: banco-baterias
+family: datacenter
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+
+complexity:
+  scores: {silhouette: 1, components: 2, hierarchy: 2, repetition: 3,
+           material_layers: 3, detail: 3, occlusion: 3, action_readiness: 1}
+  tier: complex
+  notes: >
+    material_layers 3 rests on one small object: a VRLA block is a moulded ABS jar, a separate lid,
+    lead posts and lead straps — three surface families inside 0.10 m. repetition 3: 60 blocks,
+    120 posts, 48 straps, 60 sense leads, all instanced.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    scope_boundary: "disenos/catalog/electricos/ups/ (the power cabinet this bank feeds)"
+    isa101_states: "research/HANDBOOK.md §3.4"
+
+references:
+  - source: "research/HANDBOOK.md §3.1 (PBR palette) + §3.4 (ISA-101)"
+    evidences: >
+      [CERT] near-binary metalness; the jar and lid are dielectrics while the posts and straps are
+      bare lead; neutral grey is the normal state and colour is reserved for the actionable one.
+    suitability: pass
+  - source: "battery-room practice (no document preserved in sources/)"
+    evidences: >
+      [INFER] cabinets bolted together rather than spaced, sharing division panels; blocks on
+      shelves strapped post-to-post with the series path zig-zagging front/rear along each shelf;
+      shelf-to-shelf jumpers alternating ends; a string disconnect and fuse in the last cabinet;
+      low-level ventilation because VRLA still off-gasses; one voltage/temperature sense lead per
+      block for the monitoring system.
+    suitability: partial
+
+dimensions_real:
+  cabinets:      {value: 3,    confidence: low}
+  cabinet_w_m:   {value: 0.72, confidence: low}
+  total_w_m:     {value: 2.16, confidence: low}
+  depth_m:       {value: 0.85, confidence: low}
+  body_h_m:      {value: 1.90, confidence: low}
+  overall_h_m:   {value: 2.00, confidence: low}
+  shelves_per_cabinet: {value: 4, confidence: low}
+  blocks_per_shelf: {value: 5, confidence: low}
+  blocks_total:  {value: 60,   confidence: low}
+  block_w_m:     {value: 0.105, confidence: low}
+
+hierarchy:
+  - name: root
+    children:
+      - name: carcasses       # 3 shells bolted together, shared division panels, low vent slats
+        pivot: [0, 0, 0]
+        animation: none
+      - name: guts            # 12 shelves, 60 blocks (jar + lid + posts), straps, jumpers,
+                              # per-block sense leads, per-cabinet monitoring module
+        pivot: [0, 0, 0]
+        animation: none
+      - name: links           # inter-cabinet links, string disconnect + fuse, DC feed, gland plate
+        pivot: [0, 0, 0]      # THIS group is what makes it a bank rather than three cabinets
+        animation: none
+      - name: hmi_band        # fixed band: monitoring display, lamps, hazard plate
+        pivot: [0, 0, 0]
+        animation: none
+      - name: doors           # 3 leaves, hinged left, eased swing
+        pivot: per-leaf left stile
+        animation: swing
+
+materials:
+  - id: battery-jar-abs
+    family: plastic
+    color: "#22262b"
+    metalness: 0.0             # painting a whole battery as one material is the giveaway error:
+    roughness: 0.44            # the jar is a dielectric and the posts on top of it are not
+    evidence: "HANDBOOK §3.1 dielectric metalness 0"
+    confidence: 0.8
+  - id: battery-post-lead
+    family: bare-metal
+    color: "#9aa0a6"
+    metalness: 0.90
+    roughness: 0.48
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0 — posts and inter-block straps"
+    confidence: 0.8
+  - id: cabinet-ral7035
+    family: painted-metal
+    color: "#cfd2cc"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1 'panelBox -> 0.0-0.05'"
+    confidence: 0.9
+  - id: dc-cable-insulation
+    family: rubber
+    color: "#7a1e1e"
+    metalness: 0.0
+    roughness: 0.72
+    evidence: "HANDBOOK §3.1 dielectric — insulated DC link"
+    confidence: 0.8
+  - id: led-isa101
+    family: emissive
+    color: "#5a6878"
+    metalness: 0.0
+    roughness: 0.40
+    evidence: "HANDBOOK §3.4 — amber for a weak block: actionable at the next service, not a trip"
+    confidence: 0.9
+
+critical_features:
+  - id: it-is-a-bank
+    desc: >
+      Inter-cabinet links, a string disconnect with fuse, a DC feed leaving through a gland, and
+      per-block sense leads into per-cabinet monitoring modules. Strip those and the asset is three
+      separate battery cabinets standing next to each other, which is the sibling asset's scope.
+    threshold: 0.85
+  - id: series-path-is-visible
+    desc: >
+      Straps run post-to-post along each shelf and alternate front/rear so the series path
+      zig-zags, with shelf-to-shelf jumpers at alternating ends. A bank whose wiring does not
+      connect anything is a shelf of batteries.
+    threshold: 0.80
+  - id: block-is-three-materials
+    desc: "Moulded ABS jar, separate lid, lead posts, lead straps — inside one 0.105 m object."
+    threshold: 0.78
+  - id: everything-stays-inside-the-shell
+    desc: >
+      The DC feed leaves through a gland plate, not through the side wall. A first pass put the
+      feed bars 90 mm past the cabinet envelope, reading as cables floating beside the bank; a
+      runtime assertion now guards it.
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 170          # measured 128
+    tris: 14000         # measured 8,406
+
+camera:
+  azimuth_deg: 42
+  elevation_deg: 11
+  fov: 38
+  target_y_m: 1.04
+  radius_m: 5.6
+
+lighting: house-rig + vertical-subject fill
+  # DOCUMENTED DEVIATION: three large VERTICAL coated doors. Fix is LIGHT:
+  # DirectionalLight(0xdce6f2, 0.85) along the panel normal (+Z), environmentIntensity 2.2.
+  # metalness/roughness unchanged per HANDBOOK §3.1.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ABRIR PUERTAS"
+  - "PUENTES ENTRE GABINETES"   # isolates exactly the geometry that makes this a bank
+  - "BLOQUE DÉBIL (ISA-101)"    # one amber lamp; the string-healthy lamp is the normal state
+
+colorTarget:
+  srgb: [231, 232, 231]
+  deltaE00Max: 8
+  crop: "22x18+441+260"   # clean cabinet door face at 1280x800, per-channel std 0.00
+
+verification:
+  gate: "node disenos/catalog/tools/verify-catalog-asset.mjs datacenter/banco-baterias"
+  state_probe: "node disenos/catalog/tools/probe-state.mjs datacenter/banco-baterias btnDoor open"
+  measured: {ready: true, calls: 128, triangles: 8406, console_errors: 0, shadowAuto: false}
+  # Caught by reading the capture: the DC feed bars ran 90 mm past the cabinet envelope and read as
+  # cables floating in mid-air beside the bank. Guarded now by a console.assert on the extent.
+  # KNOWN VIEW LIMIT, declared rather than hidden: with all three leaves hinged left and the camera
+  # at +X/+Z, only the right-hand cabinet's interior is visible in the doors-open capture. That is
+  # correct physics — the other two were verified by orbiting.
+  known_flake: >
+    The gate fetches three.js from unpkg. A CDN hiccup surfaces as ready:false / error:'no-renderer'
+    with an EMPTY console-error list and zero __ globals. Observed THREE times across these two
+    families, every time on an asset that was fine. Re-run before believing it.
