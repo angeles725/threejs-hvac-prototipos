@@ -38,7 +38,9 @@ PASO 1 — CONTRATO (cada asset, o no integra):
 PASO 2 — QA OBLIGATORIA antes de cada commit (mismo gate que usa la integración):
     python3 -m http.server 8899 --bind 127.0.0.1 &
     SHOT_DIR=/tmp/shots node disenos/catalog/tools/verify-catalog-asset.mjs <familia>/<slug>
-  Sale 0 solo si: data-app-ready true, calls>0, 0 excepciones de consola, hook presente.
+  Exit 0 = pass (ready true, calls>0, 0 excepciones de consola, hook presente).
+  Exit 1 = FALLO real de un asset. Exit 2 = NO CONCLUYENTE (servidor caído: no se midió nada) →
+  arranca el servidor y REINTENTA; nunca trates exit 2 como rechazo.
   ABRE el PNG que deja y REVÍSALO: geometría correcta (los conteos verdes NO ven bugs de geometría).
   Caveat: mide con SwiftShader → conteos reales, pero el TIEMPO DE FRAME no; no lo uses como criterio.
 
