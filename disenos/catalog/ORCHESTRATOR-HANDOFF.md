@@ -5,7 +5,17 @@ model 3D catalog assets in parallel git worktrees; you integrate their branches,
 contract/tools/registry coherent, and coordinate. **You do not model assets** (the user prefers Opus-5's
 modeling; your value is orchestration, QA integration, and merges). Resume with this exact role.
 
-## Where things stand (update as you go — the repo is the source of truth, not this line)
+## 2026-08-09 UPDATE (session-A close) — READ THIS FIRST
+- **Progress: 106/107 done.** `origin/master` synced. **Only `proceso/llenadora` (rotary/linear filler) remains** — the last `pending` in `catalog.yaml`; needs a modeling session (assign it a fresh worktree). All other families complete.
+- **PIPELINE CHANGED: assets are now built with `/design3d` (threejs track), not the ad-hoc ONBOARD.** The catalog lives in `disenos/`, which is design3d's threejs territory. The ONBOARD-SESSION.md is still the catalog contract + ~20 gotchas; design3d wraps it with the gated P0-P8 pipeline.
+- **BLIND REVIEW is session-A's job at integration.** A `/design3d` asset needs a fresh-context blind reviewer (the acceptance authority); the modeling session CANNOT spawn one. So when you integrate a `/design3d` asset, launch an Agent blind-reviewer over its `runs/*.png` (or flat `review-*.png`) vs the spec, before calling it contract-passed. All 6 done this way passed.
+- **COORDINATION FIXED (worktree-per-session).** Sessions do NOT self-select worktrees (that caused a 6-session pile-up). YOU assign: each session gets its OWN worktree + branch (collision gone by construction) + disjoint slugs. Occupancy witness = untracked `.session-claim.local` with the SOCKET, checked via `ps -p <pid>` (idle != closed). `.session-claim.txt` and `RESUME.md` are UNTRACKED/gitignored (they collide on every merge). Full design: `LAUNCH-PROMPT.md` + kit postmortem `research-sdd/toolbelt/MULTI-SESSION-WORKTREE-COORDINATION.md`.
+- **INTEGRATION: cherry-pick the ASSET commit**, keep large `runs/*.png` OUT of master (ephemeral, ~5-10 MB each; blind-review reads them from the worktree, then delete). Small DPR-1 `review-*.png` (~200 KB) may stay.
+- **OPEN USER DECISION — `environmentIntensity`:** it is a NO-OP in three r160 (arrived r163). Option 2 DONE (65 specs corrected, text-only, no render change — commit d338d3c). Option 1 (implement `material.envMapIntensity` + recalibrate 100+) stays OPEN; user leans no. The ONBOARD vertical-metal gotcha was corrected to stop prescribing the dead knob.
+- **SKILL IMPROVEMENT:** 6 measured learnings consolidated into `~/.claude/skills/design3d/LEARNINGS.md §Staged` (commit c3731a0 there) — AWAITING USER PROMOTION (a run/orchestrator may only stage; the user promotes to §Active).
+- **AT llenadora INTEGRATION:** run `verify-design-spec.mjs` once over all 107, reading the MESSAGE per failure (not just exit code). 3 estructuras specs (bodega/nave-almacen/supermercado shells) fail on a MISSING KEY (`envelope:` vs `dimensions_real:`) — a schema decision, NOT a syntax bug; leave unless the user decides to unify.
+
+## Where things stand (historical — the repo is the source of truth, not this line)
 - Progress at handoff: **91/107 assets `done`** (`git log`, `rg -c 'status: done' disenos/catalog/catalog.yaml`).
 - **8+ families complete**: retail, seguridad, hvac, robotica, automotriz, transporte, laboratorio, estructuras,
   electricos, datacenter, instrumentacion. Pending (being modeled): proceso 6, fluidos 3, utilities 1,
