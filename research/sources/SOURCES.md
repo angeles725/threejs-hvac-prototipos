@@ -87,6 +87,12 @@
 | B57-catalog-dims/mecalux-euro-pallet | B57-catalog-dims | https://www.mecalux.com/warehouse-manual/pallet/euro-pallet | 2026-08-09T01:13:37Z | c963d7fc9cd3c670e16fc2bbedb032aa7b61944027bd437ea5d0e78f0c7f90fb | B58 |
 | B57-catalog-dims/ssi-schaefer-pallet-racking-2018.pdf | B57-catalog-dims | https://www.ssi-schaefer.com/resource/blob/490780/10112b951333e455c0a64a8d8fc91292/d4-d27-general-catalogue-chapter-d-pallet-racking-systems-pdf-dam-download-en-15831--data.pdf | 2026-08-09T01:14:36Z | 04576a0b7da0fab9c51e29547d1e9ba5000519854e3306eaa25ccf93369357e4 | B58 |
 | B57-catalog-dims/wikipedia-eur-pallet | B57-catalog-dims | https://en.wikipedia.org/wiki/EUR-pallet | 2026-08-09T01:21:51Z | def67cba3a7037bf14c906635f22ca3c9bcf69d9dce98a6bfa898036cbeac100 | B58 |
+| B59-door-dims/hoermann-sectional-42mm.pdf | B59-door-dims | https://www.hoermann.com/fileadmin/_country/dok/EBD_INDBR50_Sectionaltor_42_EN.pdf | 2026-08-09T01:59:28Z | e5bca5fa1272cb32340f5adfb2d9827183be587d172198e02de3c6ea7e0974fe | B59 |
+| B59-door-dims/hartdoors-roller-shutter.pdf | B59-door-dims | https://www.hartdoors.com/wp-content/uploads/2023/09/203-Industrial-Roller-Shutter-V10.7.pdf | 2026-08-09T01:59:29Z | 6d6e873edc8b7b3ce8d3558800a0f215e023db899f6242acc8c9992826b6c73c | B59 |
+| B59-door-dims/bifoldrolfe-bfr75.pdf | B59-door-dims | https://www.bifoldrolfe.co.uk/pdf/datasheet-roller-shutter-doors-bfr-75.pdf | 2026-08-09T02:00:29Z | cb962c98511e4e2fa0a55b9eb47a0b6ea5e0cb840ec6fc1c350340072918e6fa | B59 |
+| B59-door-dims/angelmir-roller-shutter.pdf | B59-door-dims | https://www.angelmir.com/uploads/files/entry/en-roller-shutter-doors-am.pdf | 2026-08-09T02:00:31Z | 9996249e2e0f0146d8ce85e4e9fd938f3789fa1fc71a9a86a76b08692f75eec9 | B59 |
+| B60-access-dims/faac-620-barrier.pdf | B60-access-dims | http://www.faacgateopeners.com/FAAC-Manuals/FAAC-620-Barrier-Gate-Operator.pdf | 2026-08-09T02:22:50Z | 09656864494f9d83b1e8f68ef127b552d190dd4acc431e9ac60b5ba924d08c33 | B60 |
+| B60-access-dims/shancharm-tripod-at103.pdf | B60-access-dims | https://shancharm.com/wp-content/uploads/2026/04/datasheet-xc-at103-vertical-tripod-en-v1.pdf | 2026-08-09T02:22:51Z | 730140ef9e53211f2b10e662e9c552852a9e55c0729618b9e5b497bfcbdcd6d5 | B60 |
 
 ## Structure
 

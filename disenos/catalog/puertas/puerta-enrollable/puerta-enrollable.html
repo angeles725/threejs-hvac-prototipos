@@ -1,0 +1,262 @@
+<!doctype html>
+<!--
+  puerta-enrollable — catalog asset, family `puertas`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block59.md (Angel Mir roller-shutter catalogue)
+  Spec: ./design-spec.yaml
+  The curtain COILS: wrapped laths follow an Archimedean spiral whose radius grows with each turn
+  (r = r0 + t*theta/2pi), the rest hangs straight in the G135 guides. See lathPose() below.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Puerta enrollable industrial — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Puerta enrollable industrial — lama 100 mm</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· guía G135 · caja B 435 mm</span></div>
+  <div class="dim">hueco 3.50 × 3.00 m · muro mínimo H+B+C1 = 3.505 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnOpen">OPEN / CLOSE</button>
+  <button id="btnCover" class="on">BOX COVER</button>
+  <button id="btnWall" class="on">WALL</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 59]) ----------
+const OPEN_W = 3.50, OPEN_H = 3.00;        // [INFER] inside the certified 5,000 x 5,000 maximum
+const LATH_P = 0.100;                      // [CERT-doc] 100 mm lath pitch
+const LATH_T = 0.014;                      // [INFER] not published
+const GUIDE_W = 0.135, GUIDE_D = 0.085;    // [CERT-doc] G135 profile width / "G" value
+const BOX_B = 0.435;                       // [CERT-doc] small-flag B
+const C1 = 0.070;                          // [CERT-doc] small-flag top assembly margin
+const MIN_WALL_H = OPEN_H + BOX_B + C1;    // [CERT-doc] "Minimum total height = H + B + C1" = 3.505
+const CURTAIN_W = OPEN_W + 0.10;           // laths run into the guides
+const N_LATH = Math.ceil(OPEN_H / LATH_P) + 2;
+const DRUM_Y = OPEN_H + BOX_B/2;           // barrel centre, inside the box
+const DRUM_Z = -0.10;
+const R0 = 0.075;                          // barrel core radius
+const RAIL_H = 0.13;                       // inverted-T bottom rail
+const WALL_T = 0.14, WALL_W = 6.00, WALL_H = MIN_WALL_H + 0.55;
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 14, 40);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 9.5, AZ = 0.733, EL = 0.227;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.75 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.75, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.75, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.2;   // vertical bare-metal curtain — see the fill below
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(6, 9, 6); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d
+sun.shadow.camera.left=-6; sun.shadow.camera.right=6; sun.shadow.camera.top=6; sun.shadow.camera.bottom=-6;
+sun.shadow.camera.far = 30;
+scene.add(sun);
+// VERTICAL-SUBJECT DEVIATION (same as puerta-cuarto-frio, documented in the spec): a bare-aluminium
+// curtain on a vertical plane reflects the dark horizon and reads flat. Fixed with light, never by
+// lowering metalness — that would turn aluminium into plastic (HANDBOOK §3.1).
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.2);
+fill.position.set(-5, 4, 7); scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: aluminium lath + steel guides are BARE metal;
+//          the coated box cover is a dielectric.
+// ============================================================================
+const matLath  = new THREE.MeshStandardMaterial({ color:0xb9bec1, metalness:0.90, roughness:0.42 });
+const matGuide = new THREE.MeshStandardMaterial({ color:0x8a9094, metalness:0.90, roughness:0.50 });
+const matBox   = new THREE.MeshStandardMaterial({ color:0xc7cbcb, metalness:0.0,  roughness:0.62 });
+const matRail  = new THREE.MeshStandardMaterial({ color:0x8f9498, metalness:0.92, roughness:0.45 });
+const matWall  = new THREE.MeshStandardMaterial({ color:0x6e767b, metalness:0.0,  roughness:0.72 });
+const matShaft = new THREE.MeshStandardMaterial({ color:0x7d8386, metalness:0.95, roughness:0.40 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (parent,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); parent.add(m); return m; };
+
+// --- context wall: tall enough for H + B + C1, which is the point of the equation ---
+const wall = new THREE.Group();
+const sideW = (WALL_W - OPEN_W)/2;
+put(wall, sideW, WALL_H, WALL_T, matWall, -(OPEN_W/2 + sideW/2), WALL_H/2, 0);
+put(wall, sideW, WALL_H, WALL_T, matWall,  (OPEN_W/2 + sideW/2), WALL_H/2, 0);
+put(wall, OPEN_W, WALL_H - OPEN_H, WALL_T, matWall, 0, OPEN_H + (WALL_H - OPEN_H)/2, 0);
+root.add(wall);
+
+// --- G135 side guides: a U profile that captures the lath edges ---
+const guides = new THREE.Group();
+for(const sx of [-1,1]){
+  const x = sx*(OPEN_W/2 + GUIDE_W/2 - 0.02);
+  put(guides, GUIDE_W, OPEN_H + 0.04, 0.016, matGuide, x, (OPEN_H+0.04)/2, GUIDE_D/2 + 0.012);   // outer web, proud of the curtain so the G135 profile reads
+  put(guides, GUIDE_W, OPEN_H + 0.04, 0.012, matGuide, x, (OPEN_H+0.04)/2, -GUIDE_D/2);  // inner web
+  put(guides, 0.012, OPEN_H + 0.04, GUIDE_D, matGuide, x + sx*GUIDE_W/2, (OPEN_H+0.04)/2, 0); // back
+}
+root.add(guides);
+
+// --- drum box: barrel, shaft, end plates, optional cover ---
+const drumbox = new THREE.Group();
+const shaft = new THREE.Mesh(new THREE.CylinderGeometry(R0, R0, OPEN_W + 0.16, 16), matShaft);
+shaft.rotation.z = Math.PI/2; shaft.position.set(0, DRUM_Y, DRUM_Z);
+shaft.castShadow = true; drumbox.add(shaft);
+for(const sx of [-1,1])
+  put(drumbox, 0.014, BOX_B, BOX_B, matGuide, sx*(OPEN_W/2 + 0.10), DRUM_Y, DRUM_Z);   // end plate
+const cover = new THREE.Group();   // "compulsory for doors lower than 2500 mm in height" [CERT-doc]
+put(cover, OPEN_W + 0.24, 0.014, BOX_B + 0.05, matBox, 0, DRUM_Y + BOX_B/2, DRUM_Z);
+put(cover, OPEN_W + 0.24, BOX_B, 0.014, matBox, 0, DRUM_Y, DRUM_Z + (BOX_B + 0.05)/2);
+put(cover, OPEN_W + 0.24, 0.014, BOX_B + 0.05, matBox, 0, DRUM_Y - BOX_B/2, DRUM_Z);
+drumbox.add(cover);
+root.add(drumbox);
+
+// --- the curtain: one InstancedMesh of laths, posed by lathPose() ---
+const lathGeo = new THREE.BoxGeometry(CURTAIN_W, LATH_P - 0.006, LATH_T);
+const curtain = new THREE.InstancedMesh(lathGeo, matLath, N_LATH);
+curtain.castShadow = curtain.receiveShadow = true;
+root.add(curtain);
+const rail = box(CURTAIN_W + 0.03, RAIL_H, LATH_T + 0.02, matRail);   // inverted-T bottom rail
+const railWeb = box(CURTAIN_W + 0.03, 0.03, LATH_T + 0.09, matRail);
+root.add(rail); root.add(railWeb);
+
+// THE COIL. d = distance of this lath above the curtain's leading edge; `lift` = how far the
+// leading edge has risen. Everything above the lintel is WRAPPED: its excess length becomes angle
+// on an Archimedean spiral r = R0 + LATH_T*theta/(2*pi) — so the roll thickens turn by turn,
+// which is exactly why the box has to be B tall.
+const Y_WRAP = OPEN_H - 0.02;
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function lathPose(d, lift){
+  const y = lift + d;
+  if(y <= Y_WRAP) return { p:[0, y, 0], rx:0 };
+  let e = y - Y_WRAP, th = 0, r = R0;
+  // walk the spiral: each step of arc length advances theta by ds/r, and r grows with theta
+  const STEP = 0.02;
+  for(let s=0; s<e; s+=STEP){ th += STEP / r; r = R0 + LATH_T*th/(2*Math.PI); }
+  return { p:[0, DRUM_Y - r*Math.cos(th), DRUM_Z + r*Math.sin(th)], rx: -th };
+}
+function layout(lift){
+  for(let i=0;i<N_LATH;i++){
+    const pose = lathPose(i*LATH_P + RAIL_H, lift);
+    _p.set(pose.p[0], pose.p[1], pose.p[2]);
+    _q.setFromEuler(new THREE.Euler(pose.rx, 0, 0));
+    curtain.setMatrixAt(i, _m.compose(_p,_q,_s));
+  }
+  curtain.instanceMatrix.needsUpdate = true;
+  rail.position.set(0, lift + RAIL_H/2, 0);
+  railWeb.position.set(0, lift + 0.015, 0);
+}
+layout(0);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED; the coil animation holds needsRender while moving.
+// ============================================================================
+const LIFT_OPEN = OPEN_H - 0.25;
+let liftTarget = 0, liftNow = 0;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnOpen = document.getElementById('btnOpen');
+btnOpen.onclick = ()=>{ liftTarget = liftTarget === 0 ? LIFT_OPEN : 0;
+  btnOpen.classList.toggle('on', liftTarget !== 0); requestRender(); };
+
+const btnCover = document.getElementById('btnCover');
+btnCover.onclick = ()=>{ cover.visible = !cover.visible; btnCover.classList.toggle('on', cover.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnWall = document.getElementById('btnWall');
+btnWall.onclick = ()=>{ wall.visible = !wall.visible; btnWall.classList.toggle('on', wall.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const d = liftTarget - liftNow;
+  if(Math.abs(d) > 0.002){ liftNow += d * 0.10; layout(liftNow); needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__puertaEnrollableApp = __app;
+globalThis['__puerta-enrollableApp'] = __app;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

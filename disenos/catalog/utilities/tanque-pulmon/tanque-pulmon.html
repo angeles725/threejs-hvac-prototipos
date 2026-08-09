@@ -1,0 +1,286 @@
+<!doctype html>
+<!--
+  tanque-pulmon — catalog asset, family `utilities`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/sources/B59-proceso-dims/atlas-copco-lv511-500l-receiver.md
+  Spec: ./design-spec.yaml
+  NOTE: the shell is ONE LatheGeometry over a real DIN 28011 Klöpper profile. Flat ends would be
+  wrong twice over: wrong for a pressure vessel, and they would not close Ø600 + 2,185 mm at 500 L.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tanque pulmón de aire 500 L — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Tanque pulmón de aire comprimido — 500 L / 11 bar</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· acero galvanizado desnudo</span></div>
+  <div class="dim">Ø 600 mm · altura total 2 185 mm · entrada 799 mm · salida 1 799 mm · G2"</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnFit" class="on">ACCESORIOS</button>
+  <button id="btnPipe" class="on">TUBERÍA</button>
+  <button id="btnDim">COTAS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence: Atlas Copco LV511 500 L) ----------
+const D        = 0.600, RAD = D/2;   // [CERT-web] shell diameter
+const OVERALL  = 2.185;              // [CERT-web] overall height
+const STAND    = 0.300;              // [INFER] leg stand height, set by the 2.185 closure
+const CROWN_R  = 1.00 * D;           // [INFER] DIN 28011 Klöpper crown
+const KNUCK_R  = 0.10 * D;           // [INFER] DIN 28011 Klöpper knuckle
+const INLET_Y  = 0.799;              // [CERT-web] inlet 799 mm from base
+const OUTLET_Y = 1.799;              // [CERT-web] outlet 1,799 mm from base
+const PORT_OD  = 0.060;              // [CERT-web] G2" connection, outside diameter of the stub
+
+// Klöpper end geometry, solved from the tangency of crown and knuckle (see design-spec references)
+const dc = CROWN_R - KNUCK_R, dx = RAD - KNUCK_R;
+const dy = Math.sqrt(dc*dc - dx*dx);
+const END_D = CROWN_R - dy;                       // dished depth = 0.1163 m on Ø600
+const TAN_LO = STAND + END_D;                     // lower tangent line
+const TAN_HI = OVERALL - END_D;                   // upper tangent line
+const BARREL = TAN_HI - TAN_LO;                   // 1.655 m — the barrel the 500 L needs
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 9, 30);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.05, 120);
+const R = 4.30, AZ = 0.768, EL = 0.1745;                        // 44° azimuth / 10° elevation (spec camera)
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.05 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.05, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.05, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.7;      // DEVIATION (spec §lighting): this asset IS the house gotcha —
+                                       // one bare vertical galvanized cylinder. Lift the environment,
+                                       // never the metalness.
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.4, 3.6, 2.0); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-2; sun.shadow.camera.right=2; sun.shadow.camera.top=2.6; sun.shadow.camera.bottom=-2.6;
+sun.shadow.camera.far = 12;
+scene.add(sun);
+// fill FROM THE CAMERA SIDE, aimed across the curved flank so it carries a gradient
+const fill = new THREE.DirectionalLight(0xdfe9f5, 0.75);
+fill.position.set(2.6, 1.3, 3.0); scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Galvanized shell = BARE METAL (0.90). If the flank reads flat, fix it with the fill light
+//   above — dropping metalness would fake the look and break the material claim.
+// ============================================================================
+const matShell = new THREE.MeshStandardMaterial({ color:0xb9bdbe, metalness:0.90, roughness:0.45 });
+const matBrass = new THREE.MeshStandardMaterial({ color:0xb08d57, metalness:0.85, roughness:0.35 });
+const matPipe  = new THREE.MeshStandardMaterial({ color:0x9aa0a3, metalness:0.88, roughness:0.40 });
+const matBlack = new THREE.MeshStandardMaterial({ color:0x1a1d21, metalness:0.0,  roughness:0.55 });
+const matFace  = new THREE.MeshStandardMaterial({ color:0xe8e6df, metalness:0.0,  roughness:0.90 });
+const matDim   = new THREE.MeshStandardMaterial({ color:0x00d4aa, metalness:0.0,  roughness:0.6,
+                                                  emissive:0x0b3b32, emissiveIntensity:1.0 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. The shell is a body of revolution → one LatheGeometry, no instancing needed.
+// ============================================================================
+const root = new THREE.Group();
+function mesh(geo, mat, parent){ const m = new THREE.Mesh(geo, mat);
+  m.castShadow = m.receiveShadow = true; if(parent) parent.add(m); return m; }
+
+// --- shell profile: lower Klöpper end → barrel → upper Klöpper end, bottom-up ---
+// Tangency angle shared by crown and knuckle (they touch on the line of centres).
+const TANG = Math.atan2(-dy, dx);                 // ≈ -63.6°
+const prof = [];
+function lowerEnd(yTan){                          // apex → rim
+  const cy = yTan + dy;                           // crown centre
+  for(let i=0;i<=14;i++){ const t = -Math.PI/2 + (TANG + Math.PI/2)*(i/14);
+    prof.push(new THREE.Vector2(CROWN_R*Math.cos(t), cy + CROWN_R*Math.sin(t))); }
+  for(let i=1;i<=8;i++){ const t = TANG + (0 - TANG)*(i/8);
+    prof.push(new THREE.Vector2(RAD - KNUCK_R + KNUCK_R*Math.cos(t), yTan + KNUCK_R*Math.sin(t))); }
+}
+function upperEnd(yTan){                          // rim → apex (mirror of the lower end)
+  const cy = yTan - dy;
+  for(let i=1;i<=8;i++){ const t = 0 + (TANG - 0)*(i/8);
+    prof.push(new THREE.Vector2(RAD - KNUCK_R + KNUCK_R*Math.cos(t), yTan - KNUCK_R*Math.sin(t))); }
+  for(let i=1;i<=14;i++){ const t = TANG + (-Math.PI/2 - TANG)*(i/14);
+    prof.push(new THREE.Vector2(CROWN_R*Math.cos(t), cy - CROWN_R*Math.sin(t))); }
+}
+lowerEnd(TAN_LO);
+prof.push(new THREE.Vector2(RAD, TAN_LO), new THREE.Vector2(RAD, TAN_HI));
+upperEnd(TAN_HI);
+const shell = mesh(new THREE.LatheGeometry(prof, 64), matShell, root);
+// weld seams: the two tangent lines are visible girth welds on a real vessel
+for(const y of [TAN_LO, TAN_HI])
+  mesh(new THREE.TorusGeometry(RAD + 0.001, 0.005, 6, 48).rotateX(Math.PI/2), matShell, root).position.y = y;
+
+// --- stand: 3 legs welded to the lower end, with base plates ---
+const stand = new THREE.Group();
+for(let k=0;k<3;k++){
+  const a = k*Math.PI*2/3 + Math.PI/6, cx = Math.cos(a)*0.245, cz = Math.sin(a)*0.245;
+  const leg = mesh(new THREE.BoxGeometry(0.070, 0.560, 0.010), matShell, stand);
+  leg.position.set(cx, 0.280, cz); leg.rotation.y = -a;
+  const web = mesh(new THREE.BoxGeometry(0.010, 0.560, 0.070), matShell, stand);
+  web.position.set(cx, 0.280, cz); web.rotation.y = -a;
+  const plate = mesh(new THREE.BoxGeometry(0.130, 0.010, 0.130), matShell, stand);
+  plate.position.set(cx, 0.005, cz); plate.rotation.y = -a;
+}
+root.add(stand);
+
+// --- piping: inlet at 799 mm, outlet at 1,799 mm — both on the barrel, 1 m apart ---
+const piping = new THREE.Group();
+function port(y, dir){
+  const g = new THREE.Group();
+  const stub = mesh(new THREE.CylinderGeometry(PORT_OD/2, PORT_OD/2, 0.170, 20).rotateZ(Math.PI/2), matPipe, g);
+  stub.position.x = RAD + 0.060;
+  mesh(new THREE.CylinderGeometry(PORT_OD/2 + 0.014, PORT_OD/2 + 0.014, 0.028, 20).rotateZ(Math.PI/2), matPipe, g)
+    .position.x = RAD + 0.020;                                  // boss where it enters the shell
+  mesh(new THREE.CylinderGeometry(PORT_OD/2 + 0.011, PORT_OD/2 + 0.011, 0.024, 6).rotateZ(Math.PI/2), matPipe, g)
+    .position.x = RAD + 0.128;                                  // union nut
+  g.position.y = y; g.rotation.y = dir;
+  piping.add(g);
+  return g;
+}
+port(INLET_Y, 0.42);
+port(OUTLET_Y, 0.42);
+root.add(piping);
+
+// --- fittings: safety valve, gauge, drain at the LOW point, plates ---
+const fittings = new THREE.Group();
+// safety valve, on the upper end
+const svX = 0.115, svZ = -0.075, svY = TAN_HI + 0.075;
+mesh(new THREE.CylinderGeometry(0.026, 0.030, 0.075, 16), matBrass, fittings).position.set(svX, svY + 0.037, svZ);
+mesh(new THREE.CylinderGeometry(0.020, 0.020, 0.055, 12), matBrass, fittings).position.set(svX, svY + 0.100, svZ);
+mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.045, 10).rotateZ(Math.PI/2), matBrass, fittings)
+  .position.set(svX + 0.040, svY + 0.085, svZ);                 // discharge elbow
+mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.050, 8), matBrass, fittings).position.set(svX, svY + 0.150, svZ);
+// pressure gauge, near the outlet
+const gA = 0.42, gY = OUTLET_Y + 0.150;
+const gx = Math.cos(gA)*(RAD + 0.055), gz = -Math.sin(gA)*(RAD + 0.055);
+mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.070, 10).rotateZ(Math.PI/2), matPipe, fittings)
+  .position.set(Math.cos(gA)*(RAD + 0.020), gY, -Math.sin(gA)*(RAD + 0.020));
+const gauge = mesh(new THREE.CylinderGeometry(0.048, 0.048, 0.030, 24).rotateZ(Math.PI/2), matBlack, fittings);
+gauge.position.set(gx + Math.cos(gA)*0.02, gY, gz - Math.sin(gA)*0.02); gauge.rotation.y = gA;
+const face = mesh(new THREE.CylinderGeometry(0.040, 0.040, 0.004, 24).rotateZ(Math.PI/2), matFace, fittings);
+face.position.set(gx + Math.cos(gA)*0.037, gY, gz - Math.sin(gA)*0.037); face.rotation.y = gA;
+// drain — at the LOWEST point of the dished end, which is the reason the end is dished at all
+const drainY = STAND;
+mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.080, 12), matPipe, fittings).position.set(0, drainY - 0.040, 0);
+mesh(new THREE.BoxGeometry(0.052, 0.046, 0.046), matBrass, fittings).position.set(0, drainY - 0.098, 0);
+mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.055, 10).rotateX(Math.PI/2), matBrass, fittings)
+  .position.set(0, drainY - 0.098, 0.048);
+mesh(new THREE.TorusGeometry(0.028, 0.005, 6, 18).rotateY(Math.PI/2), matBrass, fittings)
+  .position.set(0, drainY - 0.098, 0.078);                      // drain handwheel
+// nameplate + inspection plate on the barrel
+const npA = 0.42 + 1.15;
+mesh(new THREE.BoxGeometry(0.004, 0.075, 0.130), matFace, fittings)
+  .position.set(Math.cos(npA)*(RAD + 0.002), 1.42, -Math.sin(npA)*(RAD + 0.002));
+const insA = 0.42 - 1.30;
+const insp = mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.012, 20).rotateZ(Math.PI/2), matShell, fittings);
+insp.position.set(Math.cos(insA)*(RAD + 0.004), 1.10, -Math.sin(insA)*(RAD + 0.004));
+insp.rotation.y = insA;
+root.add(fittings);
+
+// --- COTAS: marks the two published port heights against the shell ---
+const dims = new THREE.Group(); dims.visible = false;
+for(const y of [INLET_Y, OUTLET_Y])
+  mesh(new THREE.TorusGeometry(RAD + 0.012, 0.006, 6, 48).rotateX(Math.PI/2), matDim, dims).position.y = y;
+mesh(new THREE.BoxGeometry(0.008, OUTLET_Y - INLET_Y, 0.008), matDim, dims)
+  .position.set(RAD + 0.012, (INLET_Y + OUTLET_Y)/2, 0);
+root.add(dims);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible;
+  btn.classList.toggle('on', obj.visible); renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(document.getElementById('btnFit'), fittings);
+toggle(document.getElementById('btnPipe'), piping);
+toggle(document.getElementById('btnDim'), dims);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__tanquePulmonApp = __app;
+globalThis['__tanque-pulmonApp'] = __app;          // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

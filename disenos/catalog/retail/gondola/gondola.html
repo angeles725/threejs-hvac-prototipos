@@ -1,0 +1,322 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — retail/gondola · double-sided supermarket gondola run (3 sections).
+  Built from disenos/catalog/shell-template.html. Contract: __gondolaApp.runtime + __qaRenderInfo +
+  data-app-ready, render-on-demand, shadows frozen (autoUpdate=false, 1024), DPR<=2.
+  Instancing (block54 §2.3) is used where the repetition is REAL: 18 shelves, 18 price rails and
+  ~150 products. The unique pieces (plinth, spine, end frames) stay ordinary meshes.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Góndola de supermercado — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">GÓNDOLA DOBLE CARA — acero pintado epoxi</div>
+  <div><span class="dim">3.66 × 1.17 × 1.80 m · 3 secciones de 1.22 m · 4 niveles por cara</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnProd" class="on">PRODUCTOS</button>
+  <button id="btnSign" class="on">CENEFA</button>
+  <button id="btnRail" class="on">PORTA-PRECIOS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+// The gondola is an IMPERIAL-MODULE product: 4 ft sections, 22 in base deck, upper shelves in 1 in
+// steps. Values below are the metric equivalents of that module [INFER — no datasheet preserved].
+const SEC_W = 1.22, SECTIONS = 3;              // 4 ft section × 3 = 3.66 m run
+const RUN_W = SEC_W * SECTIONS;
+const H = 1.80;                                // 72 in upright — the common grocery height
+const BASE_D = 0.56;                           // 22 in base deck, per side
+const BASE_Y = 0.20;                           // deck sits on the plinth
+const KICK_H = 0.13, KICK_INSET = 0.06;        // recessed toe kick
+const SPINE_T = 0.05;                          // back-to-back slotted panel pair
+const UP_W = 0.055, UP_D = 0.048;              // slotted upright profile
+const SHELF_T = 0.022;                         // deck + front lip
+const LEVELS = [                               // y, depth — upper shelves get shallower
+  { y: 0.68, d: 0.48 },
+  { y: 1.06, d: 0.44 },
+  { y: 1.44, d: 0.40 },
+];
+const RAIL_H = 0.038;                          // price-rail (data strip) front face
+const SIGN_H = 0.16;                           // header canopy band
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 34);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.02;   // painted white steel blows out at the house 1.15
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 6.4, AZ = 0.90, EL = 0.30;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.95 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.95, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.95, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.5;   // the subject is COATED white steel, not bare metal: it does not
+                                    // need the bare-metal IBL boost, and 1.9-2.2 clips the shelf faces
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(5, 7, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-4; sun.shadow.camera.right=4; sun.shadow.camera.top=4; sun.shadow.camera.bottom=-4;
+scene.add(sun);
+// VERTICAL-SUBJECT FILL (documented in design-spec.yaml `lighting`): the run is a 3.7 m vertical
+// wall of painted steel; the house rig lights horizontal tops, so the shelf faces fall into the
+// dark horizon. This fill sits on the camera side, mirrored about the shelf normal (+Z).
+const fill = new THREE.DirectionalLight(0xf2f6ff, 0.7);
+fill.position.set(-5.0, 3.0, 6.5);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(28,28),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness: epoxy-powder-coated steel is a COATED
+// surface (dielectric, metalness 0), not bare metal. Only the shelf-front trim is bare aluminium.
+// ============================================================================
+const matSteel = new THREE.MeshStandardMaterial({ color:0xd6d9dd, metalness:0.0, roughness:0.52 });
+const matDeck  = new THREE.MeshStandardMaterial({ color:0xcdd1d5, metalness:0.0, roughness:0.58 });
+const matBack  = new THREE.MeshStandardMaterial({ color:0xb9bec4, metalness:0.0, roughness:0.66 });
+const matKick  = new THREE.MeshStandardMaterial({ color:0x353a41, metalness:0.0, roughness:0.72 });
+// warm ticket white, NOT the shelf white: a pure-white rail on a white shelf disappears at distance
+const matRail  = new THREE.MeshStandardMaterial({ color:0xe8e2d2, metalness:0.0, roughness:0.42 });
+const matAlu   = new THREE.MeshStandardMaterial({ color:0xa8adb2, metalness:0.90, roughness:0.42 });
+const matSign  = new THREE.MeshStandardMaterial({ color:0x1c4f8a, metalness:0.0, roughness:0.44 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (parent,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); parent.add(m); return m; };
+
+// --- plinth + toe kick: the run stands on a closed recessed base ---
+const baseTotalD = 2*BASE_D + SPINE_T;
+put(root, RUN_W, KICK_H, baseTotalD - 2*KICK_INSET, matKick, 0, KICK_H/2, 0);
+put(root, RUN_W, BASE_Y - KICK_H, baseTotalD, matSteel, 0, KICK_H + (BASE_Y-KICK_H)/2, 0);
+
+// --- base decks: one per side, the deep 22 in shelf products stand on ---
+for(const s of [1,-1]){
+  put(root, RUN_W, SHELF_T, BASE_D, matDeck, 0, BASE_Y + SHELF_T/2, s*(SPINE_T/2 + BASE_D/2));
+  // front lip that stops product sliding off the deck
+  put(root, RUN_W, 0.045, 0.014, matDeck, 0, BASE_Y + SHELF_T + 0.022, s*(SPINE_T/2 + BASE_D - 0.007));
+}
+
+// --- spine: back-to-back slotted panels, the double-sided identity of a gondola ---
+for(const s of [1,-1]){
+  put(root, RUN_W, H - BASE_Y, SPINE_T/2, matBack, 0, BASE_Y + (H-BASE_Y)/2, s*SPINE_T/4);
+}
+// horizontal panel joints so the back reads as slotted sheet, not one blank slab
+for(const y of [0.72, 1.10, 1.48]){
+  for(const s of [1,-1]) put(root, RUN_W, 0.012, SPINE_T/2 + 0.006, matKick, 0, y, s*SPINE_T/4);
+}
+
+// --- uprights: slotted verticals at every section joint, both faces ---
+const upX = [];
+for(let i=0;i<=SECTIONS;i++) upX.push(-RUN_W/2 + i*SEC_W);
+for(const x of upX){
+  for(const s of [1,-1]){
+    const xi = Math.min(Math.max(x, -RUN_W/2 + UP_W/2), RUN_W/2 - UP_W/2);
+    put(root, UP_W, H - BASE_Y, UP_D, matSteel, xi, BASE_Y + (H-BASE_Y)/2, s*(SPINE_T/2 + UP_D/2));
+  }
+}
+
+// --- end frames: closed side panels, full depth ---
+for(const s of [1,-1]){
+  put(root, 0.03, H - BASE_Y, baseTotalD, matSteel, s*(RUN_W/2 - 0.015), BASE_Y + (H-BASE_Y)/2, 0);
+}
+
+// --- shelves + brackets + price rails: REAL repetition -> InstancedMesh (block54 §2.3) ---
+// One instanced batch per shelf depth (the three upper levels differ in depth), 6 instances each
+// (3 sections × 2 faces). Brackets and rails follow the same batching.
+const shelves = new THREE.Group(), rails = new THREE.Group(), brackets = new THREE.Group();
+const dummy = new THREE.Object3D();
+for(const lv of LEVELS){
+  const geo = new THREE.BoxGeometry(SEC_W - 0.012, SHELF_T, lv.d);
+  const im = new THREE.InstancedMesh(geo, matDeck, SECTIONS*2);
+  im.castShadow = im.receiveShadow = true;
+  const rgeo = new THREE.BoxGeometry(SEC_W - 0.012, RAIL_H, 0.012);
+  const ir = new THREE.InstancedMesh(rgeo, matRail, SECTIONS*2);
+  ir.castShadow = ir.receiveShadow = true;
+  // brackets tuck UNDER the shelf and stop short of the front edge — same coat as the frame, so
+  // they read as structure and not as dark spikes poking out of the facing line
+  const bgeo = new THREE.BoxGeometry(0.010, 0.05, lv.d - 0.06);
+  const ib = new THREE.InstancedMesh(bgeo, matSteel, SECTIONS*2*2);
+  ib.castShadow = ib.receiveShadow = true;
+  let n = 0, nb = 0;
+  for(let i=0;i<SECTIONS;i++){
+    const cx = -RUN_W/2 + SEC_W*(i+0.5);
+    for(const s of [1,-1]){
+      const cz = s*(SPINE_T/2 + lv.d/2);
+      dummy.position.set(cx, lv.y, cz); dummy.rotation.set(0,0,0); dummy.updateMatrix();
+      im.setMatrixAt(n, dummy.matrix);
+      // the price rail hangs on the FRONT edge of the shelf, slightly below the deck line
+      dummy.position.set(cx, lv.y - RAIL_H/2 - 0.004, s*(SPINE_T/2 + lv.d + 0.006));
+      dummy.updateMatrix(); ir.setMatrixAt(n, dummy.matrix);
+      n++;
+      for(const bx of [-0.5, 0.5]){
+        dummy.position.set(cx + bx*(SEC_W - 0.10), lv.y - SHELF_T/2 - 0.025, cz - s*0.015);
+        dummy.updateMatrix(); ib.setMatrixAt(nb++, dummy.matrix);
+      }
+    }
+  }
+  im.instanceMatrix.needsUpdate = ir.instanceMatrix.needsUpdate = ib.instanceMatrix.needsUpdate = true;
+  shelves.add(im); rails.add(ir); brackets.add(ib);
+}
+root.add(shelves, rails, brackets);
+
+// --- header canopy band (cenefa): the printed sign strip that crowns a grocery aisle ---
+const sign = new THREE.Group();
+// The steel cap is DELIBERATELY deeper than the two sign faces (0.12 vs ±0.05): if the cap face and
+// the sign face land on the same plane the depth buffer ties and the band edge tears.
+for(const s of [1,-1]){
+  put(sign, RUN_W, SIGN_H, 0.02, matSign, 0, H + SIGN_H/2, s*0.04);
+}
+put(sign, RUN_W, 0.022, 0.12, matSteel, 0, H + 0.011, 0);
+root.add(sign);
+
+// --- products: instanced facings on every shelf, deterministic pseudo-random layout ---
+// Three primitives (carton, can, bottle) reused as instanced batches with per-instance colour.
+const products = new THREE.Group();
+let seed = 20260808;
+const rnd = ()=> (seed = (seed*1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+const palette = [0xc4442f, 0xe0a53a, 0x2f6fb0, 0x3f8f5a, 0xd8d3c6, 0x8a4d9e, 0xdd7a3a];
+const matProd = new THREE.MeshStandardMaterial({ metalness:0.0, roughness:0.55, vertexColors:false });
+const shelfPlanes = [{ y: BASE_Y + SHELF_T, d: BASE_D }, ...LEVELS.map(l=>({ y: l.y + SHELF_T/2, d: l.d }))];
+const kinds = [
+  { geo: new THREE.BoxGeometry(0.085, 0.20, 0.075), h: 0.20, step: 0.098 },   // carton
+  { geo: new THREE.BoxGeometry(0.13, 0.145, 0.09),  h: 0.145, step: 0.142 },  // wide carton
+  { geo: new THREE.CylinderGeometry(0.036, 0.036, 0.115, 14), h: 0.115, step: 0.082 },  // can
+  { geo: new THREE.CylinderGeometry(0.028, 0.038, 0.235, 12), h: 0.235, step: 0.092 },  // bottle
+];
+// A real planogram is mostly cartons; the draw was uniform before, which filled the run with bottles.
+const KIND_MIX = [0,0,0,1,1,2,2,3];
+const slots = [];   // {kind, x, y, z, colour}
+for(const plane of shelfPlanes){
+  for(let i=0;i<SECTIONS;i++){
+    for(const s of [1,-1]){
+      const k = KIND_MIX[Math.floor(rnd()*KIND_MIX.length)];
+      const kind = kinds[k];
+      const rows = plane.d > 0.5 ? 2 : 1;
+      const cols = Math.floor((SEC_W - 0.09) / kind.step);
+      const col = palette[Math.floor(rnd()*palette.length)];
+      for(let c=0;c<cols;c++){
+        for(let r=0;r<rows;r++){
+          const x = -RUN_W/2 + SEC_W*i + 0.045 + kind.step*(c+0.5);
+          const z = s*(SPINE_T/2 + plane.d - 0.085 - r*0.115);
+          slots.push({ k, x, y: plane.y + kind.h/2, z, col });
+        }
+      }
+    }
+  }
+}
+for(let k=0;k<kinds.length;k++){
+  const mine = slots.filter(s=>s.k===k);
+  if(!mine.length) continue;
+  const im = new THREE.InstancedMesh(kinds[k].geo, matProd, mine.length);
+  im.castShadow = im.receiveShadow = true;
+  const c = new THREE.Color();
+  mine.forEach((s,idx)=>{
+    dummy.position.set(s.x, s.y, s.z); dummy.rotation.set(0,0,0); dummy.updateMatrix();
+    im.setMatrixAt(idx, dummy.matrix);
+    im.setColorAt(idx, c.setHex(s.col));
+  });
+  im.instanceMatrix.needsUpdate = true; if(im.instanceColor) im.instanceColor.needsUpdate = true;
+  products.add(im);
+}
+root.add(products);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot  = document.getElementById('btnRot');
+const btnProd = document.getElementById('btnProd');
+const btnSign = document.getElementById('btnSign');
+const btnRail = document.getElementById('btnRail');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(btnProd, products);
+toggle(btnSign, sign);
+toggle(btnRail, rails);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__gondolaApp = { runtime:{ scene, renderer, camera, root } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

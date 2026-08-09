@@ -44,6 +44,13 @@ PASO 2 — QA OBLIGATORIA antes de cada commit (mismo gate que usa la integraci�
   ABRE el PNG que deja y REVÍSALO: geometría correcta (los conteos verdes NO ven bugs de geometría).
   Caveat: mide con SwiftShader → conteos reales, pero el TIEMPO DE FRAME no; no lo uses como criterio.
 
+PASO 2b — QA DE ESTADO (OBLIGATORIA si tu asset tiene toggles). El gate del 2a captura SOLO el estado por
+DEFECTO, así que cualquier cuerpo que viva detrás de un botón (revelado, corte, puerta, falla) NUNCA se mira
+— ya se colaron ~15 defectos reales así, todos con exit 0. Acciona CADA botón y revisa el PNG resultante:
+    SHOT_DIR=/tmp/shots BASE=http://127.0.0.1:8899 node disenos/catalog/tools/probe-state.mjs <familia>/<slug> btnA,btnB [sufijo]
+  (usa puerto CDP 9336, distinto del gate). Revisa: ¿el revelado muestra el cuerpo interno o una caja vacía?
+  ¿la puerta abre a un vano o a metal macizo? ¿el corte deja ver lo que debe? Si no, arréglalo antes de commitear.
+
 PASO 3 — COMMIT + STATUS:
 - Commit por asset en tu rama (git -C <worktree> add/commit). NO hagas push.
 - Marca status de TUS assets en catalog.yaml (pending→done). NO toques otras familias.
@@ -51,15 +58,55 @@ PASO 3 — COMMIT + STATUS:
   (busca su nombre con ListAgents; suele ser la sesión en el worktree principal / master).
 
 FAMILIAS needs-research (robotica, transporte, automotriz): corre /research-sdd PRIMERO para la técnica
-dura (jerarquía de joints/IK; scroll de textura para banda). Bloques de corpus arrancan en B59
-(B57/B58 ya tomados); sincroniza con research-sdd-status.sh <target> --sync-state antes de tocar el envelope.
+dura (jerarquía de joints/IK; scroll de textura para banda). Sincroniza con
+research-sdd-status.sh <target> --sync-state antes de tocar el envelope.
+
+RANGOS DE BLOQUE RESEARCH (asignados para que NO colisionen números entre sesiones — usa el siguiente
+libre DE TU RANGO; si te quedas sin, pide otro a session-A):
+- session-B (puertas/almacenamiento): B57-B69   (B57/B58/B59/B60 ya en master)
+- transporte: B70-B79   ·   robotica: B80-B89   ·   automotriz: B90-B99
+Si ya escribiste un bloque fuera de tu rango (p.ej. transporte con B59-B61), RENUMÉRALO a tu rango antes de
+pedir integración; session-A también reconcilia al mergear.
+
+POLÍTICA para assets SIN ficha de fabricante (precedente barrera-vehicular): NO inventes cifras y las
+declares "high". Modela con todas las confidences en LOW, documenta en el design-spec la lista de fuentes
+intentadas, y avisa en el HUD que esa parte no está certificada. Es preferible un asset honesto-con-caveats
+a dejarlo pendiente, salvo que el usuario pida esperar una ficha.
+
+ESCALA: para assets pequeños/medianos usa la FIGURA humana de 1.8 m (HANDBOOK §3.0) como referencia, NO un
+vehículo — un coche de 4.3 m domina el encuadre y compite con el sujeto.
 
 GOTCHAS ya detectados (evítalos):
-- Sujetos VERTICALES de metal desnudo (puertas, cladding, tableros) reflejan el horizonte oscuro y se leen
-  gris plano. NO subas metalness (rompe HANDBOOK §3.1): añade un fill hacia la normal del panel y sube
-  environmentIntensity. Documenta la desviación en el design-spec.
+- Sujetos VERTICALES de metal desnudo (puertas, cladding, tableros) se leen gris plano. FÍSICA: una cara
+  vertical NO puede recibir un reflejo especular de una luz ELEVADA, a cualquier altura de cámara (la
+  geometría de reflexión lo impide) → el brillo lo da el IBL, no una luz de relleno. FORMULACIÓN CORRECTA
+  (session-B, torniquete): sube environmentIntensity (p.ej. 2.8) para el término especular; el fill lateral
+  solo ayuda al término DIFUSO. NUNCA bajes metalness (rompe HANDBOOK §3.1). Documenta la desviación en el spec.
 - Racks/estructuras de carga: el bastidor debe cubrir la carga superior + margen (DGUV: +500 mm sobre el
   nivel más alto). No dejes carga volando por encima del puntal.
+- ACERO PINTADO no es metal desnudo: con env 1.9-2.2 + exposure 1.15 los paneles claros se queman. Para
+  superficies recubiertas usa env ~1.5 / exposure ~1.02 + fill lateral. El gotcha del metal vertical de
+  arriba aplica SOLO a inox/acero desnudo.
+- Una TIRA EMISIVA no ilumina nada: un gabinete/vitrina con vidrio necesita PointLights reales dentro o el
+  producto sale negro detrás del cristal.
+- VIDRIO a transmission 0.96 desaparece del render; usa ~0.72 con tinte leve para que el producto se lea y
+  la superficie curva se note.
+- MECANISMO EN UNA SOLA CARA (puerta seccional, cortina, cualquier equipo con corte): encuadra ESA cara. La
+  vista canónica de una seccional es desde DENTRO (rieles + eje de muelles); de fuera cerrada es un panel liso.
+- CONTEO ≠ CORRECTO: draw calls/tris verdes NO ven geometría rota (carga atravesando mallas, pernos flotando
+  al ocultar una brida, carcasa translúcida con depthWrite tapando el corte, boca sobre el azimut de cámara).
+  SIEMPRE abre el PNG del gate y revísalo.
+- CylinderGeometry / BoxGeometry son SÓLIDAS: un "aro" o "marco" hecho con un cilindro OCLUYE lo de adentro
+  (tapó ventiladores en torre y VRF). Aro → TorusGeometry o 4 tiras; marco → 4 barras, no una caja.
+- Una PUERTA colgada sobre un muro MACIZO se ve bien cerrada y no revela nada al abrir → recorta el VANO en el
+  muro (Shape con hole), como en bodega-shell/puerta-cuarto-frio.
+- En metal, el `map` tiñe F0: un mapa OSCURO en cara vertical colapsa a negro y parece agujero → sube el VALOR
+  del mapa, no bajes metalness.
+- BLANCO sobre BLANCO es invisible aunque nada lo tape (aspa dentro de chimenea blanca). Diferencia el valor.
+- Metal desnudo mirando hacia ABAJO también falla (refleja el cuarto oscuro → bandas negras). Un perfil T de
+  falso techo es acero PINTADO = dieléctrico → valor correcto, no más luz.
+- DISPOSICIÓN físicamente imposible pasa sin que nada la detecte: succión axial dentro del motor vecino, 2
+  ventiladores Ø0.60 en 0.78 m de fondo, carga volando. Revisa cotas y holguras contra tu design-spec.
 
 Trabaja en bucle por todos los assets pendientes de tu familia. Cuando tu familia quede en done, avisa y
 elige otra familia libre si queda, o detente.
