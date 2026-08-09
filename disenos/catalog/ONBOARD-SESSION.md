@@ -233,7 +233,11 @@ elige otra familia libre si queda, o detente.
   conteos verdes — el gate mide que la escena renderiza, no que ENCUADRA. Confirmado por dos sesiones (bomba: el
   motor a ndcY 1.172; rack-drive-in: el arriostramiento superior por encima del HUD). Chequeo barato y que
   discrimina: proyecta las 8 esquinas del bounding box MUNDO del root a NDC y exige |ndc| <= ~0.93, con el tope por
-  debajo de +0.75 para dejar libre el HUD de 4 líneas. Si algo se sale, reencuadra moviendo la CÁMARA (R/target),
+  debajo de +0.75 para dejar libre el HUD de 4 líneas. ANTES de proyectar, LLAMA `controls.update()`: OrbitControls
+  llama a update() al final de su constructor con su target por defecto (0,0,0) y re-apunta la cámara con lookAt,
+  anulando tu `camera.lookAt(0, TGT_Y, 0)`. Si proyectas sin update() previo mides una cámara que NO es la del render
+  (medido en skid-cip: top +0.989 falso vs +0.572 real — dispara un recorte fantasma o, con el signo contrario,
+  esconde uno real). Si algo se sale, reencuadra moviendo la CÁMARA (R/target),
   nunca bajando el sujeto para esquivar el HUD (eso recorta por el otro lado). Es la misma familia que "los conteos
   no ven geometría", un escalón más arriba: tampoco ven el encuadre.
   CUIDADO — el NDC puede salir VERDE midiendo lo equivocado: maximizar el RECTÁNGULO envolvente premia una DIAGONAL
