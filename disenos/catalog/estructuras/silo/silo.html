@@ -1,0 +1,338 @@
+<!doctype html>
+<!--
+  silo — catalog asset, family `estructuras`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Cone-bottom material silo on braced legs, with a slide gate at the outlet.
+  LIGHTING: curved bare-metal subject, so it uses the HANDBOOK §3.3 STUDIO VARIANT (large soft
+  area sources) like tanque-almacenamiento — NOT the flat-panel camera-side fill that the
+  sandwich-panel assets use. See design-spec.yaml `lighting` for why the two are different fixes.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Silo de material — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Silo de material — fondo cónico 60°, patas arriostradas</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· compuerta de guillotina · filtro de venteo · escalera enjaulada</span></div>
+  <div class="dim">Ø 2.20 × 6.55 m total · cilindro 2.80 m · cono 1.90 m · patas 1.50 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnGate">COMPUERTA</button>
+  <button id="btnLad">ESCALERA</button>
+  <button id="btnBrace">ARRIOSTRE</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const RAD = 1.10;                           // barrel radius
+const LEG_H = 1.50;                         // outlet flange height above grade
+const CONE_H = 1.90;                        // 60 deg cone: RAD * tan(60) = 1.10 * 1.732
+const BAR_H = 2.80;                         // cylindrical barrel
+const ROOF_H = 0.35;                        // shallow roof cone
+const OUT_R = 0.15;                         // outlet
+const Y_CONE0 = LEG_H, Y_CONE1 = LEG_H + CONE_H;
+const Y_BAR1 = Y_CONE1 + BAR_H;
+const TOP = Y_BAR1 + ROOF_H;
+const LEG_R = RAD - 0.06;                   // leg pitch circle
+const LAD_A = -0.70;
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 16, 50);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 13.6, AZ = 0.84, EL = 0.20;   // pulled back: the roof rail and filter were cropped
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 3.30 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 3.30, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 3.30, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// CURVED BARE-METAL SUBJECT — HANDBOOK §3.3 studio variant, same reasoning as the tank.
+scene.environmentIntensity = 2.6;
+RectAreaLightUniformsLib.init();
+const keyPanel = new THREE.RectAreaLight(0xffffff, 5.5, 6.0, 9.0);
+keyPanel.position.set(-6.0, 4.4, 7.0); keyPanel.lookAt(0, 3.2, 0);
+scene.add(keyPanel);
+const fillPanel = new THREE.RectAreaLight(0xdfe8f2, 1.8, 4.5, 7.0);
+fillPanel.position.set(7.0, 3.2, 2.5); fillPanel.lookAt(0, 3.2, 0);
+scene.add(fillPanel);
+// BOUNCE CARD. A 60 deg hopper is a downward-tilted mirror: its reflection vector points at the
+// ground, so with correct normals and a bright barrel it STILL rendered charcoal. The physical
+// fix is the one a product photographer uses — a low card throwing light up into the cone.
+const bounce = new THREE.RectAreaLight(0xe8eef6, 3.2, 6.0, 2.6);
+bounce.position.set(0.6, 0.30, 6.0); bounce.lookAt(0, 2.4, 0);
+scene.add(bounce);
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(6, 10, 5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0005;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-5; sun.shadow.camera.right=5; sun.shadow.camera.top=8; sun.shadow.camera.bottom=-3;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(50,50),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+// ============================================================================
+const matShell  = new THREE.MeshStandardMaterial({ color:0xc4cacd, metalness:0.95, roughness:0.34 });
+const matShellD = new THREE.MeshStandardMaterial({ color:0xa9b0b4, metalness:0.95, roughness:0.44 });
+const matWeld   = new THREE.MeshStandardMaterial({ color:0x9aa1a6, metalness:0.95, roughness:0.58 });
+const matGalv   = new THREE.MeshStandardMaterial({ color:0xb7bec2, metalness:0.95, roughness:0.46 });
+const matRail   = new THREE.MeshStandardMaterial({ color:0xc6ccd0, metalness:0.95, roughness:0.38 });
+const matGate   = new THREE.MeshStandardMaterial({ color:0x8f3b2a, metalness:0.0,  roughness:0.50 });
+const matFilter = new THREE.MeshStandardMaterial({ color:0xd4d8db, metalness:0.0,  roughness:0.55 });
+const matConc   = new THREE.MeshStandardMaterial({ color:0x8e8d88, metalness:0.0,  roughness:0.95 });
+const matDark   = new THREE.MeshStandardMaterial({ color:0x1b1f23, metalness:0.0,  roughness:0.72 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=26)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+const at = (a, r)=> [Math.cos(a)*r, Math.sin(a)*r];
+
+// --- legs on pad footings + a support ring under the cone ---
+const legs = new THREE.Group();
+const LEG_A = [Math.PI/4, 3*Math.PI/4, 5*Math.PI/4, 7*Math.PI/4];
+for(const a of LEG_A){
+  const [x, z] = at(a, LEG_R);
+  put(legs, 0.10, LEG_H + 0.30, 0.10, matGalv, x, (LEG_H + 0.30)/2, z).rotation.y = -a;
+  cyl(legs, 0.34, 0.16, matConc, x, 0.08, z, 0, 0, 14);                      // pad footing
+  put(legs, 0.26, 0.02, 0.26, matGalv, x, 0.17, z).rotation.y = -a;          // base plate
+}
+{ const ring = new THREE.Mesh(new THREE.TorusGeometry(LEG_R, 0.045, 8, 26), matGalv);
+  ring.position.set(0, Y_CONE0 + 0.22, 0); ring.rotation.x = Math.PI/2;
+  ring.castShadow = true; legs.add(ring); }
+root.add(legs);
+
+// --- cross bracing between adjacent legs (togglable) ---
+const brace = new THREE.Group();
+for(let i=0;i<LEG_A.length;i++){
+  const a0 = LEG_A[i], a1 = LEG_A[(i+1) % LEG_A.length];
+  const [x0, z0] = at(a0, LEG_R), [x1, z1] = at(a1, LEG_R);
+  const span = Math.hypot(x1 - x0, z1 - z0);
+  const mid = [(x0 + x1)/2, (z0 + z1)/2];
+  const yaw = -Math.atan2(z1 - z0, x1 - x0);
+  for(const sgn of [1, -1]){
+    const b = box(Math.hypot(span, LEG_H * 0.9), 0.05, 0.05, matGalv);
+    b.position.set(mid[0], LEG_H * 0.55, mid[1]);
+    b.rotation.y = yaw;
+    b.rotation.z = sgn * Math.atan2(LEG_H * 0.9, span);
+    brace.add(b);
+  }
+  put(brace, span, 0.05, 0.05, matGalv, mid[0], LEG_H * 0.98, mid[1]).rotation.y = yaw;
+}
+root.add(brace);
+
+// --- cone bottom (60 deg) + outlet spout + slide gate ---
+const body = new THREE.Group();
+// The hopper is a FRUSTUM, not a rotated cone. Two reasons, both learned from captures:
+//   1. ConeGeometry puts its apex at +Y; flipping it with rotation.x = PI also flips its NORMALS,
+//      so the surface then reflects the dark ground and the whole hopper rendered charcoal while
+//      the barrel beside it read as bright stainless.
+//   2. A real hopper ends at the outlet diameter, not at a mathematical point.
+{ const hopper = new THREE.Mesh(
+    new THREE.CylinderGeometry(RAD, OUT_R + 0.03, CONE_H, 26, 1, true),
+    new THREE.MeshStandardMaterial({ color:0xc4cacd, metalness:0.95, roughness:0.34,
+                                     side:THREE.DoubleSide }));
+  hopper.position.set(0, Y_CONE0 + CONE_H/2, 0);
+  hopper.castShadow = hopper.receiveShadow = true; body.add(hopper); }
+cyl(body, OUT_R, 0.26, matShellD, 0, Y_CONE0 - 0.05, 0, 0, 0, 18);            // outlet spout
+cyl(body, OUT_R + 0.05, 0.03, matGalv, 0, Y_CONE0 - 0.18, 0, 0, 0, 18);       // outlet flange
+root.add(body);
+
+// --- slide gate: a plate that travels across the outlet, plus its frame and handwheel ---
+const gate = new THREE.Group();
+put(gate, 0.62, 0.05, 0.34, matGalv, 0, Y_CONE0 - 0.24, 0);                   // gate frame
+const gatePlate = put(gate, 0.40, 0.020, 0.30, matGate, 0, Y_CONE0 - 0.245, 0);
+cyl(gate, 0.016, 0.34, matGalv, 0.42, Y_CONE0 - 0.245, 0, 0, Math.PI/2, 8);   // stem
+{ const hw = new THREE.Mesh(new THREE.TorusGeometry(0.10, 0.014, 6, 16), matGate);
+  hw.position.set(0.60, Y_CONE0 - 0.245, 0); hw.rotation.y = Math.PI/2;
+  hw.castShadow = true; gate.add(hw); }
+root.add(gate);
+
+// --- barrel + weld seams + inspection hatch + level indicator ---
+const barrel = new THREE.Group();
+cyl(barrel, RAD, BAR_H, matShell, 0, Y_CONE1 + BAR_H/2, 0, 0, 0, 26);
+for(const f of [0.34, 0.67])
+  cyl(barrel, RAD + 0.012, 0.03, matWeld, 0, Y_CONE1 + BAR_H*f, 0, 0, 0, 26);
+cyl(barrel, RAD + 0.02, 0.05, matWeld, 0, Y_CONE1, 0, 0, 0, 26);              // cone-to-barrel joint
+{ const g = new THREE.Group(); g.rotation.y = -1.9; barrel.add(g);            // inspection hatch
+  cyl(g, 0.20, 0.08, matShellD, RAD - 0.01, Y_CONE1 + 0.55, 0, 0, Math.PI/2, 16);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.016, 6, 18), matGalv);
+  ring.position.set(RAD + 0.02, Y_CONE1 + 0.55, 0); ring.rotation.y = Math.PI/2;
+  ring.castShadow = true; g.add(ring); }
+{ const g = new THREE.Group(); g.rotation.y = -1.1; barrel.add(g);            // level indicator
+  put(g, 0.10, 0.16, 0.14, matDark, RAD + 0.05, Y_CONE1 + BAR_H - 0.35, 0);
+  cyl(g, 0.010, 0.60, matGalv, RAD + 0.05, Y_CONE1 + BAR_H - 0.70, 0, 0, 0, 6); }
+root.add(barrel);
+
+// --- roof: shallow cone + venting filter + fill pipe + handrail ---
+const roof = new THREE.Group();
+{ const cone = new THREE.Mesh(new THREE.ConeGeometry(RAD + 0.03, ROOF_H, 26), matShellD);
+  cone.position.set(0, Y_BAR1 + ROOF_H/2, 0);
+  cone.castShadow = cone.receiveShadow = true; roof.add(cone); }
+cyl(roof, 0.34, 0.55, matFilter, 0.30, Y_BAR1 + 0.52, 0.16, 0, 0, 18);        // venting filter body
+cyl(roof, 0.38, 0.06, matGalv, 0.30, Y_BAR1 + 0.82, 0.16, 0, 0, 18);          // filter lid
+for(const i of [0,1,2]) cyl(roof, 0.012, 0.20, matGalv, 0.30 + Math.cos(i*2.1)*0.30, Y_BAR1 + 0.86, 0.16 + Math.sin(i*2.1)*0.30, 0, 0, 6);
+cyl(roof, 0.085, 0.90, matGalv, -0.46, Y_BAR1 + 0.42, -0.24, 0, 0, 14);       // fill pipe riser
+{ const el = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.085, 8, 14, Math.PI/2), matGalv);
+  el.position.set(-0.30, Y_BAR1 + 0.87, -0.24); el.rotation.set(Math.PI/2, 0, Math.PI);
+  el.castShadow = true; roof.add(el); }
+{ const N = 10, RR = RAD - 0.12;                                              // roof handrail
+  const post = new THREE.InstancedMesh(new THREE.BoxGeometry(0.045, 1.05, 0.045), matRail, N);
+  for(let i=0;i<N;i++){
+    const a = i*Math.PI*2/N, [x, z] = at(a, RR);
+    _q.setFromEuler(new THREE.Euler(0, -a, 0));
+    _p.set(x, Y_BAR1 + 0.50, z);
+    post.setMatrixAt(i, _m.compose(_p, _q, _s)); }
+  post.instanceMatrix.needsUpdate = true; post.castShadow = true; roof.add(post);
+  for(const h of [1.02, 0.52]){
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(RR, 0.016, 6, 30), matRail);
+    ring.position.set(0, Y_BAR1 + h, 0); ring.rotation.x = Math.PI/2;
+    ring.castShadow = true; roof.add(ring); }
+}
+root.add(roof);
+
+// --- caged access ladder from grade to the roof rail ---
+const ladder = new THREE.Group();
+{
+  const [lx, lz] = at(LAD_A, RAD + 0.18);
+  const g = new THREE.Group(); g.position.set(lx, 0, lz); g.rotation.y = -LAD_A;
+  const H = Y_BAR1 + 0.45;
+  for(const sz of [-1, 1]) put(g, 0.04, H - 0.30, 0.04, matGalv, 0, (H + 0.30)/2, sz*0.24);
+  { const N = Math.floor((H - 0.60) / 0.28);
+    const rung = new THREE.InstancedMesh(new THREE.BoxGeometry(0.03, 0.026, 0.48), matGalv, N);
+    for(let i=0;i<N;i++){ _q.setFromEuler(new THREE.Euler(0,0,0));
+      _p.set(0, 0.42 + i*0.28, 0); rung.setMatrixAt(i, _m.compose(_p, _q, _s)); }
+    rung.instanceMatrix.needsUpdate = true; rung.castShadow = true; g.add(rung); }
+  { const N = 8;   // cage hoops: flat rings whose MISSING sector faces the shell (see the tank)
+    const hoop = new THREE.InstancedMesh(new THREE.TorusGeometry(0.38, 0.014, 6, 18, Math.PI*1.35), matGalv, N);
+    const qFlat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), -Math.PI/2);
+    const qSpin = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), -Math.PI*0.675);
+    const qHoop = qSpin.clone().multiply(qFlat);
+    for(let i=0;i<N;i++){ _p.set(0.06, 2.20 + i*0.52, 0);
+      hoop.setMatrixAt(i, _m.compose(_p, qHoop, _s)); }
+    hoop.instanceMatrix.needsUpdate = true; hoop.castShadow = true; g.add(hoop);
+    for(const sz of [-1, 1]) put(g, 0.02, 8*0.52, 0.02, matGalv, 0.42, 2.20 + 4*0.52 - 0.26, sz*0.26);
+    put(g, 0.02, 8*0.52, 0.02, matGalv, 0.44, 2.20 + 4*0.52 - 0.26, 0);
+  }
+  put(g, 0.06, 0.05, 0.62, matGalv, 0, Y_BAR1 + 0.47, 0);
+  ladder.add(g);
+}
+root.add(ladder);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+//   The gate SLIDES, it does not rotate: a guillotine gate that swung would be the wrong machine.
+// ============================================================================
+const GATE_TRAVEL = -0.46;
+let gateTarget = 0;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnGate = document.getElementById('btnGate');
+btnGate.onclick = ()=>{ gateTarget = gateTarget === 0 ? GATE_TRAVEL : 0;
+  btnGate.classList.toggle('on', gateTarget !== 0); requestRender(); };
+
+const btnLad = document.getElementById('btnLad');
+btnLad.onclick = ()=>{ ladder.visible = !ladder.visible; btnLad.classList.toggle('on', !ladder.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnBrace = document.getElementById('btnBrace');
+btnBrace.onclick = ()=>{ brace.visible = !brace.visible; btnBrace.classList.toggle('on', !brace.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const d = gateTarget - gatePlate.position.x;
+  if(Math.abs(d) > 0.0008){ gatePlate.position.x += d * 0.12; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__siloApp = __app;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
