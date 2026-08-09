@@ -1,0 +1,190 @@
+# DesignSpec — industrial cold-room hinged door (100 mm insulated leaf)
+# First asset of the catalog `puertas` family. Its dimensional evidence is [Block 57]
+# (research/threejs-block57.md), which transcribes preserved DAN-doors manufacturer datasheets —
+# the substitute for the CAD measurements `mesa-trabajo` had.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: puerta-cuarto-frio
+family: puertas
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # the 1 mm skin and the gasket line are material, not voxels
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 9 -> simple/moderate boundary.
+  scores: {silhouette: 1, components: 2, hierarchy: 1, repetition: 1,
+           material_layers: 2, detail: 1, occlusion: 0, action_readiness: 1}
+  tier: simple
+  notes: >
+    A slab door in a frame. The identity is THICKNESS (100 mm PIR leaf) plus the stainless
+    hardware vocabulary — hinges, Fermod latch, kick plate, gasket line. action_readiness 1:
+    the leaf swings on a real hinge axis, so the pivot must sit on the hinge line, not the leaf centre.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/threejs-block57.md
+  reuse_pointers:
+    stainless_palette: "research/HANDBOOK.md §3.1 (bare-metal metalness 0.9-1.0)"
+    reference_asset: "disenos/nave-panccadia/equipos/mesa-trabajo/ (brushed-304 vocabulary)"
+
+references:
+  - source: "sources/B57-catalog-dims/dan-doors-MH1001K.pdf :p.2-3 (hinged 100 mm 1-leaf cold room door)"
+    evidences: >
+      100 mm PIR leaf [CERT-doc]; max width 1400 mm, max height 2500 mm [CERT-doc];
+      frame 1,5 mm stainless AISI 304, always insulated; leaf skin 1 mm AISI 304;
+      stainless height+side adjustable hinges with frictionless bushings; TPE-rubber/silicone
+      sealing mounted in the FRAME; Fermod 920/921 handle; kick plate = door width x 300 mm
+      (or x 800 mm); window standard sizes 150x300, 400x600, 500x600 mm.
+    suitability: pass
+  - source: "sources/B57-catalog-dims/dan-doors-MH1001F.pdf :p.2 (freeze variant)"
+    evidences: >
+      Heating cables in frame and leaf; salt-water-resistant anodised-aluminium bottom rail
+      cast into the floor (omittable variant) -> the freezer door has a VISIBLE floor rail.
+    suitability: pass
+  - source: "research/threejs-block57.md §57.2-57.6"
+    evidences: "The certified envelope vs the chosen nominal; the overlapping-leaf construction."
+    suitability: pass
+
+dimensions_real:
+  # CONFIDENCE DISCIPLINE (Block 57 §57.6): the datasheets publish a MAXIMUM and no nominal size.
+  # Only thickness, gauges, the max envelope and the derived-from-door-width parts are `high`.
+  leaf_thickness_m: {value: 0.100, confidence: high}   # [CERT-doc] 100 mm PIR
+  max_leaf_width_m: {value: 1.40,  confidence: high}   # [CERT-doc] envelope ceiling, 1-leaf
+  max_leaf_height_m: {value: 2.50, confidence: high}   # [CERT-doc] family ceiling, all 4 models
+  opening_w_m:  {value: 1.20, confidence: med}         # [INFER] chosen clear opening inside the envelope
+  opening_h_m:  {value: 2.10, confidence: med}         # [INFER] pallet-truck passage
+  leaf_w_m:     {value: 1.30, confidence: med}         # [INFER] opening + 0.05 overlap per side
+  leaf_h_m:     {value: 2.15, confidence: med}         # [INFER] overlaps the head, meets the floor
+  frame_face_m: {value: 0.09, confidence: low}         # [INFER] gauge certified, face width not published
+  frame_depth_m: {value: 0.14, confidence: low}        # [INFER] wraps a 100 mm panel wall + reveal
+  skin_gauge_m: {value: 0.001, confidence: high}       # [CERT-doc] 1 mm AISI 304 — material, not geometry
+  kick_plate_h_m: {value: 0.30, confidence: high}      # [CERT-doc] "door width x 300 mm (standard)"
+  window_w_m:   {value: 0.40, confidence: high}        # [CERT-doc] standard size 400 x 600 mm
+  window_h_m:   {value: 0.60, confidence: high}        # [CERT-doc]
+  gasket_w_m:   {value: 0.020, confidence: low}        # [INFER] frame-mounted TPE strip
+  hinge_count:  {value: 3,     confidence: low}        # [INFER] UNSTATED in all three datasheets
+  wall_panel_t_m: {value: 0.100, confidence: med}      # [INFER] context wall matches the leaf insulation
+
+hierarchy:
+  - name: root
+    children:
+      - name: wall            # context panel wall the frame is set into (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: frame           # insulated stainless surround + frame-mounted gasket
+        pivot: [0, 0, 0]
+        animation: none
+      - name: leaf            # the 100 mm slab: skin, kick plate, window, handle
+        pivot: [-0.65, 0, 0]  # HINGE LINE, not the leaf centre — the swing axis
+        animation: swing
+        attachment:
+          parent_socket: frame_hinge_side
+          contact_type: hinge
+          gap_tolerance: 0.002
+      - name: hinges          # 3 stainless adjustable hinges — one semantic system
+        pivot: [-0.65, 0, 0]
+        animation: none
+      - name: bottom_rail     # FREEZE variant only (MH1001F) — cast-in aluminium rail
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: stainless-304-leaf
+    family: bare-metal
+    color: "#c6cacc"
+    metalness: 0.95
+    roughness: 0.36            # 1 mm AISI 304 skin, satin — not mirror
+    evidence: "[CERT-doc] MH1001K :p.2 '1 mm stainless steel AISI 304'; HANDBOOK §3.1 bare-metal 0.9-1.0"
+    confidence: 0.9
+  - id: stainless-304-frame
+    family: bare-metal
+    color: "#bcc0c2"
+    metalness: 0.95
+    roughness: 0.42            # 1,5 mm frame, duller than the leaf
+    evidence: "[CERT-doc] MH1001K :p.2 '1,5 mm stainless steel AISI 304'"
+    confidence: 0.9
+  - id: gasket-tpe
+    family: rubber
+    color: "#15181b"
+    metalness: 0.0             # dielectric — Block 57 §57.7: must NOT inherit the steel material
+    roughness: 0.88
+    evidence: "[CERT-doc] MH1001K :p.2 'TPE-rubber or silicone'; HANDBOOK §3.1 dielectric metalness 0"
+    confidence: 0.9
+  - id: panel-ppgi
+    family: painted-metal
+    color: "#e6e9ea"
+    metalness: 0.0             # pre-painted sandwich panel — coated, dielectric
+    roughness: 0.62
+    evidence: "HANDBOOK §3.1 painted panel 0.0-0.05"
+    confidence: 0.8
+  - id: aluminium-rail
+    family: bare-metal
+    color: "#9fa5a9"
+    metalness: 0.9
+    roughness: 0.48
+    evidence: "[CERT-doc] MH1001F :p.2 'salt water resistant anodised aluminium'"
+    confidence: 0.85
+  - id: glass-thermo
+    family: glass
+    color: "#cfe2e8"
+    metalness: 0.0
+    roughness: 0.05
+    evidence: "[CERT-doc] MH1001K :p.3 'Minimum 2-layer thermo glass'"
+    confidence: 0.8
+
+critical_features:
+  - id: slab-thickness-read
+    desc: >
+      The leaf reads as a 100 mm INSULATED SLAB, not a joinery panel — the edge return is visibly
+      thick and the leaf OVERLAPS the frame face (Fermod overlapping-door construction), with the
+      dark gasket line compressed between leaf back-face and frame.
+    threshold: 0.78
+  - id: stainless-hardware-vocabulary
+    desc: >
+      Three stainless hinges on one edge, a Fermod-style vertical latch handle on the other, and a
+      kick plate across the bottom 300 mm of the leaf — the hardware set that identifies a cold-room
+      door rather than a generic metal door.
+    threshold: 0.75
+  - id: proportion-scale
+    desc: >
+      At a 1.20 x 2.10 m clear opening a 1.8 m person reads correct in the doorway; the frame is a
+      thick insulated surround, not a thin architrave.
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 30
+    tris: 40000
+
+camera:
+  azimuth_deg: 42
+  elevation_deg: 15          # lower than the equipment band: the subject is 2.15 m tall
+  fov: 38
+  target_y_m: 1.15
+  radius_m: 5.0
+
+lighting: house-rig + vertical-subject fill
+  # DOCUMENTED DEVIATION: the house rig was calibrated on horizontal equipment surfaces, which
+  # reflect the bright upper IBL. A door is a VERTICAL bare-metal plane and reflects the dark
+  # horizon, so bare 304 reads as flat grey. One extra DirectionalLight sits at the mirror of the
+  # camera about the leaf normal (+Z) and environmentIntensity goes 1.9 -> 2.2. Metalness/roughness
+  # are UNCHANGED (HANDBOOK §3.1) — the fix is lighting, not a fudged material.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "OPEN / CLOSE"          # animated swing on the hinge axis; sets needsRender while moving
+  - "FREEZE RAIL"           # MH1001F variant — cast-in aluminium bottom rail
+  - "WALL"                  # context sandwich-panel wall
+
+colorTarget:
+  # MEASURED from the rendered leaf skin (headless SwiftShader capture at 1280x800), then frozen as
+  # the regression anchor — same method as mesa-trabajo. Not a guessed value.
+  srgb: [105, 110, 114]
+  deltaE00Max: 8
+  crop: "120x110+545+430"   # clean leaf skin: below the window, above the kick plate, at 1280x800
