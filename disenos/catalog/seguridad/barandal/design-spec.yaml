@@ -1,0 +1,173 @@
+# DesignSpec — industrial guardrail run (4 bays) with toe board and self-closing safety gate
+# Catalog family `seguridad` (worktree catalog-retail-lab).
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: barandal
+family: seguridad
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # 5 mm grating bars and a 6 mm toe plate are material, not voxels
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 12 -> moderate.
+  scores: {silhouette: 1, components: 2, hierarchy: 1, repetition: 3,
+           material_layers: 1, detail: 2, occlusion: 0, action_readiness: 2}
+  tier: moderate
+  notes: >
+    repetition 3 (78 grating bars + 13 cross rods + 10 anchor bolts, three instanced batches).
+    action_readiness 2: the safety gate swings, and its swing DIRECTION is a safety property, not a
+    cosmetic choice — it must open over the deck, never over the drop it protects.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    bare_metal: "research/HANDBOOK.md §3.1 (hot-dip galvanised: metalness 0.9-1.0)"
+    hinge_direction: >
+      disenos/catalog/seguridad/gabinete-extintor/ and retail/refrigerador-vertical — third asset in
+      this worktree whose first swing direction was wrong; only a toggle capture shows it.
+
+references:
+  - source: "industrial guardrail geometry (EN ISO 14122-3 / OSHA 1910.29 class rules)"
+    evidences: >
+      [INFER] The standards are RECALLED, not preserved as documents in sources/ — treat every value
+      as inference. The rules modelled: a handrail around 1.1 m, an intermediate rail roughly
+      halfway so the open gap stays limited, a toe board of about 100 mm held clear of the deck for
+      drainage, posts at a pitch of ~1.5 m, and an opening protected by a self-closing gate rather
+      than a removable chain.
+    suitability: partial
+
+dimensions_real:
+  run_m:        {value: 6.00, confidence: low}    # [INFER] 4 bays — enough to read as a run, not a sample
+  bay_m:        {value: 1.50, confidence: med}    # [INFER] post pitch
+  handrail_y_m: {value: 1.10, confidence: med}    # [INFER] top rail height
+  knee_rail_y_m:{value: 0.55, confidence: med}    # [INFER] intermediate rail, halfway
+  toe_h_m:      {value: 0.10, confidence: med}    # [INFER] toe board height
+  toe_gap_m:    {value: 0.010, confidence: low}   # [INFER] drainage gap under the toe board
+  post_mm:      {value: 48,   confidence: low}    # [INFER] square post
+  rail_d_mm:    {value: 42,   confidence: low}    # [INFER] rail tube
+  gate_w_m:     {value: 0.90, confidence: low}    # [INFER] safety gate over the ladder opening
+  deck_d_m:     {value: 1.30, confidence: low}    # [INFER] platform stub for context
+  grating_pitch_m: {value: 0.033, confidence: low} # [INFER] bearing-bar pitch
+
+hierarchy:
+  - name: root
+    children:
+      - name: deck            # platform stub + edge channel
+        pivot: [0, 0, 0]
+        animation: none
+      - name: grid            # InstancedMesh bearing bars + cross rods (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: posts           # 5 posts on baseplates + instanced anchor bolts
+        pivot: [0, 0, 0]
+        animation: none
+      - name: rails           # handrail + knee rail, broken at the gate bay, with end returns
+        pivot: [0, 0, 0]
+        animation: none
+      - name: toe             # toe board, broken at the gate bay (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: gatePivot       # safety gate — hinge ON the closing post, opens over the DECK
+        pivot: [0.90, 0, 0]
+        animation: swing
+        attachment:
+          parent_socket: gate_post
+          contact_type: hinge
+          gap_tolerance: 0.003
+
+materials:
+  - id: tube-galvanised
+    family: bare-metal
+    color: "#c4c8cb"
+    metalness: 0.93
+    roughness: 0.33
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0"
+    confidence: 0.85
+  - id: post-galvanised
+    family: bare-metal
+    color: "#babfc3"
+    metalness: 0.93
+    roughness: 0.38
+    evidence: "HANDBOOK §3.1 — post stock slightly duller than the handled rail"
+    confidence: 0.8
+  - id: toe-plate
+    family: bare-metal
+    color: "#9ea3a8"
+    metalness: 0.92
+    roughness: 0.46
+    evidence: >
+      HANDBOOK §3.1. Deliberately darker than the rails: at rail tone the 100 mm plate disappeared
+      into the deck in this asset's first QA capture.
+    confidence: 0.8
+  - id: grating
+    family: bare-metal
+    color: "#a9aeb2"
+    metalness: 0.90
+    roughness: 0.46
+    evidence: "HANDBOOK §3.1"
+    confidence: 0.8
+  - id: gate-yellow
+    family: painted-metal
+    color: "#d8b41e"
+    metalness: 0.0             # painted, DIELECTRIC — the colour is the point: it marks the opening
+    roughness: 0.50
+    evidence: "HANDBOOK §3.1 painted/coated 0.0-0.05"
+    confidence: 0.8
+
+critical_features:
+  - id: three-element-edge-protection
+    desc: >
+      Handrail, intermediate rail AND toe board are all present with their real spacing — an edge
+      protection that omits any of the three is not compliant and reads wrong to anyone who knows it.
+    threshold: 0.80
+  - id: gate-opens-over-the-deck
+    desc: >
+      The safety gate swings INWARD over the platform. Opening outward would carry a person over the
+      drop the gate exists to protect. Certified by review-puerta-abierta.png.
+    threshold: 0.80
+  - id: run-not-sample
+    desc: >
+      Four bays with real posts, baseplates and anchor bolts, plus end returns that turn the
+      handrail down instead of leaving a snag end.
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 50
+    tris: 20000
+  measured:             # SwiftShader headless capture, 1280x800 — COUNTS are valid, frame time is NOT
+    draws: 30
+    tris: 3298
+    geometries: 31
+    root_meshes: 29
+
+camera:
+  azimuth_deg: 60
+  elevation_deg: 15
+  fov: 38
+  target_y_m: 0.72
+  radius_m: 6.4
+
+lighting: house-rig + camera-side fill
+  # DOCUMENTED DEVIATION: tube railing is nearly pure silhouette — no flat face catches the upper
+  # IBL. Fill 1.1 with environmentIntensity 2.0; metalness/roughness untouched (HANDBOOK §3.1).
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "PUERTA DE SEGURIDAD"   # damped swing, inward over the deck
+  - "RODAPIÉ"               # toe board
+  - "REJILLA"               # grating deck
+
+colorTarget:
+  # MEASURED from a rendered post face (headless SwiftShader capture at 1280x800). The strip is 6 px
+  # wide: this asset is all thin stock, and any wider crop measures background between the members.
+  # Per-channel std ~1.4.
+  srgb: [114, 120, 126]
+  deltaE00Max: 8
+  crop: "6x40+634+356"   # post face at 1280x800
