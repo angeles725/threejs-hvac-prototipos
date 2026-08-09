@@ -1,0 +1,294 @@
+<!doctype html>
+<!--
+  osmosis-inversa — catalog asset, family `utilities`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Evidence: research/sources/B59-proceso-dims/ro-membrane-elements.md
+  Spec: ./design-spec.yaml
+  NOTE: "4040" IS the dimension — 4.0 in diameter x 40 in length. So a vessel's length is an integer
+  count of a 1,016 mm standard part plus closures, not a styling choice. MEMBRANAS slides the two
+  elements out of one vessel so the count is visible rather than merely asserted.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skid de ósmosis inversa — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Skid de ósmosis inversa — 6 portamembranas 4040, 2 elementos cada uno</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· envolvente FRP dieléctrica · bomba inox</span></div>
+  <div class="dim">elemento 4″ × 40″ (99 × 1 016 mm) · tubo 2 210 mm derivado del conteo · 300 psi</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnPipe" class="on">TUBERÍA</button>
+  <button id="btnMem">MEMBRANAS</button>
+  <button id="btnDim">COTAS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const EL_D = 0.099, EL_L = 1.016;      // [CERT-web] 4040: 3.9 in actual dia, 40 in long
+const N_EL = 2;                        // [INFER] elements per vessel — this is what sets the length
+const CLOSURE = 0.089;                 // [INFER] end closure depth
+const VES_L = N_EL*EL_L + 2*CLOSURE;   // [CERT-web] DERIVED = 2.210, not chosen
+const VES_OD = 0.125;                  // [CERT-web] 4-inch FRP housing
+const ROWS = [0.62, 0.95], COLS = [-0.28, 0, 0.28];
+const FRAME = [2.50, 0.95, 1.65];      // [INFER]
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 9, 34);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.05, 120);
+const R = 5.40, AZ = 0.803, EL_A = 0.244;                       // 46° azimuth / 14° elevation (spec camera)
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL_A), 0.90 + R*Math.sin(EL_A), R*Math.sin(AZ)*Math.cos(EL_A));
+camera.lookAt(0, 0.90, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.90, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.0;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.0, 4.4, 2.6); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-2.2; sun.shadow.camera.right=2.2; sun.shadow.camera.top=2.2; sun.shadow.camera.bottom=-2.2;
+sun.shadow.camera.far = 13;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(34,34),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. FRP is a semi-gloss DIELECTRIC; only the pump and pressure piping are metal.
+// ============================================================================
+const matFRP    = new THREE.MeshStandardMaterial({ color:0xd6d2c8, metalness:0.0,  roughness:0.42 });
+const matClose  = new THREE.MeshStandardMaterial({ color:0x575e64, metalness:0.0,  roughness:0.50 });
+const matFrame  = new THREE.MeshStandardMaterial({ color:0x2f6b8a, metalness:0.0,  roughness:0.55 });
+const matPipe   = new THREE.MeshStandardMaterial({ color:0xc2c7c9, metalness:0.92, roughness:0.32 });
+const matMotor  = new THREE.MeshStandardMaterial({ color:0x5c646a, metalness:0.0,  roughness:0.55 });
+const matFace   = new THREE.MeshStandardMaterial({ color:0xe6e4de, metalness:0.0,  roughness:0.60 });
+const matElem   = new THREE.MeshStandardMaterial({ color:0x9aa7ad, metalness:0.0,  roughness:0.75 });
+const matDim    = new THREE.MeshStandardMaterial({ color:0x00d4aa, metalness:0.0,  roughness:0.6,
+                                                   emissive:0x0b3b32, emissiveIntensity:1.0 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Six identical vessels: the clean instancing case of this family.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xf, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xf.length);
+  im.castShadow = im.receiveShadow = true;
+  xf.forEach((t,i)=>{ _p.set(t[0],t[1],t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0)); _s.set(1,1,1);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s)); });
+  im.instanceMatrix.needsUpdate = true; parent.add(im); return im;
+}
+function mesh(geo, mat, parent){ const m = new THREE.Mesh(geo, mat);
+  m.castShadow = m.receiveShadow = true; if(parent) parent.add(m); return m; }
+function cylX(r, len, seg=24){ const g = new THREE.CylinderGeometry(r, r, len, seg); g.rotateZ(Math.PI/2); return g; }
+
+// --- frame ---
+const frame = new THREE.Group();
+const [FW, FD, FH] = FRAME;
+for(const sx of [-1,1]) for(const sz of [-1,1]){
+  mesh(new THREE.BoxGeometry(0.060, FH, 0.060), matFrame, frame)
+    .position.set(sx*(FW/2 - 0.05), FH/2, sz*(FD/2 - 0.05));
+  mesh(new THREE.BoxGeometry(0.130, 0.014, 0.130), matFrame, frame)
+    .position.set(sx*(FW/2 - 0.05), 0.007, sz*(FD/2 - 0.05));
+}
+for(const y of [0.12, 0.50, 1.28, FH - 0.03]) for(const sz of [-1,1])
+  mesh(new THREE.BoxGeometry(FW - 0.10, 0.055, 0.045), matFrame, frame).position.set(0, y, sz*(FD/2 - 0.05));
+for(const y of [0.12, 1.28]) for(const sx of [-1,1])
+  mesh(new THREE.BoxGeometry(0.045, 0.055, FD - 0.10), matFrame, frame).position.set(sx*(FW/2 - 0.05), y, 0);
+root.add(frame);
+
+// --- pressure vessels: 2 rows x 3, all identical -> instanced ---
+const vessels = new THREE.Group();
+const vXF = [], closeXF = [], clampXF = [], permXF = [];
+for(const y of ROWS) for(const z of COLS){
+  vXF.push([0, y, z]);
+  for(const sx of [-1,1]){
+    closeXF.push([sx*(VES_L/2 - CLOSURE/2), y, z]);
+    permXF.push([sx*(VES_L/2 + 0.030), y, z]);
+  }
+  for(const x of [-0.72, 0, 0.72]) clampXF.push([x, y, z]);
+}
+instanced(cylX(VES_OD/2, VES_L - 2*CLOSURE, 28), matFRP, vXF, vessels);
+instanced(cylX(VES_OD/2 + 0.004, CLOSURE, 24), matClose, closeXF, vessels);
+instanced(cylX(0.016, 0.060, 12), matPipe, permXF, vessels);            // permeate ports, both ends
+instanced(new THREE.TorusGeometry(VES_OD/2 + 0.010, 0.012, 6, 20).rotateY(Math.PI/2), matFrame, clampXF, vessels);
+root.add(vessels);
+
+// --- the two membrane elements of ONE vessel, slid out on MEMBRANAS ---
+// Two 40-inch elements are 2.03 m of hardware: sliding them axially out of the vessel puts them
+// well outside the frame and outside the spec camera. Laid out in FRONT of the skid instead — which
+// is also what a membrane change actually looks like — the count and the 1,016 mm length read at a
+// glance without leaving frame.
+const membranes = new THREE.Group(); membranes.visible = false;
+const showY = EL_D/2 + 0.020, showZ = FRAME[1]/2 + 0.34;
+for(let k=0;k<N_EL;k++){
+  const ex = (k - (N_EL-1)/2) * (EL_L + 0.10);
+  mesh(cylX(EL_D/2, EL_L - 0.010, 24), matElem, membranes).position.set(ex, showY, showZ);
+  mesh(cylX(0.014, EL_L, 10), matPipe, membranes).position.set(ex, showY, showZ);   // permeate tube
+  for(const sx of [-1,1])
+    mesh(cylX(EL_D/2 + 0.002, 0.014, 20), matClose, membranes)
+      .position.set(ex + sx*(EL_L/2 - 0.012), showY, showZ);                        // brine seal / ATD
+}
+root.add(membranes);
+
+// --- high-pressure pump + motor, and the cartridge prefilter ahead of it ---
+const pump = new THREE.Group();
+mesh(cylX(0.075, 0.230, 20), matPipe, pump).position.set(-(FW/2 - 0.30), 0.30, -0.18);
+mesh(new THREE.CylinderGeometry(0.070, 0.070, 0.320, 20), matPipe, pump).position.set(-(FW/2 - 0.30), 0.46, -0.18);
+mesh(cylX(0.090, 0.300, 24), matMotor, pump).position.set(-(FW/2 - 0.58), 0.30, -0.18);
+mesh(new THREE.BoxGeometry(0.090, 0.070, 0.080), matMotor, pump).position.set(-(FW/2 - 0.58), 0.40, -0.18);
+mesh(new THREE.BoxGeometry(0.260, 0.040, 0.220), matFrame, pump).position.set(-(FW/2 - 0.44), 0.14, -0.18);
+root.add(pump);
+
+const prefilter = new THREE.Group();
+mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.560, 24), matFRP, prefilter).position.set(-(FW/2 - 0.26), 0.60, 0.30);
+mesh(new THREE.CylinderGeometry(0.098, 0.098, 0.050, 24), matClose, prefilter).position.set(-(FW/2 - 0.26), 0.90, 0.30);
+mesh(new THREE.CylinderGeometry(0.020, 0.020, 0.070, 12), matPipe, prefilter).position.set(-(FW/2 - 0.26), 0.945, 0.30);
+root.add(prefilter);
+
+// --- piping: feed header low, concentrate high, permeate manifold along the ends ---
+const piping = new THREE.Group();
+mesh(cylX(0.026, FW - 0.30, 16), matPipe, piping).position.set(0, 0.34, 0.40);          // feed header
+mesh(cylX(0.022, FW - 0.30, 16), matPipe, piping).position.set(0, 1.22, 0.40);          // concentrate
+for(const z of COLS){                                                                    // vessel connections
+  mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.30, 12), matPipe, piping)
+    .position.set(-(VES_L/2 + 0.030), (ROWS[0]+0.34)/2 + 0.02, (z+0.40)/2);
+}
+for(const sx of [-1,1])                                                                   // permeate manifolds
+  mesh(new THREE.CylinderGeometry(0.020, 0.020, COLS[2]-COLS[0]+0.16, 14).rotateX(Math.PI/2), matPipe, piping)
+    .position.set(sx*(VES_L/2 + 0.062), (ROWS[0]+ROWS[1])/2, 0);
+// Permeate outlet must stay INSIDE the skid envelope: at x = VES_L/2 + 0.32 with a 0.50 m run it
+// reached 1.675 against a frame half-width of 1.25 and speared straight through the frame.
+mesh(cylX(0.020, 0.150, 12), matPipe, piping).position.set(VES_L/2 + 0.075, (ROWS[0]+ROWS[1])/2, 0);
+mesh(cylX(0.020, 0.170, 12), matPipe, piping).position.set(FW/2 - 0.135, (ROWS[0]+ROWS[1])/2, 0.22);
+mesh(new THREE.CylinderGeometry(0.020, 0.020, 0.46, 12).rotateX(Math.PI/2), matPipe, piping)
+  .position.set(FW/2 - 0.22, (ROWS[0]+ROWS[1])/2, 0);
+for(const [x,y,z] of [[-0.75,1.30,0.40],[0.75,1.30,0.40],[0.10,0.42,0.40]]){              // gauges
+  const g = mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.022, 18), matClose, piping);
+  g.position.set(x, y, z); g.rotation.x = Math.PI/2;
+  const f = mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.004, 18), matFace, piping);
+  f.position.set(x, y, z + 0.014); f.rotation.x = Math.PI/2;
+}
+root.add(piping);
+
+// --- control panel + rotameters ---
+const panel = new THREE.Group();
+mesh(new THREE.BoxGeometry(0.070, 0.520, 0.420), matFrame, panel).position.set(FW/2 - 0.12, 1.12, -0.16);
+mesh(new THREE.BoxGeometry(0.010, 0.440, 0.340), matFace, panel).position.set(FW/2 - 0.082, 1.12, -0.16);
+for(let k=0;k<3;k++)
+  mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.012, 12).rotateZ(Math.PI/2), matClose, panel)
+    .position.set(FW/2 - 0.072, 0.98, -0.28 + k*0.10);
+for(let k=0;k<2;k++)                                                                      // rotameters
+  mesh(new THREE.BoxGeometry(0.030, 0.300, 0.050), matFace, panel)
+    .position.set(FW/2 - 0.30, 1.10, 0.10 + k*0.12);
+root.add(panel);
+
+// --- COTAS: the 1,016 mm element pitch along one vessel ---
+const dims = new THREE.Group(); dims.visible = false;
+const dz = COLS[0] - 0.16;
+mesh(new THREE.BoxGeometry(N_EL*EL_L, 0.008, 0.008), matDim, dims).position.set(0, ROWS[0] - 0.12, dz);
+for(let k=0;k<=N_EL;k++)
+  mesh(new THREE.BoxGeometry(0.006, 0.070, 0.006), matDim, dims)
+    .position.set(-N_EL*EL_L/2 + k*EL_L, ROWS[0] - 0.12, dz);
+mesh(new THREE.BoxGeometry(VES_L, 0.006, 0.006), matDim, dims).position.set(0, ROWS[0] - 0.20, dz);
+root.add(dims);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible;
+  btn.classList.toggle('on', obj.visible); renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(document.getElementById('btnPipe'), piping);
+toggle(document.getElementById('btnMem'), membranes);
+toggle(document.getElementById('btnDim'), dims);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root },
+                derived:{ vesselLength: VES_L, elements: N_EL, elementLength: EL_L } };
+globalThis.__osmosisInversaApp = __app;
+globalThis['__osmosis-inversaApp'] = __app;        // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
