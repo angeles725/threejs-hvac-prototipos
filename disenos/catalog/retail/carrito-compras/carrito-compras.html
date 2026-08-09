@@ -1,0 +1,349 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — retail/carrito-compras · nesting supermarket trolley (~180 L basket).
+  Built from disenos/catalog/shell-template.html. Contract: __carritoComprasApp.runtime +
+  __qaRenderInfo + data-app-ready, render-on-demand, shadows frozen (autoUpdate=false, 1024), DPR<=2.
+  Instancing (block54 §2.3): the basket IS a repetition — ~90 wires drawn from ONE unit cylinder,
+  each placed by a composed matrix (position + quaternion + length). The chassis, handle, casters
+  and the hinged child-seat flap are unique meshes.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carrito de compras — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">CARRITO DE COMPRAS — alambre cincado + plástico</div>
+  <div><span class="dim">1.02 × 0.62 × 1.00 m · canasta ~180 L · 4 ruedas de 125 mm</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnSeat">ASIENTO NIÑO</button>
+  <button id="btnLoad" class="on">CARGA</button>
+  <button id="btnTray" class="on">BANDEJA INFERIOR</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+// The basket TAPERS in both plan directions — that taper is what lets carts nest, and a straight
+// box would be the wrong object.
+const TOP_W = 0.60, TOP_L = 0.96;      // top rim (x = width, z = length)
+const BOT_W = 0.42, BOT_L = 0.64;      // bottom of the basket
+const BOT_Y = 0.52, TOP_Y = 0.90;      // basket floor / rim heights
+const WIRE_R = 0.0045;                 // zinc-plated wire
+const RIM_R  = 0.0085;                 // heavier rim and post wire
+const WHEEL_R = 0.0625, WHEEL_T = 0.032;   // 125 mm castor
+const HANDLE_Y = 0.99;
+const TRAY_Y = 0.18;                   // lower bottle tray
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 6, 20);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 2.9, AZ = 0.95, EL = 0.30;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.60 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.58, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.58, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.1;   // a wire mesh is almost all silhouette: the IBL is what shapes it
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3, 5, 2.5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-1.6; sun.shadow.camera.right=1.6; sun.shadow.camera.top=1.6; sun.shadow.camera.bottom=-1.6;
+scene.add(sun);
+// Bare-metal wire is a VERTICAL-ish subject with almost no flat face: without a camera-side fill the
+// mesh collapses into a grey scribble. Same remedy as the cold-room door; metalness untouched.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.15);
+fill.position.set(-2.6, 1.8, 3.6);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(14,14),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: zinc-plated wire is BARE metal; the handle, the seat flap and
+// the castor tyres are polymer -> dielectric.
+// ============================================================================
+const matWire  = new THREE.MeshStandardMaterial({ color:0xd0d4d7, metalness:0.95, roughness:0.24 });
+const matTube  = new THREE.MeshStandardMaterial({ color:0xc2c6ca, metalness:0.95, roughness:0.30 });
+const matGrip  = new THREE.MeshStandardMaterial({ color:0xa8321f, metalness:0.0,  roughness:0.46 });
+const matPlast = new THREE.MeshStandardMaterial({ color:0x2a2f35, metalness:0.0,  roughness:0.62 });
+const matTyre  = new THREE.MeshStandardMaterial({ color:0x1a1d21, metalness:0.0,  roughness:0.80 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+
+// --- wire batch: ONE unit cylinder instanced along every segment of the basket ---
+// A unit cylinder is 1 m tall on +Y; each instance is scaled to the segment length and rotated by
+// the quaternion that takes +Y onto the segment direction.
+const segments = [];   // {a: Vector3, b: Vector3, r: number}
+const wire = (ax,ay,az, bx,by,bz, r=WIRE_R)=>
+  segments.push({ a:new THREE.Vector3(ax,ay,az), b:new THREE.Vector3(bx,by,bz), r });
+
+const lerp = (a,b,t)=> a + (b-a)*t;
+// rectangle corner at height factor t (0 = basket floor, 1 = rim), in plan order
+const rect = t => {
+  const w = lerp(BOT_W, TOP_W, t)/2, l = lerp(BOT_L, TOP_L, t)/2, y = lerp(BOT_Y, TOP_Y, t);
+  return [ [-w,y,-l], [ w,y,-l], [ w,y, l], [-w,y, l] ];
+};
+
+// basket floor grid
+for(let i=0;i<=8;i++){
+  const x = -BOT_W/2 + BOT_W*i/8;
+  wire(x, BOT_Y, -BOT_L/2, x, BOT_Y, BOT_L/2);
+}
+for(let i=0;i<=10;i++){
+  const z = -BOT_L/2 + BOT_L*i/10;
+  wire(-BOT_W/2, BOT_Y, z, BOT_W/2, BOT_Y, z);
+}
+// horizontal rings — bottom, two intermediates, rim
+for(const t of [0, 0.34, 0.67, 1]){
+  const c = rect(t), r = (t===1 || t===0) ? RIM_R : WIRE_R;
+  for(let i=0;i<4;i++){
+    const p = c[i], q = c[(i+1)%4];
+    wire(p[0],p[1],p[2], q[0],q[1],q[2], r);
+  }
+}
+// side wires: every vertical follows the TAPER, from a floor point to the matching rim point
+const c0 = rect(0), c1 = rect(1);
+const sideWires = (i0, i1, n)=>{
+  for(let k=0;k<=n;k++){
+    const t = k/n;
+    const a = [ lerp(c0[i0][0], c0[i1][0], t), c0[i0][1], lerp(c0[i0][2], c0[i1][2], t) ];
+    const b = [ lerp(c1[i0][0], c1[i1][0], t), c1[i0][1], lerp(c1[i0][2], c1[i1][2], t) ];
+    wire(a[0],a[1],a[2], b[0],b[1],b[2], k===0 || k===n ? RIM_R : WIRE_R);
+  }
+};
+sideWires(0,1,8);    // front panel (-z)
+sideWires(1,2,13);   // right panel
+sideWires(3,2,8);    // back panel (+z) — the flap hangs from its rim, wires still run full height
+sideWires(0,3,13);   // left panel
+
+const wireGeo = new THREE.CylinderGeometry(1, 1, 1, 7);
+const wires = new THREE.InstancedMesh(wireGeo, matWire, segments.length);
+wires.castShadow = wires.receiveShadow = true;
+{
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0,1,0);
+  const dir = new THREE.Vector3(), mid = new THREE.Vector3(), scl = new THREE.Vector3();
+  segments.forEach((s, i)=>{
+    dir.subVectors(s.b, s.a); const len = dir.length(); dir.normalize();
+    q.setFromUnitVectors(up, dir);
+    mid.addVectors(s.a, s.b).multiplyScalar(0.5);
+    scl.set(s.r, len, s.r);
+    m.compose(mid, q, scl);
+    wires.setMatrixAt(i, m);
+  });
+  wires.instanceMatrix.needsUpdate = true;
+}
+root.add(wires);
+
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (parent,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); parent.add(m); return m; };
+const tube = (parent, len, r, mat, x,y,z, rx=0, rz=0)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 10), mat);
+  m.castShadow = m.receiveShadow = true;
+  m.position.set(x,y,z); m.rotation.set(rx,0,rz); parent.add(m); return m;
+};
+
+// --- chassis: two longitudinal tubes under the basket + the castor legs ---
+const chassis = new THREE.Group();
+for(const sx of [-1,1]){
+  tube(chassis, TOP_L*0.92, 0.014, matTube, sx*BOT_W/2*0.9, BOT_Y - 0.03, 0.02, Math.PI/2, 0);
+  // rear leg (fixed castors) and front leg (swivel castors) splay outward as they drop
+  for(const sz of [-1,1]){
+    const zTop = sz*(BOT_L/2 - 0.04), zBot = sz*(TOP_L/2 - 0.12);
+    const a = new THREE.Vector3(sx*BOT_W/2*0.9, BOT_Y - 0.03, zTop);
+    const b = new THREE.Vector3(sx*(TOP_W/2 - 0.06), WHEEL_R + 0.05, zBot);
+    const dir = new THREE.Vector3().subVectors(b,a), len = dir.length();
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.014,0.014,len,10), matTube);
+    leg.castShadow = leg.receiveShadow = true;
+    leg.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().normalize());
+    leg.position.copy(a).add(b).multiplyScalar(0.5);
+    chassis.add(leg);
+  }
+}
+root.add(chassis);
+
+// --- castors: fork + wheel; the front pair swivels, so it hangs off an offset kingpin ---
+for(const sx of [-1,1]) for(const sz of [-1,1]){
+  const cx = sx*(TOP_W/2 - 0.06), cz = sz*(TOP_L/2 - 0.12);
+  const g = new THREE.Group(); g.position.set(cx, 0, cz);
+  put(g, 0.05, 0.02, 0.05, matPlast, 0, WHEEL_R + 0.055, 0);            // mount plate
+  tube(g, 0.05, 0.012, matPlast, 0, WHEEL_R + 0.03, 0);                 // kingpin
+  for(const s of [-1,1]) put(g, 0.008, 0.075, 0.05, matPlast, s*(WHEEL_T/2 + 0.006), WHEEL_R + 0.012, 0);
+  const w = new THREE.Mesh(new THREE.CylinderGeometry(WHEEL_R, WHEEL_R, WHEEL_T, 18), matTyre);
+  w.castShadow = w.receiveShadow = true; w.rotation.z = Math.PI/2; w.position.y = WHEEL_R;
+  g.add(w);
+  root.add(g);
+}
+
+// --- push handle: grip tube on two uprights rising off the rear rim ---
+const handle = new THREE.Group();
+for(const sx of [-1,1]){
+  tube(handle, HANDLE_Y - TOP_Y + 0.02, 0.011, matTube, sx*(TOP_W/2 - 0.02), (TOP_Y + HANDLE_Y)/2, TOP_L/2 - 0.01);
+}
+tube(handle, TOP_W - 0.02, 0.017, matGrip, 0, HANDLE_Y, TOP_L/2 - 0.01, 0, Math.PI/2);
+root.add(handle);
+
+// --- child-seat flap: hinged on the rear rim, folds down into the basket ---
+const seatPivot = new THREE.Group();
+seatPivot.position.set(0, TOP_Y - 0.02, TOP_L/2 - 0.05);
+const seat = new THREE.Group();
+put(seat, TOP_W - 0.10, 0.012, 0.26, matPlast, 0, 0, -0.13);           // seat panel
+put(seat, TOP_W - 0.10, 0.10, 0.012, matPlast, 0, 0.05, -0.26);        // back rest lip
+for(const sx of [-1,1]) put(seat, 0.012, 0.05, 0.20, matPlast, sx*(TOP_W/2 - 0.07), 0.02, -0.13);
+seatPivot.add(seat);
+seatPivot.rotation.x = -1.35;                                          // stowed against the rear panel
+root.add(seatPivot);
+
+// --- lower bottle tray: the shelf between the castor legs ---
+const tray = new THREE.Group();
+for(let i=0;i<=6;i++){
+  const x = -0.20 + 0.40*i/6;
+  tube(tray, TOP_L*0.62, 0.006, matWire, x, TRAY_Y, 0.02, Math.PI/2, 0);
+}
+for(const sz of [-1,1]) tube(tray, 0.42, 0.008, matWire, 0, TRAY_Y, sz*TOP_L*0.31 + 0.02, 0, Math.PI/2);
+root.add(tray);
+
+// --- load: instanced groceries sitting in the basket, deterministic layout ---
+const load = new THREE.Group();
+let seed = 20260808;
+const rnd = ()=> (seed = (seed*1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+const dummy = new THREE.Object3D();
+const palette = [0xc4442f, 0x2f6fb0, 0x3f8f5a, 0xe0a53a, 0xd8d3c6, 0x7b4a2f];
+const matGood = new THREE.MeshStandardMaterial({ metalness:0.0, roughness:0.55 });
+// `rx`/`rz` are the HALF footprint of each good: without them a 0.20 m box centred near the basket
+// edge pokes straight through the wire wall (seen in the first QA capture).
+const goods = [
+  { geo: new THREE.BoxGeometry(0.14,0.20,0.10), h:0.20, rx:0.09, rz:0.07 },
+  { geo: new THREE.CylinderGeometry(0.035,0.045,0.26,12), h:0.26, rx:0.05, rz:0.05 },
+  { geo: new THREE.BoxGeometry(0.20,0.09,0.14), h:0.09, rx:0.12, rz:0.09 },
+];
+const placed = [];
+for(let i=0;i<11;i++){
+  const k = Math.floor(rnd()*goods.length), g = goods[k];
+  const spanX = Math.max(0, BOT_W/2 - g.rx), spanZ = Math.max(0, BOT_L/2 - g.rz);
+  placed.push({ k, col: palette[Math.floor(rnd()*palette.length)],
+    x: (rnd()*2 - 1)*spanX,
+    y: BOT_Y + 0.01 + g.h/2,
+    z: (rnd()*2 - 1)*spanZ,
+    ry: rnd()*0.5 - 0.25 });
+}
+for(let k=0;k<goods.length;k++){
+  const mine = placed.filter(p=>p.k===k);
+  if(!mine.length) continue;
+  const im = new THREE.InstancedMesh(goods[k].geo, matGood, mine.length);
+  im.castShadow = im.receiveShadow = true;
+  const c = new THREE.Color();
+  mine.forEach((p,idx)=>{ dummy.position.set(p.x,p.y,p.z); dummy.rotation.set(0,p.ry,0); dummy.updateMatrix();
+    im.setMatrixAt(idx, dummy.matrix); im.setColorAt(idx, c.setHex(p.col)); });
+  im.instanceMatrix.needsUpdate = true; if(im.instanceColor) im.instanceColor.needsUpdate = true;
+  load.add(im);
+}
+root.add(load);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot  = document.getElementById('btnRot');
+const btnSeat = document.getElementById('btnSeat');
+const btnLoad = document.getElementById('btnLoad');
+const btnTray = document.getElementById('btnTray');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+let seatTarget = -1.35, seatAngle = -1.35;                      // stowed <-> deployed
+btnSeat.onclick = ()=>{ seatTarget = seatTarget < -1 ? -0.05 : -1.35;
+  btnSeat.classList.toggle('on', seatTarget > -1); requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(btnLoad, load);
+toggle(btnTray, tray);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  if(Math.abs(seatAngle - seatTarget) > 0.001){                 // per-frame branch -> keep rendering
+    seatAngle += (seatTarget - seatAngle) * 0.14;
+    seatPivot.rotation.x = seatAngle;
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__carritoComprasApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__carrito-comprasApp'] = globalThis.__carritoComprasApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

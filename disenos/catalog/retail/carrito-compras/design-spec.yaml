@@ -1,0 +1,176 @@
+# DesignSpec — nesting supermarket trolley (~180 L wire basket)
+# Catalog family `retail` (worktree catalog-retail-lab).
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: carrito-compras
+family: retail
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # a 4.5 mm wire is far below voxel resolution — this asset is
+                                     # built from segments, not from a blockout
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 16 -> moderate/complex boundary.
+  scores: {silhouette: 3, components: 2, hierarchy: 2, repetition: 3,
+           material_layers: 1, detail: 3, occlusion: 1, action_readiness: 1}
+  tier: moderate
+  notes: >
+    repetition 3 and detail 3 are the same fact seen twice: the subject IS ~90 wire segments. They
+    are drawn from ONE unit cylinder instanced with a composed matrix (position + quaternion +
+    length), which is the only way the taper stays honest without 90 draw calls.
+    action_readiness 1: the child-seat flap hinges on the rear rim.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    bare_metal: "research/HANDBOOK.md §3.1 (zinc-plated wire: metalness 0.9-1.0)"
+    instancing: "block54 §2.3 — one instanced batch for the whole basket"
+
+references:
+  - source: "nesting trolley class, ~180 L basket, 125 mm castors"
+    evidences: >
+      [INFER] No manufacturer datasheet was preserved for this family (retail is procedural-direct,
+      not needs-research). The envelope follows the common supermarket trolley: ~1.0 m long overall,
+      handle at ~1.0 m, basket tapering in BOTH plan directions so carts nest, four 100-125 mm
+      castors, a lower bottle tray and a hinged child seat. Values are med/low confidence.
+    suitability: partial
+
+dimensions_real:
+  top_w_m:     {value: 0.60, confidence: med}    # [INFER] rim width
+  top_l_m:     {value: 0.96, confidence: med}    # [INFER] rim length
+  bottom_w_m:  {value: 0.42, confidence: med}    # [INFER] the taper is the nesting mechanism
+  bottom_l_m:  {value: 0.64, confidence: med}    # [INFER]
+  basket_y0_m: {value: 0.52, confidence: low}    # [INFER] basket floor height
+  basket_y1_m: {value: 0.90, confidence: low}    # [INFER] rim height
+  handle_y_m:  {value: 0.99, confidence: med}    # [INFER] push height
+  wire_d_m:    {value: 0.009, confidence: low}   # [INFER] 4.5 mm radius mesh wire
+  rim_d_m:     {value: 0.017, confidence: low}   # [INFER] heavier rim / corner post
+  wheel_d_m:   {value: 0.125, confidence: med}   # [INFER] 125 mm castor, the class standard
+  tray_y_m:    {value: 0.18, confidence: low}    # [INFER] lower bottle tray
+
+hierarchy:
+  - name: root
+    children:
+      - name: wires           # InstancedMesh: floor grid + 4 rings + tapered side wires (~90 segments)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: chassis         # longitudinal tubes + splayed castor legs
+        pivot: [0, 0, 0]
+        animation: none
+      - name: castors         # 4 groups: plate, kingpin, fork, tyre
+        pivot: [0, 0, 0]
+        animation: none
+      - name: handle          # 2 uprights + polymer grip tube
+        pivot: [0, 0, 0]
+        animation: none
+      - name: seatPivot       # child-seat flap, hinge ON the rear rim
+        pivot: [0, 0.88, 0.43]
+        animation: fold
+        attachment:
+          parent_socket: rear_rim
+          contact_type: hinge
+          gap_tolerance: 0.002
+      - name: tray            # lower bottle tray (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: load            # instanced groceries, footprint-clamped to the basket (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: wire-zinc
+    family: bare-metal
+    color: "#d0d4d7"
+    metalness: 0.95
+    roughness: 0.24
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0; zinc-plated wire is brighter than brushed 304"
+    confidence: 0.85
+  - id: tube-frame
+    family: bare-metal
+    color: "#c2c6ca"
+    metalness: 0.95
+    roughness: 0.30
+    evidence: "HANDBOOK §3.1"
+    confidence: 0.85
+  - id: grip-polymer
+    family: plastic
+    color: "#a8321f"
+    metalness: 0.0
+    roughness: 0.46
+    evidence: "[INFER] moulded handle grip — dielectric; the only large flat surface on the asset"
+    confidence: 0.75
+  - id: seat-polymer
+    family: plastic
+    color: "#2a2f35"
+    metalness: 0.0
+    roughness: 0.62
+    evidence: "[INFER] moulded child-seat flap and castor housings"
+    confidence: 0.75
+  - id: tyre
+    family: rubber
+    color: "#1a1d21"
+    metalness: 0.0
+    roughness: 0.80
+    evidence: "HANDBOOK §3.1 dielectric rubber"
+    confidence: 0.8
+
+critical_features:
+  - id: two-way-taper
+    desc: >
+      The basket narrows toward the floor in BOTH plan directions and the side wires follow that
+      taper. This is not styling: it is why trolleys nest. A straight box would be the wrong object.
+    threshold: 0.80
+  - id: wire-mesh-density
+    desc: >
+      The basket reads as a MESH — floor grid, four horizontal rings and closely spaced verticals —
+      not as a solid box with a wire texture.
+    threshold: 0.78
+  - id: rolling-chassis
+    desc: >
+      Splayed legs dropping to four castors with plate, kingpin, fork and tyre, plus the lower bottle
+      tray between them — the running gear reads as a real chassis, not as four floating cylinders.
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 60
+    tris: 20000
+  measured:             # SwiftShader headless capture, 1280x800 — COUNTS are valid, frame time is NOT
+    draws: 47
+    tris: 3934
+    geometries: 24
+    root_meshes: 46
+
+camera:
+  azimuth_deg: 54
+  elevation_deg: 17
+  fov: 38
+  target_y_m: 0.58
+  radius_m: 2.9
+
+lighting: house-rig + camera-side fill
+  # DOCUMENTED DEVIATION: a wire basket is almost pure silhouette — it has no flat face to catch the
+  # upper IBL, so without a camera-side fill it collapses into a grey scribble. Fill 1.15 and
+  # environmentIntensity 2.1; metalness/roughness untouched (HANDBOOK §3.1).
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ASIENTO NIÑO"      # damped fold of the flap on its rim hinge
+  - "CARGA"             # instanced groceries
+  - "BANDEJA INFERIOR"  # lower bottle tray
+
+colorTarget:
+  # MEASURED, but NOT as a plain rectangle: this asset has no flat patch of its own material — every
+  # rectangle over the basket mixes wire with background. The value is the MASKED mean of the wire
+  # pixels inside the box below (mask: max(RGB)-min(RGB) < 14 AND mean > 110, i.e. neutral and lit),
+  # 10315 of 38000 pixels. deltaE00Max is widened to 10 because a cylinder's shading spread is real.
+  srgb: [182, 186, 188]
+  deltaE00Max: 10
+  crop: "200x190+640+240"          # dense back/right wire panel at 1280x800
+  crop_mask: "neutral(<14 spread) AND luma>110"
