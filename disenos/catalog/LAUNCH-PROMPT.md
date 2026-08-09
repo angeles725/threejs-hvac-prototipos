@@ -1,21 +1,31 @@
-# LAUNCH-PROMPT — arranque de una sesión de modelado del catálogo
+<!--
+PARA EL USUARIO: para lanzar una sesión nueva de modelado del catálogo, pon /model en Opus 5 y dile solo:
+    Lee disenos/catalog/LAUNCH-PROMPT.md y síguelo al pie.
+Todo lo de abajo son instrucciones DIRECTAS a esa sesión; no tienes que pegar nada más.
+-->
 
-Pega el bloque de abajo como PRIMER mensaje de una sesión Opus-5 nueva (pon `/model` en Opus 5 primero).
-La sesión elige sola su worktree y familia, retoma desde `RESUME.md` si lo hay, y trabaja autónoma.
-El detalle completo (contrato, ~50 gotchas, QA, handoff al 70%) vive en `ONBOARD-SESSION.md`; este prompt solo
-la manda a leerlo, así nunca se desactualiza.
+# Eres una sesión de modelado 3D del CATÁLOGO (repo three.js)
 
-```
-Eres una sesión de modelado 3D del CATÁLOGO (repo three.js). Trabaja de forma autónoma; no me preguntes qué hacer.
+Trabaja de forma autónoma. No preguntes qué hacer: elige tú el trabajo y ejecútalo hasta terminar tu familia.
+Sigue estos pasos AHORA, en orden:
 
-Lee /home/cristian/prototipos/three.js/disenos/catalog/ONBOARD-SESSION.md COMPLETO y síguelo al pie:
-- PASO 0: corre `git -C /home/cristian/prototipos/three.js worktree list` y ListAgents, elige tú un worktree catalog-* LIBRE (sin sesión viva con ese nombre), y toma su familia de catalog.yaml. Si el worktree tiene RESUME.md, léelo y continúa lo que falta (puede haber un asset en progreso untracked en disco); no rehagas ni reaudites lo ya hecho.
-- Trabaja con rutas absolutas dentro de ESE worktree. QA SIEMPRE envuelta en qa-lock.sh. Commit por asset, sin push.
-- Reporta tus lotes a session-A (el orquestador en master; búscalo con ListAgents).
-- Al ~70% de contexto: para, commitea lo que pase QA, deja lo demás untracked, escribe/actualiza RESUME.md en tu worktree, avísame y cierra.
+1. **Elige worktree y familia (tú solo).** Corre `git -C /home/cristian/prototipos/three.js worktree list` y la
+   herramienta `ListAgents`. Un worktree `catalog-*` está OCUPADO si ya hay una sesión viva con ese nombre.
+   Elige uno LIBRE. Su familia está en `disenos/catalog/catalog.yaml`. Trabaja con rutas absolutas dentro de
+   `/home/cristian/prototipos/three.js-worktrees/<worktree>/`. Corre `git -C <worktree> merge --ff-only master`
+   antes de empezar.
+2. **Si tu worktree tiene `RESUME.md`, LÉELO PRIMERO** y continúa lo que falta (puede haber un asset en progreso
+   untracked en disco). No rehagas ni reaudites lo ya hecho.
+3. **Lee `disenos/catalog/ONBOARD-SESSION.md` COMPLETO** y síguelo al pie: contrato por asset, ~50 gotchas,
+   QA obligatoria SIEMPRE envuelta en `qa-lock.sh`, PASO 2b de estados, commit por asset (sin push).
+4. **Reporta tus lotes a session-A** (el orquestador en master; búscalo con `ListAgents`).
+5. **Handoff al ~70% de contexto:** para de tomar asset nuevo, commitea lo que pase QA, deja lo demás untracked,
+   escribe/actualiza `RESUME.md` en tu worktree con qué está hecho y qué falta exacto, avisa a session-A y cierra.
+   No llegues al 100%: ahí se pierde el cierre limpio.
 
-Empieza ya: elige worktree y familia, y avísame cuál tomaste.
-```
+Empieza ya: elige worktree y familia, y avisa a session-A cuál tomaste.
+
+---
 
 ## Worktrees ABIERTOS para retomar (estado a este punto)
 - **catalog-proceso** (8 assets): `bomba-vertical-pozo` casi lista (solo ficha + colorTarget), `skid-hidroneumatico`,
@@ -26,4 +36,5 @@ Empieza ya: elige worktree y familia, y avísame cuál tomaste.
 
 ## Worktrees CERRADOS (no relanzar — familia completa e integrada)
 catalog-hvac (hvac+estructuras), catalog-electricos-dc (electricos+datacenter), catalog-robotica, catalog-automotriz.
-NOTA: NO mergees `feat/catalog-robotica` (contenido ya en master; arrastra filas duplicadas en SOURCES.md — cherry-pick por contenido si hace falta).
+NOTA para session-A: NO mergees `feat/catalog-robotica` (contenido ya en master; arrastra filas duplicadas en
+SOURCES.md — cherry-pick por contenido si hace falta).
