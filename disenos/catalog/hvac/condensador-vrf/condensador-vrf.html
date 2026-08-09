@@ -1,0 +1,327 @@
+<!doctype html>
+<!--
+  condensador-vrf — catalog asset, family `hvac`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional anchor: research/HANDBOOK.md §3.0 gives ~0.9 m for a minisplit evaporator; a VRF
+  OUTDOOR module is the large end of that family — a slim tall box, top discharge, wrap-around coil.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Condensadora VRF — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Condensadora VRF — módulo exterior, descarga superior</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· serpentín envolvente · 2 ventiladores</span></div>
+  <div class="dim">1.00 × 0.78 × 1.72 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnFans">VENTILADORES</button>
+  <button id="btnFront">PANEL FRONTAL</button>
+  <button id="btnPipe">LÍNEA FRIGORÍFICA</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const W = 1.00, D = 0.78, H = 1.62;        // casing envelope (legs excluded)
+const LEG_H = 0.10;                        // base legs
+const Y0 = LEG_H, Y1 = LEG_H + H;
+const COIL_Y0 = Y0 + 0.16, COIL_Y1 = Y1 - 0.30;   // wrap-around coil band
+const COIL_T = 0.07;
+// Two top fans sit side by side across the WIDTH. At Ø0.60 on a 0.78 m depth they would have
+// overlapped each other; the module is 1.00 m wide, so the pair fits across X, not across Z.
+const FAN_R = 0.22, FAN_X = [-0.25, 0.25];
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 7, 24);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 3.9, AZ = 0.78, EL = 0.30;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.90 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.90, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.90, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.1;   // slim VERTICAL subject — see the fill note below
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.5, 5.5, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-2; sun.shadow.camera.right=2; sun.shadow.camera.top=2.5; sun.shadow.camera.bottom=-1.5;
+scene.add(sun);
+// VERTICAL-SUBJECT DEVIATION (design-spec.yaml `lighting`): almost the entire visible surface of
+// this asset is a vertical plane — three coil faces and a painted front panel. Camera-side fill
+// mirrored about the front normal (+X); metalness/roughness unchanged (HANDBOOK §3.1).
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.2);
+fill.position.set(5.0, 2.6, -3.0);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+// Interior lamp (shadowless): with PANEL FRONTAL off the compartment faces away from the rig.
+const innerLamp = new THREE.PointLight(0xe6eef8, 4, 2.2, 2);
+innerLamp.position.set(0.20, 0.70, 0.0);
+scene.add(innerLamp);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Painted casing panels are DIELECTRIC. Aluminium fins and the galvanised chassis are bare
+//   metal. Refrigerant lines use the corrected copper F0 (#f0a67a), with black elastomeric lagging.
+// ============================================================================
+function finTexture(){
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#aab4b9'; g.fillRect(0,0,256,64);
+  for(let x=0; x<256; x+=4){ g.fillStyle = (x % 8 === 0) ? '#d6dde0' : '#8b959a'; g.fillRect(x,0,2,64); }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(22, 1);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const matCase   = new THREE.MeshStandardMaterial({ color:0xd6dade, metalness:0.0,  roughness:0.50 });
+const matCaseDk = new THREE.MeshStandardMaterial({ color:0xa9b0b5, metalness:0.0,  roughness:0.56 });
+const matFin    = new THREE.MeshStandardMaterial({ color:0xd2dade, metalness:1.0,  roughness:0.42, map:finTexture() });
+const matChassis= new THREE.MeshStandardMaterial({ color:0xb4bbbf, metalness:0.95, roughness:0.42 });
+const matGuard  = new THREE.MeshStandardMaterial({ color:0x3a4249, metalness:0.9,  roughness:0.52 });
+const matBlade  = new THREE.MeshStandardMaterial({ color:0x2b3138, metalness:0.0,  roughness:0.45 });
+const matCopper = new THREE.MeshStandardMaterial({ color:0xf0a67a, metalness:1.0,  roughness:0.30 });
+const matLag    = new THREE.MeshStandardMaterial({ color:0x191c20, metalness:0.0,  roughness:0.92 });
+const matComp   = new THREE.MeshStandardMaterial({ color:0x39424c, metalness:0.0,  roughness:0.50 });
+const matDark   = new THREE.MeshStandardMaterial({ color:0x15181b, metalness:0.0,  roughness:0.70 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=18)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+
+// --- base: two channel legs (the unit is bolted to plinths, not sat on the slab) ---
+const base = new THREE.Group();
+for(const sz of [-1,1]){
+  put(base, W - 0.06, LEG_H, 0.11, matChassis, 0, LEG_H/2, sz*(D/2 - 0.09));
+  for(const sx of [-1,1]) put(base, 0.10, 0.02, 0.15, matDark, sx*(W/2 - 0.10), 0.01, sz*(D/2 - 0.09));
+}
+put(base, W - 0.10, 0.04, D - 0.14, matChassis, 0, LEG_H - 0.02, 0);
+root.add(base);
+
+// --- wrap-around condenser coil: rear (-X) + both sides (±Z), fins instanced per face ---
+const coils = new THREE.Group();
+const coilH = COIL_Y1 - COIL_Y0, coilYC = (COIL_Y0 + COIL_Y1)/2;
+function coilFace(len, x, z, ry, nFins){
+  const g = new THREE.Group();
+  g.position.set(x, coilYC, z); g.rotation.y = ry;
+  put(g, len, coilH, COIL_T, matFin, 0, 0, 0);
+  const step = (len - 0.08)/(nFins - 1);
+  const fins = new THREE.InstancedMesh(new THREE.BoxGeometry(0.005, coilH - 0.05, COIL_T + 0.010), matFin, nFins);
+  for(let i=0;i<nFins;i++){ _p.set(-(len - 0.08)/2 + i*step, 0, 0); _q.setFromEuler(new THREE.Euler(0,0,0));
+    fins.setMatrixAt(i, _m.compose(_p, _q, _s)); }
+  fins.instanceMatrix.needsUpdate = true; fins.castShadow = fins.receiveShadow = true;
+  g.add(fins);
+  put(g, 0.03, coilH + 0.03, COIL_T + 0.02, matChassis, -(len/2 + 0.015), 0, 0);
+  put(g, 0.03, coilH + 0.03, COIL_T + 0.02, matChassis,  (len/2 + 0.015), 0, 0);
+  put(g, len + 0.06, 0.04, COIL_T + 0.02, matChassis, 0,  coilH/2 + 0.02, 0);
+  put(g, len + 0.06, 0.04, COIL_T + 0.02, matChassis, 0, -coilH/2 - 0.02, 0);
+  coils.add(g);
+  return g;
+}
+coilFace(D - 0.04, -(W/2 - COIL_T/2), 0, Math.PI/2, 22);        // rear face
+coilFace(W - 0.16, -0.06,  (D/2 - COIL_T/2), 0, 26);            // +Z side
+coilFace(W - 0.16, -0.06, -(D/2 - COIL_T/2), 0, 26);            // -Z side
+// Fascia band between the coil top and the deck. Without it the gap looks straight through the
+// casing at the fan venturi rings, which read as white sails hanging inside the unit.
+const FAS_Y0 = COIL_Y1, FAS_Y1 = Y1 - 0.05, FAS_H = FAS_Y1 - FAS_Y0;
+put(coils, 0.035, FAS_H, D - 0.05, matCase, -(W/2 - 0.02), (FAS_Y0 + FAS_Y1)/2, 0);
+for(const sz of [-1,1]) put(coils, W - 0.05, FAS_H, 0.035, matCase, 0, (FAS_Y0 + FAS_Y1)/2, sz*(D/2 - 0.02));
+root.add(coils);
+
+// --- casing: front panel (removable), corner posts, top deck, roof rails ---
+const casing = new THREE.Group();
+const frontPanel = new THREE.Group();
+put(frontPanel, 0.035, H - 0.10, D - 0.10, matCase, W/2 - 0.02, Y0 + (H - 0.10)/2, 0);
+put(frontPanel, 0.02, 0.10, 0.26, matCaseDk, W/2 - 0.001, Y0 + 1.10, 0.16);         // nameplate
+put(frontPanel, 0.03, 0.05, 0.10, matChassis, W/2 - 0.005, Y0 + 0.62, -(D/2 - 0.14)); // panel latch
+casing.add(frontPanel);
+for(const sx of [-1,1]) for(const sz of [-1,1])
+  put(casing, 0.05, H, 0.05, matChassis, sx*(W/2 - 0.025), Y0 + H/2, sz*(D/2 - 0.025));
+// Top deck as a FRAME around the discharge opening. A solid lid here buries both fans, which is
+// exactly what the first capture showed: a grille floating over a closed box.
+const OPEN_Z = 0.27;
+put(casing, W, 0.05, (D/2 - OPEN_Z), matCase, 0, Y1 - 0.025,  (D/2 + OPEN_Z)/2);
+put(casing, W, 0.05, (D/2 - OPEN_Z), matCase, 0, Y1 - 0.025, -(D/2 + OPEN_Z)/2);
+put(casing, (W - 2*(FAN_R + 0.26))/2 + 0.13, 0.05, 2*OPEN_Z, matCase,  (W/2 - 0.06), Y1 - 0.025, 0);
+put(casing, (W - 2*(FAN_R + 0.26))/2 + 0.13, 0.05, 2*OPEN_Z, matCase, -(W/2 - 0.06), Y1 - 0.025, 0);
+put(casing, 0.07, 0.05, 2*OPEN_Z, matCase, 0, Y1 - 0.025, 0);                        // centre rib
+put(casing, W, 0.06, 0.05, matCaseDk, 0, Y0 + 0.05, D/2 - 0.025);
+put(casing, W, 0.06, 0.05, matCaseDk, 0, Y0 + 0.05, -(D/2 - 0.025));
+root.add(casing);
+
+// --- top discharge: 2 fan orifices with rotors and instanced wire guards ---
+const top = new THREE.Group();
+const rotors = [];
+const guardRings = new THREE.InstancedMesh(new THREE.TorusGeometry(1, 0.006, 6, 26), matGuard, FAN_X.length * 3);
+const guardBars  = new THREE.InstancedMesh(new THREE.BoxGeometry(2*FAN_R + 0.04, 0.008, 0.008), matGuard, FAN_X.length * 3);
+let ri = 0, bi = 0;
+for(const fx of FAN_X){
+  const ring = new THREE.Mesh(new THREE.CylinderGeometry(FAN_R + 0.03, FAN_R + 0.08, 0.16, 24, 1, true),
+    new THREE.MeshStandardMaterial({ color:0xc6cbcf, metalness:0.0, roughness:0.52, side:THREE.DoubleSide }));
+  ring.position.set(fx, Y1 - 0.10, 0); ring.castShadow = ring.receiveShadow = true; top.add(ring);
+  const rotor = new THREE.Group(); rotor.position.set(fx, Y1 - 0.08, 0);
+  cyl(rotor, 0.06, 0.06, matBlade, 0, 0, 0, 0, 0, 14);
+  const blades = new THREE.InstancedMesh(new THREE.BoxGeometry(0.19, 0.014, 0.12), matBlade, 3);
+  for(let i=0;i<3;i++){
+    const a = i * Math.PI * 2 / 3;
+    _q.setFromEuler(new THREE.Euler(0, a, 0.34));
+    _p.set(Math.cos(a) * 0.13, 0, Math.sin(a) * 0.13);
+    blades.setMatrixAt(i, _m.compose(_p, _q, _s));
+  }
+  blades.instanceMatrix.needsUpdate = true; blades.castShadow = true; rotor.add(blades);
+  top.add(rotor); rotors.push(rotor);
+  for(const rr of [0.11, 0.21, 0.31]){
+    _q.setFromEuler(new THREE.Euler(-Math.PI/2, 0, 0));
+    _p.set(fx, Y1 + 0.02, 0); _s.set(rr, rr, 1);
+    guardRings.setMatrixAt(ri++, _m.compose(_p, _q, _s));
+  }
+  _s.set(1,1,1);
+  for(let k=0;k<3;k++){
+    _q.setFromEuler(new THREE.Euler(0, k * Math.PI / 3, 0));
+    _p.set(fx, Y1 + 0.02, 0);
+    guardBars.setMatrixAt(bi++, _m.compose(_p, _q, _s));
+  }
+}
+guardRings.instanceMatrix.needsUpdate = true; guardBars.instanceMatrix.needsUpdate = true;
+guardRings.castShadow = guardBars.castShadow = true;
+top.add(guardRings); top.add(guardBars);
+root.add(top);
+
+// --- machine compartment behind the front panel: scroll compressor, accumulator, control box ---
+const guts = new THREE.Group();
+cyl(guts, 0.115, 0.34, matComp, 0.16, Y0 + 0.30, 0.14, 0, 0, 18);                   // inverter scroll compressor
+cyl(guts, 0.13, 0.05, matComp, 0.16, Y0 + 0.50, 0.14, 0, 0, 18);
+cyl(guts, 0.075, 0.42, matChassis, 0.16, Y0 + 0.36, -0.18, 0, 0, 14);               // accumulator
+put(guts, 0.14, 0.34, 0.40, matDark, 0.20, Y0 + 1.06, 0.0);                          // control / inverter box
+cyl(guts, 0.028, 0.30, matCopper, 0.02, Y0 + 0.62, 0.14, 0, 0, 10);                  // discharge line
+cyl(guts, 0.034, 0.26, matCopper, 0.02, Y0 + 0.30, -0.02, 0, Math.PI/2, 10);         // suction line
+root.add(guts);
+
+// --- refrigerant line set leaving the base: lagged liquid + suction with stop valves ---
+const pipes = new THREE.Group();
+for(const [i, lz] of [[0, -0.10], [1, 0.14]]){
+  const r = i ? 0.030 : 0.020;
+  cyl(pipes, r + 0.014, 0.34, matLag, W/2 + 0.16, Y0 + 0.16, lz, 0, 0, 12);          // lagged riser
+  cyl(pipes, r, 0.11, matCopper, W/2 + 0.16, Y0 - 0.055, lz, 0, 0, 12);   // stops at floor level
+  cyl(pipes, r, 0.22, matCopper, W/2 + 0.05, Y0 + 0.33, lz, 0, Math.PI/2, 12);       // into the unit
+  put(pipes, 0.07, 0.09, 0.07, matChassis, W/2 + 0.16, Y0 + 0.38, lz);               // stop valve body
+  put(pipes, 0.03, 0.05, 0.03, matDark, W/2 + 0.16, Y0 + 0.45, lz);                  // valve cap
+}
+root.add(pipes);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let fansOn = false;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnFans = document.getElementById('btnFans');
+btnFans.onclick = ()=>{ fansOn = !fansOn; btnFans.classList.toggle('on', fansOn); requestRender(); };
+
+const btnFront = document.getElementById('btnFront');
+btnFront.onclick = ()=>{ frontPanel.visible = !frontPanel.visible;
+  btnFront.classList.toggle('on', !frontPanel.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnPipe = document.getElementById('btnPipe');
+btnPipe.onclick = ()=>{ pipes.visible = !pipes.visible; btnPipe.classList.toggle('on', !pipes.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(fansOn){ for(const r of rotors) r.rotation.y += 0.12; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__condensadorVrfApp = __app;
+globalThis['__condensador-vrfApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

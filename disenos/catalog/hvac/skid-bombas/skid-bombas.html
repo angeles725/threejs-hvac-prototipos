@@ -1,0 +1,307 @@
+<!doctype html>
+<!--
+  skid-bombas — catalog asset, family `hvac`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional anchor: research/HANDBOOK.md §3.0 ("Bomba centrífuga | 1-1.5 m").
+  Envelope: 1.90 x 1.50 x 1.78 m (skid footprint x height to the discharge valve levers).
+  Duty/standby pair of end-suction pumps on a common skid with suction and discharge headers.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skid de bombeo — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Skid de bombeo — 2 bombas centrífugas (uso/reserva)</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· cabezales · válvulas · guardas de acople</span></div>
+  <div class="dim">1.90 × 1.50 × 1.78 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnRun">BOMBAS</button>
+  <button id="btnGuard">GUARDAS</button>
+  <button id="btnPipe">CABEZALES</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+// LAYOUT: the two pumps sit SIDE BY SIDE across the skid width, both inlets facing +X. That is
+// what makes the pipework honest: an end-suction pump takes its suction axially, so two pumps in
+// LINE would have each one's inlet buried in its neighbour's motor (the first build did exactly
+// that and the suction branches had nowhere to land).
+const L = 1.90, W = 1.50;                  // skid footprint
+const SKID_H = 0.16;                       // channel base
+const PUMP_Z = [-0.36, 0.36];              // duty / standby centre lines, across the width
+const SHAFT_Y = 0.52;                      // pump/motor shaft centre line
+const SUC_X = 0.92, SUC_R = 0.105;         // suction header, runs across Z at the inlet height
+const DIS_X = 0.34, DIS_Y = 1.30, DIS_R = 0.085;   // discharge header, runs across Z above the volutes
+const VOL_X = 0.34;                        // volute centre
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 9, 30);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 4.7, AZ = 0.90, EL = 0.34;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.75 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.75, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.75, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.0;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4, 6, 3.5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-3; sun.shadow.camera.right=3; sun.shadow.camera.top=3; sun.shadow.camera.bottom=-2;
+scene.add(sun);
+// Vertical-subject fill (design-spec.yaml `lighting`): the header pipes and the motor barrels are
+// bare metal cylinders whose upper half reflects the dark horizon. Camera-side fill; the PBR
+// values themselves stay per HANDBOOK §3.1.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.0);
+fill.position.set(-3.5, 2.6, 5.5);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(24,24),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Pump volute and motor housing are PAINTED castings -> dielectric 0.0.
+//   Header pipe, flanges and skid channel are bare metal 0.9-1.0.
+//   Valve bodies and levers keep the ISA-101 "actionable" red; the coupling guard is caution yellow.
+// ============================================================================
+const matSkid   = new THREE.MeshStandardMaterial({ color:0xb7bec2, metalness:0.95, roughness:0.42 });
+const matPipe   = new THREE.MeshStandardMaterial({ color:0xc3cacd, metalness:0.95, roughness:0.36 });
+const matFlange = new THREE.MeshStandardMaterial({ color:0xa8b0b5, metalness:0.95, roughness:0.44 });
+const matPump   = new THREE.MeshStandardMaterial({ color:0x2f5d6b, metalness:0.0,  roughness:0.45 });
+const matMotor  = new THREE.MeshStandardMaterial({ color:0x37414c, metalness:0.0,  roughness:0.52 });
+const matGuard  = new THREE.MeshStandardMaterial({ color:0xc9a227, metalness:0.0,  roughness:0.50 });
+const matValve  = new THREE.MeshStandardMaterial({ color:0x8f3b2a, metalness:0.0,  roughness:0.50 });
+const matPanelB = new THREE.MeshStandardMaterial({ color:0xcdd2d5, metalness:0.0,  roughness:0.55 });
+const matDark   = new THREE.MeshStandardMaterial({ color:0x15181b, metalness:0.0,  roughness:0.70 });
+const matRubber = new THREE.MeshStandardMaterial({ color:0x101316, metalness:0.0,  roughness:0.95 });
+const matGauge  = new THREE.MeshStandardMaterial({ color:0xe8ecee, metalness:0.0,  roughness:0.35 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=18)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+
+// --- skid: channel perimeter + cross members + levelling pads + lifting lugs ---
+const skid = new THREE.Group();
+for(const sz of [-1,1]) put(skid, L, SKID_H, 0.10, matSkid, 0, SKID_H/2, sz*(W/2 - 0.05));
+for(const sx of [-1,1]) put(skid, 0.10, SKID_H, W - 0.20, matSkid, sx*(L/2 - 0.05), SKID_H/2, 0);
+for(const z of [-0.36, 0.36]) put(skid, L - 0.20, SKID_H*0.8, 0.08, matSkid, 0, SKID_H/2, z);
+for(const sx of [-1,1]) for(const sz of [-1,1]){
+  put(skid, 0.16, 0.03, 0.16, matRubber, sx*(L/2 - 0.14), 0.015, sz*(W/2 - 0.14));
+  put(skid, 0.06, 0.09, 0.03, matSkid, sx*(L/2 - 0.26), SKID_H + 0.045, sz*(W/2 - 0.05));
+}
+root.add(skid);
+
+// --- pump sets: inertia base, painted TEFC motor with instanced cooling fins, volute, guard ---
+const guards = [];
+const fans = [];
+for(const cz of PUMP_Z){
+  const set = new THREE.Group();
+  put(set, 1.12, 0.09, 0.46, matSkid, 0.06, SKID_H + 0.045, cz);                   // grouted baseplate
+  const mx = -0.30;
+  cyl(set, 0.155, 0.44, matMotor, mx, SHAFT_Y, cz, 0, Math.PI/2, 20);              // motor frame
+  const finGeo = new THREE.BoxGeometry(0.40, 0.012, 0.022);
+  const finN = 14;
+  const finM = new THREE.InstancedMesh(finGeo, matMotor, finN);
+  for(let i=0;i<finN;i++){
+    const a = -Math.PI*0.42 + i * (Math.PI*0.84/(finN-1));
+    _q.setFromEuler(new THREE.Euler(a, 0, 0, 'XYZ'));
+    _p.set(mx, SHAFT_Y + Math.cos(a)*0.163, cz + Math.sin(a)*0.163);
+    finM.setMatrixAt(i, _m.compose(_p, _q, _s));
+  }
+  finM.instanceMatrix.needsUpdate = true; finM.castShadow = true;
+  set.add(finM);
+  put(set, 0.20, 0.13, 0.16, matMotor, mx, SHAFT_Y + 0.20, cz);                    // terminal box
+  put(set, 0.34, 0.20, 0.30, matMotor, mx, SKID_H + 0.19, cz);                     // motor feet / pedestal
+  cyl(set, 0.135, 0.14, matDark, mx - 0.30, SHAFT_Y, cz, 0, Math.PI/2, 16);        // fan cowl
+  const fan = new THREE.Group(); fan.position.set(mx - 0.245, SHAFT_Y, cz);
+  { const bg = new THREE.BoxGeometry(0.02, 0.10, 0.035);
+    const im = new THREE.InstancedMesh(bg, matDark, 8);
+    for(let i=0;i<8;i++){ const a = i*Math.PI/4;
+      _q.setFromEuler(new THREE.Euler(a, 0, 0, 'XYZ'));
+      _p.set(0, Math.cos(a)*0.07, Math.sin(a)*0.07);
+      im.setMatrixAt(i, _m.compose(_p, _q, _s)); }
+    im.instanceMatrix.needsUpdate = true; im.castShadow = true; fan.add(im); }
+  set.add(fan); fans.push(fan);
+  // pump: painted volute (axis along X), axial suction on +X, discharge upward
+  cyl(set, 0.19, 0.22, matPump, VOL_X, SHAFT_Y, cz, 0, Math.PI/2, 22);             // volute
+  cyl(set, 0.115, 0.20, matPump, VOL_X + 0.20, SHAFT_Y, cz, 0, Math.PI/2, 18);     // suction nozzle
+  cyl(set, 0.145, 0.03, matFlange, VOL_X + 0.31, SHAFT_Y, cz, 0, Math.PI/2, 18);   // suction flange
+  cyl(set, 0.085, 0.34, matPump, VOL_X, SHAFT_Y + 0.30, cz, 0, 0, 16);             // discharge nozzle
+  cyl(set, 0.115, 0.03, matFlange, VOL_X, SHAFT_Y + 0.48, cz, 0, 0, 18);           // discharge flange
+  put(set, 0.24, 0.20, 0.26, matPump, VOL_X - 0.14, SKID_H + 0.19, cz);            // bearing pedestal
+  // coupling guard (removable, ISA-101 caution yellow) over the coupling it hides
+  const g = new THREE.Group();
+  put(g, 0.22, 0.30, 0.28, matGuard, 0.02, SHAFT_Y, cz);
+  guards.push(g); set.add(g);
+  cyl(set, 0.075, 0.18, matSkid, 0.02, SHAFT_Y, cz, 0, Math.PI/2, 14);             // coupling
+  // pressure gauges: one on the suction nozzle, one on the discharge riser
+  for(const [gx, gy] of [[VOL_X + 0.18, SHAFT_Y + 0.16], [VOL_X, SHAFT_Y + 0.62]]){
+    cyl(set, 0.055, 0.035, matGauge, gx, gy, cz + 0.15, Math.PI/2, 0, 14);
+    cyl(set, 0.012, 0.12, matPipe, gx, gy, cz + 0.08, Math.PI/2, 0, 8);
+  }
+  root.add(set);
+}
+
+// --- headers: both run ACROSS the skid (Z), so every branch is a short straight run ---
+const pipes = new THREE.Group();
+cyl(pipes, SUC_R, W + 0.40, matPipe, SUC_X, SHAFT_Y, 0, Math.PI/2, 0, 20);          // suction header
+cyl(pipes, SUC_R + 0.045, 0.035, matFlange, SUC_X, SHAFT_Y, -(W/2 + 0.20), Math.PI/2, 0, 20);
+cyl(pipes, DIS_R, W + 0.40, matPipe, DIS_X, DIS_Y, 0, Math.PI/2, 0, 20);            // discharge header
+cyl(pipes, DIS_R + 0.045, 0.035, matFlange, DIS_X, DIS_Y, -(W/2 + 0.20), Math.PI/2, 0, 20);
+for(const sz of [-1,1]){                                                            // header stands
+  put(pipes, 0.09, SHAFT_Y - SKID_H - 0.10, 0.09, matSkid, SUC_X, (SHAFT_Y + SKID_H - 0.10)/2 + 0.05, sz*(W/2 - 0.06));
+  put(pipes, 0.07, 0.06, 0.24, matSkid, SUC_X, SHAFT_Y - SUC_R - 0.03, sz*(W/2 - 0.06));
+}
+for(const cz of PUMP_Z){
+  // suction branch: header -> butterfly valve -> pump suction flange (one straight run in X)
+  cyl(pipes, 0.085, 0.28, matPipe, (SUC_X + VOL_X + 0.31)/2, SHAFT_Y, cz, 0, Math.PI/2, 16);
+  cyl(pipes, 0.125, 0.09, matValve, SUC_X - 0.20, SHAFT_Y, cz, 0, Math.PI/2, 14);   // butterfly body
+  put(pipes, 0.05, 0.22, 0.05, matValve, SUC_X - 0.20, SHAFT_Y + 0.19, cz);         // lever handle
+  // discharge branch: flexible connector -> check valve -> butterfly -> header
+  cyl(pipes, 0.085, 0.12, matRubber, VOL_X, SHAFT_Y + 0.55, cz, 0, 0, 16);
+  cyl(pipes, 0.075, 0.16, matPipe, VOL_X, SHAFT_Y + 0.69, cz, 0, 0, 16);
+  put(pipes, 0.19, 0.17, 0.19, matValve, VOL_X, SHAFT_Y + 0.86, cz);                // check valve body
+  put(pipes, 0.07, 0.05, 0.13, matValve, VOL_X + 0.11, SHAFT_Y + 0.90, cz);         // check valve cover boss
+  cyl(pipes, 0.075, 0.14, matPipe, VOL_X, SHAFT_Y + 1.02, cz, 0, 0, 16);
+  cyl(pipes, 0.115, 0.09, matValve, VOL_X, SHAFT_Y + 1.14, cz, 0, 0, 14);           // butterfly body
+  put(pipes, 0.05, 0.20, 0.05, matValve, VOL_X + 0.14, SHAFT_Y + 1.14, cz);         // lever handle
+  cyl(pipes, 0.075, 0.10, matPipe, VOL_X, DIS_Y - 0.10, cz, 0, 0, 16);
+}
+root.add(pipes);
+
+// --- control panel on the skid: enclosure, HMI, ISA-101 lamps, conduit to each motor ---
+const ctrl = new THREE.Group();
+const CPX = -(L/2 - 0.18);
+put(ctrl, 0.26, 0.62, 0.46, matPanelB, CPX, SKID_H + 0.95, 0);
+put(ctrl, 0.10, 0.64, 0.10, matSkid, CPX, SKID_H + 0.32, 0);                        // stand
+put(ctrl, 0.02, 0.22, 0.28, matDark, CPX - 0.14, SKID_H + 1.08, 0);                 // HMI
+for(const [i, c] of [[0, 0x5a6878], [1, 0x00ff66]]){                                // §3.4: grey is normal
+  const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.012, 12),
+    new THREE.MeshStandardMaterial({ color:c, emissive:c, emissiveIntensity:0.6, metalness:0, roughness:0.4 }));
+  lamp.position.set(CPX - 0.14, SKID_H + 0.82, i ? 0.10 : -0.10);
+  lamp.rotation.z = Math.PI/2; ctrl.add(lamp);
+}
+for(const cz of PUMP_Z){                                                            // conduit drop to each motor
+  cyl(ctrl, 0.022, 0.46, matSkid, CPX, SKID_H + 0.62, cz*0.5, 0, 0, 10);
+  cyl(ctrl, 0.022, Math.abs(cz), matSkid, CPX, SKID_H + 0.39, cz*0.5, Math.PI/2, 0, 10);
+}
+root.add(ctrl);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let running = false;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnRun = document.getElementById('btnRun');
+btnRun.onclick = ()=>{ running = !running; btnRun.classList.toggle('on', running); requestRender(); };
+
+const btnGuard = document.getElementById('btnGuard');
+btnGuard.onclick = ()=>{ const v = !guards[0].visible;
+  for(const g of guards) g.visible = v;
+  btnGuard.classList.toggle('on', !v);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnPipe = document.getElementById('btnPipe');
+btnPipe.onclick = ()=>{ pipes.visible = !pipes.visible; btnPipe.classList.toggle('on', !pipes.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(running){ for(const f of fans) f.rotation.x += 0.22; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__skidBombasApp = __app;
+globalThis['__skid-bombasApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
