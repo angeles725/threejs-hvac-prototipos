@@ -1,0 +1,301 @@
+<!doctype html>
+<!--
+  muelle-carga — catalog asset, family `estructuras`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  A loading dock is a RELATIONSHIP, not an object: platform height, leveler, bumpers, shelter and
+  the trailer that berths against them only make sense together, so the trailer is part of the
+  asset (togglable) and the platform height is the number everything else follows from.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Muelle de carga — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Muelle de carga — nivelador, topes y abrigo</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· plataforma 1.20 m · guías de aproximación · semáforo de muelle</span></div>
+  <div class="dim">frente 8.00 m · vano 2.60 × 3.00 m · nivelador 1.80 × 2.00 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnLev">NIVELADOR</button>
+  <button id="btnTrail">REMOLQUE</button>
+  <button id="btnShel">ABRIGO</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const DOCK_H = 1.20;                        // platform height — the number the whole asset follows
+const FRONT = 8.00;                         // dock face width (X)
+const DEPTH = 4.20;                         // platform depth (Z, into the building)
+const DOOR_W = 2.60, DOOR_H = 3.00;         // dock door opening
+const WALL_H = 4.60, WALL_T = 0.22;         // dock face wall
+const LEV_W = 1.80, LEV_L = 2.00;           // dock leveler deck
+const LIP_L = 0.40;                         // leveler lip
+const TRL_W = 2.50, TRL_H = 2.70, TRL_L = 7.00;   // trailer box
+const TRL_FLOOR = 1.24;                     // trailer bed height — deliberately NOT equal to DOCK_H
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 18, 60);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 14.5, AZ = 1.04, EL = 0.34;   // more frontal and higher: the dock face is the subject
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.90 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.90, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.90, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.0;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(7, 11, 7); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0005;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-9; sun.shadow.camera.right=9; sun.shadow.camera.top=7; sun.shadow.camera.bottom=-5;
+scene.add(sun);
+// FLAT-panel case of the family decision tree: the dock wall and the trailer sides are flat
+// coated surfaces, so a camera-side directional fill is the right remedy. PBR unchanged (§3.1).
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.05);
+fill.position.set(-6.0, 3.6, 8.0);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.26));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+// Warehouse-side lamp (shadowless): the doorway is a hole into a building. Unlit it is a black
+// rectangle and the dock reads as a wall with a sticker on it.
+const insideLamp = new THREE.PointLight(0xffeed8, 9, 8.0, 2);
+insideLamp.position.set(0, DOCK_H + 1.9, -1.9);
+scene.add(insideLamp);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(60,60),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Concrete, rubber bumpers, the shelter fabric and painted markings are DIELECTRIC.
+//   Leveler deck, shutter curtain and the trailer skin are the only metals.
+// ============================================================================
+const matConc   = new THREE.MeshStandardMaterial({ color:0x8e8d88, metalness:0.0,  roughness:0.95 });
+const matConcD  = new THREE.MeshStandardMaterial({ color:0x74736f, metalness:0.0,  roughness:0.95 });
+const matWall   = new THREE.MeshStandardMaterial({ color:0xd9dcde, metalness:0.0,  roughness:0.62 });
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xb7bec2, metalness:0.95, roughness:0.44 });
+const matTread  = new THREE.MeshStandardMaterial({ color:0x9aa2a7, metalness:0.95, roughness:0.60 });
+const matRubber = new THREE.MeshStandardMaterial({ color:0x14171a, metalness:0.0,  roughness:0.95 });
+const matShelter= new THREE.MeshStandardMaterial({ color:0x23282c, metalness:0.0,  roughness:0.92 });
+const matShutter= new THREE.MeshStandardMaterial({ color:0xc3c8cb, metalness:0.0,  roughness:0.55 });
+const matTrailer= new THREE.MeshStandardMaterial({ color:0xdfe2e5, metalness:0.0,  roughness:0.55 });
+const matTire   = new THREE.MeshStandardMaterial({ color:0x14161a, metalness:0.0,  roughness:0.95 });
+const matYellow = new THREE.MeshStandardMaterial({ color:0xc9a227, metalness:0.0,  roughness:0.60 });
+const matDark   = new THREE.MeshStandardMaterial({ color:0x1b1f23, metalness:0.0,  roughness:0.72 });
+const lampRed   = new THREE.MeshStandardMaterial({ color:0xff2233, emissive:0xff2233, emissiveIntensity:1.4,
+                                                   metalness:0.0, roughness:0.4 });
+const lampGrey  = new THREE.MeshStandardMaterial({ color:0x2a2f34, metalness:0.0,  roughness:0.5 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=16)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+
+// --- platform + dock face + apron ---
+const platform = new THREE.Group();
+put(platform, FRONT, DOCK_H, DEPTH, matConc, 0, DOCK_H/2, -(DEPTH/2));
+put(platform, FRONT, 0.06, 0.12, matConcD, 0, DOCK_H - 0.03, -0.06);        // edge kerb
+put(platform, 14.0, 0.04, 6.0, matConcD, 0, 0.02, 3.6);                     // apron slab
+root.add(platform);
+
+// --- dock face wall, built AROUND the door opening ---
+const wall = new THREE.Group();
+const jamb = DOOR_W/2;
+put(wall, (FRONT/2 - jamb), WALL_H, WALL_T, matWall, -(jamb + (FRONT/2 - jamb)/2), WALL_H/2, -WALL_T/2);
+put(wall, (FRONT/2 - jamb), WALL_H, WALL_T, matWall,  (jamb + (FRONT/2 - jamb)/2), WALL_H/2, -WALL_T/2);
+put(wall, DOOR_W, WALL_H - (DOCK_H + DOOR_H), WALL_T, matWall, 0,
+    DOCK_H + DOOR_H + (WALL_H - DOCK_H - DOOR_H)/2, -WALL_T/2);
+put(wall, DOOR_W + 0.24, 0.14, WALL_T + 0.06, matDark, 0, DOCK_H + DOOR_H + 0.07, -WALL_T/2);  // lintel
+root.add(wall);
+
+// --- sectional door, parked up under the lintel (the dock is IN USE) ---
+const door = new THREE.Group();
+for(let i=0;i<4;i++)
+  put(door, DOOR_W - 0.06, 0.44, 0.06, matShutter, 0, DOCK_H + DOOR_H - 0.26 - i*0.46, 0.06);
+put(door, DOOR_W + 0.10, 0.05, 0.14, matSteel, 0, DOCK_H + DOOR_H + 0.02, 0.06);
+root.add(door);
+
+// --- dock leveler: pit, deck hinged at the building side, and its lip ---
+const leveler = new THREE.Group();
+put(leveler, LEV_W + 0.16, 0.10, LEV_L + 0.10, matConcD, 0, DOCK_H - 0.16, -(LEV_L/2));  // pit floor
+const levPivot = new THREE.Group();
+levPivot.position.set(0, DOCK_H - 0.02, -LEV_L);                             // HINGE at the rear of the pit
+const deck = put(levPivot, LEV_W, 0.06, LEV_L, matTread, 0, 0, LEV_L/2);
+const lipPivot = new THREE.Group();
+lipPivot.position.set(0, 0, LEV_L);
+put(lipPivot, LEV_W - 0.06, 0.05, LIP_L, matTread, 0, 0, LIP_L/2);
+levPivot.add(lipPivot);
+leveler.add(levPivot);
+for(const sx of [-1,1]) put(leveler, 0.05, 0.34, LEV_L, matSteel, sx*(LEV_W/2 + 0.03), DOCK_H - 0.20, -(LEV_L/2));
+root.add(leveler);
+
+// --- bumpers, approach guides and the dock traffic light ---
+const trim = new THREE.Group();
+for(const sx of [-1,1]){
+  put(trim, 0.30, 0.46, 0.14, matRubber, sx*(DOOR_W/2 + 0.28), DOCK_H - 0.32, 0.07);      // laminated bumper
+  put(trim, 0.34, 0.05, 0.05, matSteel, sx*(DOOR_W/2 + 0.28), DOCK_H - 0.10, 0.06);
+  put(trim, 0.22, 0.16, 5.2, matYellow, sx*(DOOR_W/2 + 0.62), 0.08, 2.9);                 // approach guide
+}
+put(trim, 0.16, 0.62, 0.16, matDark, DOOR_W/2 + 1.05, DOCK_H + 1.30, 0.10);               // traffic light body
+const lampR = put(trim, 0.12, 0.12, 0.05, lampRed, DOOR_W/2 + 1.05, DOCK_H + 1.46, 0.19);
+const lampG = put(trim, 0.12, 0.12, 0.05, lampGrey, DOOR_W/2 + 1.05, DOCK_H + 1.16, 0.19);
+put(trim, 0.24, 0.30, 0.06, matDark, -(DOOR_W/2 + 0.75), DOCK_H + 1.35, 0.10);            // control station
+root.add(trim);
+
+// --- dock shelter: head and side curtains around the opening ---
+const shelter = new THREE.Group();
+put(shelter, DOOR_W + 0.70, 0.34, 0.34, matShelter, 0, DOCK_H + DOOR_H + 0.20, 0.20);
+for(const sx of [-1,1]) put(shelter, 0.34, DOOR_H + 0.20, 0.34, matShelter,
+                            sx*(DOOR_W/2 + 0.18), DOCK_H + (DOOR_H + 0.20)/2, 0.20);
+for(const sx of [-1,1]) put(shelter, 0.10, DOOR_H, 0.06, matYellow, sx*(DOOR_W/2 + 0.02), DOCK_H + DOOR_H/2, 0.36);
+root.add(shelter);
+
+// --- access stair from the apron up to the platform, at the -X end ---
+const stair = new THREE.Group();
+for(let i=0;i<6;i++)
+  put(stair, 1.10, 0.20, 0.28, matConc, -(FRONT/2 - 0.70), 0.10 + i*0.20, 0.30 + i*0.28);
+for(const sx of [-1,1]) put(stair, 0.05, 1.05, 0.05, matSteel, -(FRONT/2 - 0.70) + sx*0.52, DOCK_H + 0.52, 0.20);
+put(stair, 1.10, 0.05, 0.05, matSteel, -(FRONT/2 - 0.70), DOCK_H + 1.02, 0.20);
+root.add(stair);
+
+// --- the trailer berthed against the bumpers ---
+const trailer = new THREE.Group();
+const TZ = 0.14 + TRL_L/2 + 0.10;
+put(trailer, TRL_W, TRL_H, TRL_L, matTrailer, 0, TRL_FLOOR + TRL_H/2, TZ);
+put(trailer, TRL_W + 0.06, 0.18, TRL_L, matDark, 0, TRL_FLOOR - 0.06, TZ);                // chassis rail
+put(trailer, TRL_W, 0.10, 0.10, matDark, 0, TRL_FLOOR + 0.10, 0.16);                      // rear sill
+for(const sx of [-1,1]) put(trailer, 0.06, TRL_H - 0.10, 0.10, matDark, sx*(TRL_W/2 - 0.05), TRL_FLOOR + TRL_H/2, 0.16);
+for(const sx of [-1,1]) for(const tz of [TZ + 1.5, TZ + 2.4]){                            // bogie wheels
+  const w = cyl(trailer, 0.50, 0.26, matTire, sx*(TRL_W/2 - 0.06), 0.50, tz, 0, Math.PI/2, 18);
+  cyl(trailer, 0.20, 0.28, matSteel, sx*(TRL_W/2 - 0.06), 0.50, tz, 0, Math.PI/2, 14);
+}
+for(const sx of [-1,1]) cyl(trailer, 0.06, 0.90, matSteel, sx*0.80, 0.45, TZ + TRL_L/2 - 0.9, 0, 0, 10);  // landing legs
+// DEFAULT OFF. Berthed at the door, the trailer stands between the camera and the entire dock —
+// the first capture was a picture of a white box with a yellow guide beside it. The dock is the
+// subject; REMOLQUE brings in the counterpart that explains why the leveler exists.
+trailer.visible = false;
+root.add(trailer);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+//   NIVELADOR is the point of the asset: the trailer bed sits 40 mm ABOVE the platform, and the
+//   leveler is what bridges that difference. Deck and lip move on separate hinges, as they do.
+// ============================================================================
+const DECK_ANGLE = Math.atan2(TRL_FLOOR - DOCK_H, LEV_L);   // the real slope to the trailer bed
+let levTarget = 0;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnLev = document.getElementById('btnLev');
+btnLev.onclick = ()=>{ levTarget = levTarget === 0 ? 1 : 0;
+  lampR.material = levTarget ? lampGrey : lampRed;        // red while parked, green while working
+  lampG.material = levTarget ? new THREE.MeshStandardMaterial({ color:0x00ff66, emissive:0x00ff66,
+                       emissiveIntensity:1.4, metalness:0, roughness:0.4 }) : lampGrey;
+  btnLev.classList.toggle('on', levTarget !== 0); requestRender(); };
+
+const btnTrail = document.getElementById('btnTrail');
+btnTrail.onclick = ()=>{ trailer.visible = !trailer.visible; btnTrail.classList.toggle('on', trailer.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnShel = document.getElementById('btnShel');
+btnShel.onclick = ()=>{ shelter.visible = !shelter.visible; btnShel.classList.toggle('on', !shelter.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const want = levTarget ? DECK_ANGLE : 0;
+  const d = want - levPivot.rotation.x;
+  if(Math.abs(d) > 0.0004){
+    levPivot.rotation.x += d * 0.10;
+    lipPivot.rotation.x = -levPivot.rotation.x * 1.6;      // the lip folds out flat onto the bed
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__muelleCargaApp = __app;
+globalThis['__muelle-cargaApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
