@@ -220,6 +220,11 @@ elige otra familia libre si queda, o detente.
 - Identifica una InstancedMesh por `geometry.parameters` (width/height/depth), NUNCA por `count` ni por índice
   de traversal: varias mallas comparten conteo por casualidad (24 aisladores vs 28 MCCB) y el orden de
   traversal cambia con cualquier edición → agarras la malla de al lado y reportas un defecto que no existe.
+- UNA SALVAGUARDA QUE EL INSTRUMENTO NO LEE NO ES SALVAGUARDA: el gate recoge `console.error` (y excepciones),
+  NO `console.assert`. Un `console.assert(envolvente_ok)` que falla NO da error en el gate → exit 0, errors:[],
+  con tres paquetes flotando fuera de la banda (empacadora-flowwrap). Usa `console.error` para toda salvaguarda de
+  layout/geometría que quieras que el gate haga fallar; un assert es invisible para el instrumento. (Aparte: `SHOT_DIR`
+  debe EXISTIR o el gate muere con ENOENT y parece fallo del asset — créalo antes de correr.)
 - EL GATE NO VE EL BORDE DEL CUADRO: un sujeto puede salir RECORTADO con exit 0, ready true, 0 excepciones y
   conteos verdes — el gate mide que la escena renderiza, no que ENCUADRA. Confirmado por dos sesiones (bomba: el
   motor a ndcY 1.172; rack-drive-in: el arriostramiento superior por encima del HUD). Chequeo barato y que
