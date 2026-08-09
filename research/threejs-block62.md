@@ -1,16 +1,18 @@
 # Block 62 — ROBOTICS dimensional + joint-hierarchy reference (catalog family `robotica`)
 
-**Run 10 · gap G71 · EVIDENCE + DESIGN block · target: `three.js`**
+**Run 10 · gap G74 · EVIDENCE + DESIGN block · target: `three.js`**
 Written for the `catalog-robotica` worktree. Sibling of [Block 57] (doors) and [Block 58] (racking):
 same purpose — replace guessed geometry with manufacturer-published dimensions before modelling.
 
 Provenance markers: `[CERT-doc]` preserved manufacturer document in `sources/` · `[CERT-web]` official
 web page · `[CERT-a]` secondary/expert source · `[INFER]` deduction stated as such.
 
-Block numbering note: B59 was consumed twice in parallel worktrees (transporte belt-scroll,
-proceso dims). This block takes **B62** and namespaces its evidence folder by family
-(`sources/datasheets/*`, rows registered in `sources/SOURCES.md`) so a number clash cannot
-silently merge two corpora.
+Block numbering note: parallel catalog worktrees were writing corpus blocks at the same time, so
+the number was picked defensively. On integration B57-B61 were already taken (doors, storage,
+sectional/roll-up doors, access control, shelving) and **B62 was free** — this block keeps it, with
+no renumbering needed. Its evidence folder is namespaced by family (`sources/datasheets/*`, rows
+registered in `sources/SOURCES.md`) so a future clash cannot silently merge two corpora. The gap id
+moved G71 -> **G74** on integration: G71 was already the security-door gap.
 
 ---
 

@@ -9,9 +9,9 @@
 > cameras/controls, procedural geometry/textures, versioning) — not the whole library.
 <!-- research-state.v1 -->
 schema: research-state.v1
-covered_blocks: 61
-gaps_closed: 53
-known_gaps: 55
+covered_blocks: 62
+gaps_closed: 54
+known_gaps: 56
 investigable_open: 1
 requires_execution_open: 1
 blocked_open: 0
@@ -53,7 +53,7 @@ undocumented_findings: 0
     `renderer.info`, `sources/probes/B56-visor-perf/`): the scenes are far under the [Block 54] gates, so the
     heavy playbook is premature — the ONE data-justified lever is damping-safe render-on-demand, written from
     primary sources. Closes the [Block 54] "measure before applying" next-step.
-- **Coverage metric**: 53 / 55 closed (RUN 10: G67→B57, G68→B58, G69→B59 [2 of 3], G72→B60, G70→B61 [2 of 4]; G73 open, G71 blocked-on-thin-source) — **RUN 9 STOPPED (read-only-investigable=0). B45+B46+B47+B48+B49+B50+B51+B52 written.** (Runs 7-8 history below; G41 remains as requires-execution §19 build phase.)
+- **Coverage metric**: 54 / 56 closed (RUN 10: G67→B57, G68→B58, G69→B59 [2 of 3], G72→B60, G70→B61 [2 of 4], G74→B62 [robotics]; G73 open, G71 blocked-on-thin-source) — **RUN 9 STOPPED (read-only-investigable=0). B45+B46+B47+B48+B49+B50+B51+B52 written.** (Runs 7-8 history below; G41 remains as requires-execution §19 build phase.)
 - **RUN 5 STOPPED (2026-07-04): read-only-investigable = 0 — ALL RUNS COMPLETE (32/32 gaps, 5 runs)**
 - **RUN 5 (2026-07-04, AUTO/orchestrated)**: HVAC-domain design (G29-G32) — G29 (HVAC/industrial equipment visualization domain, B29), G30 (dashboards & telemetry, B30), G31 (terrain/relief, B31), and G32 (buildings/BIM, B32) covered — **RUN 5 COMPLETE, all 4 gaps closed**. User authorized auto-chaining incl. emergent gaps; RUN 5 ran to exhaustion of the backlog with no new gaps left. Hard-stops: failed self-report, cap, exhaustion, destructive step.
 - **RUN 4 (REOPEN §8, 2026-07-04, AUTO/orchestrated)**: 3D-design craft + optimization (G22-G28) — **RUN 4 COMPLETE**, all 7 gaps covered (B22-B28).
@@ -172,7 +172,7 @@ undocumented_findings: 0
 | 49 | 2026-08-07 | G62 QEM mesh simplification (run 9); premise CORRECTED — SimplifyModifier is Melax 1998 then a meshopt wrapper, not hand-rolled QEM | B49 | inline (constraint: single-block reopen executor; web-primary DESIGN/APPLIED block, 5 NEW sources preserved+hashed before citing — Garland-Heckbert 1997 paper PDF, three.js SimplifyModifier dev+r160, meshoptimizer README+simplifier.cpp) · scout: CERTIFIABLE-NOW | 0 (forward gaps G63/G64/G66 already queued; documentation half of G41 supplied) |
 | 50 | 2026-08-07 | G63 isosurfaces: marching cubes vs dual contouring (run 9) | B50 | inline (constraint: single-block reopen executor; web-primary DESIGN/APPLIED block, 6 NEW sources preserved+hashed before citing — three.js MarchingCubes.js, Bourke polygonise, Wikipedia MC, Ju-et-al 2002 DC paper PDF, boris-the-brave DC tutorial, isosurface npm README) · scout: CERTIFIABLE-NOW | 0 (forward gaps G64/G66 already queued) |
 | 51 | 2026-08-07 | G64 curves & surfaces: Bézier/Catmull-Rom/NURBS (run 9) | B51 | inline (constraint: single-block reopen executor; source+web-primary DESIGN/APPLIED block, 13 sources preserved+hashed before citing — 9 three.js source files [Curve/Interpolations/CatmullRomCurve3/{Cubic,Quadratic}BezierCurve3/TubeGeometry/NURBS{Curve,Surface,Utils}], Wikipedia Bézier/centripetal-CatmullRom/NURBS, Yuksel-2011 centripetal PDF) · scout: CERTIFIABLE-NOW | 0 (forward gap G66 already queued) |
-| 55 | 2026-08-08 | G71 ROBOTICS dimensional + joint-hierarchy reference (run 10, catalog-robotica worktree) | B62 | inline (constraint: parallel catalog worktrees — no sub-agents; doc+web-primary EVIDENCE/DESIGN block, 6 NEW sources preserved+hashed before citing — ABB IRB 6700 product spec 3HAC080365, ABB IRB 660 PR10284EN, UR10e technical spec, MiR250 spec 2.99, SICK C4000 C40S-1301AA030, robot-safety.net ISO 13857 fence + Robotiq 2F-85 manual §6) · block number 62 taken because B59 was consumed twice in parallel worktrees; evidence folder namespaced by family | 0 (siblings SCARA/delta/AGV-tugger queued as G72 if a future family needs them) |
+| 56 | 2026-08-08 | G74 ROBOTICS dimensional + joint-hierarchy reference (run 10, catalog-robotica worktree) | B62 | inline (constraint: parallel catalog worktrees — no sub-agents; doc+web-primary EVIDENCE/DESIGN block, 6 NEW sources preserved+hashed before citing — ABB IRB 6700 product spec 3HAC080365, ABB IRB 660 PR10284EN, UR10e technical spec, MiR250 spec 2.99, SICK C4000 C40S-1301AA030, robot-safety.net ISO 13857 fence + Robotiq 2F-85 manual §6) · B62 is the first free block number after B57-B61; the evidence folder is namespaced by family so a future number clash cannot merge two corpora. Gap renumbered G71->G74 on merge: G71 was already the security-door gap in master | 0 (siblings SCARA/delta/AGV-tugger queued as G75 if a future family needs them) |
 | 54 | 2026-08-08 | G68 warehouse STORAGE dimensional reference — selective pallet racking (run 10) | B58 | inline (constraint: session directive — no sub-agents; doc-primary EVIDENCE block, 5 NEW sources preserved+hashed before citing — SSI SCHÄFER chapter extracts PR 350 + PR 600, Dexion P90 brochure [REJECTED, recorded], mecalux euro-pallet, Wikipedia EUR-pallet) · scout: CERTIFIABLE-NOW ×2, INSUFFICIENT ×1 (Dexion) | 1 (G70 — shelving/mezzanine/tote siblings) |
 | 53 | 2026-08-08 | G67 industrial DOOR dimensional + construction reference (run 10 — NEW AXIS) | B57 | inline (constraint: session directive — no sub-agents; web+doc-primary EVIDENCE block, 3 NEW manufacturer datasheets preserved+hashed+text-extracted before citing — DAN-doors MH1001K/MH1001F/MH0601K; 2 web checks dan-doors.dk MH1002K + fermod.com) · scout: CERTIFIABLE-NOW | 1 (G69 — sectional/roll-up/security door siblings) |
 | 57 | 2026-08-08 | G70 storage: boltless shelving + Euro container KLT (run 10) | B61 | inline (constraint: session directive; 3 sources preserved+hashed, 1 fetch returned 0 bytes and was DELETED rather than registered as a phantom) · scout: CERTIFIABLE-NOW x2, FAILED x1 | 0 (§61.5: this gap's easy evidence is exhausted) |

@@ -217,7 +217,7 @@ This index guides through the **40 blocks** of this research. Each block is an i
 
 ### RUN 10 — catalog family evidence (robotica worktree, 2026-08-08)
 
-- [x] G71 — ROBOTICS dimensional + joint-hierarchy reference (ABB IRB 6700-235/2.65 envelope & axis
+- [x] G74 — ROBOTICS dimensional + joint-hierarchy reference (ABB IRB 6700-235/2.65 envelope & axis
   ranges; UR10e certified DH chain; Robotiq 2F-85 adaptive linkage; MiR250 AMR envelope; ABB IRB 660
   4-axis palletizer + parallelogram constraint; ISO 13857 fence heights + SICK C4000 light-curtain
   proportions; the six-rule joint-hierarchy contract for three.js) → [Block 62]
