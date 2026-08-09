@@ -1,0 +1,358 @@
+<!doctype html>
+<!--
+  subestacion-electrica — catalog asset, family `estructuras`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Outdoor compound: oil-filled power transformer with radiator banks and porcelain bushings, a
+  gantry with strain insulators, a switchgear row, bus bars on post insulators, and the fence that
+  makes it a substation rather than a machine standing in a yard.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subestación eléctrica — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Subestación eléctrica — transformador, pórtico y celdas</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· radiadores instanciados · aisladores de porcelana · malla perimetral</span></div>
+  <div class="dim">recinto 11.0 × 8.0 m · transformador 2.60 × 1.70 × 2.30 m · pórtico 5.20 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnFence">CERCA</button>
+  <button id="btnBus">BARRAS</button>
+  <button id="btnFans">VENTILADORES</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const YARD_W = 11.0, YARD_D = 8.0;          // fenced compound
+const FENCE_H = 2.40;                       // mesh fence height
+const TR_W = 2.60, TR_D = 1.70, TR_H = 2.30;// transformer tank
+const TR_X = -1.60, TR_Y0 = 0.30;           // tank position / plinth top
+const GANTRY_H = 5.20, GANTRY_SPAN = 4.60;  // HV gantry
+const CELL_W = 0.90, CELL_H = 2.20, CELL_D = 1.00;
+const CELL_X0 = 2.30;                       // switchgear row start
+const BUS_Y = 3.45;                         // bus bar height
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 18, 60);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 15.0, AZ = 0.90, EL = 0.30;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 2.20 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(-0.3, 2.20, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(-0.3, 2.20, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.05;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(8, 12, 6); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0005;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-9; sun.shadow.camera.right=9; sun.shadow.camera.top=8; sun.shadow.camera.bottom=-5;
+scene.add(sun);
+// FLAT case: the tank walls, radiator fins and cubicle doors are flat painted steel, so the
+// camera-side directional fill applies (not the §3.3 studio rig, which this family reserves for
+// curved metal bodies). PBR values unchanged (HANDBOOK §3.1).
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.10);
+fill.position.set(-6.0, 3.6, 8.0);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.26));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(60,60),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Transformer tank, radiators and cubicles are PAINTED -> dielectric. Bus bars, fence mesh and
+//   the gantry lattice are bare metal. Porcelain is a dielectric with its own pale grey-brown.
+//   ISA-101 §3.4: the only colour in the compound is the warning sign, because it is the only
+//   thing that is actionable.
+// ============================================================================
+const matTank   = new THREE.MeshStandardMaterial({ color:0x4a5a63, metalness:0.0,  roughness:0.52 });
+const matTankD  = new THREE.MeshStandardMaterial({ color:0x3b4850, metalness:0.0,  roughness:0.58 });
+const matRad    = new THREE.MeshStandardMaterial({ color:0x44545c, metalness:0.0,  roughness:0.56 });
+const matPorc   = new THREE.MeshStandardMaterial({ color:0xcfc9ba, metalness:0.0,  roughness:0.30 });
+const matBus    = new THREE.MeshStandardMaterial({ color:0xc9a06a, metalness:0.95, roughness:0.34 });
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xb7bec2, metalness:0.95, roughness:0.46 });
+const matMesh   = new THREE.MeshStandardMaterial({ color:0x9aa2a7, metalness:0.95, roughness:0.60 });
+const matCell   = new THREE.MeshStandardMaterial({ color:0xd3d7da, metalness:0.0,  roughness:0.52 });
+const matCellD  = new THREE.MeshStandardMaterial({ color:0xa9aeb2, metalness:0.0,  roughness:0.58 });
+const matConc   = new THREE.MeshStandardMaterial({ color:0x8e8d88, metalness:0.0,  roughness:0.95 });
+const matGravel = new THREE.MeshStandardMaterial({ color:0x5a5c5e, metalness:0.0,  roughness:0.98 });
+const matDark   = new THREE.MeshStandardMaterial({ color:0x1b1f23, metalness:0.0,  roughness:0.72 });
+const matBlade  = new THREE.MeshStandardMaterial({ color:0x2b3138, metalness:0.0,  roughness:0.45 });
+const matWarn   = new THREE.MeshStandardMaterial({ color:0xc9a227, metalness:0.0,  roughness:0.55 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=16)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+// a porcelain insulator: a stack of instanced sheds on a core — the shape that says "high voltage"
+function insulator(parent, x, y, z, h, r, sheds){
+  const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g);
+  cyl(g, r*0.45, h, matPorc, 0, h/2, 0, 0, 0, 12);
+  const im = new THREE.InstancedMesh(new THREE.CylinderGeometry(r, r*0.72, h/sheds*0.42, 12), matPorc, sheds);
+  for(let i=0;i<sheds;i++){
+    _q.setFromEuler(new THREE.Euler(0,0,0));
+    _p.set(0, (i + 0.5) * (h/sheds), 0);
+    im.setMatrixAt(i, _m.compose(_p, _q, _s));
+  }
+  im.instanceMatrix.needsUpdate = true; im.castShadow = true; g.add(im);
+  return g;
+}
+
+// --- yard: gravel pad + equipment plinths ---
+put(root, YARD_W, 0.04, YARD_D, matGravel, 0, 0.02, 0);
+put(root, TR_W + 1.20, TR_Y0, TR_D + 1.00, matConc, TR_X, TR_Y0/2, 0);              // transformer plinth
+put(root, 3.40, 0.20, CELL_D + 0.50, matConc, CELL_X0 + 1.35, 0.10, 0);            // switchgear plinth
+
+// --- transformer: tank, radiators with fans, conservator, bushings, fittings ---
+const tr = new THREE.Group();
+put(tr, TR_W, TR_H, TR_D, matTank, TR_X, TR_Y0 + TR_H/2, 0);
+put(tr, TR_W + 0.10, 0.12, TR_D + 0.10, matTankD, TR_X, TR_Y0 + TR_H - 0.06, 0);   // tank cover flange
+for(const sx of [-1,1]) put(tr, 0.10, 0.24, TR_D + 0.20, matTankD, TR_X + sx*(TR_W/2 - 0.05), TR_Y0 + 0.12, 0);
+// radiator banks on both long faces: instanced fin panels (real repetition)
+const radFans = [];
+for(const sz of [-1, 1]){
+  const N = 11, pitch = (TR_W - 0.50) / (N - 1);
+  const im = new THREE.InstancedMesh(new THREE.BoxGeometry(0.055, TR_H - 0.75, 0.44), matRad, N);
+  for(let i=0;i<N;i++){
+    _q.setFromEuler(new THREE.Euler(0,0,0));
+    _p.set(TR_X - (TR_W - 0.50)/2 + i*pitch, TR_Y0 + TR_H/2 - 0.05, sz*(TR_D/2 + 0.24));
+    im.setMatrixAt(i, _m.compose(_p, _q, _s));
+  }
+  im.instanceMatrix.needsUpdate = true; im.castShadow = im.receiveShadow = true; tr.add(im);
+  // header pipes top and bottom of each bank
+  for(const dy of [TR_H - 0.45, 0.42])
+    cyl(tr, 0.06, TR_W - 0.40, matTankD, TR_X, TR_Y0 + dy, sz*(TR_D/2 + 0.24), 0, Math.PI/2, 12);
+  // forced-air cooling fans under the bank
+  for(const fx of [-0.62, 0.62]){
+    const g = new THREE.Group(); g.position.set(TR_X + fx, TR_Y0 + 0.30, sz*(TR_D/2 + 0.24));
+    const bl = new THREE.InstancedMesh(new THREE.BoxGeometry(0.20, 0.10, 0.014), matBlade, 4);
+    for(let i=0;i<4;i++){ const a = i*Math.PI/2;
+      _q.setFromEuler(new THREE.Euler(0, 0, a + 0.3));
+      _p.set(Math.cos(a)*0.13, Math.sin(a)*0.13, 0);
+      bl.setMatrixAt(i, _m.compose(_p, _q, _s)); }
+    bl.instanceMatrix.needsUpdate = true; bl.castShadow = true; g.add(bl);
+    cyl(g, 0.24, 0.03, matDark, 0, 0, 0, Math.PI/2, 0, 18);
+    tr.add(g); radFans.push(g);
+  }
+}
+// conservator tank on top, oil gauge, Buchholz relay, control cabinet, rating plate
+cyl(tr, 0.26, 1.40, matTankD, TR_X - 0.30, TR_Y0 + TR_H + 0.34, -(TR_D/2 - 0.10), 0, Math.PI/2, 18);
+cyl(tr, 0.09, 0.10, matDark, TR_X - 1.02, TR_Y0 + TR_H + 0.34, -(TR_D/2 - 0.10), 0, Math.PI/2, 12);
+cyl(tr, 0.055, 0.34, matTankD, TR_X - 0.30, TR_Y0 + TR_H + 0.08, -(TR_D/2 - 0.10), 0, 0, 10);
+put(tr, 0.14, 0.16, 0.14, matDark, TR_X - 0.05, TR_Y0 + TR_H + 0.14, -(TR_D/2 - 0.10));   // Buchholz
+put(tr, 0.42, 0.56, 0.22, matCell, TR_X + TR_W/2 + 0.12, TR_Y0 + 1.10, 0.20);             // control cabinet
+put(tr, 0.24, 0.16, 0.01, matCellD, TR_X, TR_Y0 + 1.55, TR_D/2 + 0.005);                  // rating plate
+// HV bushings (3, tall) on the cover and LV bushings (3, short) on the +Z face
+const hvTops = [];
+for(const [i, bx] of [[0, -0.80], [1, 0.0], [2, 0.80]].entries ? [[0,-0.80],[1,0.0],[2,0.80]] : []){
+  const g = insulator(tr, TR_X + bx, TR_Y0 + TR_H, 0.28, 1.15, 0.15, 7);
+  cyl(g, 0.05, 0.10, matSteel, 0, 1.18, 0, 0, 0, 10);
+  hvTops.push([TR_X + bx, TR_Y0 + TR_H + 1.20, 0.28]);
+}
+// LV bushings are spread across the tank's WIDTH at its +X end, so each phase sits directly under
+// its own bus bar. Spread along the length (as first built) the three bars started in mid-air
+// above nothing and the electrical path did not close.
+const LV_X = TR_X + TR_W/2 - 0.25;
+for(const bz of [-0.26, 0.0, 0.26]){
+  const g = insulator(tr, LV_X, TR_Y0 + TR_H, bz, 0.55, 0.10, 4);
+  cyl(g, 0.04, 0.08, matSteel, 0, 0.57, 0, 0, 0, 10);
+  cyl(tr, 0.030, BUS_Y - (TR_Y0 + TR_H + 0.60), matBus, LV_X, (BUS_Y + TR_Y0 + TR_H + 0.60)/2, bz, 0, 0, 10);
+}
+root.add(tr);
+
+// --- gantry: two lattice columns + head beam + strain insulators + HV drops ---
+const gantry = new THREE.Group();
+for(const sx of [-1, 1]){
+  const gx = TR_X + sx*(GANTRY_SPAN/2);
+  for(const sz of [-1, 1]) put(gantry, 0.09, GANTRY_H, 0.09, matSteel, gx + sz*0.14, GANTRY_H/2, sz*0.14);
+  for(let i=0;i<7;i++){                                                   // lattice bracing
+    const b = put(gantry, 0.05, 0.05, 0.42, matSteel, gx, 0.45 + i*0.72, 0);
+    b.rotation.x = (i % 2 ? 1 : -1) * 0.62;
+  }
+  put(gantry, 0.42, 0.04, 0.42, matConc, gx, 0.02, 0);
+}
+put(gantry, GANTRY_SPAN + 0.60, 0.16, 0.30, matSteel, TR_X, GANTRY_H - 0.08, 0);
+for(const [hx, hy, hz] of hvTops){                                        // strain insulator + drop
+  insulator(gantry, hx, GANTRY_H - 0.62, 0, 0.46, 0.10, 4);
+  const dropH = (GANTRY_H - 0.62) - hy;
+  cyl(gantry, 0.018, Math.hypot(dropH, hz), matSteel, hx, hy + dropH/2, hz/2,
+      Math.atan2(hz, dropH), 0, 8);
+}
+root.add(gantry);
+
+// --- switchgear row: 3 cubicles with louvres, door handles and cable trench covers ---
+const cells = new THREE.Group();
+for(let i=0;i<3;i++){
+  const cx = CELL_X0 + i*(CELL_W + 0.02) + CELL_W/2;
+  put(cells, CELL_W, CELL_H, CELL_D, matCell, cx, 0.20 + CELL_H/2, 0);
+  put(cells, CELL_W + 0.04, 0.08, CELL_D + 0.04, matCellD, cx, 0.20 + CELL_H + 0.04, 0);
+  put(cells, CELL_W - 0.14, 0.34, 0.02, matCellD, cx, 0.20 + CELL_H - 0.42, CELL_D/2 + 0.005);  // louvre
+  put(cells, 0.04, 0.16, 0.05, matSteel, cx + CELL_W/2 - 0.10, 0.20 + 1.05, CELL_D/2 + 0.02);    // handle
+  put(cells, 0.20, 0.14, 0.01, matWarn, cx, 0.20 + 1.62, CELL_D/2 + 0.006);                      // warning label
+}
+root.add(cells);
+
+// --- bus bars: transformer LV bushings -> switchgear, carried on post insulators ---
+const bus = new THREE.Group();
+const BUS_X0 = TR_X + TR_W/2 - 0.25, BUS_X1 = CELL_X0 + 1.35;
+for(const bz of [-0.26, 0.0, 0.26]){
+  cyl(bus, 0.035, BUS_X1 - BUS_X0, matBus, (BUS_X0 + BUS_X1)/2, BUS_Y, bz, 0, Math.PI/2, 10);
+  // drop into the switchgear roof, so the run terminates in equipment and not in the air
+  cyl(bus, 0.030, BUS_Y - (0.20 + CELL_H + 0.30), matBus, BUS_X1, (BUS_Y + 0.20 + CELL_H + 0.30)/2, bz, 0, 0, 10);
+}
+for(const bz of [-0.26, 0.0, 0.26]) insulator(bus, BUS_X1, 0.20 + CELL_H + 0.04, bz, 0.28, 0.09, 3);
+for(const px of [TR_X + 1.55]){
+  put(bus, 0.30, 0.10, 0.90, matSteel, px, BUS_Y - 0.62, 0);
+  for(const bz of [-0.26, 0.0, 0.26]) insulator(bus, px, BUS_Y - 0.57, bz, 0.52, 0.10, 4);
+  for(const sz of [-1,1]) put(bus, 0.09, BUS_Y - 0.62, 0.09, matSteel, px, (BUS_Y - 0.62)/2, sz*0.36);
+}
+root.add(bus);
+
+// --- perimeter fence: posts + instanced mesh pickets + a gate + warning sign ---
+const fence = new THREE.Group();
+const SIDES = [{a:0, nx:0, nz:1, len:YARD_W}, {a:Math.PI/2, nx:1, nz:0, len:YARD_D},
+               {a:Math.PI, nx:0, nz:-1, len:YARD_W}, {a:-Math.PI/2, nx:-1, nz:0, len:YARD_D}];
+for(const {nx, nz, len} of SIDES){
+  const half = len/2;
+  const nPost = Math.round(len / 2.2) + 1;
+  for(let i=0;i<nPost;i++){
+    const t = -half + i*(len/(nPost-1));
+    put(fence, 0.08, FENCE_H, 0.08, matSteel, nx ? nx*(YARD_W/2) : t, FENCE_H/2, nz ? nz*(YARD_D/2) : t);
+  }
+  for(const h of [FENCE_H - 0.06, 0.12])
+    put(fence, nz ? len : 0.05, 0.05, nz ? 0.05 : len, matSteel,
+        nx*(YARD_W/2), h, nz*(YARD_D/2));
+}
+{ // the mesh itself: instanced vertical pickets on all four runs
+  const pitch = 0.16;
+  const items = [];
+  for(const {nx, nz, len} of SIDES){
+    for(let t = -len/2 + pitch; t < len/2; t += pitch)
+      items.push([nx ? nx*(YARD_W/2) : t, nz ? nz*(YARD_D/2) : t, nx ? Math.PI/2 : 0]);
+  }
+  const im = new THREE.InstancedMesh(new THREE.BoxGeometry(0.012, FENCE_H - 0.16, 0.012), matMesh, items.length);
+  items.forEach(([x, z, ry], i)=>{
+    _q.setFromEuler(new THREE.Euler(0, ry, 0));
+    _p.set(x, FENCE_H/2, z);
+    im.setMatrixAt(i, _m.compose(_p, _q, _s));
+  });
+  im.instanceMatrix.needsUpdate = true; im.castShadow = true; fence.add(im);
+}
+put(fence, 0.34, 0.26, 0.02, matWarn, 1.60, 1.55, YARD_D/2 + 0.02);       // warning sign
+put(fence, 0.10, FENCE_H, 0.10, matSteel, 3.10, FENCE_H/2, YARD_D/2);     // gate posts
+put(fence, 0.10, FENCE_H, 0.10, matSteel, 4.90, FENCE_H/2, YARD_D/2);
+put(fence, 1.80, 0.06, 0.06, matSteel, 4.00, FENCE_H - 0.10, YARD_D/2);
+root.add(fence);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let fansOn = false;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnFence = document.getElementById('btnFence');
+btnFence.onclick = ()=>{ fence.visible = !fence.visible; btnFence.classList.toggle('on', !fence.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnBus = document.getElementById('btnBus');
+btnBus.onclick = ()=>{ bus.visible = !bus.visible; btnBus.classList.toggle('on', !bus.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnFans = document.getElementById('btnFans');
+btnFans.onclick = ()=>{ fansOn = !fansOn; btnFans.classList.toggle('on', fansOn); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(fansOn){ for(const f of radFans) f.rotation.z += 0.20; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__subestacionElectricaApp = __app;
+globalThis['__subestacion-electricaApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
