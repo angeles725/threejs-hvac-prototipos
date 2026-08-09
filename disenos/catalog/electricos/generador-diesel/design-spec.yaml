@@ -1,0 +1,202 @@
+# DesignSpec — open diesel generating set on a base fuel tank
+# Seventh asset of the catalog `electricos` family, and the FIRST horizontal subject in it.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+#
+# EVIDENCE DISCIPLINE: no manufacturer datasheet was preserved. Every dimension is [INFER] from
+# genset practice at confidence <= 0.7. Nothing here is presented as [CERT-doc].
+
+design: generador-diesel
+family: electricos
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+
+complexity:
+  scores: {silhouette: 3, components: 3, hierarchy: 2, repetition: 2,
+           material_layers: 3, detail: 3, occlusion: 1, action_readiness: 1}
+  tier: complex
+  notes: >
+    silhouette 3 — the first asset in this family whose outline actually carries information. The
+    six cabinets before it were boxes whose identity lived in surface detail; a genset reads along
+    its AXIS, and the order radiator -> engine -> coupling -> alternator -> panel is the read. Get
+    that order wrong and no amount of detail rescues it.
+    occlusion 1 only, because the open configuration is deliberate: an enclosed set would hide the
+    whole drive line and turn this back into another box.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    isa101_states: "research/HANDBOOK.md §3.4"
+    lighting_contrast: "the six cabinet assets in this family — see §lighting for why this one differs"
+
+references:
+  - source: "research/HANDBOOK.md §3.0 (scale norm) + §3.1 (PBR palette) + §3.4 (ISA-101)"
+    evidences: >
+      [CERT] 1 unit = 1 m; near-binary metalness; painted castings are dielectrics while the
+      radiator core and exhaust cladding are bare metal; corrected warm copper; neutral grey as the
+      normal state.
+    suitability: pass
+  - source: "generating-set practice (no document preserved in sources/)"
+    evidences: >
+      [INFER] a ~500 kVA class open set at roughly 4.0 x 1.55 m on a base fuel tank; AV mounts
+      between skid rails and the engine/alternator feet; pusher fan between radiator and engine;
+      turbocharger fed by bank manifolds; flexible bellows into a lagged silencer; control panel on
+      a stand.
+    suitability: partial
+
+dimensions_real:
+  skid_l_m:      {value: 4.00, confidence: low}
+  skid_w_m:      {value: 1.55, confidence: low}
+  tank_h_m:      {value: 0.55, confidence: low}
+  deck_y_m:      {value: 0.64, confidence: low}   # rail top — the mounting plane for everything
+  radiator_w_m:  {value: 1.28, confidence: low}
+  radiator_h_m:  {value: 1.34, confidence: low}
+  engine_l_m:    {value: 1.62, confidence: low}
+  alternator_r_m:{value: 0.42, confidence: low}
+  alternator_l_m:{value: 1.20, confidence: low}
+  overall_h_m:   {value: 2.30, confidence: low}   # to the top of the exhaust silencer
+
+hierarchy:
+  - name: root
+    children:
+      - name: skid            # base fuel tank, rails, AV mounts, fill cap, level gauge, rating plate
+        pivot: [0, 0, 0]
+        animation: none
+      - name: radiator_fan    # core with striations, header tanks, side channels, cowl, fan hub
+        pivot: fan hub, spin about X
+        animation: rotate
+        notes: "the spin is gated on a state flag and only then holds needsRender true"
+      - name: engine          # block, oil pan, V head banks, rocker covers, manifolds, turbo,
+                              # air filter, intake hose, starter, oil filter, coolant hoses
+        pivot: [0, 0, 0]
+        animation: none
+      - name: alternator      # bellhousing, housing drum, end caps, cooling louvres, terminal box,
+                              # copper output bars, feet
+        pivot: [0, 0, 0]
+        animation: none
+      - name: exhaust         # riser, bellows, silencer, straps, stands, tail pipe (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: control_panel   # stand, enclosure, display, lamp row, pushbuttons, label
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: engine-paint
+    family: painted-metal
+    color: "#2f4a63"
+    metalness: 0.0             # a painted casting is a DIELECTRIC, however metallic the part under
+    roughness: 0.55            # the paint is. Same trap as the battery jar and the pad-mount tank.
+    evidence: "HANDBOOK §3.1 'compBody / compDark -> 0.0-0.05, carcasa pintada'"
+    confidence: 0.8
+  - id: radiator-core
+    family: bare-metal
+    color: "#6f7679"
+    metalness: 0.90
+    roughness: 0.62
+    evidence: "HANDBOOK §3.1 'coil -> 0.9-1.0, aletas de aluminio'"
+    confidence: 0.85
+  - id: exhaust-cladding
+    family: bare-metal
+    color: "#a9adb0"
+    metalness: 0.90
+    roughness: 0.50
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0"
+    confidence: 0.8
+  - id: av-mount-rubber
+    family: rubber
+    color: "#14171a"
+    metalness: 0.0             # AV mounts and coolant hoses must NOT inherit the skid metal
+    roughness: 0.78
+    evidence: "HANDBOOK §3.1 'hose -> 0.0, manguera de caucho, dieléctrico'"
+    confidence: 0.85
+  - id: copper-output
+    family: bare-metal
+    color: "#f0a67a"
+    metalness: 1.0
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1 copper correction"
+    confidence: 0.9
+  - id: lamp-isa101
+    family: emissive
+    color: "#5a6878"
+    metalness: 0.0
+    roughness: 0.40
+    evidence: "HANDBOOK §3.4"
+    confidence: 0.9
+
+critical_features:
+  - id: axial-order-correct
+    desc: >
+      Radiator, fan, engine, coupling, alternator, control panel — in that order along the skid,
+      all on one deck plane. This is the whole read of the machine.
+    threshold: 0.85
+  - id: fits-on-its-own-skid
+    desc: >
+      The drive line ends inside the base tank footprint. Chained offsets overrun easily: the first
+      pass cantilevered the alternator 0.10 m past the skid end and stood the control panel off the
+      edge. A runtime assertion now guards the chain.
+    threshold: 0.80
+  - id: breathing-and-exhaust
+    desc: >
+      Air filter and intake hose on the intake side; bank manifolds into the turbo; bellows into a
+      strapped, stood-off silencer on the exhaust side. A genset with no visible air path is a prop.
+    threshold: 0.78
+  - id: alternator-stays-readable
+    desc: >
+      Housing louvres, terminal box and output bars visible from the catalog camera. The panel was
+      moved off the alternator end for exactly this reason.
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 120          # measured 79
+    tris: 12000         # measured 4,114
+
+camera:
+  azimuth_deg: 46
+  elevation_deg: 14
+  fov: 38
+  target_y_m: 1.00
+  radius_m: 8.4
+
+lighting: house-rig, UNMODIFIED
+  # DELIBERATE NON-DEVIATION, and worth recording because the six cabinet assets in this family all
+  # needed the opposite. Those are large vertical planes, so they reflect the dark lower hemisphere
+  # and need a panel-normal fill plus environmentIntensity 2.2. This subject is horizontal and
+  # mostly curved, so it already catches the upper IBL the house rig was calibrated against.
+  # environmentIntensity stays at 1.9 and there is NO extra fill. Applying the cabinet rescue here
+  # would have flattened the engine's form for no reason.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "VENTILADOR"        # gated per-frame radiator-fan spin
+  - "ESCAPE"            # exhaust line on/off
+  - "FALLA (ISA-101)"
+
+colorTarget:
+  # MEASURED from the headless SwiftShader capture at 1280x800. The scored surface is the painted
+  # engine block, which IS this asset's identity material and is visible in the default state —
+  # unlike the cabinet assets, where the identity material hides behind a door.
+  srgb: [56, 97, 135]
+  deltaE00Max: 8
+  crop: "20x16+496+392"   # clean engine block flank, at 1280x800 (per-channel std 0.16)
+
+verification:
+  gate: "node disenos/catalog/tools/verify-catalog-asset.mjs electricos/generador-diesel"
+  state_probe: "node disenos/catalog/tools/probe-state.mjs electricos/generador-diesel btnFan,btnExh"
+  measured: {ready: true, calls: 79, triangles: 4114, console_errors: 0, shadowAuto: false}
+  # Two defects the gate could not see, both caught by reading the capture rather than the counts:
+  #   1. the chained drive-line offsets overran the skid, cantilevering the alternator 0.10 m off
+  #      its own base — now guarded by a console.assert on the chain;
+  #   2. the control panel stood directly in front of the alternator's terminal box and louvres,
+  #      hiding the generating half of the machine from the only camera it is viewed from.
+  known_flake: >
+    The gate fetches three.js from unpkg. A CDN hiccup surfaces as ready:false / error:'no-renderer'
+    with an EMPTY console-error list and zero __ globals. Seen twice while building this family.
+    Re-run before believing it.

@@ -1,0 +1,358 @@
+<!doctype html>
+<!--
+  generador-diesel — catalog asset, family `electricos`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Spec: ./design-spec.yaml
+  NOTE: this is the first HORIZONTAL subject in the family — the previous six are all vertical
+  cabinets. The genset reads along its axis: radiator, engine, coupling, alternator, control panel,
+  all sitting on a base fuel tank. Get that order wrong and no amount of detail rescues it.
+  The open (unhoused) configuration is deliberate: an enclosed set would hide the entire drive line.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grupo electrógeno diésel — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.025 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Grupo electrógeno diésel — configuración abierta sobre tanque base</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· bloque pintado · radiador de aluminio · escape aislado</span></div>
+  <div class="dim">4.00 × 1.55 × 2.30 m · radiador → motor → acople → alternador → tablero</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnFan">VENTILADOR</button>
+  <button id="btnExh" class="on">ESCAPE</button>
+  <button id="btnAlm">FALLA (ISA-101)</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const SKID_L = 4.00, SKID_W = 1.55, TANK_H = 0.55;
+const RAIL_Y = TANK_H, RAIL_H = 0.09;
+const DECK_Y = RAIL_Y + RAIL_H;                 // 0.64 — everything mounts on this plane
+const RAD_X0 = -SKID_L/2 + 0.10, RAD_T = 0.30;  // radiator core at the far end
+const RAD_W = 1.28, RAD_H = 1.34;
+const ENG_X0 = RAD_X0 + RAD_T + 0.52;           // fan + cowl live in the gap
+const ENG_L = 1.62, ENG_W = 0.94, ENG_H = 0.86;
+const ALT_R = 0.42, ALT_L = 1.20;
+const ALT_CX = ENG_X0 + ENG_L + 0.16 + ALT_L/2;
+// The whole drive line must FIT ON THE SKID. Chained offsets are easy to write and easy to overrun:
+// the first pass put the alternator's far end at x = 2.10 on a skid that stops at 2.00, so the
+// machine was cantilevered 0.10 m off its own base and the control panel stood past the edge.
+console.assert(ALT_CX + ALT_L/2 <= SKID_L/2 + 1e-6,
+  `drive line overruns the skid: ${(ALT_CX + ALT_L/2).toFixed(3)} > ${SKID_L/2}`);
+const EXH_Y = DECK_Y + ENG_H + 0.62;
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 14, 46);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 8.4, AZ = 0.80, EL = 0.24, TGT_Y = 1.00;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TGT_Y + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TGT_Y, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TGT_Y, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// This subject is HORIZONTAL and mostly curved, so it catches the upper IBL the house rig was
+// calibrated for. It does NOT need the vertical-plane rescue the six cabinet assets required —
+// environmentIntensity stays at the house value and there is no extra panel-normal fill.
+scene.environmentIntensity = 1.9;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(5.0, 7.0, 4.5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-4.5; sun.shadow.camera.right=4.5; sun.shadow.camera.top=4; sun.shadow.camera.bottom=-4;
+sun.shadow.camera.far = 24;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Engine block and alternator housing are PAINTED castings -> dielectric. The radiator core and
+//   the exhaust cladding are bare metal. The rubber AV mounts and hoses are dielectric too, and
+//   letting them inherit the skid metal is the usual slip.
+// ============================================================================
+const matBlock  = new THREE.MeshStandardMaterial({ color:0x2f4a63, metalness:0.0,  roughness:0.55 });
+const matBlockD = new THREE.MeshStandardMaterial({ color:0x24394d, metalness:0.0,  roughness:0.58 });
+const matAlt    = new THREE.MeshStandardMaterial({ color:0x35414b, metalness:0.0,  roughness:0.52 });
+const matSkid   = new THREE.MeshStandardMaterial({ color:0x3b4046, metalness:0.0,  roughness:0.60 });
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xb6babc, metalness:0.92, roughness:0.42 });
+const matAlu    = new THREE.MeshStandardMaterial({ color:0xc2c7ca, metalness:0.95, roughness:0.40 });
+const matRadCore= new THREE.MeshStandardMaterial({ color:0x6f7679, metalness:0.90, roughness:0.62 });
+const matExh    = new THREE.MeshStandardMaterial({ color:0xa9adb0, metalness:0.90, roughness:0.50 });
+const matRubber = new THREE.MeshStandardMaterial({ color:0x14171a, metalness:0.0,  roughness:0.78 });
+const matPlastic= new THREE.MeshStandardMaterial({ color:0x1a1d21, metalness:0.0,  roughness:0.52 });
+const matCopper = new THREE.MeshStandardMaterial({ color:0xf0a67a, metalness:1.0,  roughness:0.34 });
+const matPaint  = new THREE.MeshStandardMaterial({ color:0xcfd2cc, metalness:0.0,  roughness:0.55 });
+const matLabel  = new THREE.MeshStandardMaterial({ color:0xf2f3ef, metalness:0.0,  roughness:0.70 });
+const matScreen = new THREE.MeshStandardMaterial({ color:0x0d1a16, metalness:0.0,  roughness:0.16,
+                                                   emissive:0x0a2a22, emissiveIntensity:0.9 });
+// ISA-101 §3.4
+const matLampOff = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4 });
+const matLampRun = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                    emissive:0x0d3a2a, emissiveIntensity:1.0 });
+const matLampAlm = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                    emissive:0xff2233, emissiveIntensity:1.6 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xforms, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = im.receiveShadow = true;
+  xforms.forEach((t,i)=>{
+    _p.set(t[0], t[1], t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0));
+    _s.set(t[6]??1, t[7]??1, t[8]??1);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s));
+  });
+  im.instanceMatrix.needsUpdate = true;
+  parent.add(im); return im;
+}
+function box(w,h,d,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+function cylX(r,h,seg,mat,x,y,z,parent){          // cylinder whose axis runs along X
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.z = Math.PI/2;
+  (parent||root).add(m); return m;
+}
+function cylY(r,h,seg,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+
+// --- base fuel tank + skid rails + AV mounts ---
+box(SKID_L, TANK_H, SKID_W, matSkid, 0, TANK_H/2, 0);
+box(SKID_L + 0.04, 0.05, SKID_W + 0.04, matSteel, 0, TANK_H - 0.025, 0);            // tank top flange
+for(const sz of [-1, 1]) box(SKID_L, RAIL_H, 0.14, matSteel, 0, RAIL_Y + RAIL_H/2, sz*(SKID_W/2 - 0.16));
+cylY(0.075, 0.10, 14, matPlastic, -SKID_L/2 + 0.55, TANK_H + 0.05, SKID_W/2 - 0.20);  // fill cap
+box(0.10, 0.30, 0.05, matPlastic, -SKID_L/2 + 0.30, TANK_H/2, SKID_W/2 + 0.005);      // level gauge
+box(0.34, 0.18, 0.05, matLabel,  0.90, TANK_H/2, SKID_W/2 + 0.005);                   // rating plate
+const avm = [];
+for(const sx of [-0.75, -0.15, 0.55, 1.15]) for(const sz of [-1, 1])
+  avm.push([sx, DECK_Y + 0.035, sz*(SKID_W/2 - 0.16)]);
+instanced(new THREE.CylinderGeometry(0.055, 0.055, 0.07, 12), matRubber, avm, root);
+
+// --- radiator: core + header tanks + guard, then the fan in the gap toward the engine ---
+const RAD_CX = RAD_X0 + RAD_T/2, RAD_CY = DECK_Y + RAD_H/2;
+box(RAD_T, RAD_H, RAD_W, matRadCore, RAD_CX, RAD_CY, 0);
+for(const sy of [-1, 1]) box(RAD_T + 0.06, 0.13, RAD_W + 0.04, matAlu, RAD_CX, RAD_CY + sy*(RAD_H/2 - 0.06), 0);
+for(const sz of [-1, 1]) box(RAD_T + 0.06, RAD_H, 0.06, matAlu, RAD_CX, RAD_CY, sz*(RAD_W/2 + 0.02));
+// core striations — a radiator modelled as a smooth slab reads as a wall
+const radBars = [];
+for(let z = -RAD_W/2 + 0.05; z <= RAD_W/2 - 0.05; z += 0.055)
+  radBars.push([RAD_CX - RAD_T/2 - 0.006, RAD_CY, z]);
+instanced(new THREE.BoxGeometry(0.012, RAD_H - 0.16, 0.014), matAlu, radBars, root);
+// fan cowl + the fan itself (the animated part)
+const COWL_CX = RAD_X0 + RAD_T + 0.26;
+box(0.05, RAD_H - 0.10, RAD_W - 0.06, matPaint, COWL_CX + 0.20, RAD_CY, 0);
+const fanHub = new THREE.Group(); fanHub.position.set(COWL_CX, RAD_CY, 0);
+cylX(0.085, 0.10, 12, matPlastic, 0, 0, 0, fanHub);
+for(let b=0;b<8;b++){
+  const a = b*Math.PI*2/8;
+  const bl = box(0.020, 0.28, 0.11, matPlastic, 0, Math.cos(a)*0.30, Math.sin(a)*0.30, fanHub);
+  bl.rotation.set(a, 0, 0); bl.rotation.x += 0.45;
+}
+root.add(fanHub);
+for(const sz of [-1, 1]) box(0.03, RAD_H, 0.03, matSteel, COWL_CX + 0.10, RAD_CY, sz*(RAD_W/2 - 0.04));
+
+// --- engine: block, head banks, oil pan, turbo, air filter, exhaust manifold, starter ---
+const ENG_CX = ENG_X0 + ENG_L/2, ENG_CY = DECK_Y + ENG_H/2;
+box(ENG_L, ENG_H, ENG_W, matBlock, ENG_CX, ENG_CY, 0);
+box(ENG_L - 0.10, 0.20, ENG_W + 0.06, matBlockD, ENG_CX, DECK_Y + 0.10, 0);          // oil pan
+for(const sz of [-1, 1]){                                                             // V head banks
+  box(ENG_L - 0.24, 0.30, 0.34, matBlockD, ENG_CX, DECK_Y + ENG_H + 0.10, sz*0.26);
+  const covers = [];
+  for(let k=0;k<6;k++) covers.push([ENG_X0 + 0.22 + k*0.24, DECK_Y + ENG_H + 0.27, sz*0.26]);
+  instanced(new THREE.BoxGeometry(0.16, 0.06, 0.28), matBlock, covers, root);         // rocker covers
+  // exhaust manifold running the length of each bank, into the turbo
+  cylX(0.055, ENG_L - 0.30, 12, matExh, ENG_CX, DECK_Y + ENG_H + 0.02, sz*0.50);
+}
+cylX(0.15, 0.30, 16, matExh, ENG_X0 + 0.16, DECK_Y + ENG_H + 0.06, 0.50);            // turbo
+cylY(0.13, 0.22, 16, matExh, ENG_X0 + 0.16, DECK_Y + ENG_H + 0.22, 0.50);
+cylX(0.19, 0.46, 16, matPlastic, ENG_X0 + 0.42, DECK_Y + ENG_H + 0.30, -0.46);       // air filter canister
+cylX(0.09, 0.34, 12, matRubber, ENG_X0 + 0.74, DECK_Y + ENG_H + 0.26, -0.46);        // intake hose
+cylX(0.11, 0.34, 12, matSteel, ENG_X0 + 0.30, DECK_Y + 0.26, -ENG_W/2 - 0.10);       // starter motor
+box(0.20, 0.24, 0.16, matPlastic, ENG_X0 + 0.95, DECK_Y + 0.24, ENG_W/2 + 0.10);     // oil filter head
+// coolant hoses radiator <-> engine, top and bottom
+for(const sy of [DECK_Y + ENG_H - 0.05, DECK_Y + 0.22])
+  cylX(0.055, ENG_X0 - RAD_X0 - RAD_T - 0.10, 10, matRubber, (RAD_X0 + RAD_T + ENG_X0)/2 + 0.05, sy, -0.34);
+
+// --- coupling / bellhousing, then the alternator ---
+box(0.16, 0.70, 0.70, matBlockD, ENG_X0 + ENG_L + 0.08, DECK_Y + 0.42, 0);
+cylX(ALT_R, ALT_L, 24, matAlt, ALT_CX, DECK_Y + ALT_R + 0.04, 0);
+for(const sx of [-1, 1]) cylX(ALT_R + 0.03, 0.06, 24, matBlockD, ALT_CX + sx*(ALT_L/2 - 0.03), DECK_Y + ALT_R + 0.04, 0);
+// alternator cooling louvres around the housing — real repetition, so instanced
+const louv = [];
+for(let k=0;k<18;k++){
+  const a = k*Math.PI*2/18;
+  louv.push([ALT_CX - ALT_L/2 + 0.14, DECK_Y + ALT_R + 0.04 + Math.cos(a)*(ALT_R + 0.004),
+             Math.sin(a)*(ALT_R + 0.004), a, 0, 0]);
+}
+instanced(new THREE.BoxGeometry(0.16, 0.010, 0.055), matBlock, louv, root);
+box(0.44, 0.30, 0.46, matAlt, ALT_CX + 0.10, DECK_Y + 2*ALT_R + 0.12, 0);            // terminal box
+for(let k=0;k<3;k++)                                                                  // output bars
+  box(0.05, 0.10, 0.014, matCopper, ALT_CX + 0.10, DECK_Y + 2*ALT_R + 0.12, -0.10 + k*0.10);
+// feet clamping the alternator to the rails
+for(const sz of [-1, 1]) box(0.50, 0.10, 0.14, matAlt, ALT_CX, DECK_Y + 0.05, sz*0.42);
+
+// --- exhaust line (togglable): flexible bellows, silencer, tail pipe ---
+const exhaust = new THREE.Group();
+cylX(0.085, 0.30, 12, matRubber, ENG_X0 + 0.16, EXH_Y - 0.30, 0.50, exhaust);        // riser + flex
+cylY(0.085, 0.60, 12, matExh, ENG_X0 + 0.16, EXH_Y - 0.34, 0.50, exhaust);
+cylX(0.20, 1.30, 20, matExh, ENG_CX + 0.20, EXH_Y, 0.50, exhaust);                   // silencer body
+for(const sx of [-1, 1]) cylX(0.115, 0.22, 16, matExh, ENG_CX + 0.20 + sx*0.74, EXH_Y, 0.50, exhaust);
+cylX(0.09, 0.50, 12, matExh, ENG_CX + 1.18, EXH_Y, 0.50, exhaust);                   // tail pipe
+for(const sx of [-0.35, 0.35])                                                        // silencer straps
+  box(0.035, 0.44, 0.44, matSteel, ENG_CX + 0.20 + sx, EXH_Y, 0.50, exhaust);
+for(const sx of [-0.35, 0.35])                                                        // support stands
+  box(0.05, EXH_Y - DECK_Y - ENG_H - 0.22, 0.05, matSteel,
+      ENG_CX + 0.20 + sx, (DECK_Y + ENG_H + 0.22 + EXH_Y - 0.22)/2, 0.72, exhaust);
+root.add(exhaust);
+
+// --- control panel on a stand at the alternator end ---
+const lamps = [];
+{
+  // Panel stands over the COUPLING, not over the alternator. Parked at the alternator end it sat
+  // directly in front of the terminal box and the housing louvres, hiding the two details that
+  // identify the machine's generating half from the catalog camera.
+  const PX = ENG_X0 + ENG_L + 0.08, PZ = SKID_W/2 + 0.30, PY = DECK_Y + 0.86;
+  for(const sz of [-1, 1]) box(0.06, 0.86, 0.06, matSteel, PX + sz*0.20, DECK_Y + 0.43, PZ);
+  box(0.58, 0.72, 0.26, matPaint, PX, PY + 0.36, PZ);
+  box(0.34, 0.22, 0.010, matScreen, PX, PY + 0.56, PZ + 0.132);
+  for(let k=0;k<4;k++){
+    const l = cylY(0.015, 0.014, 12, matLampOff, PX - 0.18 + k*0.12, PY + 0.36, PZ + 0.132);
+    l.rotation.x = Math.PI/2;
+    l.userData.role = k===0 ? 'run' : (k===3 ? 'alarm' : 'aux');
+    lamps.push(l);
+  }
+  cylY(0.032, 0.020, 16, matPlastic, PX - 0.16, PY + 0.16, PZ + 0.135).rotation.x = Math.PI/2;
+  cylY(0.028, 0.018, 16, matPlastic, PX + 0.02, PY + 0.16, PZ + 0.135).rotation.x = Math.PI/2;
+  box(0.24, 0.05, 0.006, matLabel, PX, PY + 0.06, PZ + 0.134);
+}
+
+// --- battery box + lifting eyes ---
+box(0.46, 0.30, 0.34, matPlastic, ALT_CX - 0.40, DECK_Y + 0.15, -SKID_W/2 - 0.02);
+for(const sx of [-1, 1]) box(0.05, 0.05, 0.30, matCopper, ALT_CX - 0.40 + sx*0.16, DECK_Y + 0.31, -SKID_W/2 - 0.02);
+const eyes = [];
+for(const sx of [-1, 1]) for(const sz of [-1, 1])
+  eyes.push([sx*(SKID_L/2 - 0.25), TANK_H + 0.02, sz*(SKID_W/2 - 0.12), Math.PI/2, 0, 0]);
+instanced(new THREE.TorusGeometry(0.045, 0.012, 8, 16), matSteel, eyes, root);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+let fanOn = false;
+const btnFan = document.getElementById('btnFan');
+btnFan.onclick = ()=>{ fanOn = !fanOn; btnFan.classList.toggle('on', fanOn); requestRender(); };
+
+const btnExh = document.getElementById('btnExh');
+btnExh.onclick = ()=>{ exhaust.visible = !exhaust.visible;
+  btnExh.classList.toggle('on', exhaust.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnAlm = document.getElementById('btnAlm');
+let alarm = false;
+btnAlm.onclick = ()=>{
+  alarm = !alarm; btnAlm.classList.toggle('on', alarm);
+  lamps.forEach(l=>{ const r = l.userData.role;
+    l.material = alarm ? (r === 'alarm' ? matLampAlm : matLampOff)
+                       : (r === 'run'   ? matLampRun : matLampOff); });
+  requestRender();
+};
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  // gated per-frame animation: the fan holds needsRender true ONLY while it is running
+  if(fanOn){ fanHub.rotation.x += 0.26; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__generadorDieselApp = __app;
+globalThis['__generador-dieselApp'] = __app;       // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
