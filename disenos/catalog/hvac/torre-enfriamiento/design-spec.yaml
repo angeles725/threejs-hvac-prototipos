@@ -1,0 +1,242 @@
+# DesignSpec — induced-draft COUNTERFLOW cooling tower (FRP, square plan)
+# Third asset of the catalog `hvac` family.
+# EVIDENCE: `hvac` is not a needs-research family and no manufacturer datasheet is preserved for
+# this asset, so the only certified anchor is research/HANDBOOK.md §3.0 ("Torre de enfriamiento |
+# 4-6 m alto"). Everything below that is a coherent [INFER] inside the envelope, marked as such.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: torre-enfriamiento
+family: hvac
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 17 -> moderate/complex boundary.
+  scores: {silhouette: 2, components: 3, hierarchy: 1, repetition: 3,
+           material_layers: 2, detail: 2, occlusion: 3, action_readiness: 1}
+  tier: moderate
+  notes: >
+    The identity is a THREE-BAND stack: wet basin, louvred air inlet, casing, and a fan stack on
+    top. repetition 3: louvre blades (48), fill sheets (22), eliminator blades (13) and ladder
+    rungs (11) are all genuine repetition and all instanced. occlusion 3: fill and eliminators
+    only exist for the CORTE state, which is exactly why that state must be reviewed as a capture.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    palette: "research/HANDBOOK.md §3.1 (near-binary metalness; FRP/PVC are DIELECTRIC)"
+    interior_lamp: "disenos/catalog/hvac/manejadora-ahu (same fix for a revealed interior)"
+
+references:
+  - source: "research/HANDBOOK.md §3.0 (tabla de dimensiones de referencia)"
+    evidences: "[CERT] 'Torre de enfriamiento | 4-6 m alto' — the envelope this asset sits inside (4.62 m)."
+    suitability: pass
+  - source: "research/HANDBOOK.md §3.1 (paleta PBR corregida)"
+    evidences: >
+      [CERT] Near-binary metalness. FRP casing, PVC fill, PVC louvres and eliminators are
+      plastics -> metalness 0.0; only the structural frame, stack ring, hub and pipework are
+      bare metal 0.9-1.0.
+    suitability: pass
+  - source: "research/HANDBOOK.md §3.3 (rig key/fill/rim)"
+    evidences: "[CERT] The house rig this asset deviates from, and by how much (see `lighting`)."
+    suitability: pass
+
+dimensions_real:
+  plan_m:          {value: [3.00, 3.00], confidence: low}   # [INFER] square cell
+  overall_height_m:{value: 4.62, confidence: med}           # [CERT] inside the 4-6 m band, §3.0
+  basin_depth_m:   {value: 0.80, confidence: low}           # [INFER] cold-water basin + freeboard
+  basin_wall_t_m:  {value: 0.10, confidence: low}           # [INFER] FRP pan wall
+  louvre_band_m:   {value: [0.90, 1.80], confidence: low}   # [INFER] air inlet, y0..y1, all four sides
+  louvre_blades:   {value: 12, confidence: low}             # [INFER] per side; 48 total
+  fill_pack_m:     {value: [1.95, 2.80], confidence: low}   # [INFER] film fill height band
+  fill_sheets:     {value: 22, confidence: low}             # [INFER] sheet pitch inside the cell
+  eliminator_y_m:  {value: 3.06, confidence: low}           # [INFER] above the distribution
+  distribution_y_m:{value: 3.30, confidence: low}           # [INFER] header + 12 downward nozzles
+  fan_diameter_m:  {value: 1.84, confidence: low}           # [INFER] sized to the cell
+  stack_height_m:  {value: 0.92, confidence: low}           # [INFER] velocity-recovery stack
+  handrail_h_m:    {value: 1.06, confidence: med}           # [INFER] a working platform needs a real rail
+
+hierarchy:
+  - name: root
+    children:
+      - name: basin           # steel sub-base, FRP pan, water surface, suction sump screen
+        pivot: [0, 0, 0]
+        animation: none
+      - name: frame           # galvanised corner posts + perimeter rails
+        pivot: [0, 0, 0]
+        animation: none
+      - name: casing          # FRP panels above and below the louvre band + horizontal joint strips
+        pivot: [0, 0, 0]      # the +Z pair is removable -> CORTE
+        animation: none
+      - name: louvres         # 48 PVC inlet blades, ONE InstancedMesh across all four sides
+        pivot: [0, 0, 0]
+        animation: none
+      - name: guts            # fill pack, support grid, drift eliminators, distribution + nozzles
+        pivot: [0, 0, 0]
+        animation: none
+      - name: deck            # fan deck ring, stack, stack ring, beams, gearbox, motor, drive shaft
+        pivot: [0, 0, 0]
+        animation: none
+        children:
+          - name: rotor
+            pivot: [0, 4.26, 0]        # vertical axis, high in the stack throat
+            animation: spin
+      - name: access          # top handrail + side ladder (instanced rungs)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: pipes           # hot-water riser + elbow into the header, cold-water outlet, makeup float
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: frp-casing
+    family: plastic
+    color: "#c4cad0"
+    metalness: 0.0
+    roughness: 0.58
+    evidence: "HANDBOOK §3.1 — FRP is a dielectric; metalness 0, never an intermediate value"
+    confidence: 0.85
+  - id: frp-joint-strip
+    family: plastic
+    color: "#9aa3ab"
+    metalness: 0.0
+    roughness: 0.62
+    evidence: "HANDBOOK §3.1 dielectric; darker so the bolted-sheet construction reads"
+    confidence: 0.8
+  - id: galvanised-frame
+    family: bare-metal
+    color: "#b9c0c4"
+    metalness: 0.95
+    roughness: 0.42
+    evidence: "HANDBOOK §3.1 `skid` -> 0.9-1.0 (acero galvanizado)"
+    confidence: 0.85
+  - id: pvc-louvre
+    family: plastic
+    color: "#6f7a84"
+    metalness: 0.0
+    roughness: 0.72
+    evidence: "HANDBOOK §3.1 dielectric; louvres and eliminators are the same PVC family"
+    confidence: 0.8
+  - id: pvc-fill
+    family: plastic
+    color: "#59636d"
+    metalness: 0.0
+    roughness: 0.80
+    evidence: "HANDBOOK §3.1 dielectric; film fill is thin PVC sheet"
+    confidence: 0.8
+  - id: frp-fan-blade
+    family: plastic
+    color: "#7f878e"
+    metalness: 0.0
+    roughness: 0.45
+    evidence: "HANDBOOK §3.1 dielectric"
+    confidence: 0.75
+    note: >
+      Deliberately DARKER than the stack. The first pass used a near-white blade (#d8dee2) inside
+      a near-white stack and the fan was invisible even after it was un-occluded.
+  - id: basin-water
+    family: water
+    color: "#2f6f7a"
+    metalness: 0.0
+    roughness: 0.12
+    evidence: >
+      HANDBOOK §3.1 `water` correction: dielectric, metalness 0 — modelled as MeshPhysicalMaterial
+      with transmission, not as a metal with a blue tint.
+    confidence: 0.75
+  - id: steel-pipe
+    family: bare-metal
+    color: "#b2b9bd"
+    metalness: 0.95
+    roughness: 0.40
+    evidence: "HANDBOOK §3.1 bare metal"
+    confidence: 0.8
+
+critical_features:
+  - id: three-band-silhouette
+    desc: >
+      Basin, louvred inlet band and casing stack read as three distinct bands, with the fan stack
+      as a separate cylinder above the deck — not one uniform box.
+    threshold: 0.80
+  - id: open-stack-with-fan
+    desc: >
+      The stack is OPEN and the fan is visible inside it. A solid cap over the stack is a hard
+      fail: it is what the first build shipped and it hid the whole drive train.
+    threshold: 0.85
+  - id: louvre-band-density
+    desc: "The inlet reads as a close-pitch louvre (12 blades per side), not a sparse grille with daylight through it."
+    threshold: 0.75
+  - id: internals-on-cut
+    desc: >
+      With CORTE on, the fill pack (vertical sheet stack), the fill support grid, the drift
+      eliminators and the distribution nozzles are all readable.
+    threshold: 0.78
+  - id: carried-pipework
+    desc: >
+      The hot-water riser is bracketed back to the casing at three heights and turns into the
+      distribution header through an elbow — it must not float alongside the tower.
+    threshold: 0.72
+  - id: proportion-scale
+    desc: "At 3.00 x 3.00 x 4.62 m a 1.8 m person reaches roughly the top of the louvre band; the ladder rungs are at human pitch."
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 250      # measured 235 at the review camera (SwiftShader headless, DPR 1)
+    tris: 30000     # measured 8,472
+
+camera:
+  azimuth_deg: 46
+  elevation_deg: 23    # RAISED from 16: at 16 the near stack rim occluded the fan entirely
+  fov: 38
+  target_y_m: 2.10
+  radius_m: 9.6
+
+lighting: house-rig + vertical-subject fill + interior lamp
+  # DEVIATION 1: camera-side DirectionalLight mirrored about the front normal (+Z) and
+  # environmentIntensity 1.9 -> 2.1, because 3.6 m of vertical casing plus a galvanised frame
+  # otherwise reflects the dark horizon and reads flat grey. Metalness/roughness unchanged.
+  # DEVIATION 2: a shadowless PointLight inside the cell, so the CORTE state shows fill and
+  # eliminators instead of a black cavity.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "VENTILADOR"   # rotor spins on the vertical axis; holds needsRender while running
+  - "CORTE"        # removes the +Z casing panels -> fill, eliminators, distribution
+  - "HIDRÁULICA"   # hides riser, outlet, makeup and their brackets
+
+instancing:
+  # block54 §2.3 — instancing ONLY where the repetition is real.
+  - what: "inlet louvre blades"
+    count: "12 per side x 4 sides"
+    draws_saved: "48 meshes -> 1 (one InstancedMesh, per-side rotation baked into the matrices)"
+  - what: "film fill sheets"
+    count: 22
+    draws_saved: "22 meshes -> 1"
+  - what: "drift eliminator blades"
+    count: 13
+    draws_saved: "13 meshes -> 1"
+  - what: "ladder rungs"
+    count: 11
+    draws_saved: "11 meshes -> 1"
+  - what: "fan blades"
+    count: 6
+    draws_saved: "6 meshes -> 1"
+  # NOT instanced: nozzles (12, but each is a 2-part assembly), frame members, pipework.
+
+colorTarget:
+  # MEASURED from the rendered FRP casing (headless SwiftShader capture at 1280x800), then frozen
+  # as the regression anchor. Not a guessed sRGB.
+  srgb: [225, 227, 230]
+  deltaE00Max: 8
+  crop: "90x60+460+340"     # clean casing sheet between two joint strips, at 1280x800
+  secondary_observed:
+    louvre_band: [192, 198, 204]   # 90x50+470+470 — must stay DARKER than the casing, or the
+                                   # inlet band stops reading as an opening
+    galv_frame:  [83, 90, 95]      # 8x120+640+300 — the corner post

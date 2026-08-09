@@ -1,0 +1,372 @@
+<!doctype html>
+<!--
+  torre-enfriamiento — catalog asset, family `hvac`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional anchor: research/HANDBOOK.md §3.0 ("Torre de enfriamiento | 4-6 m alto").
+  Type: induced-draft COUNTERFLOW tower — air in through louvres on all four sides at the base,
+  up through the fill against the falling water, out of the top fan stack.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Torre de enfriamiento — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Torre de enfriamiento — tiro inducido, contraflujo</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· relleno · eliminadores · chimenea de ventilador</span></div>
+  <div class="dim">3.00 × 3.00 × 4.62 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnFan">VENTILADOR</button>
+  <button id="btnCut">CORTE</button>
+  <button id="btnPipe">HIDRÁULICA</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const S = 3.00, HS = S/2;                  // square plan 3.00 x 3.00 m
+const BASIN_H = 0.80, BASIN_T = 0.10;      // cold-water basin depth / wall thickness
+const CAS_Y0 = BASIN_H, CAS_Y1 = 3.60;     // casing band
+const LOUV_Y0 = 0.90, LOUV_Y1 = 1.80;      // air-inlet louvre band, all four sides
+const FILL_Y0 = 1.95, FILL_Y1 = 2.80;      // film fill pack
+const ELIM_Y = 3.06;                       // drift eliminators
+const DIST_Y = 3.30;                       // hot-water distribution header + nozzles
+const STACK_Y0 = CAS_Y1, STACK_H = 0.92;   // fan stack (velocity recovery cylinder)
+const FAN_R = 0.92;                        // induced-draft fan
+const TOP = STACK_Y0 + STACK_H;            // 4.52 m; handrail takes it to 4.62
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 16, 48);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 9.6, AZ = 0.80, EL = 0.40;   // raised: at 16 deg the near stack rim occluded the fan entirely
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 2.10 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 2.10, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 2.10, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.1;   // tall vertical subject — see the fill light note below
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(6, 10, 5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-5; sun.shadow.camera.right=5; sun.shadow.camera.top=6; sun.shadow.camera.bottom=-2;
+scene.add(sun);
+// VERTICAL-SUBJECT DEVIATION from the house rig (design-spec.yaml `lighting`): 3.6 m of vertical
+// casing plus a galvanised structural frame. Camera-side fill mirrored about the front normal (+Z)
+// so the bare steel is not a flat grey silhouette; metalness/roughness unchanged (HANDBOOK §3.1).
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.15);
+fill.position.set(-5.0, 4.0, 7.0);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+// Interior lamp (shadowless): with CORTE on, the fill pack and eliminators face away from every
+// rig light. Same fix as manejadora-ahu — inside the box, so the exterior read is untouched.
+const innerLamp = new THREE.PointLight(0xe6eef8, 12, 5.0, 2);
+innerLamp.position.set(0.20, 2.40, 0.30);
+scene.add(innerLamp);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   FRP casing / basin, PVC fill, PVC louvres and eliminators are DIELECTRIC (0.0) — they are
+//   plastics, not metal. Only the structural frame, the stack ring, the fan hub, the motor
+//   guard and the pipework are bare metal (0.9-1.0).
+// ============================================================================
+const matFRP    = new THREE.MeshStandardMaterial({ color:0xc4cad0, metalness:0.0,  roughness:0.58 });
+const matFRPdk  = new THREE.MeshStandardMaterial({ color:0x9aa3ab, metalness:0.0,  roughness:0.62 });
+const matGalv   = new THREE.MeshStandardMaterial({ color:0xb9c0c4, metalness:0.95, roughness:0.42 });
+const matGalvDk = new THREE.MeshStandardMaterial({ color:0x8e969b, metalness:0.95, roughness:0.50 });
+const matPVC    = new THREE.MeshStandardMaterial({ color:0x6f7a84, metalness:0.0,  roughness:0.72 });
+const matFill   = new THREE.MeshStandardMaterial({ color:0x59636d, metalness:0.0,  roughness:0.80 });
+const matMotor  = new THREE.MeshStandardMaterial({ color:0x2c343d, metalness:0.0,  roughness:0.55 });
+const matBlade  = new THREE.MeshStandardMaterial({ color:0x7f878e, metalness:0.0,  roughness:0.45 });  // FRP fan blade: kept DARKER than the stack, or a white blade on a white stack is invisible
+const matPipe   = new THREE.MeshStandardMaterial({ color:0xb2b9bd, metalness:0.95, roughness:0.40 });
+const matValve  = new THREE.MeshStandardMaterial({ color:0x8f3b2a, metalness:0.0,  roughness:0.50 });
+const matWater  = new THREE.MeshPhysicalMaterial({ color:0x2f6f7a, metalness:0.0, roughness:0.12,
+                                                   transmission:0.6, thickness:0.3, transparent:true, opacity:0.7 });
+const matDark   = new THREE.MeshStandardMaterial({ color:0x1b1f23, metalness:0.0,  roughness:0.72 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=18)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+// the four side normals, used for louvres and for the removable casing panels
+const SIDES = [{a:0, nx:0, nz:1}, {a:Math.PI/2, nx:1, nz:0}, {a:Math.PI, nx:0, nz:-1}, {a:-Math.PI/2, nx:-1, nz:0}];
+
+// --- cold-water basin: FRP pan on a steel sub-base, with sump and water surface ---
+const basin = new THREE.Group();
+put(basin, S + 0.20, 0.12, S + 0.20, matGalvDk, 0, 0.06, 0);                    // steel sub-base
+put(basin, S, BASIN_T, S, matFRP, 0, 0.12 + BASIN_T/2, 0);                      // pan floor
+for(const {nx, nz} of SIDES)
+  put(basin, nz ? S : BASIN_T, BASIN_H - 0.12, nz ? BASIN_T : S, matFRP,
+      nx*(HS - BASIN_T/2), 0.12 + (BASIN_H - 0.12)/2, nz*(HS - BASIN_T/2));
+const water = new THREE.Mesh(new THREE.BoxGeometry(S - 2*BASIN_T, 0.02, S - 2*BASIN_T), matWater);
+water.position.set(0, BASIN_H - 0.26, 0); basin.add(water);
+put(basin, 0.62, 0.24, 0.62, matGalvDk, -0.55, 0.30, 0.55);                     // suction sump screen
+root.add(basin);
+
+// --- structural frame: corner posts + top and mid rails (galvanised) ---
+const frame = new THREE.Group();
+for(const sx of [-1,1]) for(const sz of [-1,1]){
+  put(frame, 0.09, CAS_Y1 - BASIN_H, 0.09, matGalv, sx*(HS - 0.045), (CAS_Y1 + BASIN_H)/2, sz*(HS - 0.045));
+}
+for(const y of [CAS_Y1 - 0.05, LOUV_Y1 + 0.06, BASIN_H + 0.05]){
+  for(const {nx, nz} of SIDES)
+    put(frame, nz ? S : 0.07, 0.07, nz ? 0.07 : S, matGalv, nx*(HS - 0.035), y, nz*(HS - 0.035));
+}
+root.add(frame);
+
+// --- casing: FRP panels above the louvre band, one per side (the -Z panel is the CORTE panel) ---
+const casing = new THREE.Group();
+const cutPanels = [];
+for(const {nx, nz} of SIDES){
+  const upper = put(casing, nz ? S - 0.09 : 0.05, CAS_Y1 - LOUV_Y1 - 0.12, nz ? 0.05 : S - 0.09, matFRP,
+                    nx*(HS - 0.03), (CAS_Y1 + LOUV_Y1)/2 - 0.03, nz*(HS - 0.03));
+  const lower = put(casing, nz ? S - 0.09 : 0.05, LOUV_Y0 - BASIN_H - 0.02, nz ? 0.05 : S - 0.09, matFRP,
+                    nx*(HS - 0.03), (LOUV_Y0 + BASIN_H)/2, nz*(HS - 0.03));
+  if(nz === 1) cutPanels.push(upper, lower);            // the +Z face is the one CORTE removes
+}
+// horizontal panel joints: an FRP casing is bolted-up sheets, not one moulded face
+for(const y of [2.10, 2.70, 3.30]) for(const {nx, nz} of SIDES)
+  put(casing, nz ? S - 0.09 : 0.035, 0.05, nz ? 0.035 : S - 0.09, matFRPdk,
+      nx*(HS - 0.012), y, nz*(HS - 0.012));
+root.add(casing);
+
+// --- air-inlet louvres: PVC blades on all four sides, ONE InstancedMesh (real repetition) ---
+const NL = 12, lStep = (LOUV_Y1 - LOUV_Y0) / NL;
+const louvGeo = new THREE.BoxGeometry(S - 0.20, 0.022, 0.19);
+const louvres = new THREE.InstancedMesh(louvGeo, matPVC, NL * SIDES.length);
+let li = 0;
+for(const {a, nx, nz} of SIDES){
+  for(let i=0;i<NL;i++){
+    _q.setFromEuler(new THREE.Euler(-0.50, a, 0, 'YXZ'));      // blades tilted down and outward
+    _p.set(nx*(HS - 0.09), LOUV_Y0 + (i + 0.5) * lStep, nz*(HS - 0.09));
+    louvres.setMatrixAt(li++, _m.compose(_p, _q, _s));
+  }
+}
+louvres.instanceMatrix.needsUpdate = true; louvres.castShadow = louvres.receiveShadow = true;
+root.add(louvres);
+
+// --- internals: film fill pack (instanced sheets), drift eliminators, distribution nozzles ---
+const guts = new THREE.Group();
+const NF = 22, fStep = (S - 0.44) / (NF - 1);
+const fillGeo = new THREE.BoxGeometry(0.012, FILL_Y1 - FILL_Y0, S - 0.44);
+const fillPack = new THREE.InstancedMesh(fillGeo, matFill, NF);
+for(let i=0;i<NF;i++){
+  _p.set(-(S - 0.44)/2 + i*fStep, (FILL_Y0 + FILL_Y1)/2, 0);
+  _q.setFromEuler(new THREE.Euler(0,0,0));
+  fillPack.setMatrixAt(i, _m.compose(_p, _q, _s));
+}
+fillPack.instanceMatrix.needsUpdate = true; fillPack.castShadow = fillPack.receiveShadow = true;
+guts.add(fillPack);
+put(guts, S - 0.36, 0.06, S - 0.36, matGalvDk, 0, FILL_Y0 - 0.05, 0);          // fill support grid
+// drift eliminators: a second, coarser instanced blade pack above the distribution
+const NE = 13, eStep = (S - 0.44) / (NE - 1);
+const elimGeo = new THREE.BoxGeometry(0.05, 0.16, S - 0.44);
+const elim = new THREE.InstancedMesh(elimGeo, matPVC, NE);
+for(let i=0;i<NE;i++){
+  _q.setFromEuler(new THREE.Euler(0, 0, 0.5));
+  _p.set(-(S - 0.44)/2 + i*eStep, ELIM_Y, 0);
+  elim.setMatrixAt(i, _m.compose(_p, _q, _s));
+}
+elim.instanceMatrix.needsUpdate = true; elim.castShadow = true;
+guts.add(elim);
+// hot-water distribution: header across the tower + downward spray nozzles
+cyl(guts, 0.085, S - 0.30, matPipe, 0, DIST_Y, 0, 0, Math.PI/2, 14);
+for(const nx of [-0.85, -0.28, 0.28, 0.85]) for(const nz of [-0.55, 0.0, 0.55]){
+  cyl(guts, 0.035, 0.10, matPVC, nx, DIST_Y - 0.12, nz, 0, 0, 10);
+  const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.03, 0.09, 12), matPVC);
+  cone.position.set(nx, DIST_Y - 0.21, nz); cone.castShadow = true; guts.add(cone);
+}
+root.add(guts);
+
+// --- fan deck, stack and induced-draft fan (blades instanced) ---
+const deck = new THREE.Group();
+for(const {nx, nz} of SIDES)                                                    // deck ring around the stack
+  put(deck, nz ? S : (S - FAN_R*2 - 0.12)/2, 0.06, nz ? (S - FAN_R*2 - 0.12)/2 : S, matFRPdk,
+      nx*(HS - (S - FAN_R*2 - 0.12)/4), CAS_Y1 + 0.03, nz*(HS - (S - FAN_R*2 - 0.12)/4));
+const stack = new THREE.Mesh(new THREE.CylinderGeometry(FAN_R + 0.16, FAN_R + 0.05, STACK_H, 30, 1, true),
+  new THREE.MeshStandardMaterial({ color:0xc4cad0, metalness:0.0, roughness:0.58, side:THREE.DoubleSide }));
+stack.position.set(0, STACK_Y0 + STACK_H/2, 0); stack.castShadow = stack.receiveShadow = true;
+deck.add(stack);
+// Stack RING, not a disc: CylinderGeometry is solid, so the first version capped the tower like
+// a lid and hid the fan completely — the counts stayed green the whole time.
+{ const ring = new THREE.Mesh(new THREE.TorusGeometry(FAN_R + 0.14, 0.04, 8, 34), matGalv);
+  ring.rotation.x = Math.PI/2; ring.position.set(0, TOP, 0);
+  ring.castShadow = ring.receiveShadow = true; deck.add(ring); }
+// support beams across the stack for the gearbox
+for(const sz of [-1,1]) put(deck, 2*FAN_R + 0.30, 0.09, 0.10, matGalv, 0, STACK_Y0 + 0.30, sz*0.34);
+const gearbox = put(deck, 0.34, 0.28, 0.34, matMotor, 0, STACK_Y0 + 0.48, 0);
+const motor = cyl(deck, 0.17, 0.46, matMotor, 0, STACK_Y0 + 0.34, HS - 0.30, 0, Math.PI/2, 16);
+cyl(deck, 0.045, HS - 0.62, matGalv, 0, STACK_Y0 + 0.40, (HS - 0.30 + 0.30)/2, 0, Math.PI/2, 12); // drive shaft
+const rotor = new THREE.Group();
+rotor.position.set(0, STACK_Y0 + 0.66, 0);   // induced-draft fan sits high in the stack throat
+cyl(rotor, 0.22, 0.18, matGalvDk, 0, 0, 0, 0, 0, 16);                           // hub
+const vaneGeo = new THREE.BoxGeometry(FAN_R - 0.10, 0.045, 0.22);   // tip ~0.95*FAN_R; narrow enough that 6 blades read as blades, not as a solid disc
+const vanes = new THREE.InstancedMesh(vaneGeo, matBlade, 6);
+for(let i=0;i<6;i++){
+  const a = i * Math.PI * 2 / 6;
+  _q.setFromEuler(new THREE.Euler(0, a, 0.45));                                  // blade pitch
+  _p.set(Math.cos(a) * (FAN_R/2 + 0.05), 0, Math.sin(a) * (FAN_R/2 + 0.05));
+  vanes.setMatrixAt(i, _m.compose(_p, _q, _s));
+}
+vanes.instanceMatrix.needsUpdate = true; vanes.castShadow = true;
+rotor.add(vanes);
+deck.add(rotor);
+root.add(deck);
+
+// --- handrail around the fan deck + access ladder on the -X face ---
+const access = new THREE.Group();
+for(const {nx, nz} of SIDES){
+  put(access, nz ? S : 0.05, 0.05, nz ? 0.05 : S, matGalv, nx*(HS - 0.03), TOP + 0.10, nz*(HS - 0.03));
+  put(access, nz ? S : 0.04, 0.04, nz ? 0.04 : S, matGalv, nx*(HS - 0.03), TOP - 0.36, nz*(HS - 0.03));
+}
+for(const sx of [-1,1]) for(const sz of [-1,1])
+  put(access, 0.06, 1.06, 0.06, matGalv, sx*(HS - 0.03), TOP - 0.44, sz*(HS - 0.03));
+const LADX = -(HS + 0.10);
+for(const sz of [-1,1]) put(access, 0.05, CAS_Y1 - 0.30, 0.05, matGalv, LADX, (CAS_Y1 + 0.30)/2, sz*0.24);
+{
+  const rungGeo = new THREE.BoxGeometry(0.04, 0.035, 0.46);
+  const NR = 11, y0 = 0.55, dy = (CAS_Y1 - 0.20 - y0)/(NR - 1);
+  const rungs = new THREE.InstancedMesh(rungGeo, matGalv, NR);
+  for(let i=0;i<NR;i++){ _p.set(LADX, y0 + i*dy, 0); _q.setFromEuler(new THREE.Euler(0,0,0));
+    rungs.setMatrixAt(i, _m.compose(_p, _q, _s)); }
+  rungs.instanceMatrix.needsUpdate = true; rungs.castShadow = true;
+  access.add(rungs);
+}
+root.add(access);
+
+// --- hydraulics: hot-water riser to the distribution header, cold-water outlet, makeup float ---
+const pipes = new THREE.Group();
+cyl(pipes, 0.095, 2.55, matPipe, HS + 0.22, DIST_Y - 1.28, 0.35, 0, 0, 16);       // riser
+cyl(pipes, 0.095, 0.46, matPipe, HS - 0.02, DIST_Y, 0.35, 0, Math.PI/2, 16);      // elbow leg into the header
+cyl(pipes, 0.13, 0.04, matPipe, HS + 0.22, 1.30, 0.35, 0, 0, 16);                 // flange
+for(const by of [1.70, 2.60, 3.20]){                                              // pipe brackets to the casing
+  put(pipes, 0.20, 0.05, 0.06, matGalv, HS + 0.12, by, 0.35);
+  put(pipes, 0.05, 0.16, 0.16, matGalv, HS + 0.22, by, 0.35);
+}
+{ const el = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.095, 8, 14, Math.PI/2),
+    matPipe);                                                                      // riser -> header elbow
+  el.position.set(HS + 0.06, DIST_Y - 0.16, 0.35); el.rotation.set(Math.PI/2, 0, Math.PI);
+  el.castShadow = true; pipes.add(el); }
+cyl(pipes, 0.10, 0.14, matValve, HS + 0.22, 1.10, 0.35, 0, 0, 12);                // isolation valve
+cyl(pipes, 0.13, 0.03, matValve, HS + 0.34, 1.10, 0.35, 0, Math.PI/2, 14);        // handwheel
+cyl(pipes, 0.11, 0.50, matPipe, HS + 0.30, 0.36, -0.55, 0, Math.PI/2, 16);        // cold-water outlet
+cyl(pipes, 0.145, 0.04, matPipe, HS + 0.52, 0.36, -0.55, 0, Math.PI/2, 16);
+cyl(pipes, 0.035, 0.40, matPipe, HS + 0.10, 0.66, -0.05, 0, Math.PI/2, 12);       // makeup line
+put(pipes, 0.10, 0.12, 0.16, matDark, HS - 0.06, 0.62, -0.05);                    // float valve body
+root.add(pipes);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let fanOn = false;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnFan = document.getElementById('btnFan');
+btnFan.onclick = ()=>{ fanOn = !fanOn; btnFan.classList.toggle('on', fanOn); requestRender(); };
+
+const btnCut = document.getElementById('btnCut');
+btnCut.onclick = ()=>{ const v = !cutPanels[0].visible;
+  for(const p of cutPanels) p.visible = v;
+  btnCut.classList.toggle('on', !v);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnPipe = document.getElementById('btnPipe');
+btnPipe.onclick = ()=>{ pipes.visible = !pipes.visible; btnPipe.classList.toggle('on', !pipes.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(fanOn){ rotor.rotation.y += 0.06; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__torreEnfriamientoApp = __app;
+globalThis['__torre-enfriamientoApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
