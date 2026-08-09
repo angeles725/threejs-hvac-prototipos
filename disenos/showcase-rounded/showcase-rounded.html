@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rounded Equipment Showcase — design3d toolkit</title>
+<link rel="icon" href="data:,">                     <!-- favicon 404 pollutes the console sidecar -->
+<!-- SCALE: 1 unit = 1 m · a row of 5 rounded-equipment builders on the ground -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700} #hud .pass{color:var(--accent)}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Rounded Equipment Showcase</div>
+  <div><span class="pass">PASS: materials</span> <span class="dim">· design3d rounded-equipment toolkit</span></div>
+  <div class="dim">row ~5.6 m × 0.9 m · 5 builders · 1 unit = 1 m</div>
+</div>
+<div id="panel">
+  <div>lathe tank · dome vessel · superquadric · swept hose · round-box</div>
+</div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+// --- the new design3d "rounded equipment" builders, copied verbatim into ./lib/ ---
+import { makeLatheBody, filletedCylinderProfile, domeProfile } from './lib/lathe-body.mjs';
+import { makeSuperquadric } from './lib/superquadric.mjs';
+import { makeSweptTube } from './lib/rmf-frames.mjs';
+import { makeProceduralMetalRough } from './lib/procedural-pbr-canvas.mjs';
+import { makeRoundEdgeNormalMap } from './lib/round-edge-normal.mjs';
+// (adaptive-segments.mjs is pulled in transitively by lathe-body / rmf-frames.)
+
+// ---------------------------------------------------------------- scene / renderer
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 34);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;   // baked; force one bake after the async build
+document.body.appendChild(renderer.domElement);
+
+// hero camera framing the whole ~5.6 m row
+const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.1, 200);
+camera.position.set(4.5, 3.2, 6.6);
+camera.lookAt(0, 0.5, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.5, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;   // OFF (gate captures need a settled frame)
+
+// IBL — RoomEnvironment gives bare metal its satin base
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// scene.environmentIntensity is INERT in r160 — push metal per-material with envMapIntensity.
+
+// house 3-light rig + hemisphere + frontal fill
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(5, 8, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left=-5; sun.shadow.camera.right=5; sun.shadow.camera.top=3; sun.shadow.camera.bottom=-3;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));   // lifts upward-facing stainless
+const fill = new THREE.DirectionalLight(0xffffff, 0.6);          // frontal fill for the VERTICAL faces
+fill.position.set(0, 1.5, 8);
+scene.add(fill);
+
+// ground plane
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  new THREE.MeshStandardMaterial({ color:0x0c1017, roughness:0.95, metalness:0.0 })
+);
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true;
+scene.add(ground);
+
+const EMI = 1.4;   // envMapIntensity for the bare-metal materials
+
+// ---------------------------------------------------------------- materials (ASYNC)
+// One packed metallicRoughness texture (G=roughness, B=metalness) drives BOTH maps.
+const packed = await makeProceduralMetalRough({ roughnessBase:0.4, metalness:0.9 });
+
+const matA  = new THREE.MeshStandardMaterial({ color:0xb8bcc4, metalness:1, roughness:1 });
+const matA2 = new THREE.MeshStandardMaterial({ color:0xc2c6ce, metalness:1, roughness:1 });
+const matB  = new THREE.MeshStandardMaterial({ color:0xb0b4bc, metalness:1, roughness:1 });
+for (const m of [matA, matA2, matB]) {
+  m.roughnessMap = packed;   // three reads roughness from the GREEN channel
+  m.metalnessMap = packed;   // three reads metalness from the BLUE channel
+  m.envMapIntensity = EMI;
+}
+
+// round-box cabinet: its own material (a matB variant) so the box-edge normal map only lands on the box.
+const matBox = new THREE.MeshStandardMaterial({ color:0xbfc3cb, metalness:1, roughness:1 });
+matBox.roughnessMap = packed;
+matBox.metalnessMap = packed;
+matBox.envMapIntensity = EMI;
+matBox.normalMap = await makeRoundEdgeNormalMap({ bevel:0.14 });   // fake-bevel the flat box edges
+matBox.normalScale = new THREE.Vector2(1, 1);
+
+// hose: simple bright metal, no maps
+const matC = new THREE.MeshStandardMaterial({ color:0xd8dce2, metalness:1, roughness:0.3 });
+matC.envMapIntensity = EMI;
+
+// ---------------------------------------------------------------- the SUBJECT: a row of 5 builders
+const showcase = new THREE.Group();
+const SPACING = 1.2;
+
+// 1) LATHE TANK — a filleted cylinder revolved into one round body.
+const tank = await makeLatheBody(
+  filletedCylinderProfile({ radius:0.4, height:0.9, fillet:0.12, filletSegments:5 }),
+  { targetEdgeLength:0.05 }, matA
+);
+tank.position.set(-2*SPACING, 0, 0);   // base sits on the ground (profile y starts at 0)
+showcase.add(tank);
+
+// 2) DOME-TOPPED VESSEL — a dome lathe body on a short filleted-cylinder base (both lathe bodies).
+const vessel = new THREE.Group();
+const base = await makeLatheBody(
+  filletedCylinderProfile({ radius:0.32, height:0.14, fillet:0.05, filletSegments:4 }),
+  { targetEdgeLength:0.05 }, matA2
+);
+const dome = await makeLatheBody(
+  domeProfile({ radius:0.45, height:0.5, segments:14 }), {}, matA2
+);
+dome.position.y = 0.14;   // stack the dome on top of the base
+vessel.add(base, dome);
+vessel.position.set(-1*SPACING, 0, 0);
+showcase.add(vessel);
+
+// 3) SUPERQUADRIC rounded housing — one parametric surface, no CSG fillets.
+const housing = await makeSuperquadric(
+  { a:0.45, b:0.4, c:0.45, e1:0.35, e2:0.35, uSeg:28, vSeg:20 }, matB
+);
+housing.position.set(0, 0.4, 0);   // b (vertical semi-axis) = 0.4 → lift so it rests on the ground
+showcase.add(housing);
+
+// 4) SWEPT HOSE — a smooth RMF sweep along a curve (no Frenet twist at the inflections).
+const hose = await makeSweptTube(
+  [[-0.5,0.1,0],[-0.2,0.6,0.2],[0.2,0.5,-0.2],[0.5,0.2,0]],
+  { radius:0.06, targetEdgeLength:0.04 }, matC
+);
+hose.position.set(1*SPACING, 0, 0);
+showcase.add(hose);
+
+// 5) ROUND-BOX CABINET — a flat RoundedBoxGeometry, edges faked round by the normal map.
+const cabinet = new THREE.Mesh(new RoundedBoxGeometry(0.7, 0.9, 0.5, 1, 0.06), matBox);
+cabinet.castShadow = true; cabinet.receiveShadow = true;
+cabinet.position.set(2*SPACING, 0.45, 0);   // height 0.9 → centre at 0.45 to sit on the ground
+showcase.add(cabinet);
+
+scene.add(showcase);
+
+// ---------------------------------------------------------------- QA hooks (installed after the build)
+const SUBJECT = showcase;   // the framing gate frames the whole row
+
+globalThis.__qaRenderInfo = () => renderer.info.render;   // qa-render-info-hook
+
+globalThis.__qaFraming = () => {                          // qa-framing-hook
+  camera.updateMatrixWorld(); camera.updateProjectionMatrix();
+  const mvp = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  const b = new THREE.Box3().setFromObject(SUBJECT, true);
+  const mn = b.min, mx = b.max;
+  const corners = [
+    [mn.x,mn.y,mn.z],[mx.x,mn.y,mn.z],[mn.x,mx.y,mn.z],[mx.x,mx.y,mn.z],
+    [mn.x,mn.y,mx.z],[mx.x,mn.y,mx.z],[mn.x,mx.y,mx.z],[mx.x,mx.y,mx.z],
+  ];
+  const hudEl = document.querySelector('#hud');
+  const hud = hudEl ? (r => ({left:r.left,right:r.right,top:r.top,bottom:r.bottom}))(hudEl.getBoundingClientRect()) : null;
+  return { mvpElements: Array.from(mvp.elements), corners, W: innerWidth, H: innerHeight, hud };
+};
+
+// geometry was added AFTER renderer creation → force one shadow bake (autoUpdate is off)
+renderer.shadowMap.needsUpdate = true;
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+document.documentElement.dataset.appReady = 'true';   // ready LAST — all awaits are resolved by here
+</script>
+</body>
+</html>
