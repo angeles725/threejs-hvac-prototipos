@@ -42,15 +42,24 @@ fi
 # Reap ORPHANED headless chrome before running. A run that timed out leaves its chrome-headless-shell
 # reparented to init (ppid 1), dragging ~10 renderer children each; measured 2026-08-08, 5 orphans =
 # 58 procs, machine 123 -> 65. The lock queues LIVE probes but nothing harvests dead ones, so the
-# "contention" is partly accumulated garbage. Killing ppid==1 chrome-headless-shell is safe: a live
-# probe's chrome has a living node parent; only an orphan's parent is init. Opt out with QA_LOCK_NO_REAP=1.
+# "contention" is partly accumulated garbage. Filter by chrome-headless-shell, NOT bare "chrome" (most
+# chrome on the box is not a catalog probe).
+# CAVEAT 1 — reparenting: killing an orphan's main reparents its zygote/gpu/renderer children to init,
+# so they become NEW ppid=1 orphans; ONE pass leaves garbage. Loop until zero (bounded).
+# CAVEAT 2 — safety rests on NO probe spawning chrome DETACHED: a detached child is ppid=1 while ALIVE
+# and would be killed mid-run. Verified 2026-08-08: verify-catalog-asset/probe-state/audit-asset/
+# hole-probe all use spawn(BIN,args,{stdio:'ignore'}) with no `detached`, so here ppid=1 == dead parent.
+# Re-check this if a future probe spawns detached. Opt out entirely with QA_LOCK_NO_REAP=1.
 if [ "${QA_LOCK_NO_REAP:-0}" != "1" ] && command -v ps >/dev/null 2>&1; then
-  orphans=$(ps -eo pid=,ppid=,comm= 2>/dev/null | awk '$2==1 && $3 ~ /chrome-headles/ {print $1}')
-  if [ -n "$orphans" ]; then
-    n=$(printf '%s\n' "$orphans" | grep -c .)
-    echo "qa-lock: cosechando $n chrome huérfano(s) (ppid=1) de corridas muertas" >&2
+  reaped=0
+  for _ in 1 2 3 4 5 6; do
+    orphans=$(ps -eo pid=,ppid=,comm= 2>/dev/null | awk '$2==1 && $3 ~ /chrome-headles/ {print $1}')
+    [ -z "$orphans" ] && break
+    reaped=$((reaped + $(printf '%s\n' "$orphans" | grep -c .)))
     printf '%s\n' "$orphans" | xargs -r kill -KILL 2>/dev/null || true
-  fi
+    sleep 0.2
+  done
+  [ "$reaped" -gt 0 ] && echo "qa-lock: cosechados $reaped chrome huérfano(s) (ppid=1, reparenteo incluido)" >&2
 fi
 
 if ! command -v flock >/dev/null 2>&1; then
