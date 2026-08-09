@@ -110,9 +110,24 @@ async function check(target){
   return {target, ready, errors, ...(r.result?r.result.value:{error:'eval-failed'})};
 }
 
+// A page whose ES module never executed reports `ready:false, error:'no-renderer', keys:[]` — no
+// global was ever defined. That is indistinguishable from a broken asset, but its usual cause is the
+// unpkg CDN being slow past the readiness wait: seen for real on almacenamiento/lockers, which
+// failed once and passed on an immediate retry with 73 draw calls. Retry ONCE before failing, and
+// say so in the row, so a network hiccup cannot reject good work at the merge gate.
+const moduleNeverRan = r => r && r.ready === false && r.error === 'no-renderer'
+                          && Array.isArray(r.keys) && r.keys.length === 0;
 const out = [];
 for(const t of TARGETS){
-  try{ out.push(await check(t)); }catch(e){ out.push({target:t, error:String(e)}); }
+  try{
+    let r = await check(t);
+    if(moduleNeverRan(r)){
+      const again = await check(t);
+      r = moduleNeverRan(again) ? {...again, note:'module never ran on 2 attempts — likely a real failure'}
+                                : {...again, note:'passed on retry — first attempt did not execute the module (CDN?)'};
+    }
+    out.push(r);
+  }catch(e){ out.push({target:t, error:String(e)}); }
 }
 console.log(JSON.stringify(out,null,2));
 ws.close(); proc.kill('SIGKILL');

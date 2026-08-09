@@ -1,0 +1,251 @@
+<!doctype html>
+<!--
+  lockers — catalog asset, family `almacenamiento`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block66.md (Link 51 handbook / BS 4680:1996)
+  Spec: ./design-spec.yaml
+  The detail that makes it read right is the handbook's derived rule: the door opening is
+  overall width -50 mm, so a 25 mm frame margin runs down BOTH sides of every door.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Taquillas de acero — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Taquillas de acero — nido de 3, BS 4680:1996</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· 1800 × 300 × 450 mm por bahía</span></div>
+  <div class="dim">apertura libre = ancho − 50 mm · interior = ancho − 3 mm / fondo − 21 mm</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnOpen">OPEN DOORS</button>
+  <button id="btnNest" class="on">NEST 3 / SINGLE</button>
+  <button id="btnScale" class="on">SCALE 1.8 m</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 66]) ----------
+const H = 1.80, BAY_W = 0.300, D = 0.450;   // [CERT-doc] BS 4680 ladder
+const OPENING = BAY_W - 0.050;              // [CERT-doc] clear opening = overall width -50mm
+const MARGIN = (BAY_W - OPENING)/2;         // 25 mm of frame each side — the read-defining detail
+const INT_D = D - 0.021;                    // [CERT-doc] internal depth = overall depth -21mm
+const LEG = 0.10;                           // [INFER] the band is "excluding legs"
+const NEST = 3, TIERS = 2;
+const PANEL = 0.010;
+const BODY_H = H - LEG;
+const TIER_H = BODY_H / TIERS;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 7, 22);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 100);
+const R = 3.8, AZ = 0.733, EL = 0.244;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.95 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.95, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.95, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;   // coated dielectric — deliberate non-deviation
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3, 5, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d
+sun.shadow.camera.left=-3; sun.shadow.camera.right=3; sun.shadow.camera.top=3; sun.shadow.camera.bottom=-3;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. Coated steel carcass/doors = DIELECTRIC (HANDBOOK §3.1).
+// ============================================================================
+const matCar  = new THREE.MeshStandardMaterial({ color:0x8f9599, metalness:0.0, roughness:0.60 });
+const matDoor = new THREE.MeshStandardMaterial({ color:0x3a5f86, metalness:0.0, roughness:0.55 });
+const matHw   = new THREE.MeshStandardMaterial({ color:0xb9bec1, metalness:0.9, roughness:0.42 });
+const matSkin = new THREE.MeshStandardMaterial({ color:0x6f7c86, metalness:0.0, roughness:0.85 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+
+// A nest SHARES its internal side panels — this is one carcass, not three lockers touching.
+function buildNest(n){
+  const g = new THREE.Group();
+  const W = n * BAY_W;
+  put(g, W, PANEL, D, matCar, 0, LEG + BODY_H - PANEL/2, 0);            // top
+  put(g, W, PANEL, D, matCar, 0, LEG + PANEL/2, 0);                     // bottom
+  put(g, W, BODY_H, PANEL, matCar, 0, LEG + BODY_H/2, -D/2 + PANEL/2);  // back
+  for(let i=0;i<=n;i++)                                                  // n+1 sides for n bays
+    put(g, PANEL, BODY_H, D, matCar, -W/2 + i*BAY_W, LEG + BODY_H/2, 0);
+  for(let i=0;i<n;i++)                                                   // tier shelf
+    put(g, BAY_W - PANEL, PANEL, INT_D, matCar, -W/2 + (i+0.5)*BAY_W, LEG + TIER_H, 0);
+  for(const sx of [-1,1]) for(const sz of [-1,1])                        // legs
+    put(g, 0.05, LEG, 0.05, matCar, sx*(W/2 - 0.05), LEG/2, sz*(D/2 - 0.05));
+  return { group:g, W };
+}
+
+// Doors: inset by MARGIN each side — the certified frame margin. Hinged on the left edge.
+function buildDoors(n){
+  const doors = [];
+  const g = new THREE.Group();
+  const W = n * BAY_W;
+  for(let i=0;i<n;i++) for(let t=0;t<TIERS;t++){
+    const cx = -W/2 + (i+0.5)*BAY_W;
+    const y0 = LEG + t*TIER_H;
+    const dh = TIER_H - 0.012;
+    const pivot = new THREE.Group();
+    pivot.position.set(cx - OPENING/2, y0 + dh/2 + 0.006, D/2);
+    const leaf = new THREE.Group();
+    leaf.position.set(OPENING/2, 0, 0);
+    const face = box(OPENING, dh, 0.010, matDoor);
+    leaf.add(face);
+    // louvre vents, top and bottom of each door
+    for(const vy of [dh/2 - 0.06, -dh/2 + 0.06]) for(let k=0;k<3;k++)
+      put(leaf, OPENING*0.55, 0.008, 0.004, matHw, 0, vy + k*0.016, 0.007);
+    // camlock + number plate
+    const lock = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.014, 12), matHw);
+    lock.rotation.x = Math.PI/2; lock.position.set(OPENING/2 - 0.035, 0, 0.010); leaf.add(lock);
+    put(leaf, 0.045, 0.028, 0.003, matHw, 0, dh/2 - 0.10, 0.008);
+    pivot.add(leaf);
+    g.add(pivot);
+    doors.push(pivot);
+  }
+  return { group:g, doors };
+}
+
+const nest3 = buildNest(NEST);
+const doors3 = buildDoors(NEST);
+const single = buildNest(1);
+const doorsSingle = buildDoors(1);
+single.group.visible = false; doorsSingle.group.visible = false;
+root.add(nest3.group, doors3.group, single.group, doorsSingle.group);
+
+// --- 1.8 m scale figure: the carcass is exactly the same height ---
+const scaleFig = new THREE.Group();
+const fx = -0.95, fz = 0.60;
+const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.52, 6, 12), matSkin);
+torso.position.set(fx, 1.16, fz); torso.castShadow = true; scaleFig.add(torso);
+const headM = new THREE.Mesh(new THREE.SphereGeometry(0.115, 14, 12), matSkin);
+headM.position.set(fx, 1.62, fz); headM.castShadow = true; scaleFig.add(headM);
+for(const s of [-1,1]){
+  const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.62, 6, 10), matSkin);
+  leg.position.set(fx + s*0.10, 0.46, fz); leg.castShadow = true; scaleFig.add(leg);
+}
+root.add(scaleFig);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED; the door swing holds needsRender while moving.
+// ============================================================================
+let swingTarget = 0, swingNow = 0;
+const activeDoors = ()=> (nest3.group.visible ? doors3.doors : doorsSingle.doors);
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnOpen = document.getElementById('btnOpen');
+btnOpen.onclick = ()=>{ swingTarget = swingTarget === 0 ? -1.15 : 0;
+  btnOpen.classList.toggle('on', swingTarget !== 0); requestRender(); };
+
+const btnNest = document.getElementById('btnNest');
+btnNest.onclick = ()=>{
+  const to3 = !nest3.group.visible;
+  nest3.group.visible = doors3.group.visible = to3;
+  single.group.visible = doorsSingle.group.visible = !to3;
+  btnNest.classList.toggle('on', to3);
+  renderer.shadowMap.needsUpdate = true; requestRender();
+};
+
+const btnScale = document.getElementById('btnScale');
+btnScale.onclick = ()=>{ scaleFig.visible = !scaleFig.visible; btnScale.classList.toggle('on', scaleFig.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const d = swingTarget - swingNow;
+  if(Math.abs(d) > 0.001){
+    swingNow += d * 0.12;
+    for(const [i, p] of activeDoors().entries()) p.rotation.y = swingNow * (i % 2 ? 0.85 : 1);
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__lockersApp = __app;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
