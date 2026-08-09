@@ -137,6 +137,7 @@
 | B69-gate-dims/quiko-cantilever-guide | B69-gate-dims | https://www.quikoitaly.com/en/cantilever-sliding-gates-complete-installation-guide-and-design-insights/ | 2026-08-09T06:55:59Z | 4df67dd44494eb74d80e878cece424f7bdbd4f98468b3315fb79132fce0193f0 | B69 |
 | B120-airlock-dims/cometa-co135-security-portal | B120-airlock-dims | https://www.cometaspa.com/en/Product-detail/Classic-Security-Portal-Co135/ | 2026-08-09T07:20:30Z | 696bf13bb1d67075e139ba4044a5a2b20afa54d924e876a5ccd60e912644f60f | B120 |
 | B120-airlock-dims/boonedam-circlelock-nbs | B120-airlock-dims | https://source.thenbs.com/en/product/boon-edam-circlelock-solo-mantrap-security-portal/8HPZ8Ub4SuuACSfYt1mQcs/aBXMiQifjzWi7UoTpMXLdV | 2026-08-09T07:20:33Z | 3f6c9f2cbae4ee8b1b767ffaa3137729c194f98f9405a0d35a368626969daab2 | B120 |
+| B121-security-door-dims/ekin-en1125-vs-en179 | B121-security-door-dims | https://www.ekinpanicbar.com/knowledge/what-is-a-panic-bar-us-vs-en-1125en-179-eu | 2026-08-09T18:44:10Z | 94c0311e5ce068017f3f364c9e60172a8ee051dcb82b26ad6b5ded314127ab6e | B121 |
 
 ## Structure
 
