@@ -1,0 +1,329 @@
+<!doctype html>
+<!--
+  caldera — catalog asset, family `hvac`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Type: packaged three-pass FIRE-TUBE boiler, horizontal shell, front-mounted pressure-jet burner,
+  hinged front smokebox door. Opening the door is what proves it is a fire-tube boiler: the tube
+  plate behind it carries the tube nest.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caldera pirotubular — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Caldera pirotubular — quemador frontal, puerta abisagrada</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· placa tubular · tren de gas · chimenea</span></div>
+  <div class="dim">3.10 × 1.42 × 3.40 m (con chimenea)</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">PUERTA</button>
+  <button id="btnBurn">QUEMADOR</button>
+  <button id="btnStack">CHIMENEA</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const SH_R = 0.62, SH_L = 2.10;            // insulated shell radius / length
+const SH_Y = 1.04;                         // shell centre line
+const BASE_H = 0.16;
+const FRONT_X = SH_L/2, REAR_X = -SH_L/2;  // front (burner) end / rear (flue) end
+const DOOR_T = 0.14;                       // smokebox door thickness
+const STACK_R = 0.19, STACK_TOP = 3.40;
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 36);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 6.6, AZ = 0.72, EL = 0.26;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.45 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.45, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.45, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.0;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(5, 8, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-4; sun.shadow.camera.right=4; sun.shadow.camera.top=5; sun.shadow.camera.bottom=-2;
+scene.add(sun);
+// Vertical-subject fill (design-spec.yaml `lighting`): the stack and the smokebox door are
+// vertical bare-metal surfaces. Camera-side fill; PBR values unchanged (HANDBOOK §3.1).
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.05);
+fill.position.set(-4.0, 3.0, 6.0);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+// Smokebox lamp (shadowless): with the door open the tube plate faces away from every rig light.
+const boxLamp = new THREE.PointLight(0xffd9b0, 2.2, 1.9, 2);
+boxLamp.position.set(FRONT_X + 0.20, SH_Y + 0.06, 0.10);
+scene.add(boxLamp);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Insulated jacket, burner housing and control box are PAINTED -> dielectric.
+//   Tube plate, tubes, stack, gas train and the base frame are bare metal.
+// ============================================================================
+const matJacket = new THREE.MeshStandardMaterial({ color:0x2f4a63, metalness:0.0,  roughness:0.46 });
+const matJackDk = new THREE.MeshStandardMaterial({ color:0x24384b, metalness:0.0,  roughness:0.52 });
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xb7bec2, metalness:0.95, roughness:0.42 });
+const matSoot   = new THREE.MeshStandardMaterial({ color:0x4a4640, metalness:0.7,  roughness:0.78 });
+const matTube   = new THREE.MeshStandardMaterial({ color:0x1a1714, metalness:0.0,  roughness:0.92 });
+const matBurner = new THREE.MeshStandardMaterial({ color:0xc9ced1, metalness:0.0,  roughness:0.50 });
+const matMotor  = new THREE.MeshStandardMaterial({ color:0x2c343d, metalness:0.0,  roughness:0.55 });
+const matGas    = new THREE.MeshStandardMaterial({ color:0xc4a03a, metalness:0.0,  roughness:0.48 });
+const matValve  = new THREE.MeshStandardMaterial({ color:0x8f3b2a, metalness:0.0,  roughness:0.50 });
+const matStack  = new THREE.MeshStandardMaterial({ color:0xa9b0b5, metalness:0.95, roughness:0.46 });
+const matDark   = new THREE.MeshStandardMaterial({ color:0x15181b, metalness:0.0,  roughness:0.70 });
+const matGauge  = new THREE.MeshStandardMaterial({ color:0xe8ecee, metalness:0.0,  roughness:0.35 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=20)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+
+// --- base frame + saddles ---
+const base = new THREE.Group();
+for(const sz of [-1,1]) put(base, SH_L + 0.50, BASE_H, 0.12, matSteel, 0, BASE_H/2, sz*0.55);
+for(const x of [-0.70, 0.70]){
+  put(base, 0.16, BASE_H, 1.22, matSteel, x, BASE_H/2, 0);
+  put(base, 0.22, SH_Y - SH_R - BASE_H + 0.10, 0.96, matJackDk, x, (SH_Y - SH_R + BASE_H)/2 + 0.02, 0);
+}
+root.add(base);
+
+// --- shell: insulated jacket over the pressure vessel, with banding straps ---
+const shell = new THREE.Group();
+cyl(shell, SH_R, SH_L, matJacket, 0, SH_Y, 0, 0, Math.PI/2, 30);
+for(const x of [-0.86, -0.30, 0.30, 0.86]) cyl(shell, SH_R + 0.012, 0.05, matSteel, x, SH_Y, 0, 0, Math.PI/2, 30);
+put(shell, 0.34, 0.10, 0.34, matSteel, -0.20, SH_Y + SH_R + 0.03, 0);            // manhole cover
+put(shell, 0.44, 0.05, 0.44, matJackDk, 0.60, SH_Y + SH_R + 0.02, 0);            // nameplate pad
+root.add(shell);
+
+// --- rear smokebox + flue transition + stack ---
+const stack = new THREE.Group();
+cyl(stack, SH_R - 0.02, 0.22, matJackDk, REAR_X - 0.11, SH_Y, 0, 0, Math.PI/2, 30);
+put(stack, 0.34, 0.60, 0.44, matSteel, REAR_X - 0.14, SH_Y + SH_R + 0.20, 0);     // flue transition
+cyl(stack, STACK_R, STACK_TOP - (SH_Y + SH_R + 0.46), matStack,
+    REAR_X - 0.14, (STACK_TOP + SH_Y + SH_R + 0.46)/2, 0, 0, 0, 22);
+cyl(stack, STACK_R + 0.035, 0.05, matSteel, REAR_X - 0.14, STACK_TOP - 0.03, 0, 0, 0, 22);
+cyl(stack, STACK_R + 0.035, 0.05, matSteel, REAR_X - 0.14, SH_Y + SH_R + 0.52, 0, 0, 0, 22);
+put(stack, 0.50, 0.05, 0.05, matSteel, REAR_X + 0.10, SH_Y + SH_R + 1.10, 0);     // stack bracket to the shell
+root.add(stack);
+
+// --- front smokebox: the OPENING the door closes, and the tube plate behind it ---
+const smokebox = new THREE.Group();
+// OPEN-ENDED ring, not a solid cylinder: the smokebox is the VOID between the tube plate and the
+// door. Built solid (as it first was) it caps the shell and the reveal shows a brown disc.
+{ const ring = new THREE.Mesh(
+    new THREE.CylinderGeometry(SH_R - 0.02, SH_R - 0.02, 0.22, 30, 1, true),
+    new THREE.MeshStandardMaterial({ color:0x4a4640, metalness:0.7, roughness:0.78, side:THREE.DoubleSide }));
+  ring.position.set(FRONT_X + 0.11, SH_Y, 0); ring.rotation.z = Math.PI/2;
+  ring.castShadow = ring.receiveShadow = true; smokebox.add(ring); }
+const platePlane = new THREE.Group();
+platePlane.position.set(FRONT_X + 0.01, SH_Y, 0);
+cyl(platePlane, SH_R - 0.06, 0.04, matSoot, 0, 0, 0, 0, Math.PI/2, 30);                 // tube plate
+// furnace tube (first pass) low in the plate + the second/third-pass tube nest around it
+cyl(platePlane, 0.24, 0.06, matTube, 0.02, -0.16, 0, 0, Math.PI/2, 22);
+{
+  const tubeGeo = new THREE.CylinderGeometry(0.033, 0.033, 0.07, 10);
+  const spots = [];
+  for(let ring = 1; ring <= 3; ring++){
+    const rr = 0.13 + ring * 0.115, n = 6 + ring * 4;
+    for(let i=0;i<n;i++){
+      const a = (i + (ring % 2 ? 0.5 : 0)) * Math.PI * 2 / n;
+      const y = 0.10 + Math.sin(a) * rr, z = Math.cos(a) * rr;
+      if(y > -0.02 && Math.hypot(y - 0.10, z) < SH_R - 0.14) spots.push([y, z]);
+    }
+  }
+  const tubes = new THREE.InstancedMesh(tubeGeo, matTube, spots.length);
+  spots.forEach(([y, z], i)=>{
+    _q.setFromEuler(new THREE.Euler(0, 0, Math.PI/2));
+    _p.set(0.03, y, z);
+    tubes.setMatrixAt(i, _m.compose(_p, _q, _s));
+  });
+  tubes.instanceMatrix.needsUpdate = true; tubes.castShadow = true;
+  platePlane.add(tubes);
+}
+smokebox.add(platePlane);
+root.add(smokebox);
+
+// --- hinged smokebox door (carries the burner) ---
+const doorPivot = new THREE.Group();
+// HINGE on the -Z edge, i.e. the side AWAY from the review camera. Hinged on the near edge the
+// open door swings across the opening and hides the tube plate — the reveal shows nothing.
+doorPivot.position.set(FRONT_X + 0.20, SH_Y, -(SH_R - 0.02));
+const door = new THREE.Group();
+door.position.set(0, 0, SH_R - 0.02);
+cyl(door, SH_R, DOOR_T, matJacket, 0, 0, 0, 0, Math.PI/2, 30);
+cyl(door, SH_R + 0.02, 0.05, matSteel, -DOOR_T/2, 0, 0, 0, Math.PI/2, 30);
+for(const [hy, hz] of [[0.42, -0.42], [-0.42, -0.42]])                            // hinge knuckles
+  cyl(door, 0.045, 0.16, matSteel, 0.02, hy, hz, 0, 0, 12);
+for(const [by, bz] of [[0.40, 0.40], [-0.40, 0.40], [0.0, 0.55]]){                // swing bolts
+  cyl(door, 0.028, 0.16, matSteel, DOOR_T/2 + 0.05, by, bz, 0, Math.PI/2, 10);
+  put(door, 0.05, 0.09, 0.09, matSteel, DOOR_T/2 + 0.13, by, bz);
+}
+// --- burner mounted ON the door, so it swings with it ---
+const burnerFan = new THREE.Group();
+cyl(door, 0.17, 0.30, matBurner, DOOR_T/2 + 0.15, -0.16, 0, 0, Math.PI/2, 20);    // blast tube housing
+cyl(door, 0.235, 0.24, matBurner, DOOR_T/2 + 0.42, -0.16, 0, 0, Math.PI/2, 20);   // fan scroll
+cyl(door, 0.15, 0.22, matMotor, DOOR_T/2 + 0.66, -0.16, 0, 0, Math.PI/2, 18);     // burner motor
+put(door, 0.20, 0.26, 0.22, matDark, DOOR_T/2 + 0.42, 0.14, 0.0);                 // burner control box
+burnerFan.position.set(DOOR_T/2 + 0.54, -0.16, 0);
+{ const bg = new THREE.BoxGeometry(0.02, 0.12, 0.05);
+  const im = new THREE.InstancedMesh(bg, matMotor, 10);
+  for(let i=0;i<10;i++){ const a = i*Math.PI/5;
+    _q.setFromEuler(new THREE.Euler(a, 0, 0, 'XYZ'));
+    _p.set(0, Math.cos(a)*0.10, Math.sin(a)*0.10);
+    im.setMatrixAt(i, _m.compose(_p, _q, _s)); }
+  im.instanceMatrix.needsUpdate = true; im.castShadow = true; burnerFan.add(im); }
+door.add(burnerFan);
+// gas train along the burner: ball valve, filter, regulator, double solenoid block
+const gasY = -0.44;
+cyl(door, 0.045, 0.80, matGas, DOOR_T/2 + 0.40, gasY, 0.34, 0, Math.PI/2, 12);
+for(const [gx, w] of [[DOOR_T/2 + 0.10, 0.14], [DOOR_T/2 + 0.44, 0.20], [DOOR_T/2 + 0.72, 0.16]])
+  put(door, w, 0.16, 0.18, matGas, gx, gasY, 0.34);
+cyl(door, 0.045, 0.30, matGas, DOOR_T/2 + 0.10, gasY + 0.15, 0.34, 0, 0, 12);     // riser into the burner
+put(door, 0.10, 0.06, 0.12, matGas, DOOR_T/2 + 0.10, gasY + 0.30, 0.30);          // burner gas inlet boss
+for(const bx of [DOOR_T/2 + 0.26, DOOR_T/2 + 0.62])                               // train support brackets
+  put(door, 0.05, 0.22, 0.05, matBurner, bx, gasY + 0.20, 0.34);
+cyl(door, 0.075, 0.10, matValve, DOOR_T/2 + 0.80, gasY, 0.34, 0, Math.PI/2, 12);
+put(door, 0.04, 0.16, 0.04, matValve, DOOR_T/2 + 0.80, gasY + 0.13, 0.34);
+doorPivot.add(door);
+root.add(doorPivot);
+
+// --- top trim: safety valve + vent, flow/return flanges, gauge column, control panel ---
+const trim = new THREE.Group();
+cyl(trim, 0.075, 0.22, matSteel, -0.60, SH_Y + SH_R + 0.11, 0.18, 0, 0, 14);      // safety valve body
+cyl(trim, 0.055, 0.50, matSteel, -0.60, SH_Y + SH_R + 0.45, 0.18, 0, 0, 12);      // vent pipe
+cyl(trim, 0.095, 0.24, matSteel, 0.75, SH_Y + SH_R + 0.12, -0.16, 0, 0, 16);      // flow nozzle
+cyl(trim, 0.125, 0.035, matSteel, 0.75, SH_Y + SH_R + 0.24, -0.16, 0, 0, 16);
+cyl(trim, 0.085, 0.22, matSteel, -0.95, SH_Y + SH_R + 0.11, -0.16, 0, 0, 16);     // return nozzle
+cyl(trim, 0.115, 0.035, matSteel, -0.95, SH_Y + SH_R + 0.22, -0.16, 0, 0, 16);
+cyl(trim, 0.030, 0.42, matGauge, 0.20, SH_Y + 0.30, SH_R + 0.03, 0, 0, 10);       // gauge column
+cyl(trim, 0.062, 0.03, matGauge, 0.20, SH_Y + 0.56, SH_R + 0.05, Math.PI/2, 0, 14);
+put(trim, 0.46, 0.40, 0.24, matBurner, -0.30, SH_Y + SH_R + 0.30, -0.30);         // control panel
+for(const sx of [-1,1]) put(trim, 0.05, 0.16, 0.16, matSteel, -0.30 + sx*0.18, SH_Y + SH_R + 0.05, -0.30);
+put(trim, 0.50, 0.03, 0.28, matSteel, -0.30, SH_Y + SH_R + 0.115, -0.30);         // panel stand plate
+put(trim, 0.30, 0.22, 0.02, matDark, -0.30, SH_Y + SH_R + 0.34, -0.43);
+for(const [i, c] of [[0, 0x5a6878], [1, 0xffb020]]){                              // §3.4: grey normal, amber advisory
+  const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.020, 0.012, 12),
+    new THREE.MeshStandardMaterial({ color:c, emissive:c, emissiveIntensity:0.6, metalness:0, roughness:0.4 }));
+  lamp.position.set(-0.30 + (i ? 0.09 : -0.09), SH_Y + SH_R + 0.14, -0.43);
+  lamp.rotation.x = Math.PI/2; trim.add(lamp);
+}
+root.add(trim);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const DOOR_OPEN = 1.55;                   // ~89 deg, swings the burner clear of the tube plate
+let doorTarget = 0, burnOn = false;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnDoor = document.getElementById('btnDoor');
+btnDoor.onclick = ()=>{ doorTarget = doorTarget === 0 ? DOOR_OPEN : 0;
+  btnDoor.classList.toggle('on', doorTarget !== 0); requestRender(); };
+
+const btnBurn = document.getElementById('btnBurn');
+btnBurn.onclick = ()=>{ burnOn = !burnOn; btnBurn.classList.toggle('on', burnOn); requestRender(); };
+
+const btnStack = document.getElementById('btnStack');
+btnStack.onclick = ()=>{ stack.visible = !stack.visible; btnStack.classList.toggle('on', !stack.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const d = doorTarget - doorPivot.rotation.y;
+  if(Math.abs(d) > 0.0008){ doorPivot.rotation.y += d * 0.10; needsRender = true; }
+  if(burnOn){ burnerFan.rotation.x += 0.25; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__calderaApp = __app;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

@@ -1,0 +1,207 @@
+# DesignSpec — packaged fire-tube boiler (horizontal shell, front pressure-jet burner)
+# Seventh asset of the catalog `hvac` family.
+# EVIDENCE: no preserved datasheet. HANDBOOK §3.0 has no boiler row, so this asset has NO certified
+# dimensional anchor at all — every dimension is [INFER] and is marked `low`. It is sized to sit in
+# the same machine room as skid-bombas and manejadora-ahu, which is a coherence argument, not a
+# measurement. Flagged here rather than dressed up.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: caldera
+family: hvac
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 17 -> moderate/complex boundary.
+  scores: {silhouette: 2, components: 3, hierarchy: 2, repetition: 2,
+           material_layers: 2, detail: 3, occlusion: 3, action_readiness: 1}
+  tier: moderate
+  notes: >
+    occlusion 3 is the whole point: a horizontal insulated drum could be a boiler, a tank or an
+    air receiver. What makes it a FIRE-TUBE boiler is the tube plate behind the smokebox door,
+    and that only exists in the PUERTA state — so that state is part of the deliverable.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+
+references:
+  - source: "research/HANDBOOK.md §3.1"
+    evidences: >
+      [CERT] The insulated jacket, burner housing and control panel are PAINTED -> dielectric
+      0.0-0.05; banding straps, tube plate, stack and gas train are bare metal 0.9-1.0.
+    suitability: pass
+  - source: "research/HANDBOOK.md §3.4"
+    evidences: "[CERT] ISA-101 status colours: grey is the normal state, amber is advisory."
+    suitability: pass
+  - source: "NEGATIVE — no dimensional source"
+    evidences: >
+      HANDBOOK §3.0 lists chillers, AHUs, towers and pumps but NOT boilers, and no boiler
+      datasheet is preserved in research/sources/. Recorded so a later session adds evidence
+      instead of assuming these numbers were measured.
+    suitability: fail
+
+dimensions_real:
+  shell_diameter_m: {value: 1.24, confidence: low}   # [INFER] insulated OD
+  shell_length_m:   {value: 2.10, confidence: low}   # [INFER]
+  overall_length_m: {value: 3.10, confidence: low}   # [INFER] incl. smokebox, door and burner
+  shell_centre_h_m: {value: 1.04, confidence: low}   # [INFER] on saddles over a base frame
+  overall_height_m: {value: 3.40, confidence: low}   # [INFER] to the stack cap
+  stack_diameter_m: {value: 0.38, confidence: low}   # [INFER]
+  door_thickness_m: {value: 0.14, confidence: low}   # [INFER] refractory-lined smokebox door
+  furnace_tube_d_m: {value: 0.48, confidence: low}   # [INFER] first pass
+  tube_d_m:         {value: 0.066, confidence: low}  # [INFER] second/third pass tubes
+  tube_count:       {value: "~30 visible in the plate", confidence: low}   # [INFER]
+
+hierarchy:
+  - name: root
+    children:
+      - name: base            # frame rails, cross members, two saddles
+        pivot: [0, 0, 0]
+        animation: none
+      - name: shell           # insulated jacket, banding straps, manhole cover, nameplate pad
+        pivot: [0, 1.04, 0]
+        animation: none
+      - name: stack           # rear smokebox, flue transition, stack, cap ring, bracket (togglable)
+        pivot: [-1.19, 0, 0]
+        animation: none
+      - name: smokebox        # OPEN-ENDED ring wall + tube plate + furnace tube + instanced tube nest
+        pivot: [1.05, 1.04, 0]
+        animation: none
+      - name: doorPivot       # hinged smokebox door, carries the whole burner
+        pivot: [1.25, 1.04, -0.60]     # HINGE LINE on the far edge, not the door centre
+        animation: swing
+        children:
+          - name: burnerFan
+            pivot: [in-door, -0.16, 0]
+            animation: spin
+          - name: gasTrain             # ball valve, filter, regulator, solenoid block, riser to the burner
+            animation: none
+      - name: trim            # safety valve + vent, flow/return nozzles, gauge column, control panel
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: jacket-paint
+    family: painted-metal
+    color: "#2f4a63"
+    metalness: 0.0
+    roughness: 0.46
+    evidence: "HANDBOOK §3.1 painted casing -> 0.0-0.05 (the jacket is a painted steel skin over insulation)"
+    confidence: 0.9
+  - id: banding-steel
+    family: bare-metal
+    color: "#b7bec2"
+    metalness: 0.95
+    roughness: 0.42
+    evidence: "HANDBOOK §3.1 bare metal 0.9-1.0"
+    confidence: 0.85
+  - id: smokebox-soot
+    family: bare-metal
+    color: "#4a4640"
+    metalness: 0.7
+    roughness: 0.78
+    evidence: >
+      DELIBERATE EXCEPTION to the near-binary rule: this is sooted steel, i.e. metal under a thin
+      dielectric deposit. HANDBOOK §3.1 forbids intermediate metalness for a CLEAN untextured
+      surface; a fouled surface is the documented exception and is called out here rather than
+      hidden.
+    confidence: 0.6
+  - id: tube-bore
+    family: painted-metal
+    color: "#1a1714"
+    metalness: 0.0
+    roughness: 0.92
+    evidence: "HANDBOOK §3.1 — a tube bore reads as an unlit cavity, not as a metal surface"
+    confidence: 0.7
+  - id: burner-paint
+    family: painted-metal
+    color: "#c9ced1"
+    metalness: 0.0
+    roughness: 0.50
+    evidence: "HANDBOOK §3.1 painted housing"
+    confidence: 0.85
+  - id: gas-train-yellow
+    family: painted-metal
+    color: "#c4a03a"
+    metalness: 0.0
+    roughness: 0.48
+    evidence: "HANDBOOK §3.4 — gas service is the colour-coded, actionable system on this asset"
+    confidence: 0.7
+  - id: stack-steel
+    family: bare-metal
+    color: "#a9b0b5"
+    metalness: 0.95
+    roughness: 0.46
+    evidence: "HANDBOOK §3.1 bare metal"
+    confidence: 0.85
+
+critical_features:
+  - id: tube-plate-reveal
+    desc: >
+      With PUERTA open, the tube plate is visible and carries a furnace tube plus a nest of
+      smaller tubes. This is the ONLY feature that distinguishes the asset from a tank. The
+      smokebox ring must be OPEN-ENDED: built as a solid cylinder it caps the shell and the
+      reveal shows a blank disc (that is what the first two builds did).
+    threshold: 0.85
+  - id: door-swings-away
+    desc: >
+      The hinge is on the edge AWAY from the review camera. Hinged on the near edge the open door
+      crosses the opening and hides the very thing the toggle exists to show.
+    threshold: 0.80
+  - id: burner-on-the-door
+    desc: "Blast tube, fan scroll, motor, control box and the gas train are mounted ON the door and swing with it."
+    threshold: 0.78
+  - id: boiler-house-trim
+    desc: "Safety valve with vent, flow and return nozzles, gauge column, manhole cover, banding straps, control panel on a bracket."
+    threshold: 0.75
+  - id: flue-path
+    desc: "Rear smokebox -> flue transition -> stack with cap ring and a bracket back to the shell; CHIMENEA removes the whole path."
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 90       # measured 64 at the review camera (SwiftShader headless, DPR 1)
+    tris: 15000     # measured ~4,000
+
+camera:
+  azimuth_deg: 41
+  elevation_deg: 15
+  fov: 38
+  target_y_m: 1.45
+  radius_m: 6.6
+
+lighting: house-rig + vertical-subject fill + smokebox lamp
+  # DEVIATION 1: camera-side fill for the stack and door, which are vertical bare-metal surfaces.
+  # DEVIATION 2: a warm shadowless PointLight inside the smokebox so the tube plate is readable
+  # with the door open. It was dialled DOWN from the first attempt (6 -> 2.2, range 2.6 -> 1.9),
+  # which was blowing out the open door face.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "PUERTA"       # swings the door + burner on the hinge line; holds needsRender while moving
+  - "QUEMADOR"     # burner fan spins
+  - "CHIMENEA"     # hides the rear smokebox, transition and stack
+
+instancing:
+  - what: "smoke tube nest in the tube plate"
+    count: "~30 (3 rings, culled to the plate area above the furnace tube)"
+    draws_saved: "~30 meshes -> 1"
+  - what: "burner fan blades"
+    count: 10
+    draws_saved: "10 meshes -> 1"
+  # NOT instanced: banding straps (4), swing bolts (3), saddles (2).
+
+colorTarget:
+  # MEASURED from the rendered jacket (headless SwiftShader capture at 1280x800).
+  srgb: [133, 162, 188]
+  deltaE00Max: 8
+  crop: "90x60+560+440"
+  secondary_observed:
+    stack_steel: [84, 90, 95]     # 40x80+500+120
