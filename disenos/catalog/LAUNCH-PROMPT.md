@@ -35,7 +35,13 @@ varias sesiones eligen el mismo worktree porque ListAgents las nombra por el cwd
 3. **Ponte al día:** `git -C <worktree> merge master` (NO `--ff-only`: tu rama tiene commits propios y el ff-only
    aborta). Si el worktree tiene `RESUME.md`, LÉELO y continúa lo que falta; no rehagas lo ya hecho.
 4. **Modela con el pipeline canónico:** por CADA slug asignado corre `/design3d <slug> threejs` (spec-first + gates
-   del skill design3d, track threejs — el catálogo vive en `disenos/`, que es su territorio). Contrato del catálogo
+   del skill design3d, track threejs — el catálogo vive en `disenos/`, que es su territorio).
+   INFRA /design3d en worktree enlazado: `research/tools/*` importa `puppeteer-core` y un worktree NO tiene
+   `node_modules` propio → el harness muere con `ERR_MODULE_NOT_FOUND` en el primer uso. Symlinkea el `node_modules`
+   del checkout principal (`ln -s /home/cristian/prototipos/three.js/node_modules <worktree>/node_modules`) y añade
+   `node_modules` a `.git/info/exclude` (el `.gitignore` lista `node_modules/` CON barra y no casa un symlink → sale
+   untracked y se puede colar en un commit). Y `capture-gc` propone borrar la vista `grazing`, que es EVIDENCIA del
+   gate de materiales — no lo apliques a ciegas. Contrato del catálogo
    y ~50 gotchas en `disenos/catalog/ONBOARD-SESSION.md` — léelo. QA envuelta en `qa-lock.sh`. Puerto HTTP PROPIO
    (no 8899, que sirve otro root) + `curl` contra una ruta que solo exista en tu worktree.
 5. **Commit por asset a TU rama, rutas ESPECÍFICAS** (NUNCA `git add -A`). Marca done solo TUS slugs en catalog.yaml.

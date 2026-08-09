@@ -36,7 +36,7 @@ RENUMBER it to your range before requesting integration. session-A reconciles at
 ## Assigned ranges (next free inside each)
 | Family | Range | Next free |
 |---|---|---|
-| puertas + almacenamiento (session-B) | B57–B69 | B69 |
+| puertas + almacenamiento (session-B) | B57–B69 (full) + B120–B124 (extension, session-A 2026-08-09) | B69 (last of 1st range → porton-corredizo), then B120 (esclusa-personal), B121 (puerta-seguridad), B122+ free |
 | transporte | B70–B79 | B74 |
 | robotica | B80–B89 | B80 (B62 is its historical entry; new blocks go B80+) |
 | automotriz | B90–B99 | B90 (B63 historical; new blocks B90+) |
