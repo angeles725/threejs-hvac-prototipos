@@ -39,7 +39,12 @@ RENUMBER it to your range before requesting integration. session-A reconciles at
 | proceso / fluidos / utilities | B100–B119 | B100 |
 | any new family | ask session-A | — |
 
-## Detection (for the integration gate — TODO)
-The only check that catches a wrong-topic citation is crossing each `[Block N]` cite against the
-**title** of block N (content), not against its number or mere existence. Counting cites or checking the
-file resolves detects nothing. session-B/transporte proposed it; to be added to `tools/`.
+## Enforcement — prevent at WRITE, not detect at read
+- **WRITE RULE (mandatory, automatable, zero false positives):** before writing block N, check THIS table —
+  N must be inside your family's range and not already consumed. This prevents the wrong-topic citation at
+  origin. It is a table lookup, no content-reading. This is the enforceable rule.
+- **Citation↔title cross = HUMAN review only, NOT a tool.** Crossing each `[Block N]` cite against block N's
+  title catches wrong-topic cites but automating it is NOISY: cross-family citations are usually LEGITIMATE
+  (palletizer cites racking; vehicles cite the EUR pallet). Measured: range-check = 54% noise, content-cross =
+  worse. So the reviewer does this by eye at integration; do NOT build the noisy verifier believing this
+  registry asks for it. (Idea/measurements: catalog-transporte + catalog-hvac.)
