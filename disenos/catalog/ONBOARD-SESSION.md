@@ -142,8 +142,11 @@ GOTCHAS ya detectados (evítalos):
   · cuerpo CURVO de metal (tanque, silo, tubo) → NUNCA el fill plano (lo aplana) y tampoco basta con nada
     (sale negro): usa la VARIANTE ESTUDIO de HANDBOOK §3.3 — RectAreaLight key+fill grandes, con
     RectAreaLightUniformsLib.init() UNA vez antes de renderizar. Resuelve el degradado vertical del casco.
-  · superficie INCLINADA hacia abajo (tolva 60°) → además una tarjeta de rebote baja apuntando hacia ARRIBA
-    (es un espejo inclinado que refleja el suelo → si no, negro aunque las normales estén bien).
+  · superficie INCLINADA hacia abajo (tolva 60°, cono, cara inferior) → normalmente NO tiene arreglo por luz
+    (medido: R = 2(N·V)N − V con normal de Y negativa y cámara sobre el horizonte deja la fuente BAJO el suelo;
+    una tarjeta de rebote en la escena PMREM da efecto CERO, o revienta el mapa si la subes). Documéntalo como
+    LÍMITE MEDIDO y elige el crop del colorTarget en una cara representativa que mire hacia arriba/afuera.
+    (Si en algún asset se resolvió, fue con luz colocada BAJO el horizonte o un environment propio, no RoomEnvironment.)
 - METALNESS casi BINARIO (HANDBOOK §3.1): en superficie sólida SIN textura, un metalness intermedio
   (0.2-0.55) es artefacto del shader, no autoría válida. Usa 0 (dieléctrico: pintado, plástico) o ~1 (metal
   desnudo). No dejes 0.35/0.4/0.7 en paneles lisos.
