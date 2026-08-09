@@ -1,0 +1,331 @@
+<!doctype html>
+<!--
+  transformador-pad — catalog asset, family `electricos`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Spec: ./design-spec.yaml
+  NOTE: this is the DEADFRONT sibling of transformador-seco, and the two must not converge. This one
+  is oil-filled: a sealed corrugated tank, a concrete pad, and a single lockable front compartment
+  split HV / LV. There is no exposed core, no ventilation louvre and no wheeled base anywhere on it.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transformador pad-mounted — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.025 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Transformador pad-mounted — frente muerto, 3 fases</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· verde Munsell 7GY · tanque corrugado</span></div>
+  <div class="dim">tanque 1.70 × 1.30 × 1.42 m · pad 2.20 × 2.15 m · compartimento AT | BT</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">ABRIR COMPARTIMENTO</button>
+  <button id="btnPad" class="on">PAD DE CONCRETO</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const TANK_W = 1.70, TANK_D = 1.30, TANK_H = 1.42;   // ~300 kVA class 3-phase pad-mount
+// The pad must cover the WHOLE footprint, and the footprint is not the tank: the front terminal
+// compartment adds 0.34 m of it forward of the tank face. A pad sized to the tank alone leaves the
+// compartment and both doors cantilevered over bare earth.
+const PAD_W  = 2.20, PAD_D = 2.15, PAD_H = 0.16;
+const PAD_CZ = 0.17;                                  // pad centre, offset forward to stay under the cabinet
+const TANK_Y0 = PAD_H;
+const TANK_TOP = TANK_Y0 + TANK_H;
+const CAB_D  = 0.34;                                  // front terminal compartment depth
+const CAB_H  = 1.00;                                  // compartment height (sill above the pad)
+const CAB_Y0 = TANK_Y0 + 0.14;
+const FRONT_Z = TANK_D/2 + CAB_D;
+const HV_FRAC = 0.42;                                 // HV compartment share of the front width
+const DIV_X = -TANK_W/2 + TANK_W*HV_FRAC;             // HV | LV barrier
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 8, 30);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 5.7, AZ = 0.73, EL = 0.26, TGT_Y = 0.78;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TGT_Y + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TGT_Y, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TGT_Y, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.2;        // vertical-subject deviation — see design-spec §lighting
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.2, 4.8, 3.8); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-2.6; sun.shadow.camera.right=2.6; sun.shadow.camera.top=2.6; sun.shadow.camera.bottom=-2.6;
+sun.shadow.camera.far = 16;
+scene.add(sun);
+const faceFill = new THREE.DirectionalLight(0xdce6f2, 0.85);    // panel-normal fill (the deviation)
+faceFill.position.set(0.5, 1.2, 4.5);
+scene.add(faceFill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(24,24),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   The tank is PAINTED steel -> dielectric. Utility pad-mounts are finished in the Munsell 7GY
+//   green that ANSI C57.12.28 fixes for pad-mounted equipment; a bare-steel tank would be wrong
+//   twice over, once on the family and once on the colour.
+// ============================================================================
+const matTank   = new THREE.MeshStandardMaterial({ color:0x5c6b52, metalness:0.0,  roughness:0.58 });
+const matTankD  = new THREE.MeshStandardMaterial({ color:0x4c5a44, metalness:0.0,  roughness:0.60 });
+const matTankL  = new THREE.MeshStandardMaterial({ color:0x6a7a5e, metalness:0.0,  roughness:0.56 });
+const matConc   = new THREE.MeshStandardMaterial({ color:0x6e7069, metalness:0.0,  roughness:0.92 });
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xb6babc, metalness:0.92, roughness:0.42 });
+const matCopper = new THREE.MeshStandardMaterial({ color:0xf0a67a, metalness:1.0,  roughness:0.36 });
+const matEpdm   = new THREE.MeshStandardMaterial({ color:0x14171a, metalness:0.0,  roughness:0.72 }); // elbow rubber
+const matPlastic= new THREE.MeshStandardMaterial({ color:0x1a1d21, metalness:0.0,  roughness:0.52 });
+const matLabel  = new THREE.MeshStandardMaterial({ color:0xf2f3ef, metalness:0.0,  roughness:0.70 });
+const matWarn   = new THREE.MeshStandardMaterial({ color:0xd8b81a, metalness:0.0,  roughness:0.62 });
+const matGauge  = new THREE.MeshStandardMaterial({ color:0xdfe3e6, metalness:0.0,  roughness:0.22 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xforms, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = im.receiveShadow = true;
+  xforms.forEach((t,i)=>{
+    _p.set(t[0], t[1], t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0));
+    _s.set(t[6]??1, t[7]??1, t[8]??1);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s));
+  });
+  im.instanceMatrix.needsUpdate = true;
+  parent.add(im);
+  return im;
+}
+function box(w,h,d,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+function cyl(rt,rb,h,seg,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+
+// --- concrete pad with the cable-entry window the unit straddles ---
+const pad = new THREE.Group();
+box(PAD_W, PAD_H, PAD_D, matConc, 0, PAD_H/2, PAD_CZ, pad);
+box(PAD_W - 0.10, 0.012, PAD_D - 0.10, matConc, 0, PAD_H + 0.004, PAD_CZ, pad);   // chamfer ring
+box(TANK_W - 0.50, 0.06, TANK_D - 0.50, new THREE.MeshStandardMaterial({ color:0x14181d, metalness:0, roughness:1 }),
+    0, PAD_H - 0.02, -0.10, pad);                                                 // cable window (dark void)
+root.add(pad);
+
+// --- tank: corrugated side and rear walls. The corrugation IS the radiator on a modern pad-mount,
+//     so a smooth-walled tank silently removes the machine's entire cooling surface. ---
+const tank = new THREE.Group();
+box(TANK_W, TANK_H, TANK_D, matTank, 0, TANK_Y0 + TANK_H/2, 0, tank);
+const fins = [], FIN_STEP = 0.062, FIN_H = TANK_H - 0.30;
+for(let x = -TANK_W/2 + 0.09; x <= TANK_W/2 - 0.09; x += FIN_STEP)          // rear wall fins
+  fins.push([x, TANK_Y0 + 0.12 + FIN_H/2, -TANK_D/2 - 0.030, 0, 0, 0, 1, 1, 1]);
+const sideFins = [];
+for(const sx of [-1, 1]) for(let z = -TANK_D/2 + 0.09; z <= TANK_D/2 - 0.09; z += FIN_STEP)
+  sideFins.push([sx*(TANK_W/2 + 0.030), TANK_Y0 + 0.12 + FIN_H/2, z]);
+instanced(new THREE.BoxGeometry(0.030, FIN_H, 0.062), matTankD, fins, tank);
+instanced(new THREE.BoxGeometry(0.062, FIN_H, 0.030), matTankD, sideFins, tank);
+// welded top cover with a raised seam, and the tank base skirt
+box(TANK_W + 0.05, 0.045, TANK_D + 0.05, matTankL, 0, TANK_TOP + 0.020, 0, tank);
+box(TANK_W + 0.02, 0.09,  TANK_D + 0.02, matTankD, 0, TANK_Y0 + 0.045, 0, tank);
+root.add(tank);
+
+// --- tank-top accessories: the trim that says "oil-filled", not "dry" ---
+const trim = new THREE.Group();
+cyl(0.055, 0.055, 0.075, 14, matSteel, -TANK_W/2 + 0.24, TANK_TOP + 0.078, -0.18, trim);  // pressure relief
+cyl(0.048, 0.048, 0.030, 16, matGauge,  TANK_W/2 - 0.30, TANK_TOP + 0.058, -0.10, trim);  // liquid level gauge
+cyl(0.040, 0.040, 0.030, 16, matGauge,  TANK_W/2 - 0.30, TANK_TOP + 0.058,  0.10, trim);  // oil temperature
+cyl(0.030, 0.030, 0.14,  12, matSteel,  0.10, TANK_TOP + 0.09, -0.30, trim);              // fill plug / handhole
+box(0.20, 0.020, 0.20, matTankL, 0.10, TANK_TOP + 0.050, -0.30, trim);
+root.add(trim);
+
+// --- front terminal compartment: HV on the left, LV on the right, one barrier between them ---
+const cab = new THREE.Group();
+// The compartment is a SHELL, not a solid: floor, roof, two end walls and the HV|LV barrier, with
+// the tank face as its back. Modelled as one filled box it still renders, still counts and still
+// looks correct with the doors shut — and hides every bushing, elbow and fuse the moment they open.
+const CAB_CZ = TANK_D/2 + CAB_D/2;
+box(TANK_W, 0.025, CAB_D, matTankD, 0, CAB_Y0 + 0.012, CAB_CZ, cab);                          // floor
+box(TANK_W, 0.025, CAB_D, matTankD, 0, CAB_Y0 + CAB_H - 0.012, CAB_CZ, cab);                  // roof
+for(const sx of [-1, 1])
+  box(0.022, CAB_H, CAB_D, matTank, sx*(TANK_W/2 - 0.011), CAB_Y0 + CAB_H/2, CAB_CZ, cab);    // ends
+box(0.020, CAB_H - 0.05, CAB_D - 0.02, matTankD, DIV_X, CAB_Y0 + CAB_H/2, CAB_CZ, cab);       // barrier
+box(TANK_W + 0.04, 0.035, CAB_D + 0.04, matTankL, 0, CAB_Y0 + CAB_H + 0.015, CAB_CZ, cab);    // drip hood
+box(TANK_W - 0.04, 0.03, 0.05, matTankD, 0, CAB_Y0 + 0.03, TANK_D/2 + CAB_D - 0.025, cab);    // door sill
+root.add(cab);
+
+// interior of the compartment — only visible once the doors swing, which is the state the gate
+// never captures, so it gets its own probe run.
+const guts = new THREE.Group();
+const HV_CX = (-TANK_W/2 + DIV_X)/2, LV_CX = (DIV_X + TANK_W/2)/2;
+const BUSH_Y = CAB_Y0 + CAB_H*0.62, TANK_FACE = TANK_D/2 + 0.012;
+// HV side: 3 deadfront bushing wells with loadbreak elbows, plus a bayonet fuse and a switch handle
+for(let k=0;k<3;k++){
+  const x = HV_CX - 0.20 + k*0.20;
+  cyl(0.052, 0.062, 0.10, 14, matTankL, x, BUSH_Y, TANK_FACE + 0.05, guts).rotation.x = Math.PI/2;
+  const elbow = cyl(0.046, 0.046, 0.17, 14, matEpdm, x, BUSH_Y - 0.07, TANK_FACE + 0.12, guts);
+  elbow.rotation.x = 0;                                     // elbows hang DOWN off the bushing
+  cyl(0.020, 0.020, 0.10, 10, matEpdm, x, BUSH_Y - 0.17, TANK_FACE + 0.12, guts);
+}
+cyl(0.045, 0.045, 0.26, 14, matTankL, HV_CX + 0.24, BUSH_Y + 0.10, TANK_FACE + 0.06, guts)
+  .rotation.set(0.55, 0, 0);                                 // bayonet fuse holder, angled up
+box(0.05, 0.05, 0.16, matSteel, HV_CX - 0.30, CAB_Y0 + 0.30, TANK_FACE + 0.10, guts);    // switch handle
+box(0.16, 0.16, 0.012, matLabel, HV_CX, CAB_Y0 + CAB_H - 0.14, TANK_FACE + 0.01, guts);  // connection diagram
+// LV side: spade terminals on a landing pad + neutral bushing + ground bar
+for(let k=0;k<3;k++){
+  const x = LV_CX - 0.17 + k*0.17;
+  cyl(0.038, 0.044, 0.09, 12, matTankL, x, BUSH_Y, TANK_FACE + 0.045, guts).rotation.x = Math.PI/2;
+  box(0.055, 0.16, 0.012, matCopper, x, BUSH_Y - 0.10, TANK_FACE + 0.09, guts);          // spade
+}
+cyl(0.034, 0.040, 0.08, 12, matTankL, LV_CX + 0.26, BUSH_Y - 0.04, TANK_FACE + 0.04, guts).rotation.x = Math.PI/2;
+box(0.34, 0.030, 0.010, matCopper, LV_CX, CAB_Y0 + 0.16, TANK_FACE + 0.02, guts);        // ground bar
+root.add(guts);
+
+// --- doors: two leaves, each hinged on its OUTBOARD edge so they open away from the barrier ---
+const doors = [];
+function makeDoor(x0, x1, hingeLeft){
+  const w = x1 - x0 - 0.012, h = CAB_H - 0.05, cy = CAB_Y0 + 0.025 + h/2;
+  const g = new THREE.Group();
+  g.position.set(hingeLeft ? x0 : x1, 0, FRONT_Z + 0.004);
+  const lx = hingeLeft ? (0.006 + w/2) : -(0.006 + w/2);
+  box(w, h, 0.022, matTank, lx, cy, 0, g);
+  box(w, 0.022, 0.05, matTankD, lx, cy - h/2 + 0.011, -0.032, g);        // stiffening returns
+  box(w, 0.022, 0.05, matTankD, lx, cy + h/2 - 0.011, -0.032, g);
+  // pentahead bolt + recessed handle on the free edge; hinges on the pivot edge
+  const free = hingeLeft ? (lx + w/2 - 0.06) : (lx - w/2 + 0.06);
+  box(0.05, 0.09, 0.026, matSteel, free, cy + 0.05, 0.022, g);
+  cyl(0.020, 0.020, 0.030, 5, matSteel, free, cy - 0.07, 0.030, g).rotation.x = Math.PI/2;
+  for(const hy of [cy - h/2 + 0.09, cy + h/2 - 0.09])
+    box(0.020, 0.070, 0.026, matSteel, hingeLeft ? 0.010 : -0.010, hy, -0.008, g);
+  root.add(g); doors.push({g, hingeLeft});
+  return g;
+}
+makeDoor(-TANK_W/2 + 0.01, DIV_X, true);          // HV leaf, hinged at the left end
+makeDoor(DIV_X, TANK_W/2 - 0.01, false);          // LV leaf, hinged at the right end
+// exterior labels ride on the doors' outer faces
+box(0.24, 0.16, 0.005, matWarn,  -TANK_W/2 + 0.30, CAB_Y0 + CAB_H - 0.22, FRONT_Z + 0.020);
+box(0.26, 0.17, 0.005, matLabel,  TANK_W/2 - 0.34, CAB_Y0 + 0.26,        FRONT_Z + 0.020);
+
+// --- grounding: pad ground rod + tank ground pads, both sides ---
+for(const sx of [-1, 1])
+  box(0.07, 0.07, 0.012, matCopper, sx*(TANK_W/2 + 0.045), TANK_Y0 + 0.22, TANK_D/2 - 0.16);
+cyl(0.012, 0.012, 0.55, 8, matCopper, -PAD_W/2 + 0.10, 0.28, PAD_CZ + PAD_D/2 - 0.12);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+// ~120°, not 90°. Pad-mount doors fold BACK against the tank sides; stopping them square leaves
+// both leaves standing across the compartment they are supposed to be revealing.
+const OPEN_ANGLE = 2.10;
+let doorTarget = 0, doorPos = 0;
+const btnDoor = document.getElementById('btnDoor');
+btnDoor.onclick = ()=>{ doorTarget = doorTarget ? 0 : 1;
+  btnDoor.classList.toggle('on', !!doorTarget); requestRender(); };
+
+const btnPad = document.getElementById('btnPad');
+btnPad.onclick = ()=>{ pad.visible = !pad.visible;
+  btnPad.classList.toggle('on', pad.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(Math.abs(doorPos - doorTarget) > 0.001){
+    doorPos += (doorTarget - doorPos) * 0.10;
+    if(Math.abs(doorPos - doorTarget) <= 0.001){
+      doorPos = doorTarget;
+      renderer.shadowMap.needsUpdate = true;    // re-bake once the swing settles, not every frame
+    }
+    // the two leaves mirror each other: each swings away from the HV|LV barrier
+    doors.forEach(d=>{ d.g.rotation.y = (d.hingeLeft ? -1 : 1) * OPEN_ANGLE * doorPos; });
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__transformadorPadApp = __app;
+globalThis['__transformador-padApp'] = __app;      // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

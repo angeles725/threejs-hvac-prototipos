@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 
 const BIN = process.env.HOME + '/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell';
-const PORT = 9336;
+const PORT = Number(process.env.CDP_PORT || 9336);   // override para evitar colisión entre probes concurrentes
 const BASE = process.env.BASE || 'http://127.0.0.1:8899';
 const SHOT_DIR = process.env.SHOT_DIR || '.';
 const [target, btnList, suffix = 'state'] = process.argv.slice(2);

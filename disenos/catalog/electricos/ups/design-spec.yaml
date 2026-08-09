@@ -1,0 +1,191 @@
+# DesignSpec — modular UPS power cabinet + coupled VRLA battery cabinet
+# Sixth asset of the catalog `electricos` family.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+#
+# EVIDENCE DISCIPLINE: no manufacturer datasheet was preserved. Every dimension is [INFER] from
+# UPS-room practice at confidence <= 0.7. Nothing here is presented as [CERT-doc].
+#
+# SCOPE BOUNDARY vs datacenter/banco-baterias — these two must not converge. THIS asset is the
+# POWER cabinet: modular rectifier/inverter, static bypass, HMI, with ONE battery cabinet attached
+# to show where the DC link goes. The datacenter asset is the opposite emphasis: a multi-cabinet
+# battery bank with no power conversion in it at all.
+
+design: ups
+family: electricos
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+
+complexity:
+  scores: {silhouette: 1, components: 3, hierarchy: 2, repetition: 3,
+           material_layers: 3, detail: 2, occlusion: 3, action_readiness: 1}
+  tier: complex
+  notes: >
+    occlusion 3 again: two cabinets, and everything identifying either of them is behind a door.
+    material_layers 3 for the battery in particular — one block is a moulded ABS jar with lead
+    posts and lead straps, three surface families in an object 0.10 m wide.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    isa101_states: "research/HANDBOOK.md §3.4"
+    scope_boundary: "disenos/catalog/datacenter/banco-baterias/ (must stay a different asset)"
+
+references:
+  - source: "research/HANDBOOK.md §3.1 (PBR palette) + §3.4 (ISA-101)"
+    evidences: >
+      [CERT] near-binary metalness; coated cabinet sheet is dielectric; corrected warm copper;
+      neutral grey is the NORMAL state and colour is reserved for the abnormal one.
+    suitability: pass
+  - source: "UPS-room practice (no document preserved in sources/)"
+    evidences: >
+      [INFER] hot-swap power modules in a slot frame with N+1 spare capacity and blanking plates in
+      the unused slots; a static bypass beneath the module stack; an EPO mushroom on the door; VRLA
+      blocks on shelves linked post-to-post by lead straps behind a DC breaker.
+    suitability: partial
+
+dimensions_real:
+  ups_cabinet_w_m: {value: 0.90, confidence: low}
+  bat_cabinet_w_m: {value: 0.70, confidence: low}
+  depth_m:         {value: 0.85, confidence: low}
+  body_h_m:        {value: 1.90, confidence: low}
+  plinth_h_m:      {value: 0.10, confidence: low}
+  overall_h_m:     {value: 2.00, confidence: low}
+  module_h_m:      {value: 0.22, confidence: low}
+  module_slots:    {value: 5,    confidence: low}   # 3 populated, 2 blanked
+  battery_blocks:  {value: 20,   confidence: low}   # 4 shelves x 5 blocks
+  battery_block_w_m: {value: 0.105, confidence: low}
+
+hierarchy:
+  - name: root
+    children:
+      - name: carcass_ups     # plinth, walls, roof with exhaust louvres, front frame
+        pivot: [0, 0, 0]
+        animation: none
+      - name: carcass_bat     # same shell, NO roof louvres — a VRLA cabinet is not force-cooled
+        pivot: [0, 0, 0]
+        animation: none
+      - name: upsGuts         # slot frame + rails, 3 power modules, 2 blanking plates, static bypass,
+                              # control shelf, DC link bars crossing into the battery cabinet
+        pivot: [0, 0, 0]
+        animation: none
+      - name: batGuts         # 4 shelves x 5 VRLA blocks, lids, posts, straps, DC breaker
+        pivot: [0, 0, 0]
+        animation: none
+      - name: doors           # 2 leaves, hinged left, eased swing
+        pivot: per-leaf left stile
+        animation: swing
+
+materials:
+  - id: paint-ral7035
+    family: painted-metal
+    color: "#cfd2cc"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1 'panelBox -> 0.0-0.05'"
+    confidence: 0.9
+  - id: battery-jar-abs
+    family: plastic
+    color: "#22262b"
+    metalness: 0.0             # moulded ABS/SAN. Painting a whole battery as one material is the
+    roughness: 0.44            # giveaway error — the jar is dielectric, the posts are not.
+    evidence: "HANDBOOK §3.1 dielectric metalness 0"
+    confidence: 0.8
+  - id: battery-post-lead
+    family: bare-metal
+    color: "#9aa0a6"
+    metalness: 0.9
+    roughness: 0.48
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0 — posts and interconnect straps"
+    confidence: 0.8
+  - id: copper-dc-link
+    family: bare-metal
+    color: "#f0a67a"
+    metalness: 1.0
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1 copper correction"
+    confidence: 0.9
+  - id: module-housing
+    family: painted-metal
+    color: "#30353a"
+    metalness: 0.0
+    roughness: 0.58
+    evidence: "coated module chassis — dielectric per HANDBOOK §3.1"
+    confidence: 0.8
+  - id: lamp-isa101
+    family: emissive
+    color: "#5a6878"
+    metalness: 0.0
+    roughness: 0.40
+    evidence: "HANDBOOK §3.4 — amber for the ON-BATTERY state, which is abnormal and time-limited"
+    confidence: 0.9
+
+critical_features:
+  - id: modular-slot-frame
+    desc: >
+      A slot frame with guide rails, 3 populated hot-swap modules and 2 blanking plates. The blanks
+      are not filler: N+1 spare capacity with blanked slots is what a modular UPS looks like in
+      service, and without them the rack reads as a half-empty cabinet with an unexplained void.
+    threshold: 0.80
+  - id: dc-link-goes-somewhere
+    desc: >
+      The DC busbars leave the power cabinet toward the battery cabinet. Their side is DERIVED from
+      the cabinet positions, not hard-coded — hard-coded, they pointed at open air the moment the
+      cabinet order changed.
+    threshold: 0.78
+  - id: battery-is-three-materials
+    desc: >
+      Moulded ABS jar, separate lid, lead posts, lead straps linking post to post along the shelf.
+    threshold: 0.75
+  - id: ups-not-generic-cabinet
+    desc: >
+      Colour touch display, mimic lamp row, EPO mushroom, recessed intake grille on the door. The
+      EPO in particular is what says "UPS" rather than "a cabinet with a screen on it".
+    threshold: 0.78
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 140          # measured 103
+    tris: 10000         # measured 3,678
+
+camera:
+  azimuth_deg: 42
+  elevation_deg: 11
+  fov: 38
+  target_y_m: 1.02
+  radius_m: 5.0
+
+lighting: house-rig + vertical-subject fill
+  # DOCUMENTED DEVIATION: two large VERTICAL coated planes; the house rig was calibrated on
+  # horizontal equipment tops. Fix is LIGHT: DirectionalLight(0xdce6f2, 0.85) along the panel
+  # normal (+Z), environmentIntensity 2.2. metalness/roughness unchanged per HANDBOOK §3.1.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ABRIR PUERTAS"
+  - "MODO BATERÍA (ISA-101)"   # amber on the battery lamp only; everything else stays neutral
+
+colorTarget:
+  srgb: [231, 232, 231]
+  deltaE00Max: 8
+  crop: "16x20+451+230"   # clean cabinet door face at 1280x800, per-channel std 0.00
+
+verification:
+  gate: "node disenos/catalog/tools/verify-catalog-asset.mjs electricos/ups"
+  measured: {ready: true, calls: 103, triangles: 3678, console_errors: 0, shadowAuto: false}
+  # Caught only by capturing the doors-open state:
+  #   1. the power cabinet was outboard of the battery cabinet, so the battery door covered the
+  #      module stack — the one thing this asset exists to show — in every open view;
+  #   2. the DC link bars were hard-coded to the +X side and, once the cabinets swapped, ran out of
+  #      the power cabinet into open air;
+  #   3. the slot frame was populated 3-of-3 in a 5-slot-tall space, leaving a void mid-cabinet.
+  # None of the three changes ready, calls or triangles.
+  known_flake: >
+    The gate fetches three.js from unpkg. A CDN hiccup surfaces as ready:false / error:'no-renderer'
+    with an EMPTY console-error list and zero __ globals. Observed TWICE while building this family,
+    both times on an asset that was perfectly fine. Re-run before believing it.
