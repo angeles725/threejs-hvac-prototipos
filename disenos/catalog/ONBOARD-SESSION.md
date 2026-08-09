@@ -124,6 +124,12 @@ GOTCHAS ya detectados (evítalos):
   `known_view_limit` en el spec en vez de forzar geometría imposible.
 - PRODUCTO DE TECHO (difusor, VAV): el detalle va hacia la SALA y la cámara de revisión debe estar DEBAJO;
   conos escalonados hacia arriba se ven como placa lisa desde el único ángulo real (abajo).
+- FOOTGUN three.js: Object3D.position no tiene setter (Object.defineProperties) → `Object.assign(obj,{position:
+  new Vector3(...)})` LANZA en módulo strict y la página NUNCA marca data-app-ready (el gate lo ve como asset
+  roto). Usa siempre `.position.set(...)`. Igual con .rotation/.scale.
+- INFRA (no es fallo de asset): con varias sesiones corriendo QA a la vez, chrome-headless-shell se cae
+  intermitente ("unsettled top-level await", exit 13) → REINTENTA, da exit 0. Junto con exit 2 (servidor
+  caído) son los dos casos de "no concluyente"; nunca los trates como asset roto.
 
 Trabaja en bucle por todos los assets pendientes de tu familia. Cuando tu familia quede en done, avisa y
 elige otra familia libre si queda, o detente.
