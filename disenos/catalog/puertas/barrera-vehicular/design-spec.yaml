@@ -1,0 +1,134 @@
+# DesignSpec — vehicle boom barrier (4 m boom, 610 mm keep-clear envelope)
+# Dimensional evidence: [Block 60] (research/threejs-block60.md). Read §60.3 before trusting the
+# cabinet numbers: the boom kinematics are CERTIFIED, the housing envelope is NOT published.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: barrera-vehicular
+family: puertas
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  scores: {silhouette: 1, components: 2, hierarchy: 1, repetition: 1,
+           material_layers: 2, detail: 1, occlusion: 0, action_readiness: 2}
+  tier: simple
+  notes: >
+    A cabinet and a boom on one pivot. action_readiness 2: the boom rotates about a horizontal axis
+    at the cabinet head, and the swept arc has a published keep-clear rule that the asset visualises.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/threejs-block60.md
+
+references:
+  - source: "https://www.faac.co.uk/barriers/b680-automatic-barrier (fetched 2026-08-08)"
+    evidences: "Boom 2.50-8.30 m; opening 1.5 s (2 m) to 6 s (8 m), adjustable; continuous duty; 24 V, 240 W."
+    suitability: pass
+  - source: "sources/B60-access-dims/faac-620-barrier.pdf :p.363"
+    evidences: "'Do not install the barrier in such a way that the beam moves within 2 feet (610 mm) of a rigid object.'"
+    suitability: pass
+  - source: "cabinet envelope"
+    evidences: "NOT PUBLISHED by any reachable vendor source — see [Block 60] §60.3 and its tried: list."
+    suitability: fail
+
+dimensions_real:
+  boom_len_m:     {value: 4.00,  confidence: high}   # [CERT-web] inside the certified 2.50-8.30 band
+  boom_range_m:   {value: [2.50, 8.30], confidence: high}   # [CERT-web]
+  open_time_s:    {value: 3.0,   confidence: high}   # [CERT-web] interpolated inside 1.5-6 s
+  keepclear_m:    {value: 0.610, confidence: high}   # [CERT-doc] 2 feet, around the SWEPT beam
+  supply:         {value: "24 V / 240 W", confidence: high}  # [CERT-web]
+  cabinet_w_m:    {value: 0.32,  confidence: low}    # [INFER] NOT published — see Block 60 §60.3
+  cabinet_h_m:    {value: 1.05,  confidence: low}    # [INFER] sized to a driver-window pivot height
+  cabinet_d_m:    {value: 0.28,  confidence: low}    # [INFER]
+  pivot_h_m:      {value: 0.90,  confidence: low}    # [INFER]
+  boom_section_m: {value: [0.085, 0.050], confidence: low}   # [INFER] profile not published
+
+hierarchy:
+  - name: root
+    children:
+      - name: cabinet        # housing + door + base plate (LOW confidence geometry)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: boom           # rotates about the pivot at the cabinet head
+        pivot: [0, 0.90, 0]
+        animation: rotate-x
+      - name: keepclear      # visualises the certified 610 mm envelope around the swept arc
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: cabinet-painted
+    family: painted-metal
+    color: "#c8ccce"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "coated steel housing — dielectric per HANDBOOK §3.1"
+    confidence: 0.6
+  - id: boom-white
+    family: painted-metal
+    color: "#e8eaea"
+    metalness: 0.0
+    roughness: 0.5
+    evidence: "painted aluminium boom; HANDBOOK §3.1 painted = dielectric"
+    confidence: 0.6
+  - id: boom-red
+    family: painted-metal
+    color: "#b03127"
+    metalness: 0.0
+    roughness: 0.5
+    evidence: "hazard banding — ISA/traffic convention, not a datasheet dimension"
+    confidence: 0.5
+  - id: keepclear-marker
+    family: emissive-marker
+    color: "#00d4aa"
+    metalness: 0.0
+    roughness: 1.0
+    evidence: "not a physical part — a visualisation of the [CERT-doc] 610 mm rule"
+    confidence: 1.0
+
+critical_features:
+  - id: boom-arc-and-clearance
+    desc: >
+      The boom pivots about a horizontal axis at the cabinet head and sweeps a quarter circle; the
+      610 mm keep-clear envelope around that arc is shown, so the asset teaches the installation
+      rule rather than only the object.
+    threshold: 0.75
+  - id: honest-cabinet
+    desc: >
+      The cabinet is a plausible painted housing at driver height. It is explicitly NOT certified
+      geometry — the spec and the block both say so; it must not be presented as measured.
+    threshold: 0.70
+
+quality_contract:
+  global_min: 0.72          # lower than its siblings ON PURPOSE: a third of this asset is [INFER]
+  perf_budget:
+    draws: 25                 # measured 19
+    tris: 20000               # measured ~650
+
+camera:
+  view: exterior
+  azimuth_deg: 52
+  elevation_deg: 13
+  fov: 38
+  target: [1.60, 1.05, 0]   # offset along the boom so the 4 m arm fits the frame
+  radius_m: 7.0
+
+lighting: house-rig
+  # Painted dielectric surfaces throughout — no vertical-subject fill needed.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "OPEN / CLOSE"
+  - "KEEP CLEAR 610"        # toggles the certified clearance envelope
+  - "SCALE 1.8 m"           # HANDBOOK §3.0 sanity-check figure (a car was tried and rejected)
+
+colorTarget:
+  srgb: [204, 71, 60]       # the RED hazard band: the boom banding is the material claim most
+                            # likely to regress (a metalness slip turns it into painted chrome)
+  deltaE00Max: 8
+  crop: "50x10+700+437"   # a red band on the boom, at 1280x800

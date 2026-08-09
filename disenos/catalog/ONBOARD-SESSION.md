@@ -51,8 +51,23 @@ PASO 3 — COMMIT + STATUS:
   (busca su nombre con ListAgents; suele ser la sesión en el worktree principal / master).
 
 FAMILIAS needs-research (robotica, transporte, automotriz): corre /research-sdd PRIMERO para la técnica
-dura (jerarquía de joints/IK; scroll de textura para banda). Bloques de corpus arrancan en B59
-(B57/B58 ya tomados); sincroniza con research-sdd-status.sh <target> --sync-state antes de tocar el envelope.
+dura (jerarquía de joints/IK; scroll de textura para banda). Sincroniza con
+research-sdd-status.sh <target> --sync-state antes de tocar el envelope.
+
+RANGOS DE BLOQUE RESEARCH (asignados para que NO colisionen números entre sesiones — usa el siguiente
+libre DE TU RANGO; si te quedas sin, pide otro a session-A):
+- session-B (puertas/almacenamiento): B57-B69   (B57/B58/B59/B60 ya en master)
+- transporte: B70-B79   ·   robotica: B80-B89   ·   automotriz: B90-B99
+Si ya escribiste un bloque fuera de tu rango (p.ej. transporte con B59-B61), RENUMÉRALO a tu rango antes de
+pedir integración; session-A también reconcilia al mergear.
+
+POLÍTICA para assets SIN ficha de fabricante (precedente barrera-vehicular): NO inventes cifras y las
+declares "high". Modela con todas las confidences en LOW, documenta en el design-spec la lista de fuentes
+intentadas, y avisa en el HUD que esa parte no está certificada. Es preferible un asset honesto-con-caveats
+a dejarlo pendiente, salvo que el usuario pida esperar una ficha.
+
+ESCALA: para assets pequeños/medianos usa la FIGURA humana de 1.8 m (HANDBOOK §3.0) como referencia, NO un
+vehículo — un coche de 4.3 m domina el encuadre y compite con el sujeto.
 
 GOTCHAS ya detectados (evítalos):
 - Sujetos VERTICALES de metal desnudo (puertas, cladding, tableros) reflejan el horizonte oscuro y se leen

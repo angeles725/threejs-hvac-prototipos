@@ -1,0 +1,242 @@
+<!doctype html>
+<!--
+  barrera-vehicular — catalog asset, family `puertas`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block60.md  ·  Spec: ./design-spec.yaml
+  HONESTY NOTE: the boom kinematics and the 610 mm keep-clear rule are CERTIFIED; the cabinet
+  envelope is NOT published by any reachable vendor source and is [INFER]. See Block 60 §60.3.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barrera vehicular — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #hud .warn{color:#e0a33a}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Barrera vehicular — brazo 4.00 m</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· 2.50-8.30 m · 1.5-6 s · 24 V</span></div>
+  <div class="dim">retiro obligatorio 610 mm alrededor del arco</div>
+  <div class="warn">gabinete [INFER]: ningún fabricante publica su envolvente</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnOpen">OPEN / CLOSE</button>
+  <button id="btnClear">KEEP CLEAR 610</button>
+  <button id="btnVeh" class="on">SCALE 1.8 m</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 60]) ----------
+const BOOM_L = 4.00;                       // [CERT-web] inside the certified 2.50-8.30 m band
+const BOOM_W = 0.085, BOOM_H = 0.050;      // [INFER] profile not published
+const KEEPCLEAR = 0.610;                   // [CERT-doc] 2 feet around the SWEPT beam
+const CAB_W = 0.32, CAB_H = 1.05, CAB_D = 0.28;   // [INFER] NOT published — Block 60 §60.3
+const PIVOT_H = 0.90;                      // [INFER]
+const BANDS = 7;                           // hazard banding along the boom
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 34);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 7.0, AZ = 0.90, EL = 0.235;
+camera.position.set(1.60 + R*Math.cos(AZ)*Math.cos(EL), 1.15 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(1.60, 1.05, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(1.60, 1.05, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(5, 8, 5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d
+sun.shadow.camera.left=-6; sun.shadow.camera.right=6; sun.shadow.camera.top=6; sun.shadow.camera.bottom=-6;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. Painted housing and boom = DIELECTRIC (HANDBOOK §3.1).
+// ============================================================================
+const matCab   = new THREE.MeshStandardMaterial({ color:0xc8ccce, metalness:0.0, roughness:0.55 });
+const matCabDk = new THREE.MeshStandardMaterial({ color:0x9aa0a3, metalness:0.0, roughness:0.6 });
+const matWhite = new THREE.MeshStandardMaterial({ color:0xe8eaea, metalness:0.0, roughness:0.50 });
+const matRed   = new THREE.MeshStandardMaterial({ color:0xb03127, metalness:0.0, roughness:0.50 });
+const matSteel = new THREE.MeshStandardMaterial({ color:0x909698, metalness:0.9, roughness:0.45 });
+const matVeh   = new THREE.MeshStandardMaterial({ color:0x33506b, metalness:0.0, roughness:0.55 });
+const matMark  = new THREE.MeshBasicMaterial({ color:0x00d4aa, transparent:true, opacity:0.20, side:THREE.DoubleSide });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+
+// --- cabinet [INFER geometry — flagged in the HUD, not passed off as measured] ---
+const cabinet = new THREE.Group();
+put(cabinet, CAB_W, CAB_H, CAB_D, matCab, 0, CAB_H/2, 0);
+put(cabinet, CAB_W + 0.06, 0.035, CAB_D + 0.06, matCabDk, 0, 0.018, 0);          // base plate
+put(cabinet, CAB_W - 0.06, CAB_H - 0.30, 0.006, matCabDk, 0, CAB_H/2 - 0.05, CAB_D/2 + 0.004); // access door
+put(cabinet, CAB_W + 0.02, 0.03, CAB_D + 0.02, matCabDk, 0, CAB_H, 0);           // cap
+const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 10),
+  new THREE.MeshStandardMaterial({ color:0xe0a33a, emissive:0x8a5a00, emissiveIntensity:0.6, roughness:0.4 }));
+lamp.position.set(0, CAB_H + 0.055, 0); cabinet.add(lamp);
+root.add(cabinet);
+
+// --- boom: pivots at the cabinet head, hazard-banded, with a support foot at rest ---
+const boomPivot = new THREE.Group();
+boomPivot.position.set(CAB_W/2 + BOOM_W/2 + 0.01, PIVOT_H, 0);
+const boom = new THREE.Group();
+for(let i=0;i<BANDS;i++){
+  const len = BOOM_L / BANDS;
+  put(boom, len - 0.004, BOOM_H, BOOM_W, i%2 ? matRed : matWhite, len*(i+0.5), 0, 0);
+}
+put(boom, 0.05, BOOM_H + 0.04, BOOM_W + 0.04, matCabDk, 0.02, 0, 0);              // pivot collar
+boomPivot.add(boom);
+root.add(boomPivot);
+const foot = new THREE.Group();                                                    // rest support
+put(foot, 0.06, PIVOT_H - BOOM_H/2, 0.06, matSteel, CAB_W/2 + BOOM_L - 0.10, (PIVOT_H - BOOM_H/2)/2, 0);
+root.add(foot);
+
+// --- the certified 610 mm keep-clear envelope around the SWEPT arc [CERT-doc] ---
+const keepclear = new THREE.Group();
+const arcR = BOOM_L + KEEPCLEAR;
+const sweep = new THREE.Mesh(
+  new THREE.RingGeometry(0, arcR, 48, 1, 0, Math.PI/2),
+  matMark);
+sweep.position.set(CAB_W/2 + BOOM_W/2 + 0.01, PIVOT_H, 0);
+keepclear.add(sweep);
+const halo = new THREE.Mesh(new THREE.RingGeometry(BOOM_L, arcR, 48, 1, 0, Math.PI/2),
+  new THREE.MeshBasicMaterial({ color:0x00d4aa, transparent:true, opacity:0.45, side:THREE.DoubleSide }));
+halo.position.copy(sweep.position); keepclear.add(halo);
+keepclear.visible = false;
+root.add(keepclear);
+
+// --- scale reference: the HANDBOOK §3.0 sanity check — "would a 1.8 m person read correctly?"
+//     A car body was tried first and rejected: at 4.3 m it dominated the frame and the boom passed
+//     straight through it. A figure answers the same question without competing with the subject.
+const vehicle = new THREE.Group();
+const skin = new THREE.MeshStandardMaterial({ color:0x6f7c86, metalness:0.0, roughness:0.85 });
+const fx = -0.95, fz = 0.85;
+const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.52, 6, 12), skin);
+torso.position.set(fx, 1.16, fz); torso.castShadow = true; vehicle.add(torso);
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.115, 14, 12), skin);
+head.position.set(fx, 1.62, fz); head.castShadow = true; vehicle.add(head);
+for(const sx of [-1, 1]){
+  const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.62, 6, 10), skin);
+  leg.position.set(fx + sx*0.10, 0.46, fz); leg.castShadow = true; vehicle.add(leg);
+}
+root.add(vehicle);   // total height 1.735 + head radius ≈ 1.8 m
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED; the boom animation holds needsRender while moving.
+//   Rate is taken from the certified band: ~3 s for a 4 m boom (1.5 s at 2 m … 6 s at 8 m).
+// ============================================================================
+const OPEN_A = Math.PI/2, OPEN_TIME = 3.0;
+let angTarget = 0, angNow = 0, last = performance.now();
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnOpen = document.getElementById('btnOpen');
+btnOpen.onclick = ()=>{ angTarget = angTarget === 0 ? OPEN_A : 0;
+  btnOpen.classList.toggle('on', angTarget !== 0); last = performance.now(); requestRender(); };
+
+const btnClear = document.getElementById('btnClear');
+btnClear.onclick = ()=>{ keepclear.visible = !keepclear.visible;
+  btnClear.classList.toggle('on', keepclear.visible); requestRender(); };
+
+const btnVeh = document.getElementById('btnVeh');
+btnVeh.onclick = ()=>{ vehicle.visible = !vehicle.visible; btnVeh.classList.toggle('on', vehicle.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const now = performance.now(), dt = Math.min((now - last)/1000, 0.05); last = now;
+  if(angNow !== angTarget){
+    const step = (OPEN_A / OPEN_TIME) * dt;                       // certified opening rate
+    angNow += Math.sign(angTarget - angNow) * Math.min(step, Math.abs(angTarget - angNow));
+    boomPivot.rotation.z = angNow;
+    foot.visible = angNow < 0.05;
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__barreraVehicularApp = __app;
+globalThis['__barrera-vehicularApp'] = __app;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
