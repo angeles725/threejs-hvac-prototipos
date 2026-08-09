@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **60 blocks**
+Total: **61 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -66,3 +66,4 @@ Total: **60 blocks**
 | 58 | [threejs-block58.md](threejs-block58.md) | Selective pallet racking: the rack is SHORTER than the pallet, and a single bay is not a legal rack |
 | 59 | [threejs-block59.md](threejs-block59.md) | Sectional and roll-up industrial doors: the leaf is a chain of standard sections, and the box above the opening is a computed dimension |
 | 60 | [threejs-block60.md](threejs-block60.md) | Access control: the turnstile is fully published, the barrier only half is |
+| 61 | [threejs-block61.md](threejs-block61.md) | Boltless shelving and the Euro small-load carrier: a refuted premise and a modular chain that ends at the pallet |

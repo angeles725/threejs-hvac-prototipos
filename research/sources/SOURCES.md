@@ -93,6 +93,9 @@
 | B59-door-dims/angelmir-roller-shutter.pdf | B59-door-dims | https://www.angelmir.com/uploads/files/entry/en-roller-shutter-doors-am.pdf | 2026-08-09T02:00:31Z | 9996249e2e0f0146d8ce85e4e9fd938f3789fa1fc71a9a86a76b08692f75eec9 | B59 |
 | B60-access-dims/faac-620-barrier.pdf | B60-access-dims | http://www.faacgateopeners.com/FAAC-Manuals/FAAC-620-Barrier-Gate-Operator.pdf | 2026-08-09T02:22:50Z | 09656864494f9d83b1e8f68ef127b552d190dd4acc431e9ac60b5ba924d08c33 | B60 |
 | B60-access-dims/shancharm-tripod-at103.pdf | B60-access-dims | https://shancharm.com/wp-content/uploads/2026/04/datasheet-xc-at103-vertical-tripod-en-v1.pdf | 2026-08-09T02:22:51Z | 730140ef9e53211f2b10e662e9c552852a9e55c0729618b9e5b497bfcbdcd6d5 | B60 |
+| B61-storage-dims/shelving-rivet-specs | B61-storage-dims | https://www.shelving.com/pages/rivet-shelving-info | 2026-08-09T02:38:06Z | 3e11c91d7cc4b84a232d49608409fbe71bb2f56b6a5f1692dcbbe8800eea4561 | B61 |
+| B61-storage-dims/utz-euro-container | B61-storage-dims | https://www.utzgroup.co.uk/stacking-container-600-400-220/ | 2026-08-09T02:38:08Z | 7adf27603b6713d0164d9535f67f02289c2b50171cfa0b3a7cfe0d962758b330 | B61 |
+| B61-storage-dims/wikipedia-euro-container | B61-storage-dims | https://en.wikipedia.org/wiki/Euro_container | 2026-08-09T02:38:08Z | c274c206b922e2e47fdd7ad21ddb5e56174167633d9806ac1eeced108d571be0 | B61 |
 
 ## Structure
 
