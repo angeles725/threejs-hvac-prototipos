@@ -135,6 +135,8 @@
 | B68-cage-dims/ufgs-10-22-13-wire-mesh-partitions.pdf | B68-cage-dims | https://www.wbdg.org/FFC/DOD/UFGS/UFGS%2010%2022%2013.pdf | 2026-08-09T06:15:38Z | bc55c482fed315aeedf8e4c4db4e772e37d32a8df72d5e3c8ae4bdd36883a245 | B68 |
 | B69-gate-dims/hoover-cantilever-gate-installation.pdf | B69-gate-dims | https://www.hooverfence.com/mas_assets/theme/hooverfence/pdfs/cantilever-gate-installation.pdf | 2026-08-09T06:55:56Z | 1c4971ef4a3881257d41faef3698b912effdccd129b596e35a3e90a1bc637ce1 | B69 |
 | B69-gate-dims/quiko-cantilever-guide | B69-gate-dims | https://www.quikoitaly.com/en/cantilever-sliding-gates-complete-installation-guide-and-design-insights/ | 2026-08-09T06:55:59Z | 4df67dd44494eb74d80e878cece424f7bdbd4f98468b3315fb79132fce0193f0 | B69 |
+| B120-airlock-dims/cometa-co135-security-portal | B120-airlock-dims | https://www.cometaspa.com/en/Product-detail/Classic-Security-Portal-Co135/ | 2026-08-09T07:20:30Z | 696bf13bb1d67075e139ba4044a5a2b20afa54d924e876a5ccd60e912644f60f | B120 |
+| B120-airlock-dims/boonedam-circlelock-nbs | B120-airlock-dims | https://source.thenbs.com/en/product/boon-edam-circlelock-solo-mantrap-security-portal/8HPZ8Ub4SuuACSfYt1mQcs/aBXMiQifjzWi7UoTpMXLdV | 2026-08-09T07:20:33Z | 3f6c9f2cbae4ee8b1b767ffaa3137729c194f98f9405a0d35a368626969daab2 | B120 |
 
 ## Structure
 

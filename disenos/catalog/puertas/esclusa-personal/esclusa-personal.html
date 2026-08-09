@@ -1,0 +1,325 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — puertas/esclusa-personal · cylindrical personnel interlock portal (mantrap).
+  Built from disenos/catalog/shell-template.html. Contract: __esclusaPersonalApp.runtime +
+  __qaRenderInfo + data-app-ready, render-on-demand, frozen shadows (autoUpdate=false, 1024), DPR<=2.
+
+  Dimensional evidence: research/threejs-block120.md (CoMETA Co135 + Boon Edam Circlelock Solo,
+  both preserved and token-checked).
+
+  THE INTERLOCK IS THE PRODUCT, AND IT IS ENFORCED IN CODE (block120 §120.2). Two independent door
+  toggles would depict a booth with two doors — a vestibule, a different and much cheaper product.
+  Here opening either door CLOSES the other, there is no reachable state with both open, and an
+  assertion says so. No count and no render can see this; only driving both toggles can.
+
+  Second thing a modeller would not invent: the glazing manifestations at 900 mm and 1500 mm — the
+  two bands that stop a person walking into a pane they cannot see, and the visual signature of this
+  product in every photograph of one.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Esclusa personal (portal de enclavamiento) — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">ESCLUSA PERSONAL — portal cilíndrico de enclavamiento (mantrap)</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· aluminio y acero inoxidable · vidrio laminado EN 356 P2A</span></div>
+  <div><span class="dim">Ø 1.000 m · altura 2.100 m + marquesina 0.300 m · paso 600 mm (arco 73.7°)</span></div>
+  <div><span class="dim">bandas de señalización del vidrio a 900 y 1500 mm, como publica la ficha</span></div>
+  <div><span class="dim">ENCLAVAMIENTO REAL: abrir una puerta CIERRA la otra — nunca hay un estado con las dos abiertas</span></div>
+  <div><span class="pass" id="passLabel">PASE: MATERIALS</span> <span class="dim" id="viewLabel">· vista neutral</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnA">PUERTA A</button>
+  <button id="btnB">PUERTA B</button>
+  <button id="btnFig" class="on">FIGURA 1.8 m</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · research/threejs-block120.md) ----------
+const R      = 0.500;                  // [CERT-web] "1000 mm diameter"
+const H      = 2.100;                  // [CERT-web] the specification's minimum height = standard headroom
+const CANOPY = 0.300;                  // [CERT-web] from the published ladder 200/300/400/500 mm
+const PASS_W = 0.600;                  // [CERT-web] CoMETA passage "L 600"
+const OPEN_ARC = 2*Math.asin((PASS_W/2)/R);          // 73.7 deg — DERIVED from the chord, not chosen
+const SEG_ARC  = Math.PI - OPEN_ARC;                 // each fixed glass segment
+const MAN_Y  = [0.900, 1.500];         // [CERT-web] "Circular glazing manifestations at 900 and 1500 mm"
+const GLASS_T = 0.00876;               // [CERT-web] 8.76 mm laminated, EN 356 P2A
+const SLIDE  = OPEN_ARC + 0.10;        // travel: the leaf tucks behind its fixed segment
+const FIG_H  = 1.800;                  // ONBOARD scale rule — and here it is also the SPEC: one person
+
+console.assert(Math.abs(2*R*Math.sin(OPEN_ARC/2) - PASS_W) < 1e-9, 'passage chord != 600 mm');
+console.assert(SLIDE + OPEN_ARC < SEG_ARC + OPEN_ARC + 1e-9, 'an open leaf overruns its pocket');
+console.assert(MAN_Y[1] < H, 'a manifestation band sits above the glass');
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 8, 26);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.10;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+// LOOK-DEV + KINEMATIC evidence set. No `reference-match` view (no reference photographs exist).
+const VIEWS = {
+  neutral: { pos:[4.00, 2.41, 4.00], target:[0.00, 1.15, 0.00], fov:36, label:"· vista neutral" },   // MEASURED: ndcX -0.30..+0.30, ndcY -0.77..+0.68, centrado, tope 128 px bajo el HUD. La ocupacion (22%) es baja y HONESTA: un sujeto de 1.21 m de ancho y 2.40 m de alto en un cuadro apaisado no puede llenar mas
+  grazing: { pos:[1.30, 0.95, 1.55], target:[0.05, 1.20, 0.00], fov:32,
+             label:'· vista grazing (vidrio, bandas y aluminio)' },
+  // KINEMATIC: boots with door A already open, because a blind reviewer only ever loads by URL and
+  // never clicks (GATES.md §Test-vs-render — assert the state ON LOAD). It is also the state that
+  // shows the leaf tucked behind its fixed segment instead of merely absent.
+  abierta: { pos:[4.00, 2.41, 4.00], target:[0.00, 1.15, 0.00], fov:36, openA:true,
+             label:'· vista PUERTA A ABIERTA (evidencia cinemática del enclavamiento)' },
+};
+const VIEW = VIEWS[new URLSearchParams(location.search).get('view')] || VIEWS.neutral;
+const camera = new THREE.PerspectiveCamera(VIEW.fov, innerWidth/innerHeight, 0.1, 200);
+const CAM_TARGET = new THREE.Vector3(...VIEW.target);
+camera.position.set(...VIEW.pos);
+camera.lookAt(CAM_TARGET);
+document.getElementById('viewLabel').textContent = VIEW.label;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.copy(CAM_TARGET);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.5, 6, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
+sun.shadow.camera.left=-3; sun.shadow.camera.right=3; sun.shadow.camera.top=3.5; sun.shadow.camera.bottom=-3;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+// The interior MUST be lit. Glass over an unlit volume is a black cylinder, and the person inside is
+// the subject of the entire machine (ONBOARD: an emissive strip lights nothing — use a real light).
+const inner = new THREE.PointLight(0xfff4e2, 4.2, 4.0, 2.0);
+inner.position.set(0, H - 0.22, 0);
+scene.add(inner);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(24,24),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: aluminium and stainless = BARE metal; laminated glass is
+// transmissive at ~0.72 (at 0.96 it disappears from the render entirely); rubber/electronics dielectric.
+// ============================================================================
+const matAlu   = new THREE.MeshStandardMaterial({ color:0xc3c8cc, metalness:0.92, roughness:0.32 });
+const matSteel = new THREE.MeshStandardMaterial({ color:0xb6bbbf, metalness:0.94, roughness:0.28 });
+const matGlass = new THREE.MeshPhysicalMaterial({ color:0xdff0f5, metalness:0.0, roughness:0.06,
+                                                  transmission:0.72, thickness:GLASS_T, ior:1.52,
+                                                  transparent:true, opacity:0.42,
+                                                  side:THREE.DoubleSide, depthWrite:false });
+const matMan   = new THREE.MeshStandardMaterial({ color:0xe8eef2, metalness:0.0, roughness:0.85,
+                                                  transparent:true, opacity:0.75, side:THREE.DoubleSide });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x23272c, metalness:0.0, roughness:0.60 });
+const matRead  = new THREE.MeshStandardMaterial({ color:0x1d5f52, metalness:0.0, roughness:0.45,
+                                                  emissive:0x0b3a31, emissiveIntensity:0.8 });
+const matSkin  = new THREE.MeshStandardMaterial({ color:0x9c7b62, metalness:0.0, roughness:0.75 });
+const matCloth = new THREE.MeshStandardMaterial({ color:0x36506b, metalness:0.0, roughness:0.85 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Everything under `root`.
+// ============================================================================
+const root = new THREE.Group();
+const doorA = new THREE.Group();
+const doorB = new THREE.Group();
+const figure = new THREE.Group();
+
+const shell = (parent, r, h, tStart, tLen, mat, y, seg = 40)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, seg, 1, true, tStart, tLen), mat);
+  m.position.y = y; m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
+};
+const ring = (parent, r, t, h, mat, y)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r + t, r + t, h, 44, 1, true), mat);
+  m.position.y = y; m.castShadow = true; parent.add(m); return m;
+};
+const post = (parent, theta, r, h, mat, y, d = 0.045)=>{
+  const m = new THREE.Mesh(new THREE.BoxGeometry(d, h, d), mat);
+  m.position.set(Math.cos(theta)*r, y, Math.sin(theta)*r);
+  m.rotation.y = -theta; m.castShadow = true; parent.add(m); return m;
+};
+
+// --- fixed glazed segments: two, diametrically opposite, between the two doorways ---
+for(const t0 of [OPEN_ARC/2, Math.PI + OPEN_ARC/2]) shell(root, R, H, t0, SEG_ARC, matGlass, H/2);
+
+// --- mullions at every doorway edge, plus head and sill rings ---
+for(const th of [OPEN_ARC/2, Math.PI - OPEN_ARC/2, Math.PI + OPEN_ARC/2, -OPEN_ARC/2])
+  post(root, th, R, H, matAlu, H/2);
+ring(root, R, 0.012, 0.070, matAlu, H - 0.035);
+ring(root, R, 0.012, 0.060, matAlu, 0.030);
+
+// --- glazing manifestations at the two PUBLISHED heights (§120.1) ---
+for(const y of MAN_Y) ring(root, R, 0.002, 0.055, matMan, y);
+
+// --- the two sliding leaves. Each is a glazed shell on its own group, rotating about the axis. ---
+for(const [grp, centre] of [[doorA, 0], [doorB, Math.PI]]){
+  const t0 = centre - OPEN_ARC/2 - 0.03;
+  shell(grp, R + 0.016, H - 0.09, t0, OPEN_ARC + 0.06, matGlass, (H - 0.09)/2 + 0.03);
+  post(grp, centre - OPEN_ARC/2 - 0.03, R + 0.016, H - 0.09, matAlu, (H - 0.09)/2 + 0.03, 0.035);
+  post(grp, centre + OPEN_ARC/2 + 0.03, R + 0.016, H - 0.09, matAlu, (H - 0.09)/2 + 0.03, 0.035);
+  for(const y of MAN_Y) shell(grp, R + 0.018, 0.055, t0, OPEN_ARC + 0.06, matMan, y);
+  root.add(grp);
+}
+
+// --- canopy, with the sensor head that does the anti-piggybacking counting ---
+{
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.085, R + 0.085, CANOPY, 44), matAlu);
+  cap.position.y = H + CANOPY/2; cap.castShadow = true; root.add(cap);
+  const lip = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.105, R + 0.085, 0.045, 44), matAlu);
+  lip.position.y = H + 0.022; lip.castShadow = true; root.add(lip);
+  const eye = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.035, 20), matDark);
+  eye.position.set(0, H - 0.012, 0); root.add(eye);
+}
+
+// --- floor plate: the weight/occupancy sensor lives under it (anti-piggybacking) ---
+{
+  const plate = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.055, R + 0.055, 0.020, 44), matSteel);
+  plate.position.y = 0.010; plate.receiveShadow = true; root.add(plate);
+  const tread = new THREE.Mesh(new THREE.CylinderGeometry(R - 0.03, R - 0.03, 0.006, 40), matDark);
+  tread.position.y = 0.023; root.add(tread);
+}
+
+// --- readers: card + biometric outside door A, exit button inside ---
+{
+  const pedestal = new THREE.Mesh(new THREE.BoxGeometry(0.10, 1.05, 0.10), matAlu);
+  pedestal.position.set(Math.cos(-OPEN_ARC/2 - 0.34)*(R + 0.16), 0.525, Math.sin(-OPEN_ARC/2 - 0.34)*(R + 0.16));
+  pedestal.castShadow = true; root.add(pedestal);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.19, 0.05), matRead);
+  head.position.set(pedestal.position.x, 1.12, pedestal.position.z);
+  head.rotation.y = -(-OPEN_ARC/2 - 0.34) + Math.PI/2; head.castShadow = true; root.add(head);
+  const exitBtn = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.02), matRead);
+  exitBtn.position.set(Math.cos(Math.PI/2)*(R - 0.02), 1.10, Math.sin(Math.PI/2)*(R - 0.02));
+  root.add(exitBtn);
+}
+
+// --- the 1.8 m figure. Not decoration: this product is DEFINED by fitting exactly one person. ---
+{
+  const legs = new THREE.Mesh(new THREE.CapsuleGeometry(0.105, 0.62, 4, 12), matCloth);
+  legs.position.y = 0.42; legs.castShadow = true; figure.add(legs);
+  // The torso reaches the shoulder line and a neck closes the gap to the head. The first build had a
+  // capsule ending at 1.465 and a head starting at 1.590 — a 0.125 m FLOATING HEAD, which the counts
+  // and the console never see and which the pre-look does. Same continuity rule as any other
+  // assembly: a body must TOUCH its neighbour (gap <= 0), a figure included.
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.145, 0.47, 4, 14), matCloth);
+  torso.position.y = 1.125; torso.castShadow = true; figure.add(torso);   // spans 0.735 .. 1.515
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.062, 0.10, 12), matSkin);
+  neck.position.y = 1.545; neck.castShadow = true; figure.add(neck);      // spans 1.495 .. 1.595
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.105, 18, 14), matSkin);
+  head.position.y = FIG_H - 0.105; head.castShadow = true; figure.add(head);   // spans 1.590 .. 1.800
+  console.assert(1.125 + 0.145 + 0.235 >= 1.545 - 0.05, 'torso does not reach the neck');
+  console.assert(1.545 + 0.05 >= FIG_H - 0.105 - 0.105, 'neck does not reach the head');
+  for(const s of [-1, 1]){
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.048, 0.46, 4, 10), matCloth);
+    arm.position.set(s*0.185, 1.10, 0.02); arm.castShadow = true; figure.add(arm);
+  }
+  figure.position.set(0.02, 0, -0.04);
+  root.add(figure);
+}
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED.
+// THE INTERLOCK IS ENFORCED HERE, and this handler IS the asset (block120 §120.2). Opening either
+// leaf closes the other, so no reachable state has both open. Two independent toggles would model a
+// vestibule, not an airlock — and nothing in the gate, the counts or the render could tell.
+// ============================================================================
+let openA = !!VIEW.openA, openB = false;
+const btnRot = document.getElementById('btnRot');
+const btnA = document.getElementById('btnA');
+const btnB = document.getElementById('btnB');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+function applyDoors(){
+  console.assert(!(openA && openB), 'INTERLOCK VIOLATED: both leaves open');
+  doorA.rotation.y = openA ? SLIDE : 0;
+  doorB.rotation.y = openB ? SLIDE : 0;
+  btnA.classList.toggle('on', openA);
+  btnB.classList.toggle('on', openB);
+  renderer.shadowMap.needsUpdate = true; requestRender();
+}
+btnA.onclick = ()=>{ const want = !openA; openA = want; if (want) openB = false; applyDoors(); };
+btnB.onclick = ()=>{ const want = !openB; openB = want; if (want) openA = false; applyDoors(); };
+const btnFig = document.getElementById('btnFig');
+btnFig.onclick = ()=>{ figure.visible = !figure.visible;
+  btnFig.classList.toggle('on', figure.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+// NOTE: the initial applyDoors() call lives BELOW, after requestRender is declared. Calling it here
+// throws `Cannot access 'requestRender' before initialization` — a const in its temporal dead zone.
+// Every other asset in this catalog gets away with the same ordering because its handlers only ever
+// run on a click, long after init; this one runs one at LOAD, to boot into the ?view=abierta state.
+// The preflight caught it before a gate attempt was spent, which is exactly what step 0 is for.
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+applyDoors();   // NOW it is safe: the HUD must not contradict the state the page booted into
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__esclusaPersonalApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__esclusa-personalApp'] = globalThis.__esclusaPersonalApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

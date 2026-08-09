@@ -26,6 +26,7 @@ RENUMBER it to your range before requesting integration. session-A reconciles at
 | B67 | almacenamiento (session-B) | drive-in racking — lane derived, not published |
 | B68 | almacenamiento (session-B) | wire-mesh security cage (UFGS 10 22 13) |
 | B69 | puertas (session-B) | cantilever sliding gate — counterbalance is half the opening and unfilled |
+| B120 | puertas (session-B) | personnel interlock portal (mantrap) — the interlock must be enforced |
 | B70 | transporte | conveyor texture-offset scroll |
 | B71 | transporte | conveyor dimensional reference |
 | B72 | transporte | material-handling vehicle + overhead-crane reference |
@@ -40,7 +41,7 @@ RENUMBER it to your range before requesting integration. session-A reconciles at
 ## Assigned ranges (next free inside each)
 | Family | Range | Next free |
 |---|---|---|
-| puertas + almacenamiento (session-B) | B57–B69 + B120–B124 (extension, session-A 2026-08-09) | B120 (B57–B69 exhausted; B120 esclusa-personal, B121 puerta-seguridad, B122+ free) |
+| puertas + almacenamiento (session-B) | B57–B69 + B120–B124 (extension, session-A 2026-08-09) | B121 (B57–B69 exhausted; B120 consumed by esclusa-personal; B121 reserved for puerta-seguridad; B122+ free) |
 | transporte | B70–B79 | B74 |
 | robotica | B80–B89 | B80 (B62 is its historical entry; new blocks go B80+) |
 | automotriz | B90–B99 | B90 (B63 historical; new blocks B90+) |
