@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **57 blocks**
+Total: **58 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -63,3 +63,4 @@ Total: **57 blocks**
 | 55 | [threejs-block55.md](threejs-block55.md) | Turf.js is geospatial, not planar-CAD: the offset/boolean libraries to use for DXF→mesh reconstruction |
 | 56 | [threejs-block56.md](threejs-block56.md) | Measured GPU-budget of the nave-Panccadia equipment visor, and the damping-safe render-on-demand implementation that follows from the data |
 | 57 | [threejs-block57.md](threejs-block57.md) | The industrial cold-room door: measured dimensional envelope, hardware vocabulary, and the one number the datasheets refuse to fix |
+| 58 | [threejs-block58.md](threejs-block58.md) | Selective pallet racking: the rack is SHORTER than the pallet, and a single bay is not a legal rack |
