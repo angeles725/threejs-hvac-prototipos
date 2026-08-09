@@ -1,0 +1,369 @@
+<!doctype html>
+<!--
+  transformador-seco — catalog asset, family `electricos`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional vocabulary: disenos/transformador/transformador-voxel-v1.html (1 voxel = 0.025 m →
+  core+coil block 60 x 48 vx = 1.50 x 1.20 m, limbs at 15/30/45 vx → 0.375 m pitch).
+  Spec: ./design-spec.yaml
+  NOTE: the subject is CAST-RESIN, so it has no tank, no radiators and no oil conservator. Modelling
+  it with a sealed tank would make it an oil-immersed unit — a different machine entirely.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transformador seco (resina colada) — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.025 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Transformador seco — resina colada, 3 fases</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· resina epóxica · núcleo de grano orientado</span></div>
+  <div class="dim">envolvente 1.90 × 1.50 × 2.08 m · núcleo 3 columnas, paso 0.375 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnEnc" class="on">ENVOLVENTE IP21</button>
+  <button id="btnTemp">ALARMA TEMP (ISA-101)</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const LIMB_PITCH = 0.375;                 // [CERT] voxel study limbs at 15/30/45 vx x 0.025 m
+const LIMB_X     = [-LIMB_PITCH, 0, LIMB_PITCH];
+const CORE_W     = 1.50;                  // [CERT] 60 vx — overall core width
+const CORE_D     = 0.24;                  // core stack depth (the limb section, not the footprint)
+const YOKE_H     = 0.22;                  // top and bottom yokes
+const WINDOW_H   = 0.88;                  // clear window between yokes
+const CORE_Y0    = 0.20;                  // core foot sits on the base frame
+const CORE_H     = YOKE_H*2 + WINDOW_H;   // 1.32
+const COIL_R     = 0.165, COIL_H = 0.84;  // HV cast-resin cylinder
+const COIL_Y0    = CORE_Y0 + YOKE_H + 0.02;
+const BASE_H     = 0.20;                  // wheeled base frame
+const ENC_W = 1.90, ENC_D = 1.50, ENC_H = 1.88;
+const ENC_Y0 = BASE_H, ENC_TOP = ENC_Y0 + ENC_H;   // 2.08 overall
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 9, 34);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 5.4, AZ = 0.73, EL = 0.22, TGT_Y = 1.05;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TGT_Y + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TGT_Y, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TGT_Y, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.2;        // vertical-subject deviation — see design-spec §lighting
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.6, 5.4, 4.2); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-3; sun.shadow.camera.right=3; sun.shadow.camera.top=3; sun.shadow.camera.bottom=-3;
+sun.shadow.camera.far = 18;
+scene.add(sun);
+const faceFill = new THREE.DirectionalLight(0xdce6f2, 0.85);    // panel-normal fill (the deviation)
+faceFill.position.set(0.6, 1.4, 5.0);
+scene.add(faceFill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(24,24),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Grain-oriented core laminations = BARE METAL. Cast epoxy resin = DIELECTRIC. The predictable
+//   error is giving the resin a metallic sheen because it looks glossy — it is a filled polymer.
+// ============================================================================
+const matCore   = new THREE.MeshStandardMaterial({ color:0xb4babe, metalness:0.95, roughness:0.34 });
+const matCoreEd = new THREE.MeshStandardMaterial({ color:0x969c9f, metalness:0.95, roughness:0.46 });
+// Cast epoxy is an ANTHRACITE-grey filled polymer, not a pale one. At the pale value it used, the
+// coil blew out against the light enclosure and the three windings stopped separating from it.
+const matResin  = new THREE.MeshStandardMaterial({ color:0x6f6b64, metalness:0.0,  roughness:0.42 });
+const matResinD = new THREE.MeshStandardMaterial({ color:0x585550, metalness:0.0,  roughness:0.48 });
+const matLV     = new THREE.MeshStandardMaterial({ color:0xf0a67a, metalness:1.0,  roughness:0.38 }); // §3.1 copper
+const matFrame  = new THREE.MeshStandardMaterial({ color:0x2f4a63, metalness:0.0,  roughness:0.55 }); // painted clamp
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xb6babc, metalness:0.92, roughness:0.42 });
+const matEnc    = new THREE.MeshStandardMaterial({ color:0xcfd2cc, metalness:0.0,  roughness:0.55 }); // RAL 7035
+const matEncD   = new THREE.MeshStandardMaterial({ color:0xb9bdb8, metalness:0.0,  roughness:0.58 });
+const matPlastic= new THREE.MeshStandardMaterial({ color:0x1a1d21, metalness:0.0,  roughness:0.52 });
+const matLabel  = new THREE.MeshStandardMaterial({ color:0xf2f3ef, metalness:0.0,  roughness:0.70 });
+const matWarn   = new THREE.MeshStandardMaterial({ color:0xd8b81a, metalness:0.0,  roughness:0.62 });
+// ISA-101 §3.4: the monitor reads neutral grey while the winding temperature is normal.
+const matLampOff = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4 });
+const matLampRun = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                    emissive:0x0d3a2a, emissiveIntensity:1.0 });
+const matLampAlm = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                    emissive:0xff2233, emissiveIntensity:1.6 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xforms, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = im.receiveShadow = true;
+  xforms.forEach((t,i)=>{
+    _p.set(t[0], t[1], t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0));
+    _s.set(t[6]??1, t[7]??1, t[8]??1);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s));
+  });
+  im.instanceMatrix.needsUpdate = true;
+  parent.add(im);
+  return im;
+}
+function box(w,h,d,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+function cyl(rt,rb,h,seg,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+
+// --- base: rolling channel frame with bidirectional wheels ---
+const base = new THREE.Group();
+for(const sz of [-1, 1]) box(CORE_W + 0.20, BASE_H*0.55, 0.10, matFrame, 0, BASE_H*0.62, sz*0.46, base);
+for(const sx of [-1, 1]) box(0.10, BASE_H*0.55, 1.02, matFrame, sx*(CORE_W/2 + 0.05), BASE_H*0.62, 0, base);
+const wheels = [];
+for(const sx of [-1, 1]) for(const sz of [-1, 1])
+  wheels.push([sx*(CORE_W/2 - 0.05), 0.075, sz*0.46, 0, 0, Math.PI/2]);
+instanced(new THREE.CylinderGeometry(0.075, 0.075, 0.055, 16), matSteel, wheels, base);
+root.add(base);
+
+// --- core: 3 limbs + 2 yokes, step-lapped so the stack does not read as a plain slab ---
+const core = new THREE.Group();
+// A grain-oriented core is a STEPPED stack approximating a circle, not a rectangle. Three nested
+// widths per limb is the cheapest honest read of that cross-section.
+const STEPS = [[1.00, 1.00], [0.78, 1.14], [0.52, 1.22]];
+for(const x of LIMB_X) STEPS.forEach(([dz, dx], s)=>{
+  box(0.16*dx, WINDOW_H + 0.02, CORE_D*dz, s===0 ? matCore : matCoreEd,
+      x, CORE_Y0 + YOKE_H + WINDOW_H/2, 0, core);
+});
+for(const sy of [0, 1]) STEPS.forEach(([dz, dx], s)=>{
+  box(CORE_W, YOKE_H, CORE_D*dz, s===0 ? matCore : matCoreEd,
+      0, CORE_Y0 + YOKE_H/2 + sy*(YOKE_H + WINDOW_H), 0, core);
+});
+// clamping frames + tie rods — an unclamped core would hum itself apart
+for(const sy of [0, 1]) for(const sz of [-1, 1])
+  box(CORE_W + 0.10, 0.09, 0.05, matFrame, 0,
+      CORE_Y0 + YOKE_H/2 + sy*(YOKE_H + WINDOW_H), sz*(CORE_D/2 + 0.05), core);
+const rods = [];
+for(const sx of [-1, 1]) for(const sz of [-1, 1])
+  rods.push([sx*(CORE_W/2 + 0.03), CORE_Y0 + CORE_H/2, sz*(CORE_D/2 + 0.05)]);
+instanced(new THREE.CylinderGeometry(0.012, 0.012, CORE_H - 0.10, 8), matSteel, rods, core);
+root.add(core);
+
+// --- windings: LV copper cylinder inside, HV cast-resin cylinder outside, per limb ---
+const coils = new THREE.Group();
+const ribs = [], NRIB = 14;
+for(const x of LIMB_X){
+  const cy = COIL_Y0 + COIL_H/2;
+  cyl(COIL_R - 0.045, COIL_R - 0.045, COIL_H + 0.06, 24, matLV, x, cy, 0, coils);   // LV winding
+  cyl(COIL_R, COIL_R, COIL_H, 28, matResin, x, cy, 0, coils);                       // HV resin body
+  // axial cooling ducts: the ribbed outer surface is the visual signature of a cast-resin coil
+  for(let k=0;k<NRIB;k++){
+    const a = k * Math.PI*2/NRIB;
+    ribs.push([x + Math.cos(a)*(COIL_R + 0.006), cy, Math.sin(a)*(COIL_R + 0.006), 0, -a, 0]);
+  }
+  // resin end rings, top and bottom
+  for(const sy of [-1, 1])
+    cyl(COIL_R + 0.012, COIL_R + 0.012, 0.035, 28, matResinD, x, cy + sy*(COIL_H/2 - 0.017), 0, coils);
+}
+instanced(new THREE.BoxGeometry(0.014, COIL_H - 0.09, 0.020), matResinD, ribs, coils);
+root.add(coils);
+
+// --- HV taps + LV terminal bars: the connection story on top of the coils ---
+const terms = new THREE.Group();
+for(const x of LIMB_X){
+  // HV delta link bars between adjacent coil tops, and the tap-changer link plate on the face
+  box(0.05, 0.05, 0.16, matLV, x, COIL_Y0 + COIL_H + 0.05, 0, terms);
+  box(0.10, 0.14, 0.028, matResinD, x, COIL_Y0 + COIL_H*0.5, COIL_R + 0.03, terms);   // tap links
+  for(let k=0;k<3;k++)
+    box(0.055, 0.012, 0.010, matLV, x, COIL_Y0 + COIL_H*0.5 + 0.04 - k*0.04, COIL_R + 0.048, terms);
+}
+box(CORE_W - 0.20, 0.012, 0.055, matLV, 0, COIL_Y0 + COIL_H + 0.10, 0, terms);        // HV bus link
+for(const x of LIMB_X)                                                                // LV bars down/out
+  box(0.06, 0.010, 0.30, matLV, x, COIL_Y0 - 0.06, -0.28, terms);
+box(CORE_W - 0.30, 0.010, 0.06, matLV, 0, COIL_Y0 - 0.06, -0.42, terms);
+root.add(terms);
+
+// --- winding temperature monitor: a real cast-resin unit always carries one ---
+const monitor = new THREE.Group();
+const MON_X = CORE_W/2 - 0.02, MON_Y = 1.25;
+box(0.22, 0.17, 0.10, matPlastic, MON_X, MON_Y, CORE_D/2 + 0.16, monitor);
+box(0.16, 0.07, 0.012, matLabel, MON_X, MON_Y + 0.03, CORE_D/2 + 0.212, monitor);     // display
+const lamps = [];
+for(let k=0;k<3;k++){
+  const l = cyl(0.012, 0.012, 0.012, 12, k===0 ? matLampRun : matLampOff,
+    MON_X - 0.06 + k*0.06, MON_Y - 0.05, CORE_D/2 + 0.212, monitor);
+  l.rotation.x = Math.PI/2;
+  l.userData.role = k===0 ? 'run' : (k===2 ? 'alarm' : 'aux');
+  lamps.push(l);
+}
+// PT100 sensor leads dropping into the coil ducts
+for(const x of LIMB_X)
+  box(0.008, 0.28, 0.008, matPlastic, x + 0.05, COIL_Y0 + COIL_H + 0.16, 0.04, monitor);
+root.add(monitor);
+
+// ---------- enclosure (togglable): ventilated IP21 sheet-metal housing ----------
+const enclosure = new THREE.Group();
+const T = 0.015;
+// EVERY wall belongs to the `enclosure` group. Dropping the parent argument here silently reparents
+// the walls to `root`, and the toggle then strips only the louvres and labels — leaving a blank
+// white box that looks like a modelling failure but is really a scene-graph one.
+box(ENC_W, ENC_H, T, matEncD, 0, ENC_Y0 + ENC_H/2, -ENC_D/2, enclosure);              // rear
+for(const sx of [-1, 1])
+  box(T, ENC_H, ENC_D, matEncD, sx*ENC_W/2, ENC_Y0 + ENC_H/2, 0, enclosure);          // sides
+box(ENC_W, T, ENC_D, matEnc, 0, ENC_TOP - T/2, 0, enclosure);                          // roof
+// front: a recessed access panel inside a perimeter frame, so the face has a real shadow line
+const FR = 0.055;
+box(ENC_W - 2*FR, ENC_H - 2*FR, T, matEnc, 0, ENC_Y0 + ENC_H/2, ENC_D/2 - 0.012, enclosure);
+for(const sy of [-1, 1])
+  box(ENC_W, FR, 0.040, matEnc, 0, ENC_Y0 + ENC_H/2 + sy*(ENC_H - FR)/2, ENC_D/2 - 0.008, enclosure);
+for(const sx of [-1, 1])
+  box(FR, ENC_H - 2*FR, 0.040, matEnc, sx*(ENC_W - FR)/2, ENC_Y0 + ENC_H/2, ENC_D/2 - 0.008, enclosure);
+
+// Louvre banks: bottom intake + top exhaust on the front and both sides. A dry-type transformer
+// cools by convection, so a sealed enclosure would cook it. Each bank needs a DARK RECESSED CAVITY
+// behind the slats — light slats on a light panel render as white scratches and read as damage.
+const LOUV_W = ENC_W*0.58, LOUV_D = ENC_D*0.58, LOUV_H = 0.20, SL = 0.028;
+const frontZ = ENC_D/2 - 0.012;
+const bankY = [ENC_Y0 + 0.24, ENC_TOP - 0.30];
+for(const by of bankY){
+  box(LOUV_W, LOUV_H, 0.004, matPlastic, 0, by, frontZ + 0.003, enclosure);            // cavity
+  for(const sx of [-1, 1])
+    box(LOUV_D, LOUV_H, 0.004, matPlastic, sx*(ENC_W/2 - 0.003), by, 0, enclosure)
+      .rotation.y = Math.PI/2;
+}
+const slats = [], sideSlats = [];
+for(const by of bankY) for(let k=0;k<6;k++){
+  const y = by + LOUV_H/2 - 0.022 - k*SL;
+  slats.push([0, y, frontZ + 0.008, -0.42, 0, 0, LOUV_W, 1, 1]);
+  // Side slats are tilted about Z and run along Z — NOT a front slat rotated by Y. Euler XYZ applies
+  // the X tilt before the Y turn, so "tilt then rotate" comes out as a diagonal stripe on the wall.
+  for(const sx of [-1, 1]) sideSlats.push([sx*(ENC_W/2 + 0.008), y, 0, 0, 0, -0.42, 1, 1, LOUV_D]);
+}
+instanced(new THREE.BoxGeometry(1.0, 0.017, 0.014), matEnc, slats, enclosure);
+instanced(new THREE.BoxGeometry(0.014, 0.017, 1.0), matEnc, sideSlats, enclosure);
+
+// front panel furniture: latch handles, rating plate, danger label
+for(const sy of [-1, 1])
+  box(0.05, 0.14, 0.032, matPlastic, ENC_W/2 - 0.16, ENC_Y0 + ENC_H/2 + sy*0.30, frontZ + 0.018, enclosure);
+box(0.30, 0.20, 0.005, matLabel, -ENC_W/2 + 0.30, ENC_Y0 + ENC_H - 0.62, frontZ + 0.005, enclosure);
+box(0.16, 0.16, 0.005, matWarn,  -ENC_W/2 + 0.30, ENC_Y0 + ENC_H/2 - 0.10, frontZ + 0.005, enclosure);
+// roof lifting eyes + a hinge line on the access panel
+const eyes = [];
+for(const sx of [-1, 1]) for(const sz of [-1, 1])
+  eyes.push([sx*(ENC_W/2 - 0.16), ENC_TOP + 0.024, sz*(ENC_D/2 - 0.16)]);
+instanced(new THREE.TorusGeometry(0.030, 0.008, 8, 16), matSteel, eyes, enclosure);
+for(const hy of [-0.55, 0, 0.55])
+  box(0.022, 0.075, 0.028, matSteel, -ENC_W/2 + FR + 0.012, ENC_Y0 + ENC_H/2 + hy, frontZ + 0.012, enclosure);
+root.add(enclosure);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnEnc = document.getElementById('btnEnc');
+btnEnc.onclick = ()=>{ enclosure.visible = !enclosure.visible;
+  btnEnc.classList.toggle('on', enclosure.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnTemp = document.getElementById('btnTemp');
+let alarm = false;
+btnTemp.onclick = ()=>{
+  alarm = !alarm; btnTemp.classList.toggle('on', alarm);
+  // ISA-101 §3.4: normal is the neutral grey column with one "energised" lamp. Only an
+  // over-temperature condition earns red — colour is the exception, not the decoration.
+  lamps.forEach(l=>{
+    const r = l.userData.role;
+    l.material = alarm ? (r === 'alarm' ? matLampAlm : matLampOff)
+                       : (r === 'run'   ? matLampRun : matLampOff);
+  });
+  requestRender();
+};
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__transformadorSecoApp = __app;
+globalThis['__transformador-secoApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

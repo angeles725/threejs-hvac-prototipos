@@ -1,0 +1,311 @@
+<!doctype html>
+<!--
+  puerta-fabrica-seccional — catalog asset, family `puertas`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block59.md (Hörmann industrial sectional 42 mm manual)
+  Spec: ./design-spec.yaml
+  The leaf is NON-RIGID: each section is placed by ARC LENGTH along the track path
+  (vertical at the jambs -> curve at the head -> horizontal under the ceiling), never translated
+  as a block. See trackPoint() below.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Puerta seccional industrial 42 mm — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Puerta seccional industrial — panel 42 mm</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· 7 × 500 + 750 mm · guía N · muelles de torsión</span></div>
+  <div class="dim">hoja 4.00 × 4.25 m · máx. RM 5.00 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnOpen">OPEN / CLOSE</button>
+  <button id="btnGlaz" class="on">GLAZING</button>
+  <button id="btnWall" class="on">WALL</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 59]) ----------
+const PANEL_T = 0.042;                     // [CERT-doc] 42 mm double-skinned section
+const SEC_H = 0.500, BOT_H = 0.750;        // [CERT-doc] standard section / standard bottom section
+const N_SEC = 7;                           // 7 x 500 + 750 = 4250 — a whole number of standard parts
+const LEAF_H = N_SEC*SEC_H + BOT_H;        // 4.25
+const LEAF_W = 4.00;                       // [INFER] chosen inside the RM <= 5000 envelope
+const JOINT = 0.006;                       // visible joint line between sections
+const TRACK_R = 0.40;                      // [INFER] curve radius (the manual names applications)
+const TRACK_P = 0.055;                     // [INFER] rail profile
+const HEAD = LEAF_H + 0.30;                // rail turns over just above the opening
+const HORIZ = 4.60;                        // horizontal rail run under the ceiling
+const WALL_T = 0.12, WALL_W = 6.60, WALL_H = 5.20;
+const GLAZ_SEC = 5;                        // which section carries the vision panes (0 = bottom)
+const WIN_W = 0.90, WIN_H = 0.32, WIN_N = 3;
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 18, 48);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 11.0, EL = 0.22;   // canonical view is from INSIDE (-Z): a sectional door seen from
+                             // outside is just a flat panel — the tracks and spring shaft are the identity
+camera.position.set(R*0.62*Math.cos(EL), 2.30 + R*Math.sin(EL), -R*0.78*Math.cos(EL));
+camera.lookAt(0, 2.20, -1.10);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 2.20, -1.10);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(7, 11, 7); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d
+sun.shadow.camera.left=-7; sun.shadow.camera.right=7; sun.shadow.camera.top=7; sun.shadow.camera.bottom=-7;
+sun.shadow.camera.far = 34;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1.
+//   The PANEL is polyester-primer COATED [CERT-doc] → dielectric (metalness 0), so unlike the
+//   bare-stainless cold-room leaf it does NOT need a vertical-subject fill. Track/springs are
+//   hot-galvanized bare metal.
+// ============================================================================
+const matPanel = new THREE.MeshStandardMaterial({ color:0xe2e4e0, metalness:0.0,  roughness:0.62 });
+const matRib   = new THREE.MeshStandardMaterial({ color:0xd6d8d4, metalness:0.0,  roughness:0.66 });
+const matTrack = new THREE.MeshStandardMaterial({ color:0xb6babc, metalness:0.92, roughness:0.44 });
+const matSpring= new THREE.MeshStandardMaterial({ color:0x8d9295, metalness:0.95, roughness:0.38 });
+const matAlu   = new THREE.MeshStandardMaterial({ color:0x9fa5a9, metalness:0.90, roughness:0.45 });
+const matGlass = new THREE.MeshPhysicalMaterial({ color:0xcfe2e8, metalness:0.0, roughness:0.06,
+                                                  transmission:0.85, thickness:0.02, transparent:true, opacity:0.55 });
+const matJoint = new THREE.MeshStandardMaterial({ color:0x565b5e, metalness:0.0,  roughness:0.8 });
+const matWall  = new THREE.MeshStandardMaterial({ color:0x8f979c, metalness:0.0,  roughness:0.70 });  // industrial grey: the white door must NOT disappear into the wall
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (parent,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); parent.add(m); return m; };
+
+// ---- THE TRACK PATH. s = arc length from the floor along the rail centreline. ----
+// vertical (0 → L1) → 90° curve of radius TRACK_R (L1 → L1+ARC) → horizontal into -Z.
+const L1 = HEAD - TRACK_R, ARC = TRACK_R * Math.PI/2;
+function trackPoint(s){
+  if(s <= L1)          return { y: s,                              z: 0,                              a: 0 };
+  if(s <= L1 + ARC){
+    const th = (s - L1) / TRACK_R;                                  // 0 … π/2
+    return { y: L1 + TRACK_R*Math.sin(th), z: -TRACK_R*(1-Math.cos(th)), a: th };
+  }
+  return { y: L1 + TRACK_R, z: -TRACK_R - (s - L1 - ARC), a: Math.PI/2 };
+}
+const S_MAX = L1 + ARC + HORIZ;
+
+// ---- context wall with the opening ----
+const wall = new THREE.Group();
+const sideW = (WALL_W - LEAF_W)/2;
+put(wall, sideW, WALL_H, WALL_T, matWall, -(LEAF_W/2 + sideW/2), WALL_H/2, 0);
+put(wall, sideW, WALL_H, WALL_T, matWall,  (LEAF_W/2 + sideW/2), WALL_H/2, 0);
+put(wall, LEAF_W, WALL_H - LEAF_H, WALL_T, matWall, 0, LEAF_H + (WALL_H - LEAF_H)/2, 0);
+root.add(wall);
+
+// ---- tracks: sampled from the SAME path the sections travel (one truth, not two) ----
+const tracks = new THREE.Group();
+const segGeo = new THREE.BoxGeometry(TRACK_P, 0.055, 0.10);
+const SEG = 72;
+const xJamb = LEAF_W/2 + TRACK_P/2 + 0.01;
+const segM = new THREE.InstancedMesh(segGeo, matTrack, SEG*2);
+segM.castShadow = segM.receiveShadow = true;
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s1 = new THREE.Vector3(1,1,1);
+let si = 0;
+for(let k=0;k<SEG;k++){
+  const s = (k + 0.5) * S_MAX / SEG;
+  const t = trackPoint(s);
+  const len = S_MAX / SEG + 0.02;
+  for(const sx of [-1, 1]){
+    _p.set(sx*xJamb, t.y, t.z - PANEL_T);
+    _q.setFromEuler(new THREE.Euler(t.a, 0, 0));
+    _s1.set(1, len/0.055, 1);
+    segM.setMatrixAt(si++, _m.compose(_p, _q, _s1));
+  }
+}
+segM.instanceMatrix.needsUpdate = true;
+tracks.add(segM);
+root.add(tracks);
+
+// ---- gear: torsion-spring shaft with side cable drums, above the opening ----
+const gear = new THREE.Group();
+const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, LEAF_W + 0.60, 12), matSpring);
+shaft.rotation.z = Math.PI/2; shaft.position.set(0, HEAD + 0.14, -0.26);
+shaft.castShadow = true; gear.add(shaft);
+for(const sx of [-1,1]){                                          // torsion springs, both sides of centre
+  const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.048, 0.62, 14), matSpring);
+  sp.rotation.z = Math.PI/2; sp.position.set(sx*0.42, HEAD + 0.14, -0.26);
+  sp.castShadow = true; gear.add(sp);
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.09, 14), matTrack);
+  drum.rotation.z = Math.PI/2; drum.position.set(sx*(LEAF_W/2 - 0.02), HEAD + 0.14, -0.26);
+  drum.castShadow = true; gear.add(drum);
+  // carrying cable down the side [CERT-doc: torsion springs with carrying cables on the side]
+  const cab = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, HEAD + 0.10, 6), matSpring);
+  cab.position.set(sx*(LEAF_W/2 - 0.02), (HEAD + 0.14)/2, -0.26); gear.add(cab);
+  put(gear, 0.10, 0.16, 0.16, matTrack, sx*(LEAF_W/2 + 0.10), HEAD + 0.14, -0.26);   // bearing plate
+}
+root.add(gear);
+
+// ---- the leaf: 8 sections, each carrying its own arc-length offset ----
+const leaf = new THREE.Group();
+const sections = [];
+let sAcc = 0;
+for(let i=0;i<=N_SEC;i++){
+  const h = (i === 0) ? BOT_H : SEC_H;                            // bottom section is the tall one
+  const g = new THREE.Group();
+  const inner = new THREE.Group();                                // section body, centred on its own mid-height
+  if(i === GLAZ_SEC){
+    // vision section: 4 strips around WIN_N apertures — a real hole, not a decal
+    const totalWin = WIN_N*WIN_W, gap = (LEAF_W - totalWin)/(WIN_N+1);
+    put(inner, LEAF_W, (h - WIN_H)/2 - JOINT, PANEL_T, matPanel, 0, -(h/2 - ((h-WIN_H)/2)/2), 0);
+    put(inner, LEAF_W, (h - WIN_H)/2 - JOINT, PANEL_T, matPanel, 0,  (h/2 - ((h-WIN_H)/2)/2), 0);
+    for(let w=0; w<=WIN_N; w++){
+      const x = -LEAF_W/2 + gap*w + WIN_W*w + gap/2;
+      put(inner, gap, WIN_H, PANEL_T, matPanel, x, 0, 0);
+    }
+    for(let w=0; w<WIN_N; w++){
+      const x = -LEAF_W/2 + gap*(w+1) + WIN_W*(w+0.5);
+      put(inner, WIN_W, WIN_H, 0.026, matGlass, x, 0, 0);         // [CERT-doc] 26 mm S2 double pane
+      for(const [ww,hh,ox,oy] of [[WIN_W+0.03,0.018,0,-WIN_H/2],[WIN_W+0.03,0.018,0,WIN_H/2],
+                                  [0.018,WIN_H,-WIN_W/2,0],[0.018,WIN_H,WIN_W/2,0]])
+        put(inner, ww, hh, PANEL_T+0.004, matAlu, x+ox, oy, 0);
+    }
+  }else{
+    put(inner, LEAF_W, h - JOINT, PANEL_T, matPanel, 0, 0, 0);
+    // stucco horizontal ribbing [CERT-doc: uniform horizontal ribbing]
+    const ribs = Math.max(2, Math.round(h/0.25));   // sparse: dense ribbing aliases into noise at asset framing
+    for(let r=1;r<ribs;r++)
+      put(inner, LEAF_W - 0.02, 0.010, PANEL_T + 0.004, matRib, 0, -h/2 + r*(h/ribs), 0);
+  }
+  // the joint line between sections IS the identity of a sectional door — without a dark recess
+  // the 8 panels read as one slab. Also the finger-trap gap the manual specifies on every section.
+  put(inner, LEAF_W, 0.018, PANEL_T - 0.012, matJoint, 0, -h/2 + 0.009, 0);
+  g.add(inner);
+  g.userData = { h, sOff: sAcc + h/2 };                           // arc length of THIS section's centre
+  sAcc += h;
+  leaf.add(g);
+  sections.push(g);
+}
+root.add(leaf);
+
+// place every section from one scalar: how far the leaf has travelled
+function layoutLeaf(travel){
+  for(const g of sections){
+    const t = trackPoint(Math.min(g.userData.sOff + travel, S_MAX));
+    g.position.set(0, t.y, t.z);
+    g.rotation.x = t.a;
+  }
+}
+layoutLeaf(0);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender(); the travel
+//          animation holds needsRender while it is moving and releases it when settled.
+// ============================================================================
+const TRAVEL_OPEN = LEAF_H + 0.10;
+let travelTarget = 0, travelNow = 0;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnOpen = document.getElementById('btnOpen');
+btnOpen.onclick = ()=>{ travelTarget = travelTarget === 0 ? TRAVEL_OPEN : 0;
+  btnOpen.classList.toggle('on', travelTarget !== 0); requestRender(); };
+
+const btnGlaz = document.getElementById('btnGlaz');
+btnGlaz.onclick = ()=>{ const s = sections[GLAZ_SEC]; s.visible = !s.visible;
+  btnGlaz.classList.toggle('on', s.visible); renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnWall = document.getElementById('btnWall');
+btnWall.onclick = ()=>{ wall.visible = !wall.visible; btnWall.classList.toggle('on', wall.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const d = travelTarget - travelNow;
+  if(Math.abs(d) > 0.002){ travelNow += d * 0.10; layoutLeaf(travelNow); needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__puertaFabricaSeccionalApp = __app;
+globalThis['__puerta-fabrica-seccionalApp'] = __app;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

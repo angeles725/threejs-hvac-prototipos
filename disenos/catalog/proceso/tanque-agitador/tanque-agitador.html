@@ -1,0 +1,324 @@
+<!doctype html>
+<!--
+  tanque-agitador — catalog asset, family `proceso`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/sources/B59-proceso-dims/arpn-stirred-tank-rushton.pdf (Table-1)
+  Spec: ./design-spec.yaml
+  NOTE: the metre values are a DESIGN CHOICE (T = 1.60 m). What the source fixes is the set of
+  RATIOS — D = T/3, C = T/3, blade 0.2 D, baffle T/10, four baffles, six blades — and those are
+  what this file must get right. The Klöpper end solver is the one validated on tanque-pulmon.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tanque agitador de proceso — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Tanque agitador de proceso — turbina Rushton, T = 1.60 m</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· inox 304 · accionamiento pintado</span></div>
+  <div class="dim">D = T/3 · C = T/3 · pala 0.2 D · 4 deflectores T/10 · fondos Klöpper</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnAgit">AGITADOR</button>
+  <button id="btnBaf" class="on">DEFLECTORES</button>
+  <button id="btnCut">CORTE</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions: every internal is a RATIO of T (design-spec.yaml · ARPN Table-1) ----------
+const T        = 1.600, RAD = T/2;   // [INFER] absolute size is a design choice
+const BARREL   = 1.750;              // [INFER] H/T ~ 1
+const STAND    = 0.550;              // [INFER]
+const CROWN_R  = 1.00 * T;           // [INFER] DIN 28011 Klöpper
+const KNUCK_R  = 0.10 * T;
+const IMP_D    = T/3;                // [CERT-doc] impeller diameter
+const IMP_C    = T/3;                // [CERT-doc] clearance off the INSIDE bottom
+const BLADE_H  = IMP_D/5;            // [CERT-doc] blade width D/5
+const BLADE_L  = IMP_D/4;            // [CERT-doc] D/4 (see spec: Table-1 mislabels this as disc dia.)
+const DISC_D   = 0.75 * IMP_D;       // [CERT-a] canonical Rushton disc
+const BAF_W    = T/10;               // [CERT-doc] baffle width
+const BAF_T    = T/100;              // [CERT-doc] baffle thickness ~T/100
+const BAF_GAP  = T/72;               // [INFER] stand-off from the wall
+const SHAFT_D  = 0.055;              // [INFER]
+
+// Klöpper solver (validated on utilities/tanque-pulmon)
+const dc = CROWN_R - KNUCK_R, dx = RAD - KNUCK_R;
+const dy = Math.sqrt(dc*dc - dx*dx);
+const END_D  = CROWN_R - dy;                 // 0.310 m on T = 1.60
+const TAN_LO = STAND + END_D;
+const TAN_HI = TAN_LO + BARREL;
+const TOP_Y  = TAN_HI + END_D;
+const BOT_IN = TAN_LO - END_D;               // inside bottom (the apex) — the datum for C
+const IMP_Y  = BOT_IN + IMP_C;
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 46);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.05, 200);
+const R = 7.60, AZ = 0.768, EL = 0.2094;                        // 44° azimuth / 12° elevation (spec camera)
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.90 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.90, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.90, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.7;      // DEVIATION (spec §lighting): large bare vertical cylinder.
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4.0, 6.5, 3.4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0005;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-3.2; sun.shadow.camera.right=3.2; sun.shadow.camera.top=4.4; sun.shadow.camera.bottom=-4.4;
+sun.shadow.camera.far = 20;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xdfe9f5, 0.75);        // camera-side fill across the flank
+fill.position.set(4.4, 2.2, 5.2); scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(46,46),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3 brushed 304 stainless; the drive train is PAINTED (dielectric).
+// ============================================================================
+const matShell = new THREE.MeshStandardMaterial({ color:0xc6cbcd, metalness:0.92, roughness:0.30 });
+const matShellCut = new THREE.MeshStandardMaterial({ color:0xc6cbcd, metalness:0.92, roughness:0.30,
+                                                     transparent:true, opacity:0.15, side:THREE.DoubleSide,
+                                                     depthWrite:false });   // depthWrite off — see spec
+const matInt   = new THREE.MeshStandardMaterial({ color:0xb9bfc2, metalness:0.92, roughness:0.34 });
+const matGear  = new THREE.MeshStandardMaterial({ color:0x4e565c, metalness:0.0,  roughness:0.55 });
+const matMotor = new THREE.MeshStandardMaterial({ color:0x26536e, metalness:0.0,  roughness:0.55 });
+const matSeal  = new THREE.MeshStandardMaterial({ color:0x23262a, metalness:0.0,  roughness:0.85 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Shell = one LatheGeometry. Repetition (4 legs, 4 baffles, 6 blades) is far
+//          below the [Block 54] instancing threshold, so nothing here is instanced.
+// ============================================================================
+const root = new THREE.Group();
+function mesh(geo, mat, parent){ const m = new THREE.Mesh(geo, mat);
+  m.castShadow = m.receiveShadow = true; if(parent) parent.add(m); return m; }
+
+// --- shell profile, bottom-up: Klöpper bottom → barrel → Klöpper top ---
+const TANG = Math.atan2(-dy, dx);
+const prof = [];
+(function lowerEnd(yTan){
+  const cy = yTan + dy;
+  for(let i=0;i<=14;i++){ const t = -Math.PI/2 + (TANG + Math.PI/2)*(i/14);
+    prof.push(new THREE.Vector2(CROWN_R*Math.cos(t), cy + CROWN_R*Math.sin(t))); }
+  for(let i=1;i<=8;i++){ const t = TANG + (0 - TANG)*(i/8);
+    prof.push(new THREE.Vector2(RAD - KNUCK_R + KNUCK_R*Math.cos(t), yTan + KNUCK_R*Math.sin(t))); }
+})(TAN_LO);
+prof.push(new THREE.Vector2(RAD, TAN_LO), new THREE.Vector2(RAD, TAN_HI));
+(function upperEnd(yTan){
+  const cy = yTan - dy;
+  for(let i=1;i<=8;i++){ const t = 0 + (TANG - 0)*(i/8);
+    prof.push(new THREE.Vector2(RAD - KNUCK_R + KNUCK_R*Math.cos(t), yTan - KNUCK_R*Math.sin(t))); }
+  for(let i=1;i<=14;i++){ const t = TANG + (-Math.PI/2 - TANG)*(i/14);
+    prof.push(new THREE.Vector2(CROWN_R*Math.cos(t), cy - CROWN_R*Math.sin(t))); }
+})(TAN_HI);
+const shell = mesh(new THREE.LatheGeometry(prof, 72), matShell, root);
+for(const y of [TAN_LO, TAN_HI])                                  // girth welds at the tangent lines
+  mesh(new THREE.TorusGeometry(RAD + 0.002, 0.007, 6, 56).rotateX(Math.PI/2), matShell, root).position.y = y;
+
+// --- stand: 4 legs welded to the lower end ---
+const stand = new THREE.Group();
+for(let k=0;k<4;k++){
+  const a = k*Math.PI/2 + Math.PI/4, cx = Math.cos(a)*0.620, cz = Math.sin(a)*0.620;
+  const leg = mesh(new THREE.BoxGeometry(0.100, 0.820, 0.014), matShell, stand);
+  leg.position.set(cx, 0.410, cz); leg.rotation.y = -a;
+  const web = mesh(new THREE.BoxGeometry(0.014, 0.820, 0.100), matShell, stand);
+  web.position.set(cx, 0.410, cz); web.rotation.y = -a;
+  const plate = mesh(new THREE.BoxGeometry(0.190, 0.014, 0.190), matShell, stand);
+  plate.position.set(cx, 0.007, cz); plate.rotation.y = -a;
+}
+root.add(stand);
+
+// --- baffles: four, T/10 wide, standing OFF the wall on a T/72 gap ---
+const baffles = new THREE.Group();
+const bafR = RAD - BAF_GAP - BAF_W/2;                             // radius of the baffle mid-width
+const bafY0 = TAN_LO + 0.06, bafY1 = TAN_HI - 0.06;
+for(let k=0;k<4;k++){
+  const a = k*Math.PI/2;
+  const b = mesh(new THREE.BoxGeometry(BAF_W, bafY1 - bafY0, BAF_T), matInt, baffles);
+  b.position.set(Math.cos(a)*bafR, (bafY0 + bafY1)/2, Math.sin(a)*bafR);
+  b.rotation.y = -a;
+  for(const y of [bafY0 + 0.10, (bafY0+bafY1)/2, bafY1 - 0.10]){  // the stand-off brackets
+    const s = mesh(new THREE.BoxGeometry(BAF_GAP + 0.012, 0.050, 0.012), matInt, baffles);
+    s.position.set(Math.cos(a)*(RAD - BAF_GAP/2), y, Math.sin(a)*(RAD - BAF_GAP/2));
+    s.rotation.y = -a;
+  }
+}
+root.add(baffles);
+
+// --- agitator: shaft + six-blade Rushton disc turbine at C = T/3 ---
+const agitator = new THREE.Group();
+mesh(new THREE.CylinderGeometry(SHAFT_D/2, SHAFT_D/2, TOP_Y + 0.34 - IMP_Y, 20), matInt, agitator)
+  .position.y = (IMP_Y + TOP_Y + 0.34)/2;
+mesh(new THREE.CylinderGeometry(DISC_D/2, DISC_D/2, 0.006, 40), matInt, agitator).position.y = IMP_Y;
+mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.090, 16), matInt, agitator).position.y = IMP_Y;   // hub
+for(let k=0;k<6;k++){
+  const a = k*Math.PI/3;
+  const bl = mesh(new THREE.BoxGeometry(BLADE_L, BLADE_H, 0.004), matInt, agitator);
+  bl.position.set(Math.cos(a)*(IMP_D/2 - BLADE_L/2), IMP_Y, Math.sin(a)*(IMP_D/2 - BLADE_L/2));
+  bl.rotation.y = -a;                                             // blade plane contains the radius
+}
+root.add(agitator);
+
+// --- drive: lantern pedestal, gearbox, motor, all top-mounted on the shaft axis ---
+const drive = new THREE.Group();
+mesh(new THREE.CylinderGeometry(0.150, 0.185, 0.070, 28), matShell, drive).position.y = TOP_Y + 0.035;
+for(let k=0;k<4;k++){                                             // lantern legs (open, so the seal is reachable)
+  const a = k*Math.PI/2 + Math.PI/4;
+  mesh(new THREE.BoxGeometry(0.040, 0.220, 0.040), matGear, drive)
+    .position.set(Math.cos(a)*0.125, TOP_Y + 0.180, Math.sin(a)*0.125);
+}
+mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.110, 20), matInt, drive).position.y = TOP_Y + 0.120; // seal
+mesh(new THREE.CylinderGeometry(0.170, 0.170, 0.030, 28), matGear, drive).position.y = TOP_Y + 0.300;
+mesh(new THREE.BoxGeometry(0.420, 0.360, 0.340), matGear, drive).position.y = TOP_Y + 0.495;
+mesh(new THREE.BoxGeometry(0.300, 0.026, 0.300), matGear, drive).position.y = TOP_Y + 0.688;
+mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.380, 28), matMotor, drive).position.y = TOP_Y + 0.890;
+mesh(new THREE.CylinderGeometry(0.100, 0.112, 0.100, 24), matMotor, drive).position.y = TOP_Y + 1.130;
+mesh(new THREE.BoxGeometry(0.150, 0.110, 0.130), matMotor, drive)
+  .position.set(0.150, TOP_Y + 0.900, 0);                         // terminal box
+root.add(drive);
+
+// --- nozzles: manway on the top head, feed, vent, and the bottom discharge at the LOW point ---
+const nozzles = new THREE.Group();
+// Two independent constraints on the manway, and both bite:
+//  1) radius — it must clear the drive pedestal (r 0.185) by its own flange radius, or the two
+//     solids interpenetrate and the drive sits on the manway lid;
+//  2) ANGLE — placed near the camera azimuth (0.768 rad) it projects straight onto the tank axis
+//     and reads as part of the drive even though nothing intersects. Spread the head fittings by
+//     angle so each one is legible from the spec camera.
+const mwA = 2.00, mwR = 0.47;
+const mwx = Math.cos(mwA)*mwR, mwz = Math.sin(mwA)*mwR;
+const mwY = TAN_HI + Math.sqrt(Math.max(0, CROWN_R*CROWN_R - mwR*mwR)) - dy;   // ride the dome
+mesh(new THREE.CylinderGeometry(0.200, 0.200, 0.110, 32), matShell, nozzles).position.set(mwx, mwY + 0.055, mwz);
+mesh(new THREE.CylinderGeometry(0.235, 0.235, 0.024, 32), matShell, nozzles).position.set(mwx, mwY + 0.120, mwz);
+mesh(new THREE.TorusGeometry(0.212, 0.010, 6, 28).rotateX(Math.PI/2), matSeal, nozzles).position.set(mwx, mwY + 0.108, mwz);
+for(let k=0;k<8;k++){ const a = k*Math.PI/4;                       // manway bolting
+  mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.050, 6), matInt, nozzles)
+    .position.set(mwx + Math.cos(a)*0.218, mwY + 0.132, mwz + Math.sin(a)*0.218); }
+const fdA = -0.55, fdR = 0.50;                                     // feed nozzle
+const fdY = TAN_HI + Math.sqrt(Math.max(0, CROWN_R*CROWN_R - fdR*fdR)) - dy;
+mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.150, 20), matShell, nozzles)
+  .position.set(Math.cos(fdA)*fdR, fdY + 0.075, Math.sin(fdA)*fdR);
+mesh(new THREE.CylinderGeometry(0.080, 0.080, 0.020, 20), matShell, nozzles)
+  .position.set(Math.cos(fdA)*fdR, fdY + 0.158, Math.sin(fdA)*fdR);
+const vnA = -1.75, vnR = 0.400;                                    // vent — also clear of the pedestal
+const vnY = TAN_HI + Math.sqrt(Math.max(0, CROWN_R*CROWN_R - vnR*vnR)) - dy;
+mesh(new THREE.CylinderGeometry(0.040, 0.040, 0.200, 16), matShell, nozzles)
+  .position.set(Math.cos(vnA)*vnR, vnY + 0.080, Math.sin(vnA)*vnR);
+mesh(new THREE.CylinderGeometry(0.060, 0.060, 0.018, 16), matShell, nozzles)
+  .position.set(Math.cos(vnA)*vnR, vnY + 0.170, Math.sin(vnA)*vnR);
+// bottom discharge — at the apex, because that is what a dished bottom is FOR
+mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.150, 20), matShell, nozzles).position.y = BOT_IN - 0.075;
+mesh(new THREE.BoxGeometry(0.150, 0.140, 0.140), matGear, nozzles).position.y = BOT_IN - 0.215;
+mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.130, 12).rotateZ(Math.PI/2), matGear, nozzles)
+  .position.set(0.120, BOT_IN - 0.215, 0);
+mesh(new THREE.TorusGeometry(0.075, 0.011, 6, 20).rotateY(Math.PI/2), matInt, nozzles)
+  .position.set(0.195, BOT_IN - 0.215, 0);                         // discharge valve handwheel
+root.add(nozzles);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let agitating = false, cut = false;
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnAgit = document.getElementById('btnAgit');
+btnAgit.onclick = ()=>{ agitating = !agitating; btnAgit.classList.toggle('on', agitating); requestRender(); };
+
+const btnBaf = document.getElementById('btnBaf');
+btnBaf.onclick = ()=>{ baffles.visible = !baffles.visible; btnBaf.classList.toggle('on', baffles.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+// CORTE: translucent shell with depthWrite OFF. The internals sit on the tank axis, so unlike the
+// pump there is nothing else to occlude them and the camera does not have to move.
+const btnCut = document.getElementById('btnCut');
+btnCut.onclick = ()=>{ cut = !cut; btnCut.classList.toggle('on', cut);
+  shell.material = cut ? matShellCut : matShell;
+  shell.castShadow = !cut;
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(agitating){ agitator.rotation.y += 0.06; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__tanqueAgitadorApp = __app;
+globalThis['__tanque-agitadorApp'] = __app;        // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

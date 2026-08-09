@@ -1,0 +1,244 @@
+# DesignSpec — modular air handling unit (sectioned casing)
+# Second asset of the catalog `hvac` family.
+# EVIDENCE: the local corpus already contains an AHU prototype, so this asset inherits a [CERT]
+# envelope instead of guessing one — disenos/ahu/ahu-realistic-v1.html declares 3.5 x 1.6 x 2.0 m
+# and research/HANDBOOK.md §3.0 gives the same 2.5-4 m long / ~2 m tall band.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: manejadora-ahu
+family: hvac
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # the 50 mm sandwich panel IS one voxel — the casing reads at voxel scale
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 17 -> moderate/complex boundary.
+  scores: {silhouette: 1, components: 3, hierarchy: 2, repetition: 2,
+           material_layers: 2, detail: 3, occlusion: 3, action_readiness: 1}
+  tier: moderate
+  notes: >
+    The silhouette is a plain box — the identity lives entirely in the SECTIONING (damper, filter,
+    coil, fan, discharge) and in the service face. occlusion 3: every internal component is behind
+    a panel, so the asset is only honest if the doors open onto real apertures with real internals
+    behind them. action_readiness 1: the doors swing on a hinge line, the impeller spins on its axis.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    dimensional_twin: "disenos/ahu/ahu-realistic-v1.html (3.5 x 1.6 x 2.0 m, section rings, door set)"
+    finned_coil_recipe: "disenos/in-row/inrow-cooler-realistic-v1.html"
+    palette: "research/HANDBOOK.md §3.1 (near-binary metalness)"
+
+references:
+  - source: "disenos/ahu/ahu-realistic-v1.html (título + constantes HX/HZ/Y0/Y1/PT/RINGS)"
+    evidences: >
+      [CERT] 3.5 x 1.6 x 2.0 m envelope; PT = 0.05 m panel thickness; a ring/joint list along the
+      length; a DOORS set on one service face; skid height 0.12 m. This asset keeps the width,
+      panel gauge and door vocabulary and lengthens the body to 3.60 m for a 5-section split.
+    suitability: pass
+  - source: "research/HANDBOOK.md §3.0 (tabla de dimensiones de referencia)"
+    evidences: "[CERT] 'RTU / Manejadora (AHU) | 2.5-4 m largo x ~2 m alto'."
+    suitability: pass
+  - source: "research/HANDBOOK.md §3.1"
+    evidences: >
+      [CERT] `panelBox`/`panelDk` painted casing -> metalness 0.0-0.05; `coil` aluminium fins ->
+      0.9-1.0. The casing is COATED, so the whole box is dielectric and only the extruded
+      framework, damper blades and impeller are bare metal.
+    suitability: pass
+
+dimensions_real:
+  length_m:        {value: 3.60, confidence: med}   # [CERT] inside the 2.5-4 m band; local twin is 3.5
+  width_m:         {value: 1.60, confidence: high}  # [CERT] identical to the local AHU prototype
+  body_height_m:   {value: 2.00, confidence: high}  # [CERT] identical to the local AHU prototype
+  base_frame_h_m:  {value: 0.15, confidence: med}   # [CERT-ish] local twin uses 0.12 m skid
+  panel_thickness_m:{value: 0.05, confidence: high} # [CERT] local twin PT = 0.05 (50 mm sandwich panel)
+  section_joints_x: {value: [-1.20, -0.45, 0.30, 1.50], confidence: low}   # [INFER] 5-section split
+  damper_aperture_m:{value: [1.10, 1.20], confidence: low}                 # [INFER] W x H on the -X end
+  discharge_aperture_m:{value: [0.95, 0.95], confidence: low}              # [INFER] W x H on the +X end
+  door_leaf_h_m:   {value: 1.66, confidence: low}   # [INFER] clear height minus sill and header
+  impeller_d_m:    {value: 0.68, confidence: low}   # [INFER] plug fan sized to the fan section
+  coil_depth_m:    {value: 0.16, confidence: low}   # [INFER] multi-row chilled-water coil
+  filter_cells:    {value: 4,    confidence: low}   # [INFER] 2 x 2 rack of pleated cells
+
+hierarchy:
+  - name: root
+    children:
+      - name: base            # channel rails + cross members under each section joint
+        pivot: [0, 0, 0]
+        animation: none
+      - name: casing          # roof, floor, blind side, SERVICE side built around 2 apertures,
+        pivot: [0, 0, 0]      # both end walls with their apertures, extruded joint profiles, lifting lugs
+        animation: none
+      - name: damper          # opposed-blade louvre + actuator on the -X end
+        pivot: [-1.80, 1.10, 0]
+        animation: none
+      - name: outlet          # discharge flange + flexible connector + duct stub on the +X end
+        pivot: [1.80, 1.20, 0]
+        animation: none
+      - name: guts            # filter bank, coil + drain pan, bulkhead, plug fan, motor, bedplate
+        pivot: [0, 0, 0]
+        animation: none
+        children:
+          - name: impeller
+            pivot: [0.80, 1.17, 0]     # spin axis is the airflow axis (X)
+            animation: spin
+      - name: door[0..1]      # filter + fan access doors
+        pivot: [x0, 0, 0.775]          # HINGE LINE at the -X edge of each aperture
+        animation: swing
+        attachment:
+          parent_socket: casing_service_face
+          contact_type: hinge
+          gap_tolerance: 0.003
+      - name: pipes           # coil supply/return with isolation valves + condensate drain and trap
+        pivot: [0, 0, 0]
+        animation: none
+      - name: trim            # magnehelic gauge over the filter section + nameplate
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: coated-sandwich-panel
+    family: painted-metal
+    color: "#c9ced1"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1 `panelBox` -> 0.0-0.05 (panel de gabinete pintado)"
+    confidence: 0.9
+  - id: coated-door-leaf
+    family: painted-metal
+    color: "#d3d8db"
+    metalness: 0.0
+    roughness: 0.50
+    evidence: "HANDBOOK §3.1; the leaf is the same coated sandwich panel, slightly cleaner finish"
+    confidence: 0.9
+  - id: extruded-aluminium
+    family: bare-metal
+    color: "#a5acb1"
+    metalness: 0.95
+    roughness: 0.40
+    evidence: "HANDBOOK §3.1 bare metal 0.9-1.0 — the framework, damper blades and impeller"
+    confidence: 0.85
+    note: >
+      Darkened from the first pass (#b9bfc3): against a white coated casing the framework was
+      invisible and the 'sectioned casing' identity — the thing that makes this an AHU and not a
+      container — did not read at all.
+  - id: aluminium-fin
+    family: bare-metal
+    color: "#d2dade"
+    metalness: 1.0
+    roughness: 0.42
+    map: "procedural canvas: vertical fin ribbing, repeat 16x1"
+    evidence: "HANDBOOK §3.1 `coil` -> 0.9-1.0"
+    confidence: 0.85
+  - id: filter-media
+    family: fabric
+    color: "#b6b09c"
+    metalness: 0.0
+    roughness: 0.95
+    evidence: "HANDBOOK §3.1 dielectric — pleated media is not a metal"
+    confidence: 0.8
+  - id: steel-pipe
+    family: bare-metal
+    color: "#b2b9bd"
+    metalness: 0.95
+    roughness: 0.40
+    evidence: "HANDBOOK §3.1 bare metal"
+    confidence: 0.8
+    note: >
+      Deliberately NOT copper. Copper (#f0a67a) is the refrigerant vocabulary reserved for
+      chiller-aircooled; chilled-water service pipe on an AHU is steel, and reusing copper here
+      would blur the two assets' material reads.
+  - id: valve-paint
+    family: painted-metal
+    color: "#8f3b2a"
+    metalness: 0.0
+    roughness: 0.50
+    evidence: "HANDBOOK §3.1 painted body, dielectric"
+    confidence: 0.75
+  - id: flexible-connector
+    family: rubber
+    color: "#23282c"
+    metalness: 0.0
+    roughness: 0.92
+    evidence: "HANDBOOK §3.1 dielectric (caucho/lona)"
+    confidence: 0.8
+
+critical_features:
+  - id: sectioned-casing-read
+    desc: >
+      The body reads as FIVE bolted sections, not one box: extruded joint profiles land at every
+      section boundary on both faces, with top and bottom rails tying them together.
+    threshold: 0.80
+  - id: real-apertures
+    desc: >
+      The service face is built AROUND its door openings. With PUERTAS on, the filter bank and the
+      plug fan are actually visible through the holes — a leaf hung on a solid wall is a fail.
+    threshold: 0.82
+  - id: air-path-ends
+    desc: >
+      The -X end carries an opposed-blade damper with an actuator and the +X end a flanged
+      discharge with a flexible connector, so the airflow direction is readable from outside.
+    threshold: 0.75
+  - id: service-face-hydraulics
+    desc: >
+      Coil supply/return leave the service face with isolation valves and handwheels, and the
+      condensate drain leaves the pan with a trap leg below the base.
+    threshold: 0.72
+  - id: proportion-scale
+    desc: "At 3.60 x 1.60 x 2.15 m a 1.8 m person stands just under the roof line and the door is a real man-door."
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 240      # measured 222 at the review camera (SwiftShader headless, DPR 1)
+    tris: 20000     # measured 4,376 — this asset is draw-bound, not triangle-bound
+
+camera:
+  azimuth_deg: 49
+  elevation_deg: 16
+  fov: 38
+  target_y_m: 1.15
+  radius_m: 7.0
+
+lighting: house-rig + vertical-subject fill + interior lamp
+  # DEVIATION 1 (same class as puerta-cuarto-frio): a camera-side DirectionalLight mirrored about
+  # the service-face normal (+Z), environmentIntensity 1.9 -> 2.1, so the bare extruded framework
+  # is not a flat grey silhouette. Metalness/roughness unchanged.
+  # DEVIATION 2: a shadowless PointLight INSIDE the casing. With the doors open the sections face
+  # away from every rig light and the internals rendered as black holes, which would have made the
+  # reveal worthless. It is inside the box, so it does not touch the exterior read.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "PUERTAS"       # both access doors swing on their hinge lines; holds needsRender while moving
+  - "VENTILADOR"    # plug-fan impeller spins on the airflow axis
+  - "HIDRÁULICA"    # hides the coil connections, valves and condensate drain
+
+instancing:
+  # block54 §2.3 — instancing ONLY where the repetition is real.
+  - what: "damper blades"
+    count: 9
+    draws_saved: "9 meshes -> 1"
+  - what: "impeller vanes"
+    count: 9
+    draws_saved: "9 meshes -> 1"
+  # NOT instanced: doors, filter cells (only 4 and each sits in a distinct rack slot), valves,
+  # section profiles — the profiles differ in position only but there are 12 of them, below the
+  # threshold where an InstancedMesh pays for its own complexity.
+
+colorTarget:
+  # MEASURED from the rendered door leaf (headless SwiftShader capture at 1280x800), then frozen
+  # as the regression anchor. Not a guessed sRGB.
+  srgb: [231, 232, 233]
+  deltaE00Max: 8
+  crop: "90x70+640+480"     # clean door leaf, below the inspection port, at 1280x800
+  secondary_observed:
+    casing_shadow_side: [168, 172, 175]   # 60x60+900+300 — the same paint away from the fill
+    extrusion_profile:  [122, 126, 129]   # 10x120+770+420 — the framework must stay DARKER than
+                                          # the panel; if these two converge the sectioning is gone
