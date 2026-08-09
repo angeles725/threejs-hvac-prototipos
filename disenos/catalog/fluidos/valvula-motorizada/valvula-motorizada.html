@@ -1,0 +1,310 @@
+<!doctype html>
+<!--
+  valvula-motorizada — catalog asset, family `fluidos`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Evidence: research/sources/B59-proceso-dims/wafer-butterfly-dn100-pn16.md
+  Spec: ./design-spec.yaml
+  NOTE: a WAFER body has no flanges of its own. It is clamped BETWEEN the two pipe flanges by studs
+  that run past it, and its OD must pass INSIDE the bolt circle. Giving it its own bolted flanges
+  would quietly turn it into a lugged valve — a different product.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Válvula de mariposa motorizada DN100 — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Válvula de mariposa motorizada — DN100 PN16, cuerpo wafer</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· fundición pintada · disco inox · asiento EPDM</span></div>
+  <div class="dim">EN 558-20: cara a cara 52 mm · brida EN 1092 Ø220, 8 × M16 · ISO 5211 · 16 bar</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnOpen">ABRIR</button>
+  <button id="btnCut">CORTE</button>
+  <button id="btnDim">COTAS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const F2F      = 0.052;    // [CERT-a] EN 558 series 20, DN100 — face to face
+const PIPE_OD  = 0.1143;   // [CERT-a] DN100 steel pipe OD
+const PIPE_T   = 0.0045;   // [INFER] wall
+const FL_OD    = 0.220;    // [CERT-a] EN 1092-2 PN16 DN100
+const FL_T     = 0.020;    // [INFER] flange thickness
+const PCD      = 0.180;    // [CERT-a] 8 x M16 bolt circle
+const BOLTS    = 8;        // [CERT-a]
+const BODY_OD  = 0.175;    // [INFER] MUST pass inside the bolt circle — that is what wafer means
+const DISC_D   = 0.098;    // [INFER] just under bore
+const AXIS_Y   = 0.450;    // pipe centreline height (support stands)
+const RUN_X    = 0.460;   // pipe run half-length — kept short so the VALVE dominates, not the pipe
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 5, 20);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.02, 80);
+const R = 1.90, AZ = 0.803, EL = 0.209;                         // 46° azimuth / 12° elevation (spec camera)
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.52 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.52, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.52, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.1;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(1.5, 2.4, 1.3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-1.1; sun.shadow.camera.right=1.1; sun.shadow.camera.top=1.1; sun.shadow.camera.bottom=-1.1;
+sun.shadow.camera.far = 7;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(18,18),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. Three families meet inside 52 mm: painted casting, bare metal, rubber.
+// ============================================================================
+const matBody  = new THREE.MeshStandardMaterial({ color:0x2f6b57, metalness:0.0,  roughness:0.52 });
+const matBodyCut = new THREE.MeshStandardMaterial({ color:0x2f6b57, metalness:0.0, roughness:0.52,
+                                                    transparent:true, opacity:0.20, side:THREE.DoubleSide,
+                                                    depthWrite:false });
+const matDisc  = new THREE.MeshStandardMaterial({ color:0xc4c9cb, metalness:0.92, roughness:0.30 });
+const matPipe  = new THREE.MeshStandardMaterial({ color:0x9ea4a7, metalness:0.88, roughness:0.42 });
+const matPipeCut = new THREE.MeshStandardMaterial({ color:0x9ea4a7, metalness:0.88, roughness:0.42,
+                                                    transparent:true, opacity:0.18, side:THREE.DoubleSide,
+                                                    depthWrite:false });
+const matSeat  = new THREE.MeshStandardMaterial({ color:0x1b1e21, metalness:0.0,  roughness:0.88 });
+const matAct   = new THREE.MeshStandardMaterial({ color:0x7d848a, metalness:0.0,  roughness:0.55 });
+const matInd   = new THREE.MeshStandardMaterial({ color:0xd8a413, metalness:0.0,  roughness:0.60 });
+const matDim   = new THREE.MeshStandardMaterial({ color:0x00d4aa, metalness:0.0,  roughness:0.6,
+                                                  emissive:0x0b3b32, emissiveIntensity:1.0 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Repetition is only the clamping studs → instanced; nothing else repeats.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xforms, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = im.receiveShadow = true;
+  xforms.forEach((t,i)=>{ _p.set(t[0],t[1],t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0)); _s.set(1,1,1);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s)); });
+  im.instanceMatrix.needsUpdate = true; parent.add(im); return im;
+}
+function mesh(geo, mat, parent){ const m = new THREE.Mesh(geo, mat);
+  m.castShadow = m.receiveShadow = true; if(parent) parent.add(m); return m; }
+// open-ended tube along X, so the bore is visible from the pipe ends
+function tubeX(rOut, rIn, len, seg=32){
+  const g = new THREE.CylinderGeometry(rOut, rOut, len, seg, 1, true); g.rotateZ(Math.PI/2); return g;
+}
+function cylX(r, len, seg=28){ const g = new THREE.CylinderGeometry(r, r, len, seg); g.rotateZ(Math.PI/2); return g; }
+function ringX(rOut, rIn, x, mat, parent){    // an annulus facing along X (flange face / pipe end)
+  const g = new THREE.RingGeometry(rIn, rOut, 40); g.rotateY(Math.PI/2);
+  const m = mesh(g, mat, parent); m.material.side = THREE.DoubleSide; m.position.x = x; return m;
+}
+
+// --- pipe run: two lengths, each ending in a PN16 flange against the wafer ---
+const pipeRun = new THREE.Group();
+const pipeMeshes = [], bores = [];
+// Everything is placed in WORLD y directly. Offsetting the group and then trying to compensate the
+// floor-standing parts by geometry type is the kind of trick that silently misses one mesh.
+for(const sx of [-1, 1]){
+  const inner = F2F/2 + FL_T;
+  const len = RUN_X - inner;
+  const cx = sx*(inner + len/2);
+  const p = mesh(tubeX(PIPE_OD/2, PIPE_OD/2 - PIPE_T, len), matPipe, pipeRun);
+  p.position.set(cx, AXIS_Y, 0); p.material.side = THREE.DoubleSide;
+  pipeMeshes.push(p);
+  const b = mesh(tubeX(PIPE_OD/2 - PIPE_T, 0, len), matSeat, pipeRun);   // dark bore lining
+  b.position.set(cx, AXIS_Y, 0); b.material.side = THREE.BackSide; bores.push(b);
+  ringX(PIPE_OD/2, PIPE_OD/2 - PIPE_T, sx*RUN_X, matPipe, pipeRun).position.y = AXIS_Y;
+  const fl = mesh(cylX(FL_OD/2, FL_T, 40), matPipe, pipeRun);
+  fl.position.set(sx*(F2F/2 + FL_T/2), AXIS_Y, 0);
+  pipeMeshes.push(fl);
+}
+// supports: post + base plate + a clamp band round the pipe
+for(const sx of [-1,1]){
+  const postH = AXIS_Y - PIPE_OD/2 - 0.02;
+  mesh(new THREE.BoxGeometry(0.070, postH, 0.070), matAct, pipeRun).position.set(sx*0.34, postH/2, 0);
+  mesh(new THREE.BoxGeometry(0.150, 0.014, 0.150), matAct, pipeRun).position.set(sx*0.34, 0.007, 0);
+  mesh(new THREE.BoxGeometry(0.090, 0.016, 0.130), matAct, pipeRun)
+    .position.set(sx*0.34, postH + 0.008, 0);
+  // A clamp is a BAND round the pipe. A solid cylinder of larger radius reads as a wheel stuck on
+  // the pipe end and hides the run behind it.
+  const cl = mesh(new THREE.TorusGeometry(PIPE_OD/2 + 0.007, 0.009, 8, 28), matAct, pipeRun);
+  cl.position.set(sx*0.34, AXIS_Y, 0); cl.rotation.y = Math.PI/2;
+  for(const sz of [-1,1]) mesh(new THREE.BoxGeometry(0.016, 0.030, 0.012), matAct, pipeRun)
+    .position.set(sx*0.34, AXIS_Y - PIPE_OD/2 - 0.014, sz*0.030);
+}
+root.add(pipeRun);
+
+// --- wafer body: OD passes INSIDE the bolt circle, clamped by studs that run past it ---
+const body = new THREE.Group();
+body.position.y = AXIS_Y;
+const bodyMesh = mesh(cylX(BODY_OD/2, F2F, 40), matBody, body);
+mesh(tubeX(PIPE_OD/2 - PIPE_T + 0.006, 0, F2F + 0.002, 32), matSeat, body).material.side = THREE.BackSide;
+mesh(new THREE.BoxGeometry(0.070, 0.070, 0.062), matBody, body).position.set(0, 0.088, 0);   // neck
+mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.014, 24), matBody, body).position.set(0, 0.128, 0); // ISO 5211 pad
+for(let k=0;k<4;k++){ const a = k*Math.PI/2 + Math.PI/4;   // F07 mounting screws
+  mesh(new THREE.CylinderGeometry(0.005,0.005,0.016,8), matPipe, body)
+    .position.set(Math.cos(a)*0.035, 0.134, Math.sin(a)*0.035); }
+const studs = [];                                          // clamping studs pass the body, not through it
+for(let k=0;k<BOLTS;k++){ const a = (k/BOLTS)*Math.PI*2 + Math.PI/BOLTS;
+  studs.push([0, Math.cos(a)*PCD/2, Math.sin(a)*PCD/2, 0, 0, Math.PI/2]); }
+instanced(new THREE.CylinderGeometry(0.008, 0.008, F2F + 2*FL_T + 0.030, 8), matPipe, studs, body);
+const nuts = [];
+for(let k=0;k<BOLTS;k++){ const a = (k/BOLTS)*Math.PI*2 + Math.PI/BOLTS;
+  for(const sx of [-1,1]) nuts.push([sx*(F2F/2 + FL_T + 0.008), Math.cos(a)*PCD/2, Math.sin(a)*PCD/2, 0, 0, Math.PI/2]); }
+instanced(new THREE.CylinderGeometry(0.013, 0.013, 0.013, 6), matPipe, nuts, body);
+root.add(body);
+
+// --- closure: disc + stem on ONE pivot. 0 = shut (square across the bore), 90 = open (edge on) ---
+const closure = new THREE.Group();
+closure.position.y = AXIS_Y;
+const disc = mesh(new THREE.CylinderGeometry(DISC_D/2, DISC_D/2, 0.012, 36), matDisc, closure);
+// Rotate about Z, not X. The disc is a cylinder with its axis on Y; rotating about X swings that
+// axis onto Z, which lays the disc PARALLEL to the flow — permanently open, and the 90-degree
+// travel then does nothing visible. About Z puts the disc normal on X: shut.
+disc.rotation.z = Math.PI/2;
+mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.230, 16), matDisc, closure).position.y = 0.070;
+mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.055, 16), matDisc, closure).position.y = -0.062;
+root.add(closure);
+
+// --- actuator on the ISO 5211 pad ---
+const actuator = new THREE.Group();
+actuator.position.y = AXIS_Y + 0.135;
+mesh(new THREE.CylinderGeometry(0.040, 0.048, 0.045, 20), matAct, actuator).position.y = 0.022;
+mesh(new THREE.BoxGeometry(0.200, 0.130, 0.165), matAct, actuator).position.y = 0.110;
+mesh(new THREE.BoxGeometry(0.170, 0.024, 0.140), matAct, actuator).position.y = 0.187;   // lid
+const ind = mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.020, 20), matInd, actuator);
+ind.position.set(0.050, 0.204, 0);                                                       // position indicator
+mesh(new THREE.BoxGeometry(0.046, 0.008, 0.012), matAct, actuator).position.set(0.050, 0.216, 0);
+const hw = mesh(new THREE.TorusGeometry(0.052, 0.007, 6, 24), matInd, actuator);
+hw.position.set(-0.128, 0.100, 0); hw.rotation.y = Math.PI/2;                             // manual handwheel
+mesh(new THREE.CylinderGeometry(0.013,0.013,0.040,12).rotateZ(Math.PI/2), matAct, actuator)
+  .position.set(-0.110, 0.100, 0);
+mesh(new THREE.CylinderGeometry(0.014,0.014,0.030,12).rotateX(Math.PI/2), matAct, actuator)
+  .position.set(0.040, 0.060, 0.090);                                                     // cable gland
+root.add(actuator);
+
+// --- COTAS: the DN100 bore and the EN 558-20 face-to-face ---
+const dims = new THREE.Group(); dims.visible = false;
+const f2fBar = mesh(new THREE.BoxGeometry(F2F, 0.006, 0.006), matDim, dims);
+f2fBar.position.set(0, AXIS_Y - 0.150, 0.130);
+for(const sx of [-1,1]) mesh(new THREE.BoxGeometry(0.005, 0.044, 0.005), matDim, dims)
+  .position.set(sx*F2F/2, AXIS_Y - 0.150, 0.130);
+mesh(new THREE.TorusGeometry(PIPE_OD/2 - PIPE_T, 0.004, 6, 40).rotateY(Math.PI/2), matDim, dims)
+  .position.set(RUN_X - 0.004, AXIS_Y, 0);
+root.add(dims);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let open = false, cut = false, travel = 0;                      // travel 0..1 = shut..open
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnOpen = document.getElementById('btnOpen');
+btnOpen.onclick = ()=>{ open = !open; btnOpen.classList.toggle('on', open); requestRender(); };
+
+const btnCut = document.getElementById('btnCut');
+btnCut.onclick = ()=>{ cut = !cut; btnCut.classList.toggle('on', cut);
+  bodyMesh.material = cut ? matBodyCut : matBody;
+  bodyMesh.castShadow = !cut;
+  for(const p of pipeMeshes){ p.material = cut ? matPipeCut : matPipe; p.castShadow = !cut; }
+  for(const b of bores) b.visible = !cut;
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnDim = document.getElementById('btnDim');
+btnDim.onclick = ()=>{ dims.visible = !dims.visible; btnDim.classList.toggle('on', dims.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const target = open ? 1 : 0;
+  if(Math.abs(travel - target) > 0.001){
+    travel += (target - travel) * 0.12;
+    closure.rotation.y = travel * Math.PI/2;                    // the 90 degrees the valve exists for
+    ind.rotation.y = travel * Math.PI/2;
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__valvulaMotorizadaApp = __app;
+globalThis['__valvula-motorizadaApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
