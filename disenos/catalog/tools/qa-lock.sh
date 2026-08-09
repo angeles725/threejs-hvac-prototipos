@@ -39,6 +39,20 @@ if [ "$#" -eq 0 ]; then
   exit 2
 fi
 
+# Reap ORPHANED headless chrome before running. A run that timed out leaves its chrome-headless-shell
+# reparented to init (ppid 1), dragging ~10 renderer children each; measured 2026-08-08, 5 orphans =
+# 58 procs, machine 123 -> 65. The lock queues LIVE probes but nothing harvests dead ones, so the
+# "contention" is partly accumulated garbage. Killing ppid==1 chrome-headless-shell is safe: a live
+# probe's chrome has a living node parent; only an orphan's parent is init. Opt out with QA_LOCK_NO_REAP=1.
+if [ "${QA_LOCK_NO_REAP:-0}" != "1" ] && command -v ps >/dev/null 2>&1; then
+  orphans=$(ps -eo pid=,ppid=,comm= 2>/dev/null | awk '$2==1 && $3 ~ /chrome-headles/ {print $1}')
+  if [ -n "$orphans" ]; then
+    n=$(printf '%s\n' "$orphans" | grep -c .)
+    echo "qa-lock: cosechando $n chrome huérfano(s) (ppid=1) de corridas muertas" >&2
+    printf '%s\n' "$orphans" | xargs -r kill -KILL 2>/dev/null || true
+  fi
+fi
+
 if ! command -v flock >/dev/null 2>&1; then
   # No flock: run unserialised rather than block the caller, but say so. Losing serialisation is a
   # performance problem; refusing to run would be a correctness problem for the caller's gate.

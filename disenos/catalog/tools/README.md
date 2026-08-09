@@ -63,6 +63,11 @@ Contract, chosen so the wrapper cannot corrupt a gate decision:
 | `QA_LOCK_FILE` | `/tmp/catalog-qa.lock` | shared lock path — all sessions must agree on it |
 | `QA_LOCK_TIMEOUT` | `900` | seconds to wait; `0` waits forever |
 | `QA_LOCK_QUIET` | unset | `1` silences the "waiting" notice on stderr |
+| `QA_LOCK_NO_REAP` | unset | `1` skips reaping orphaned (ppid=1) chrome-headless-shell before running |
+
+Before acquiring the lock it reaps ORPHANED headless chrome (`ppid==1` chrome-headless-shell, left by
+timed-out runs — measured 5 orphans = 58 procs, machine 123→65). Safe: a live probe's chrome has a living
+node parent; only a dead run's chrome is reparented to init. The lock queues live probes; this harvests dead ones.
 
 Wrap **one probe invocation**, not a whole sweep: holding the lock across a 90-asset run starves
 every peer. If `flock` is missing the command still runs, unserialised, with a notice on stderr —
