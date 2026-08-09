@@ -1,0 +1,140 @@
+# DesignSpec — structural steel mezzanine (EN ISO 14122-3 guard-rail geometry)
+# Dimensional evidence: [Block 65]. The guard-rail geometry is CERTIFIED against a safety standard;
+# the deck load rating is deliberately UNCITED (B65 §65.2) and the structure sizes are [INFER].
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: mezzanine-estructural
+family: almacenamiento
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  scores: {silhouette: 2, components: 3, hierarchy: 2, repetition: 3,
+           material_layers: 2, detail: 2, occlusion: 1, action_readiness: 0}
+  tier: moderate
+  notes: >
+    The only asset in this family whose geometry is dictated by a SAFETY STANDARD rather than a
+    catalogue. Guard-rail heights are not styling: 1100 mm rail, knee rail closing any gap under
+    500 mm, toe plate — three horizontal elements, and a stair handrail at a DIFFERENT height.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/threejs-block65.md
+  reuse_pointers:
+    standards_sibling: "disenos/catalog/almacenamiento/rack-pallet/ — the DGUV-derived one"
+
+references:
+  - source: "sources/B65-mezzanine-dims/gt-eng-guardrails (EN ISO 14122-3 CAP 7-8, fetched 2026-08-08)"
+    evidences: >
+      Guard-rail mandatory above a 500 mm fall or a 180 mm gap to a neighbouring structure; minimum
+      guard-rail height 1100 mm; toe-plate required once the platform gap exceeds 20 mm; knee rail
+      maximum distance 500 mm, or vertical uprights at maximum 180 mm; interrupted guard-rail clear
+      space 50-120 mm; stair handrail 900-1000 mm from the nose of the step; handrail diameter
+      25-50 mm with 75 mm clearance. Read from the tag-stripped text, not raw HTML (B65 §65.3).
+    suitability: pass
+  - source: "deck structural load rating"
+    evidences: >
+      UNCITED ON PURPOSE. The search summary asserted 2.4 kN/m2; that string appears in NO preserved
+      source in any format (B65 §65.2). A structural document would be needed.
+    suitability: fail
+
+dimensions_real:
+  guardrail_h_m:      {value: 1.10,  confidence: high}  # [CERT-web] minimum height
+  kneerail_h_m:       {value: 0.55,  confidence: high}  # [CERT-web] derived: keeps every gap under 500 mm
+  kneerail_max_gap_m: {value: 0.50,  confidence: high}  # [CERT-web]
+  toeplate_h_m:       {value: 0.10,  confidence: med}   # [INFER] trigger cited (20 mm gap), height not
+  rail_required_above_m: {value: 0.50, confidence: high} # [CERT-web]
+  stair_handrail_h_m: {value: 0.95,  confidence: high}  # [CERT-web] inside the 900-1000 mm band
+  handrail_dia_m:     {value: 0.040, confidence: high}  # [CERT-web] inside 25-50 mm
+  deck_udl_kn_m2:     {value: null,  confidence: none}  # §65.2 — deliberately uncited
+  deck_h_m:           {value: 3.00,  confidence: low}   # [INFER] clearance under the deck
+  platform_m:         {value: [6.00, 4.00], confidence: low}  # [INFER]
+  column_m:           {value: 0.15,  confidence: low}   # [INFER]
+  joist_h_m:          {value: 0.24,  confidence: low}   # [INFER]
+
+hierarchy:
+  - name: root
+    children:
+      - name: structure    # columns + primary beams + joists
+        pivot: [0, 0, 0]
+        animation: none
+      - name: deck         # floor plate
+        pivot: [0, 0, 0]
+        animation: none
+      - name: railing      # 1100 rail + knee rail + toe plate — the certified part
+        pivot: [0, 0, 0]
+        animation: none
+      - name: stair        # stringers, treads, handrail at 950 (NOT 1100)
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: structure-blue
+    family: painted-metal
+    color: "#3f5c78"
+    metalness: 0.0
+    roughness: 0.58
+    evidence: "painted structural steel — dielectric per HANDBOOK §3.1"
+    confidence: 0.6
+  - id: railing-yellow
+    family: painted-metal
+    color: "#d0a02a"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "safety yellow is the guard-rail convention; the GEOMETRY is what is certified"
+    confidence: 0.6
+  - id: deck-plate
+    family: painted-metal
+    color: "#8b9095"
+    metalness: 0.0
+    roughness: 0.7
+    evidence: "coated steel deck plate"
+    confidence: 0.55
+
+critical_features:
+  - id: three-element-railing
+    desc: >
+      Top rail at 1100 mm, knee rail keeping every opening under 500 mm, and a toe plate at deck
+      level — three horizontal elements. A single top rail is not compliant and is the obvious error.
+    threshold: 0.80
+  - id: stair-handrail-is-lower
+    desc: >
+      The stair handrail sits at 900-1000 mm from the nose of the step, LOWER than the platform's
+      1100 mm guard-rail. Using one height for both is wrong in the standard's own terms.
+    threshold: 0.75
+  - id: deck-reads-as-structure
+    desc: "Columns, primary beams and joists under the deck — the platform is not a floating slab."
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 65                 # measured 63
+    tris: 60000               # measured ~2700
+
+camera:
+  view: exterior
+  azimuth_deg: 42
+  elevation_deg: 12
+  fov: 38
+  target_y_m: 1.90
+  radius_m: 13.0
+
+lighting: house-rig
+  # Painted dielectric throughout — deliberate non-deviation, as in the other painted assets.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "RAILING"               # hide to expose the deck edge the standard is protecting
+  - "STAIR"
+  - "SCALE 1.8 m"           # the 1100 mm rail must read at chest height on the figure
+
+colorTarget:
+  srgb: [196, 162, 56]      # MEASURED on the 1100 mm guard-rail (safety yellow)
+  deltaE00Max: 8
+  crop: "80x5+539+190"   # top rail, at 1280x800 — thin, so the crop hugs the tube

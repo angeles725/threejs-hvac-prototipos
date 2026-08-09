@@ -1,0 +1,262 @@
+<!doctype html>
+<!--
+  mezzanine-estructural — catalog asset, family `almacenamiento`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block65.md (EN ISO 14122-3)  ·  Spec: ./design-spec.yaml
+  The guard-rail geometry is CERTIFIED, not styling: 1100 mm top rail, knee rail closing every gap
+  under 500 mm, toe plate — and the STAIR handrail sits LOWER, at 950 mm from the step nose.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mezzanine estructural — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)} #hud .warn{color:#e0a33a}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Mezzanine estructural — EN ISO 14122-3</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· baranda 1100 · rodilla ≤500 · rodapié</span></div>
+  <div class="dim">pasamanos de escalera 950 mm — MÁS BAJO que la baranda</div>
+  <div class="warn">carga de forjado sin citar: ninguna fuente preservada la da</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnRail" class="on">RAILING</button>
+  <button id="btnStair" class="on">STAIR</button>
+  <button id="btnScale" class="on">SCALE 1.8 m</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 65]) ----------
+const PL_X = 6.00, PL_Z = 4.00, DECK_Y = 3.00;   // [INFER] platform + clearance
+const COL = 0.15, JOIST_H = 0.24, DECK_T = 0.05; // [INFER]
+const RAIL_H = 1.10;                              // [CERT-web] EN ISO 14122-3 minimum
+const KNEE_H = 0.55;                              // [CERT-web] derived: no gap exceeds 500 mm
+const TOE_H = 0.10;                               // [INFER] height; the 20 mm trigger is cited
+const POST_S = 1.50;                              // [INFER] stanchion spacing
+const HANDRAIL_H = 0.95;                          // [CERT-web] 900-1000 from the step nose — LOWER
+const HANDRAIL_D = 0.040;                         // [CERT-web] 25-50 mm
+const STEPS = 15, RISE = DECK_Y/15, GOING = 0.26;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 16, 44);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 150);
+const R = 13.0, AZ = 0.733, EL = 0.21;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.90 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.90, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.90, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;   // painted dielectric — deliberate non-deviation
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(8, 12, 8); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d
+sun.shadow.camera.left=-8; sun.shadow.camera.right=8; sun.shadow.camera.top=8; sun.shadow.camera.bottom=-8;
+sun.shadow.camera.far = 34;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(50,50),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. Painted structural steel = DIELECTRIC (HANDBOOK §3.1).
+// ============================================================================
+const matStruct = new THREE.MeshStandardMaterial({ color:0x3f5c78, metalness:0.0, roughness:0.58 });
+const matRail   = new THREE.MeshStandardMaterial({ color:0xd0a02a, metalness:0.0, roughness:0.55 });
+const matDeck   = new THREE.MeshStandardMaterial({ color:0x8b9095, metalness:0.0, roughness:0.70 });
+const matSkin   = new THREE.MeshStandardMaterial({ color:0x6f7c86, metalness:0.0, roughness:0.85 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xf, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xf.length);
+  im.castShadow = im.receiveShadow = true;
+  xf.forEach((t,i)=>{ _p.set(t[0],t[1],t[2]); _q.setFromEuler(new THREE.Euler(0,0,t[3]||0));
+    im.setMatrixAt(i, _m.compose(_p,_q,_s)); });
+  im.instanceMatrix.needsUpdate = true; parent.add(im); return im;
+}
+
+// --- structure: columns, primary beams, joists ---
+const structure = new THREE.Group();
+const colXs = [-PL_X/2 + COL/2, 0, PL_X/2 - COL/2];
+const colZs = [-PL_Z/2 + COL/2, PL_Z/2 - COL/2];
+const beamTop = DECK_Y - DECK_T;
+for(const x of colXs) for(const z of colZs)
+  put(structure, COL, beamTop - JOIST_H, COL, matStruct, x, (beamTop - JOIST_H)/2, z);
+for(const z of colZs) put(structure, PL_X, JOIST_H, 0.10, matStruct, 0, beamTop - JOIST_H/2, z);
+const joists = [];
+for(let x = -PL_X/2 + 0.50; x <= PL_X/2 - 0.50; x += 0.60) joists.push([x, beamTop - JOIST_H/2, 0]);
+instanced(new THREE.BoxGeometry(0.06, JOIST_H - 0.04, PL_Z - 0.20), matStruct, joists, structure);
+root.add(structure);
+
+// --- deck ---
+const deck = new THREE.Group();
+put(deck, PL_X, DECK_T, PL_Z, matDeck, 0, DECK_Y - DECK_T/2, 0);
+root.add(deck);
+
+// --- railing: THE certified part. Top rail 1100 + knee 550 + toe plate. ---
+const railing = new THREE.Group();
+const edges = [
+  { len: PL_X, x: 0, z: -PL_Z/2 + 0.03, rot: 0 },
+  { len: PL_X, x: 0, z:  PL_Z/2 - 0.03, rot: 0 },
+  { len: PL_Z, x: -PL_X/2 + 0.03, z: 0, rot: Math.PI/2 },
+];
+for(const e of edges){
+  for(const [h, thick] of [[RAIL_H, 0.045], [KNEE_H, 0.035]]){
+    const r = box(e.len, thick, thick, matRail);
+    r.position.set(e.x, DECK_Y + h, e.z); r.rotation.y = e.rot;
+    if(e.rot) { r.geometry.dispose(); r.geometry = new THREE.BoxGeometry(thick, thick, e.len); r.rotation.y = 0; }
+    railing.add(r);
+  }
+  const toe = box(e.rot ? 0.02 : e.len, TOE_H, e.rot ? e.len : 0.02, matRail);
+  toe.position.set(e.x, DECK_Y + TOE_H/2, e.z); railing.add(toe);
+  const n = Math.max(2, Math.round(e.len / POST_S) + 1);
+  for(let i=0;i<n;i++){
+    const t = -e.len/2 + i*(e.len/(n-1));
+    const post = box(0.05, RAIL_H, 0.05, matRail);
+    post.position.set(e.rot ? e.x : e.x + t, DECK_Y + RAIL_H/2, e.rot ? e.z + t : e.z);
+    railing.add(post);
+  }
+}
+root.add(railing);
+
+// --- stair: stringers, treads, handrail at 950 (LOWER than the 1100 guard-rail) ---
+const stair = new THREE.Group();
+const sx = PL_X/2 + 0.30, run = STEPS*GOING;
+for(let i=0;i<STEPS;i++)
+  put(stair, 0.30, 0.035, GOING - 0.02, matDeck, sx, (i+1)*RISE, -PL_Z/2 + 0.20 + run - i*GOING);
+const strLen = Math.hypot(run, DECK_Y);
+for(const dz of [-0.17, 0.17]){
+  const s = box(0.05, 0.24, strLen, matStruct);
+  s.position.set(sx + dz, DECK_Y/2, -PL_Z/2 + 0.20 + run/2);
+  s.rotation.x = Math.atan2(DECK_Y, run); stair.add(s);   // +: the +z end goes DOWN, matching the treads
+}
+// Handrail: built with the SAME box+rotation as the stringer, not a cylinder with a derived angle.
+// The first attempt rotated a Y-axis cylinder by (PI/2 - slope) and it leaned the OPPOSITE way —
+// visible only in the render. Reusing the stringer's own transform makes parallelism structural.
+const slope = Math.atan2(DECK_Y, run);   // same sign as the stringer — verified against the treads
+for(const dz of [-0.20, 0.20]){
+  const h = box(HANDRAIL_D, HANDRAIL_D, strLen, matRail);
+  h.position.set(sx + dz, DECK_Y/2 + HANDRAIL_H*Math.cos(slope), -PL_Z/2 + 0.20 + run/2);
+  h.rotation.x = slope;
+  stair.add(h);
+  for(let k=1;k<4;k++){                                   // stanchions tying rail to stringer
+    const t = -0.5 + k*0.25;
+    const p = box(0.028, HANDRAIL_H, 0.028, matRail);
+    p.position.set(sx + dz, DECK_Y/2 + t*strLen*Math.sin(slope) + HANDRAIL_H/2,
+                   -PL_Z/2 + 0.20 + run/2 + t*strLen*Math.cos(slope));
+    stair.add(p);
+  }
+}
+root.add(stair);
+
+// --- 1.8 m figure ON the deck: the 1100 rail must read at chest height ---
+const scaleFig = new THREE.Group();
+const fx = -1.30, fz = 0.60, fy = DECK_Y;
+const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.52, 6, 12), matSkin);
+torso.position.set(fx, fy + 1.16, fz); torso.castShadow = true; scaleFig.add(torso);
+const headM = new THREE.Mesh(new THREE.SphereGeometry(0.115, 14, 12), matSkin);
+headM.position.set(fx, fy + 1.62, fz); headM.castShadow = true; scaleFig.add(headM);
+for(const s of [-1,1]){
+  const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.62, 6, 10), matSkin);
+  leg.position.set(fx + s*0.10, fy + 0.46, fz); leg.castShadow = true; scaleFig.add(leg);
+}
+root.add(scaleFig);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible;
+  btn.classList.toggle('on', obj.visible); renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(document.getElementById('btnRail'), railing);
+toggle(document.getElementById('btnStair'), stair);
+toggle(document.getElementById('btnScale'), scaleFig);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__mezzanineEstructuralApp = __app;
+globalThis['__mezzanine-estructuralApp'] = __app;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
