@@ -182,6 +182,9 @@ elige otra familia libre si queda, o detente.
 - Identifica una InstancedMesh por `geometry.parameters` (width/height/depth), NUNCA por `count` ni por índice
   de traversal: varias mallas comparten conteo por casualidad (24 aisladores vs 28 MCCB) y el orden de
   traversal cambia con cualquier edición → agarras la malla de al lado y reportas un defecto que no existe.
+- CONTAR una InstancedMesh: lee `.count`, NUNCA su caja envolvente. Una InstancedMesh tiene UNA sola geometría,
+  así que su bounding box es la del prototipo, no la del conjunto → contar por bbox/geometría siempre da 1 y
+  reportas "2 filas de 6 racks" como si hubiera uno. (contencion-pasillo: bbox=1, `.count`=12, correcto.)
 - Un pixel-diff que NO cambia solo prueba AUSENCIA si ANTES demuestras que el objeto era visible en ese estado.
   Si vive tras una tapa/puerta CERRADA, "ocultarlo no cambia el hash" es tautológico. Orden correcto: abre la
   tapa que lo cubre → confirma que aporta píxeles → recién entonces el diff prueba ausencia.
