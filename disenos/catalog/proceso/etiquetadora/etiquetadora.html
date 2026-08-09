@@ -1,0 +1,561 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — proceso/etiquetadora
+  Wrap-around pressure-sensitive labeling machine.
+  Spec:     disenos/catalog/proceso/etiquetadora/design-spec.yaml
+  Evidence: research/sources/B59-proceso-dims/wraparound-labeler.md
+            (CVC-300 datasheet fixes the envelope; SigmaEquipment guide fixes the web-path ORDER)
+
+  The identity of this machine is a THREADED PATH, not a volume:
+    unwind -> dancer -> idler1 -> idler2 -> peel plate -> nip pair -> rewind
+  At the peel plate the liner folds back at an ACUTE angle and the label carries straight on to the
+  bottle. Model the boxes and skip the thread and you have modelled a cabinet, not a labeler.
+
+  Built from disenos/catalog/shell-template.html (render-on-demand, frozen shadow, DPR<=2, map 1024).
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Etiquetadora wrap-around — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">ETIQUETADORA WRAP-AROUND — acero inoxidable 304</div>
+  <div class="pass">Pase MATERIALS</div>
+  <div><span class="dim">2.01 × 1.04 × 1.62 m · banda a 0.914 m · rollo Ø0.350 m / núcleo Ø0.076 m</span></div>
+  <div><span class="dim">envolvente y formatos [CERT-web] ficha CVC-300 · resto [INFER]</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnMarcha">MARCHA</button>
+  <button id="btnCorte">CORTE</button>
+  <button id="btnCotas">COTAS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 9, 30);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+// spec camera: azimuth 52 deg, elevation 11 deg, fov 38, target (0, 0.80, -0.05), radius 3.55.
+// Derived by PROJECTING the asset corners to NDC, not by eye: the first framing (az46/el16/r3.40/
+// ty0.95) put the near-front leg at y_ndc -1.16 — cropped — while using only 37% of the frame width.
+// This one lands the near leg at -0.94 and the head top at +0.69, with the long axis swung toward
+// the camera so the 2.0 m bed reads as length instead of foreshortening away.
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const AZ = 52*Math.PI/180, EL = 11*Math.PI/180, RAD = 3.55;
+const TGT = new THREE.Vector3(0, 0.80, -0.05);
+camera.position.set(TGT.x + RAD*Math.cos(AZ)*Math.cos(EL),
+                    TGT.y + RAD*Math.sin(EL),
+                    TGT.z + RAD*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(TGT);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.copy(TGT);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// 2.30, not the shell default 1.9. MEASURED deviation, see design-spec.yaml `lighting`: with the
+// house rig alone the VERTICAL bare-metal members measured 46-78 mean sRGB while the CYLINDRICAL
+// ones measured 121-137, against a sibling's passing anchor of 95-105. A vertical face cannot catch
+// a specular reflection from an elevated key at any camera height, so its highlight has to come
+// from the IBL. metalness stays 0.92 (HANDBOOK 3.1) — the rig moves, never the material.
+scene.environmentIntensity = 2.30;
+
+// House rig per HANDBOOK 3.3 + one camera-side frontal fill for the DIFFUSE term on those same
+// vertical faces. Shadowless on purpose: a second shadow-casting light would double the contact
+// shadows under the legs and the frozen bake would carry both.
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4, 6, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.02;
+sun.shadow.camera.left=-2.0; sun.shadow.camera.right=2.0; sun.shadow.camera.top=2.0; sun.shadow.camera.bottom=-2.0;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+// frontal fill, placed on the CAMERA's azimuth and low, so it reaches the vertical faces the
+// elevated key cannot. No RectAreaLight here: it stalls the SwiftShader shader-compile (LEARNINGS).
+const fill = new THREE.DirectionalLight(0xf2f6ff, 0.55);
+fill.position.set(2.40, 1.20, 3.00); fill.castShadow = false;
+scene.add(fill);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS (HANDBOOK 3.1: metalness is near-binary — 0 dielectric, ~0.9-1.0 bare metal)
+// ============================================================================
+function canvasTex(w,h,draw,rx,ry){
+  const c = document.createElement('canvas'); c.width=w; c.height=h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx||1, ry||1);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+// brushed stainless roughness (library/materials-textures/brushed-stainless-recipe)
+const brushed = canvasTex(128,128,(g,w,h)=>{
+  g.fillStyle='#7a7a7a'; g.fillRect(0,0,w,h);
+  for(let i=0;i<420;i++){ const y=Math.random()*h, v=110+Math.random()*70;
+    g.strokeStyle='rgb('+v+','+v+','+v+')'; g.lineWidth=Math.random()*1.4;
+    g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke(); }
+}, 3, 3);
+brushed.colorSpace = THREE.NoColorSpace;
+
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xd2d6d8, metalness:0.92, roughness:0.32, roughnessMap:brushed });
+const matFrame  = new THREE.MeshStandardMaterial({ color:0xbcc2c5, metalness:0.92, roughness:0.36, roughnessMap:brushed });
+const matRoller = new THREE.MeshStandardMaterial({ color:0x9aa0a3, metalness:0.90, roughness:0.40 });
+const matCab    = new THREE.MeshStandardMaterial({ color:0x4e565c, metalness:0.0,  roughness:0.55 });
+const matRubber = new THREE.MeshStandardMaterial({ color:0x26282b, metalness:0.0,  roughness:0.80 });
+
+// conveyor / wrap belt: dark rubber with a transverse cleat pattern that SCROLLS under MARCHA
+const beltTex = canvasTex(64,64,(g,w,h)=>{
+  g.fillStyle='#14171a'; g.fillRect(0,0,w,h);
+  g.strokeStyle='#23272b'; g.lineWidth=3;
+  for(let x=0;x<w;x+=16){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,h); g.stroke(); }
+}, 20, 1);
+const matBelt = new THREE.MeshStandardMaterial({ color:0x14171a, metalness:0.0, roughness:0.85, map:beltTex });
+// wrap belt: light urethane, dielectric like the conveyor rubber but a different component
+const matWrapBelt = new THREE.MeshStandardMaterial({ color:0x596068, metalness:0.0, roughness:0.70, map:beltTex });
+
+// LABEL WEB: white facestock divided into discrete labels on the liner. This texture is what makes
+// the ribbon read as "labels on a backing" instead of a white strap.
+const webTex = canvasTex(128,64,(g,w,h)=>{
+  g.fillStyle='#c9b88f'; g.fillRect(0,0,w,h);                 // liner showing in the gaps
+  g.fillStyle='#e9e5dd'; g.fillRect(4,0,w-16,h);              // the label itself
+  g.strokeStyle='#cfcabf'; g.lineWidth=2; g.strokeRect(5,1,w-18,h-2);
+  g.fillStyle='#b9b2a4'; g.fillRect(14,10,40,4); g.fillRect(14,22,58,3); g.fillRect(14,32,30,3);
+  for(let i=0;i<10;i++){ g.fillStyle='#3a3a3a'; g.fillRect(14+i*4,44,2,12); }  // barcode
+}, 6, 1);
+const matWeb   = new THREE.MeshStandardMaterial({ color:0xffffff, metalness:0.0, roughness:0.78,
+                                                  map:webTex, side:THREE.DoubleSide });
+const matLiner = new THREE.MeshStandardMaterial({ color:0xc9b88f, metalness:0.0, roughness:0.70,
+                                                  side:THREE.DoubleSide });
+const matLabel = new THREE.MeshStandardMaterial({ color:0xffffff, metalness:0.0, roughness:0.78, map:webTex.clone() });
+matLabel.map.repeat.set(1,1); matLabel.map.needsUpdate = true;
+
+// bottles + guard: transmission-free glass (MeshPhysicalMaterial.transmission stalls SwiftShader)
+const matBottle = new THREE.MeshStandardMaterial({ color:0xb4762f, metalness:0.0, roughness:0.12,
+                                                   transparent:true, opacity:0.55 });
+const matCap    = new THREE.MeshStandardMaterial({ color:0x2b3138, metalness:0.0, roughness:0.5 });
+// opacity 0.13, not 0.22: at 0.22 the guard was the brightest, largest object in the capture and
+// out-read the web path it is supposed to protect. depthWrite:false so it never occludes the cut.
+const matGuard  = new THREE.MeshStandardMaterial({ color:0x8fb6c6, metalness:0.0, roughness:0.10,
+                                                   transparent:true, opacity:0.13, depthWrite:false,
+                                                   side:THREE.DoubleSide });
+const matScreen = new THREE.MeshStandardMaterial({ color:0x0d1a18, metalness:0.0, roughness:0.35,
+                                                   emissive:0x0d6b5a, emissiveIntensity:1.1 });
+const matMark   = new THREE.MeshBasicMaterial({ color:0x00d4aa });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+
+const BOX = (w,h,d)=>new THREE.BoxGeometry(w,h,d);
+function box(w,h,d,x,y,z,m,parent){
+  const o = new THREE.Mesh(BOX(w,h,d), m); o.position.set(x,y,z);
+  o.castShadow = true; o.receiveShadow = true; (parent||root).add(o); return o;
+}
+// cylinder with its axis along an explicit AXIS letter — composing from explicit axis rotations,
+// never from a guessed Euler order (ONBOARD gotcha).
+function cyl(r,len,x,y,z,axis,m,parent,rTop){
+  const g = new THREE.CylinderGeometry(rTop===undefined?r:rTop, r, len, 28);
+  const o = new THREE.Mesh(g, m);
+  if(axis==='x') o.rotation.z =  Math.PI/2;
+  if(axis==='z') o.rotation.x =  Math.PI/2;
+  o.position.set(x,y,z); o.castShadow = true; o.receiveShadow = true;
+  (parent||root).add(o); return o;
+}
+
+// ---- key dimensions, straight from the datasheet ([CERT-web]) ----
+const BED_Y   = 0.914;      // conveyor bed height  36"
+const CONV_L  = 2.007;      // conveyor length      79"
+const BELT_W  = 0.102;      // conveyor width       4"
+const ROLL_OD = 0.350;      // label roll max OD
+const CORE_D  = 0.076;      // 3" core
+const LBL_H   = 0.120;      // label height, inside the 15-220 mm band
+const BOT_R   = 0.0375;     // bottle dia 75 mm, inside the 25-102 mm band
+const BOT_H   = 0.220;      // bottle height, inside the 50-320 mm band
+
+const WEB_Z   = -0.130;     // the web runs in a vertical plane PARALLEL to the conveyor
+const WEB_W   = LBL_H;      // ribbon width = label height
+const PLATE_Z = -0.300;     // head plate sits BEHIND the web: it is a backdrop, never an occluder
+const HALF_L  = CONV_L/2;
+
+// ---------- frame ----------
+const frame = new THREE.Group(); root.add(frame);
+for(const sx of [-1,1]) for(const sz of [-1,1]){
+  box(0.06, BED_Y-0.03, 0.06, sx*0.82, (BED_Y-0.03)/2, sz*0.20, matFrame, frame);
+  cyl(0.045, 0.02, sx*0.82, 0.01, sz*0.20, 'y', matCab, frame);
+}
+for(const sz of [-1,1]) box(HALF_L*2-0.06, 0.05, 0.05, 0, BED_Y-0.055, sz*0.20, matFrame, frame);
+box(0.05, 0.05, 0.42, -0.82, 0.24, 0, matFrame, frame);
+box(0.05, 0.05, 0.42,  0.82, 0.24, 0, matFrame, frame);
+
+// head-plate portal: two columns + a tie, standing on their own feet beside the conveyor
+const HEAD_X = [-0.30, 0.42];
+for(const hx of HEAD_X){
+  box(0.05, 0.98, 0.05, hx, 0.49, PLATE_Z, matFrame, frame);
+  cyl(0.045, 0.02, hx, 0.01, PLATE_Z, 'y', matCab, frame);
+}
+box(HEAD_X[1]-HEAD_X[0], 0.05, 0.05, (HEAD_X[0]+HEAD_X[1])/2, 0.55, PLATE_Z, matFrame, frame);
+// bolted bracket tying the head portal to the conveyor rail — the spec's `frame-rail-far` socket
+box(0.06, 0.05, 0.12, 0.42, BED_Y-0.055, -0.255, matFrame, frame);
+
+// ---------- conveyor ----------
+const conveyor = new THREE.Group(); root.add(conveyor);
+box(CONV_L, 0.04, 0.20, 0, BED_Y-0.055, 0, matSteel, conveyor);              // bed pan
+const beltTop = box(CONV_L, 0.008, BELT_W, 0, BED_Y-0.004, 0, matBelt, conveyor);
+for(const sz of [-1,1]) box(CONV_L, 0.045, 0.010, 0, BED_Y+0.020, sz*(BELT_W/2+0.012), matSteel, conveyor);
+for(const sx of [-1,1]) cyl(0.030, BELT_W, sx*HALF_L, BED_Y-0.026, 0, 'z', matRoller, conveyor);
+
+// ---------- separator wheel (the datasheet's "variable speed separator wheel") ----------
+const separator = new THREE.Group(); root.add(separator);
+box(0.05, 0.23, 0.05, -0.58, BED_Y+0.115, 0.170, matFrame, separator);
+const sepWheel = cyl(0.130, 0.060, -0.58, BED_Y+0.090, 0.170, 'y', matSteel, separator);
+cyl(0.045, 0.075, -0.58, BED_Y+0.090, 0.170, 'y', matRoller, separator);
+// contact check: the wheel rim must REACH the bottle line, or it separates nothing
+console.assert(0.170 - 0.130 <= BOT_R + 0.002,
+  'separator wheel does not reach the bottle line: gap ' + (0.170-0.130-BOT_R).toFixed(4));
+
+// ---------- head plate (backdrop that CARRIES the web path) ----------
+const head = new THREE.Group(); root.add(head);
+box(0.90, 0.64, 0.020, 0.06, 1.30, PLATE_Z, matSteel, head);
+for(const ry of [1.02, 1.58]) box(0.90, 0.035, 0.045, 0.06, ry, PLATE_Z+0.030, matFrame, head);
+
+// stub shaft from the plate face out to the web plane, for every roller/reel
+function stub(x,y,rr){ cyl(rr, PLATE_Z===0?0.1:(WEB_Z-PLATE_Z)+0.02, x, y, (PLATE_Z+WEB_Z)/2, 'z', matRoller, head); }
+
+// ---------- the web path, in order ----------
+// station centres in the web plane (x, y). The ORDER is the evidence; see the spec.
+const P_UNW  = {x: 0.260, y: 1.380, r: ROLL_OD/2};
+const P_DAN  = {x:-0.140, y: 1.420, r: 0.026};
+const P_ID1  = {x:-0.300, y: 1.220, r: 0.026};
+const P_ID2  = {x:-0.200, y: 1.080, r: 0.026};
+const P_PB   = {x:-0.090, y: 1.055};                 // peel-plate base
+const P_TIP  = {x: 0.055, y: 1.020};                 // knife edge — the label leaves HERE
+const P_NIP  = {x:-0.060, y: 0.965, r: 0.032};
+const P_PRS  = {x:-0.125, y: 0.965, r: 0.028};
+const P_REW  = {x:-0.290, y: 1.100, r: 0.095};
+
+// unwind reel: a ROLL on a small core, never a solid disc (important_feature roll-format)
+stub(P_UNW.x, P_UNW.y, 0.022);
+cyl(P_UNW.r, WEB_W*0.80, P_UNW.x, P_UNW.y, WEB_Z, 'z', matWeb, head);
+cyl(CORE_D/2, WEB_W*0.95, P_UNW.x, P_UNW.y, WEB_Z, 'z', matCab, head);
+for(const s of [-1,1]) cyl(P_UNW.r+0.012, 0.006, P_UNW.x, P_UNW.y, WEB_Z + s*(WEB_W*0.80/2+0.004), 'z', matRoller, head);
+
+// rewind reel: spent liner, visibly SMALLER and amber — the liner ends up here, not the labels
+stub(P_REW.x, P_REW.y, 0.020);
+cyl(P_REW.r, WEB_W*0.80, P_REW.x, P_REW.y, WEB_Z, 'z', matLiner, head);
+cyl(CORE_D/2, WEB_W*0.95, P_REW.x, P_REW.y, WEB_Z, 'z', matCab, head);
+for(const s of [-1,1]) cyl(P_REW.r+0.012, 0.006, P_REW.x, P_REW.y, WEB_Z + s*(WEB_W*0.80/2+0.004), 'z', matRoller, head);
+
+// idlers / dancer / nip pair
+for(const p of [P_DAN, P_ID1, P_ID2]){ stub(p.x,p.y,0.012); cyl(p.r, WEB_W+0.014, p.x, p.y, WEB_Z, 'z', matRoller, head); }
+stub(P_NIP.x, P_NIP.y, 0.014); cyl(P_NIP.r, WEB_W+0.014, P_NIP.x, P_NIP.y, WEB_Z, 'z', matRoller, head);
+stub(P_PRS.x, P_PRS.y, 0.014); cyl(P_PRS.r, WEB_W+0.014, P_PRS.x, P_PRS.y, WEB_Z, 'z', matRubber, head);
+// nip pair must actually PINCH — that is what pulls the liner
+console.assert(Math.hypot(P_NIP.x-P_PRS.x, P_NIP.y-P_PRS.y) <= P_NIP.r + P_PRS.r + 0.004,
+  'nip pair does not close: centres are farther apart than the two radii');
+
+// peel plate: a thin blade whose EDGE protrudes toward the bottle
+const peelLen = Math.hypot(P_TIP.x-P_PB.x, P_TIP.y-P_PB.y);
+const peel = new THREE.Mesh(BOX(peelLen, 0.030, WEB_W+0.020), matSteel);
+peel.position.set((P_PB.x+P_TIP.x)/2, (P_PB.y+P_TIP.y)/2, WEB_Z + 0.030);
+peel.rotation.z = Math.atan2(P_TIP.y-P_PB.y, P_TIP.x-P_PB.x);
+peel.castShadow = peel.receiveShadow = true; head.add(peel);
+box(0.030, 0.026, WEB_W+0.020, P_TIP.x+0.008, P_TIP.y-0.002, WEB_Z+0.052, matRoller, head);  // the edge itself
+
+// ---- the ribbon ----
+// A straight run is a thin box from A to B; a wrap is an OPEN partial cylinder around the roller.
+// Two materials on purpose: labels-on-liner BEFORE the knife edge, bare liner AFTER it.
+const webGrp = new THREE.Group(); head.add(webGrp);
+const webScrollables = [];
+function run(a, b, mat, z){
+  const len = Math.hypot(b.x-a.x, b.y-a.y);
+  const m = new THREE.Mesh(BOX(len, 0.0016, WEB_W), mat);
+  m.position.set((a.x+b.x)/2, (a.y+b.y)/2, z===undefined?WEB_Z:z);
+  m.rotation.z = Math.atan2(b.y-a.y, b.x-a.x);
+  m.castShadow = true; webGrp.add(m);
+  if(mat === matWeb) webScrollables.push(m);
+  return m;
+}
+function wrap(p, mat, thetaStart, thetaLen){
+  const g = new THREE.CylinderGeometry(p.r+0.0012, p.r+0.0012, WEB_W, 26, 1, true, thetaStart, thetaLen);
+  const m = new THREE.Mesh(g, mat); m.rotation.x = Math.PI/2;
+  m.position.set(p.x, p.y, WEB_Z); m.castShadow = true; webGrp.add(m);
+  return m;
+}
+// tangent-ish contact points, offset to the outside of each roller
+const T = (p, ang, extra)=>({ x: p.x + (p.r+(extra||0))*Math.cos(ang), y: p.y + (p.r+(extra||0))*Math.sin(ang) });
+const a1 = T(P_UNW, 2.36), a2 = T(P_DAN, 1.35), a3 = T(P_DAN, 3.20),
+      a4 = T(P_ID1, 2.90), a5 = T(P_ID1, 4.60), a6 = T(P_ID2, 4.20), a7 = T(P_ID2, 0.55),
+      a8 = T(P_NIP, 1.90), a9 = T(P_NIP, 4.30), a10 = T(P_REW, 0.30);
+
+run(a1, a2, matWeb);  wrap(P_DAN, matWeb, 1.35, 1.90);
+run(a3, a4, matWeb);  wrap(P_ID1, matWeb, 2.90, 1.75);
+run(a5, a6, matWeb);  wrap(P_ID2, matWeb, 4.20, 2.63);
+run(a7, P_PB, matWeb);
+run(P_PB, P_TIP, matWeb, WEB_Z + 0.048);                 // riding ON the blade, up to the knife edge
+// THE FOLD — liner turns back acutely at the knife edge and heads for the nip
+run(P_TIP, a8, matLiner, WEB_Z + 0.030);
+wrap(P_NIP, matLiner, 1.90, 2.40);
+run(a9, a10, matLiner);
+// the label carries STRAIGHT on from the edge onto the bottle at the applicator
+const flight = new THREE.Mesh(BOX(0.115, 0.0018, WEB_W), matLabel);
+flight.position.set(P_TIP.x + 0.058, P_TIP.y - 0.004, WEB_Z + 0.062);
+flight.rotation.z = -0.06; flight.rotation.y = 0.62;
+head.add(flight);
+
+// the fold must actually be ACUTE — that is the whole mechanism (US 11958653)
+{
+  const vin  = new THREE.Vector2(P_TIP.x-P_PB.x, P_TIP.y-P_PB.y).normalize();
+  const vout = new THREE.Vector2(a8.x-P_TIP.x,  a8.y-P_TIP.y ).normalize();
+  const between = Math.PI - Math.acos(THREE.MathUtils.clamp(vin.dot(vout), -1, 1));
+  console.assert(between < Math.PI/2,
+    'peel fold is not acute: ' + (between*180/Math.PI).toFixed(1) + ' deg between web and liner');
+}
+
+// ---------- wrap station: driven belt + opposed backing plate, bottle captured BETWEEN ----------
+const wrapSt = new THREE.Group(); root.add(wrapSt);
+const WRAP_X0 = 0.22, WRAP_X1 = 0.68, WRAP_MID = (WRAP_X0+WRAP_X1)/2, WRAP_LEN = WRAP_X1-WRAP_X0;
+const wrapBeltFaceZ = -BOT_R, backPlateFaceZ = BOT_R;
+// driven belt on the far side, its working face exactly ON the bottle surface
+// Light urethane, NOT the black conveyor rubber. Two reasons, one physical and one measured: a wrap
+// belt is a different component from a transport belt and light urethane is the common one; and at
+// the conveyor's #14171a the whole station measured as a dark bar against a dark floor, so the
+// three-body contact — the critical feature — could not be read at all.
+const wrapBelt = box(WRAP_LEN, 0.170, 0.016, WRAP_MID, BED_Y+0.105, wrapBeltFaceZ-0.008, matWrapBelt, wrapSt);
+for(const sx of [WRAP_X0, WRAP_X1]) cyl(0.038, 0.150, sx, BED_Y+0.095, wrapBeltFaceZ-0.030, 'y', matRoller, wrapSt);
+box(WRAP_LEN+0.10, 0.040, 0.050, WRAP_MID, BED_Y+0.195, wrapBeltFaceZ-0.045, matFrame, wrapSt);
+box(0.050, 0.30, 0.050, WRAP_X1+0.06, BED_Y+0.150, wrapBeltFaceZ-0.045, matFrame, wrapSt);
+// opposed backing/pressure plate on the near side — kept LOW so the labelled bottle still reads
+const backPlate = box(WRAP_LEN-0.04, 0.100, 0.014, WRAP_MID+0.02, BED_Y+0.075, backPlateFaceZ+0.007, matSteel, wrapSt);
+const backArms = [];
+for(const sx of [WRAP_X0+0.06, WRAP_X1-0.06])
+  backArms.push(box(0.030, 0.030, 0.130, sx, BED_Y+0.075, backPlateFaceZ+0.075, matFrame, wrapSt));
+// three-body contact: BOTH faces must touch the bottle, or nothing spins it
+console.assert(Math.abs(wrapBeltFaceZ) - BOT_R <= 0.0005 && Math.abs(backPlateFaceZ) - BOT_R <= 0.0005,
+  'wrap station is not a three-body contact: belt/plate do not reach the bottle surface');
+
+// ---------- bottles (instanced: 4 identical containers = real repetition) ----------
+const BOT_X = [-0.78, -0.42, 0.16, 0.48];
+const bottles = new THREE.Group(); root.add(bottles);
+const bodyIM = new THREE.InstancedMesh(new THREE.CylinderGeometry(BOT_R, BOT_R, BOT_H*0.72, 24), matBottle, 4);
+const shldIM = new THREE.InstancedMesh(new THREE.CylinderGeometry(BOT_R*0.42, BOT_R, BOT_H*0.16, 24), matBottle, 4);
+const neckIM = new THREE.InstancedMesh(new THREE.CylinderGeometry(BOT_R*0.38, BOT_R*0.42, BOT_H*0.08, 20), matBottle, 4);
+const capIM  = new THREE.InstancedMesh(new THREE.CylinderGeometry(BOT_R*0.44, BOT_R*0.44, BOT_H*0.06, 20), matCap, 4);
+for(const im of [bodyIM, shldIM, neckIM, capIM]){ im.castShadow = true; im.receiveShadow = true; bottles.add(im); }
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(1,1,1), _p = new THREE.Vector3();
+function placeBottles(xs, spinY){
+  const yBody = BED_Y + BOT_H*0.36, yShld = BED_Y + BOT_H*0.80,
+        yNeck = BED_Y + BOT_H*0.92, yCap  = BED_Y + BOT_H*0.99;
+  xs.forEach((x,i)=>{
+    _q.setFromAxisAngle(new THREE.Vector3(0,1,0), (spinY&&spinY[i])||0);
+    [[bodyIM,yBody],[shldIM,yShld],[neckIM,yNeck],[capIM,yCap]].forEach(([im,y])=>{
+      _p.set(x,y,0); _m.compose(_p,_q,_s); im.setMatrixAt(i,_m); im.instanceMatrix.needsUpdate = true;
+    });
+  });
+}
+placeBottles(BOT_X);
+// applied labels: a band wrapped on the bottle at the applicator (partial) and after the wrap (full)
+function labelBand(x, sweepStart, sweepLen){
+  const g = new THREE.CylinderGeometry(BOT_R+0.0015, BOT_R+0.0015, LBL_H, 26, 1, true, sweepStart, sweepLen);
+  const m = new THREE.Mesh(g, matLabel);
+  m.position.set(x, BED_Y + 0.06 + LBL_H/2, 0); m.castShadow = true; bottles.add(m); return m;
+}
+const bandPartial = labelBand(BOT_X[2], Math.PI*0.62, Math.PI*0.55);   // just tacked on at the nose
+const bandFull    = labelBand(BOT_X[3], 0, Math.PI*2*0.97);            // wrapped after the station
+// the label band must sit inside the bottle body, not float above the shoulder
+console.assert(BED_Y + 0.06 + LBL_H <= BED_Y + BOT_H*0.72,
+  'label band overruns the straight body wall of the bottle');
+
+// ---------- control cabinet + HMI ----------
+const cab = new THREE.Group(); root.add(cab);
+box(0.42, 0.56, 0.36, -0.76, 0.58, -0.56, matCab, cab);
+box(0.40, 0.52, 0.006, -0.76, 0.58, -0.379, matCab, cab);
+box(0.012, 0.10, 0.010, -0.58, 0.58, -0.374, matRoller, cab);
+box(0.27, 0.05, 0.18, -0.685, 0.70, -0.29, matFrame, cab);                 // bracket to the frame leg
+// HMI at operator height, pulled FORWARD (z -0.14) and further upstream (x -0.80) so it clears the
+// head plate in projection. At its first position (x -0.55, z -0.50) it projected ONTO the plate and
+// read as a floating teal wedge welded to the machine's face.
+box(0.05, 0.40, 0.05, -0.86, 1.05, -0.44, matFrame, cab);                  // HMI post
+box(0.05, 0.05, 0.30, -0.86, 1.22, -0.29, matFrame, cab);                  // HMI arm, reaching forward
+const HMI_YAW = 0.78;                                                       // faces the spec camera
+const hmi = box(0.30, 0.23, 0.035, -0.82, 1.18, -0.155, matCab, cab);
+hmi.rotation.y = HMI_YAW;
+const hmiScreen = new THREE.Mesh(BOX(0.250, 0.175, 0.004), matScreen);
+hmiScreen.position.set(-0.807, 1.18, -0.141); hmiScreen.rotation.y = HMI_YAW; cab.add(hmiScreen);
+
+// ---------- polycarbonate guard over the reel zone (removed by CORTE) ----------
+// It stops ABOVE the applicator: a guard over the knife edge would hide the one feature that
+// defines the machine, and real guards leave the applicator open to reach the product.
+// Its bottom edge is held at y=1.20, ABOVE every bottle top (0.914 + 0.220 = 1.134): the first
+// build had it at 1.10 and the pane cut across the bottles in the capture.
+const guard = new THREE.Group(); root.add(guard);
+const guardPane = new THREE.Mesh(BOX(0.80, 0.40, 0.010), matGuard);
+guardPane.position.set(0.06, 1.40, -0.062); guard.add(guardPane);
+for(const gx of [-0.33, 0.45]) box(0.012, 0.40, 0.140, gx, 1.40, -0.127, matGuard, guard);
+box(0.80, 0.012, 0.140, 0.06, 1.595, -0.127, matGuard, guard);
+console.assert(1.40 - 0.40/2 >= BED_Y + BOT_H,
+  'guard pane cuts across the bottles: bottom edge ' + (1.40-0.20).toFixed(3) + ' vs bottle top ' + (BED_Y+BOT_H).toFixed(3));
+
+// ---------- COTAS (off by default) ----------
+const cotas = new THREE.Group(); cotas.visible = false; root.add(cotas);
+function tick(w,h,d,x,y,z){ const o = new THREE.Mesh(BOX(w,h,d), matMark); o.position.set(x,y,z); cotas.add(o); }
+// The canvas is SIZED FROM THE TEXT and the fit is asserted. The first version used a fixed 320x80
+// for every tag, and "0.075 × 0.220 m" overflowed it: the capture showed "075 × 0.220" — the leading
+// digit clipped and the UNIT gone. A dimension tag missing its unit still looks like a clean render,
+// which is exactly why this is checked in code rather than by eye.
+const TAG_FONT = 46, TAG_PAD = 26, TAG_H = 80;
+function tag(text, x, y, z, worldH){
+  const probe = document.createElement('canvas').getContext('2d');
+  probe.font = 'bold ' + TAG_FONT + 'px ui-monospace, monospace';
+  const tw = Math.ceil(probe.measureText(text).width);
+  const cw = tw + TAG_PAD*2;
+  const t = canvasTex(cw, TAG_H, (g,w,h)=>{
+    g.fillStyle='rgba(6,8,13,0.88)'; g.fillRect(0,0,w,h);
+    g.strokeStyle='#00d4aa'; g.lineWidth=4; g.strokeRect(2,2,w-4,h-4);
+    g.fillStyle='#00d4aa'; g.font='bold ' + TAG_FONT + 'px ui-monospace, monospace';
+    g.textAlign='center'; g.textBaseline='middle'; g.fillText(text, w/2, h/2+2);
+  });
+  console.assert(tw + 8 <= cw, 'COTAS tag "' + text + '" does not fit its canvas: ' + tw + ' > ' + cw);
+  console.assert(/\d/.test(text) && /\bm\b/.test(text), 'COTAS tag "' + text + '" lacks a number+unit');
+  const h = worldH || 0.075;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:t, depthTest:false }));
+  sp.position.set(x,y,z); sp.scale.set(h * (cw/TAG_H), h, 1); cotas.add(sp);
+}
+tick(0.004, BED_Y, 0.004, -1.12, BED_Y/2, 0.24);
+tick(0.10, 0.004, 0.004, -1.12, BED_Y, 0.24);
+tick(0.10, 0.004, 0.004, -1.12, 0.0,    0.24);
+tag('0.914 m', -1.12, BED_Y/2, 0.30, 0.072);
+tick(ROLL_OD, 0.004, 0.004, P_UNW.x, P_UNW.y, WEB_Z-0.02);
+tag('Ø 0.350 m', P_UNW.x, P_UNW.y + 0.058, WEB_Z-0.02, 0.072);
+tick(0.004, BOT_H, 0.004, BOT_X[3]+0.085, BED_Y+BOT_H/2, 0);
+tag('0.075 × 0.220 m', BOT_X[3]+0.40, BED_Y+BOT_H/2 - 0.10, 0, 0.072);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// derived-extent guard: catch an offset chain that walked off its base at the FIRST render,
+// not three passes later (ONBOARD gotcha: offsets that leave their base).
+{
+  const bb = new THREE.Box3().setFromObject(root), sz = new THREE.Vector3(); bb.getSize(sz);
+  console.assert(sz.x < 2.6 && sz.y < 1.9 && sz.z < 1.5,
+    'asset envelope out of range: ' + sz.x.toFixed(2)+' x '+sz.y.toFixed(2)+' x '+sz.z.toFixed(2));
+  console.assert(bb.min.y > -0.001, 'geometry sinks below the floor: minY=' + bb.min.y.toFixed(3));
+}
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let running = false, cut = false;
+const btnRot = document.getElementById('btnRot');
+const btnMarcha = document.getElementById('btnMarcha');
+const btnCorte = document.getElementById('btnCorte');
+const btnCotas = document.getElementById('btnCotas');
+
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+btnMarcha.onclick = ()=>{ running = !running; btnMarcha.classList.toggle('on', running); requestRender(); };
+btnCotas.onclick = ()=>{ cotas.visible = !cotas.visible;
+  btnCotas.classList.toggle('on', cotas.visible); requestRender(); };
+// CORTE is a pure REMOVAL, not a substitution: nothing rests on the guard or the backing plate, so
+// there is no restore-list that could diverge from the hide-list (ONBOARD: a cut that hides a part
+// its replacement group lacks leaves the pieces above it floating).
+btnCorte.onclick = ()=>{
+  cut = !cut;
+  guard.visible = !cut;
+  backPlate.visible = !cut;
+  backArms.forEach(a=>{ a.visible = !cut; });
+  btnCorte.classList.toggle('on', cut); requestRender();
+};
+
+addEventListener('resize', ()=>{ camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+const bx = BOT_X.slice(), spin = [0,0,0,0];
+function animate(){
+  requestAnimationFrame(animate);
+  if(running){
+    beltTex.offset.x -= 0.010;
+    matWeb.map.offset.x -= 0.004;
+    sepWheel.rotation.y += 0.05;
+    for(let i=0;i<bx.length;i++){
+      bx[i] += 0.006;
+      if(bx[i] > HALF_L) bx[i] -= CONV_L;
+      // the bottle inside the wrap station is rolled by the belt against the backing plate
+      spin[i] = (bx[i] > WRAP_X0 && bx[i] < WRAP_X1) ? spin[i] + 0.006/BOT_R : spin[i];
+    }
+    placeBottles(bx, spin);
+    // MARCHA is CONTINUOUS, indefinite translation, not a bounded transition that settles:
+    // a frozen shadow would stay parked at the start position forever, so re-bake EVERY frame
+    // inside the moving branch (ONBOARD: motion CLASS decides, not family convention).
+    renderer.shadowMap.needsUpdate = true;
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__etiquetadoraApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__etiquetadora-App'] = globalThis.__etiquetadoraApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
