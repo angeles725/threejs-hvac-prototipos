@@ -228,6 +228,13 @@ elige otra familia libre si queda, o detente.
 - Un pixel-diff que NO cambia solo prueba AUSENCIA si ANTES demuestras que el objeto era visible en ese estado.
   Si vive tras una tapa/puerta CERRADA, "ocultarlo no cambia el hash" es tautológico. Orden correcto: abre la
   tapa que lo cubre → confirma que aporta píxeles → recién entonces el diff prueba ausencia.
+- BLINDAJE OPERATIVO (una línea en la consulta, elimina la clase entera): toda consulta de pixel-diff DEBE
+  comprobar y REPORTAR el flag `visible` EFECTIVO (propio + de TODOS los padres) del objeto que manipula. Un diff
+  de 0% sobre un objeto con visible=false (o padre invisible) se marca AUTOMÁTICAMENTE como NO CONCLUYENTE, nunca
+  como ausencia. Sin esto caes en el mismo error dos veces: "ocultar algo que YA estaba oculto" da 0% y parece
+  geometría duplicada muerta. Caso real: lockers tiene un modo SINGLE (buildNest(1), doorsSingle visible=false)
+  superpuesto a la bahía central; sus hojas parecían duplicados invisibles y eran diseño limpio — lo salvó leer
+  el fuente, no la medición. (misma raíz que el falso positivo de tablero-switchgear.)
 - RAYCAST al CENTRO de una instancia NO es prueba de visibilidad: el rayo choca con la carátula/manija del
   PROPIO dispositivo (autooclusión) → 0 hits aunque el cuerpo SÍ renderice. Da falsos positivos en casi todo
   (cualquier asset con detalle frontal). Trátalo como PISTA, nunca veredicto; excluye el objeto y sus
