@@ -114,6 +114,8 @@
 | web-snapshots/www.ccohs.ca_oshanswers_ergonomics_conveyor_ergonomics.html.md | web-snapshot | https://www.ccohs.ca/oshanswers/ergonomics/conveyor_ergonomics.html | 2026-08-09T02:23:04Z | d679fe53b2144b423fa73f146e6fd17ed2d6fcc958692df89215e82e69593b14 | B63 |
 | B64-cantilever-dims/cogan-cantilever-spec.pdf | B64-cantilever-dims | https://www.cogan.com/Resources/specifications/Racking/Cantilever-Rack-Specifications.pdf | 2026-08-09T03:38:44Z | 575a894acd238252a9b0aa3f534954f15ec1bea8baa7a35eacc70cfc8601babc | B64 |
 | B64-cantilever-dims/ntl-cantilever-specs | B64-cantilever-dims | https://www.ntlstorage.com/cantilever-racking-specifications-arms-columns-bases | 2026-08-09T03:38:46Z | a6d52fbe45c76bc83a30977c78a3ec61742aa318fb42adf1fb6374b2d3232b6f | B64 |
+| B65-mezzanine-dims/gt-eng-guardrails | B65-mezzanine-dims | https://www.gt-engineering.it/en/technical-standards/en-iso-standards/en-iso-14122-3-eng/guard-rails-en-14122-eng/ | 2026-08-09T03:56:26Z | 33471e1f64e791de433d265e587212b4fd02a41121453ed87e341c84626c7b97 | B65 |
+| B65-mezzanine-dims/safeway360-14122-3 | B65-mezzanine-dims | https://safeway360.com/en/regulatory-handrails-the-guide-to-comply-with-une-en-iso-14122-3/ | 2026-08-09T03:56:30Z | 98e7b2f956e461cda2e909a02fb5e8b8dfaf667e2b3a179e4e9a1ccbf1edf948 | B65 |
 
 ## Structure
 

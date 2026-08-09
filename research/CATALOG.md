@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **64 blocks**
+Total: **65 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -70,3 +70,4 @@ Total: **64 blocks**
 | 62 | [threejs-block62.md](threejs-block62.md) | ROBOTICS dimensional + joint-hierarchy reference (catalog family `robotica`) |
 | 63 | [threejs-block63.md](threejs-block63.md) | The automotive family: the four numbers a modeller cannot invent (body envelope, frame section, robot reach, guard height) |
 | 64 | [threejs-block64.md](threejs-block64.md) | Cantilever racking, and the token-check that almost rejected a good source |
+| 65 | [threejs-block65.md](threejs-block65.md) | Platform guard-rails per EN ISO 14122-3, and the token-check that lied in the other direction |
