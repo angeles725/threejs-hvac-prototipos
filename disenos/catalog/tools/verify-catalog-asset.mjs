@@ -25,6 +25,21 @@ const PROBE = `(()=>{
 })()`;
 
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+// PREFLIGHT — a dead server yields `ready:false, errors:[]`, which is INDISTINGUISHABLE from a
+// genuinely broken asset. That ambiguity would fail a good asset at the merge gate, so refuse to
+// run at all rather than emit a verdict the run cannot support.
+if(!TARGETS.length){ console.error('usage: verify-catalog-asset.mjs <family>/<slug> [...]'); process.exit(2); }
+try{
+  const ping = await fetch(`${BASE}/disenos/catalog/`, {signal: AbortSignal.timeout(4000)});
+  if(!ping.ok) throw new Error(`HTTP ${ping.status}`);
+}catch(e){
+  console.error(`PREFLIGHT FAILED: no server at ${BASE} (${e.message}).`);
+  console.error('Start one from the repo root:  python3 -m http.server 8899 --bind 127.0.0.1 &');
+  console.error('NOT a verdict on the assets — nothing was measured.');
+  process.exit(2);
+}
+
 const args = ['--headless=new','--no-sandbox','--use-gl=angle','--use-angle=swiftshader',
   '--enable-unsafe-swiftshader','--window-size=1280,800',`--remote-debugging-port=${PORT}`,'about:blank'];
 const proc = spawn(BIN, args, {stdio:'ignore'});
