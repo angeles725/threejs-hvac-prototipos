@@ -24,6 +24,7 @@ RENUMBER it to your range before requesting integration. session-A reconciles at
 | B65 | almacenamiento (session-B) | mezzanine guard-rail geometry (EN ISO 14122-3) |
 | B66 | almacenamiento (session-B) | steel lockers (BS 4680:1996) |
 | B67 | almacenamiento (session-B) | drive-in racking — lane derived, not published |
+| B68 | almacenamiento (session-B) | wire-mesh security cage (UFGS 10 22 13) |
 | B70 | transporte | conveyor texture-offset scroll |
 | B71 | transporte | conveyor dimensional reference |
 | B72 | transporte | material-handling vehicle + overhead-crane reference |
@@ -35,7 +36,7 @@ RENUMBER it to your range before requesting integration. session-A reconciles at
 ## Assigned ranges (next free inside each)
 | Family | Range | Next free |
 |---|---|---|
-| puertas + almacenamiento (session-B) | B57–B69 | B68 |
+| puertas + almacenamiento (session-B) | B57–B69 | B69 |
 | transporte | B70–B79 | B74 |
 | robotica | B80–B89 | B80 (B62 is its historical entry; new blocks go B80+) |
 | automotriz | B90–B99 | B90 (B63 historical; new blocks B90+) |

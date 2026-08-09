@@ -1,0 +1,410 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — almacenamiento/jaula-seguridad · caged store area in woven diamond mesh partition.
+  Built from disenos/catalog/shell-template.html. Contract: __jaulaSeguridadApp.runtime + __qaRenderInfo +
+  data-app-ready, render-on-demand, frozen shadows (autoUpdate=false, 1024), DPR<=2.
+
+  Dimensional evidence: research/threejs-block68.md (UFGS 10 22 13, preserved + token-checked).
+  Four things the source decides that a modeller would otherwise invent:
+    · HEAVY duty means a COARSER mesh of THICKER wire (50 mm aperture, 6 gage ~4.9 mm), not a finer one;
+    · the post section is read off a table indexed by PARTITION HEIGHT, it is not a free choice;
+    · the cage stands 64 mm off the slab on adjustable post shoes over 225 mm base plates;
+    · it is painted enamel — a DIELECTRIC — not bare galvanized steel.
+  The wire is modelled at its TRUE 4.9 mm diameter. Fattening it "so the mesh reads" is exactly how
+  datacenter/rack-servidores went opaque at exit 0: what closes a grille is the DEPTH of the member
+  along the view ray, not the size of the hole (block68 §68.4). At 82% open area the interior IS
+  visible, so the interior is part of the asset, not scenery.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jaula de seguridad — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">JAULA DE SEGURIDAD — malla romboidal tejida, servicio pesado (UFGS 10 22 13)</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· esmalte verde sobre imprimación (dieléctrico) · candado en metal desnudo</span></div>
+  <div><span class="dim">3.60 × 2.40 × 2.46 m · malla 50 mm de alambre 6 gage (4.9 mm) · postes 75/62 mm · zapatas de 64 mm</span></div>
+  <div><span class="dim">área libre 82%: el interior SE VE, por eso está amueblado — y por eso el alambre va a su calibre real</span></div>
+  <div><span class="pass" id="passLabel">PASE: MATERIALS</span> <span class="dim" id="viewLabel">· vista neutral</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">PUERTA</button>
+  <button id="btnRoof" class="on">TECHO</button>
+  <button id="btnLoad" class="on">CONTENIDO</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · research/threejs-block68.md) ----------
+const WIRE   = 0.0049;                 // [CERT-doc] 6 gage — the TRUE diameter, never fattened
+const APER   = 0.050;                  // [CERT-doc] "6 gage wire, 50 mm 2 inch mesh"
+const S      = APER * Math.SQRT2;      // diamond mesh: wires run at +-45 deg, so the intercept step
+const FR_H   = 0.038, FR_D = 0.020;    // [CERT-doc] panel frame "38 by 20 by 3 mm" channels
+const POST_C = 0.075;                  // [CERT-doc] corner post: structural channel 75 mm
+const POST_L = 0.062;                  // [CERT-doc] line post for a 2100-3600 mm partition: 62 by 7.9
+const SHOE_H = 0.064, PLATE = 0.225, PLATE_T = 0.012;   // [CERT-doc] shoes ~64 mm; base plate 225x225
+const CAGE_W = 3.60, CAGE_D = 2.40, PANEL_H = 2.40;     // [INFER] a store-area footprint, not published
+const Y0 = SHOE_H, Y1 = Y0 + PANEL_H;                   // the mesh does NOT touch the slab
+const DOOR_W = 0.90, DOOR_H = 2.05;    // [INFER] a single leaf a pallet truck operator walks through
+const WIN_W = 0.600, WIN_H = 0.450;    // [CERT-doc] service window "600 mm wide by 450 mm high"
+const WIN_Y0 = 1.00, WIN_X0 = 0.55;    // [INFER] counter height
+const SHELF_D = 0.300, SHELF_W = 0.625; // [CERT-doc] shelf "300 mm deep by 625 mm wide"
+const WINCH   = 0.0254;                // [CERT-doc] cut-outs framed with "25.4 mm 1 inch box channel"
+const DX0 = -1.05, DX1 = DX0 + DOOR_W; // door jambs
+const HW = CAGE_W/2, HD = CAGE_D/2;
+
+console.assert(WIN_X0 + WIN_W < HW, 'service window falls outside the front panel');
+console.assert(DX1 < WIN_X0, 'door opening and service window overlap');
+console.assert(Y0 + DOOR_H < Y1, 'door is taller than the partition');
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 10, 30);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+// COATED surface, not bare metal: the ONBOARD's painted-steel rule is env ~1.5 / exposure ~1.02 plus a
+// lateral fill. Nudged to 1.60 / 1.06 because this enamel is DARK green and the subject is 82% open,
+// so there is very little surface to blow out and a lot of background to separate from.
+renderer.toneMappingExposure = 1.06;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d
+document.body.appendChild(renderer.domElement);
+
+// Framing MEASURED (block67 §67.5 / ONBOARD): the eight world corners of the default-state envelope
+// — including the service shelf, which projects 0.28 m out of the front wall — land at
+// ndcX -0.69..+0.68 and ndcY -0.93..+0.75, so the top clears the 4-line HUD by 102 px. The first
+// camera here had the base plates ON the bottom edge at ndcY -0.981, with the gate green.
+// LOOK-DEV EVIDENCE SET (GATES.md §Capture): a material that only convinces in the hero framing has
+// not passed, so the gate drives `?view=`. There is no `reference-match` view on purpose — this
+// design has NO reference photographs, only textual evidence (a federal guide specification), and a
+// reference-match preset that matches nothing is a lie in the evidence set. Spec records
+// p6_comparison: spec-only.
+const VIEWS = {
+  neutral: { pos:[3.60, 2.40, -5.20], target:[-0.20, 0.90, 0.10], fov:38,
+             label:'· vista neutral' },
+  // low, close and almost tangent to the front panel: this is where enamel either shows a specular
+  // roll-off or confesses it is flat colour, and where the 4.9 mm wire either stays open or piles up.
+  grazing: { pos:[1.35, 0.62, -3.05], target:[0.55, 1.05, -1.15], fov:34,
+             label:'· vista grazing (esmalte + profundidad de alambre)' },
+};
+const VIEW = VIEWS[new URLSearchParams(location.search).get('view')] || VIEWS.neutral;
+const camera = new THREE.PerspectiveCamera(VIEW.fov, innerWidth/innerHeight, 0.1, 200);
+const CAM_TARGET = new THREE.Vector3(...VIEW.target);
+camera.position.set(...VIEW.pos);
+camera.lookAt(CAM_TARGET);
+document.getElementById('viewLabel').textContent = VIEW.label;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.copy(CAM_TARGET);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.60;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(5, 8, -5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
+sun.shadow.camera.left=-4; sun.shadow.camera.right=4; sun.shadow.camera.top=4; sun.shadow.camera.bottom=-4;
+sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 24;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xeef3ff, 0.85);       // lateral fill — the coated-surface rule
+fill.position.set(6, 2.4, -3);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+// Inside the cage: without it the enclosure reads as a dark box behind a grid and the 82% open area
+// (the whole point of a mesh partition) is wasted.
+const inner = new THREE.PointLight(0xfff2dd, 6.0, 7.0, 2.0);
+inner.position.set(0, 2.05, 0);
+scene.add(inner);
+// PADLOCK PRACTICAL — placed by ARITHMETIC, not by taste. The padlock is the only bare metal here
+// (metalness 0.95) and it sits on a VERTICAL face, so its brightness is a mirror reflection, not a
+// diffuse term: no amount of fill can reach it. Solving R = 2(N·V)N − V at the lock (N = -Z) gives
+// (-0.67,-0.24,-0.70) for the neutral camera and (-0.63,+0.18,-0.76) for the grazing one — both
+// point -X/-Z and only ~14 deg off horizontal, so unlike a downward-facing face (whose mirror ray
+// goes UNDER the floor and is a measured dead end) this one CAN be fed. One small practical sits on
+// that shared ray. Measured: the lock rendered as a flat black silhouette at native resolution
+// before this light — visible only in a 1:1 crop, invisible in the downscaled frame.
+const lockKey = new THREE.PointLight(0xf6faff, 4.0, 4.0, 2.0);
+lockKey.position.set(-1.60, 1.02, -2.83);
+scene.add(lockKey);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. UFGS §2.8.8: "paint with [green][black][gray] enamel over suitable primer".
+// PAINTED = dielectric (HANDBOOK §3.1, metalness 0.0). Only the padlock is bare metal.
+// ============================================================================
+const matEnamel = new THREE.MeshStandardMaterial({ color:0x2f5d46, metalness:0.0, roughness:0.55 });
+const matFrame  = new THREE.MeshStandardMaterial({ color:0x27503c, metalness:0.0, roughness:0.52 });
+const matPlate  = new THREE.MeshStandardMaterial({ color:0x2a2f33, metalness:0.0, roughness:0.70 });
+// roughness widened 0.28 -> 0.36 so the lock gathers a BROADER cone of the environment instead of a
+// single mirror ray. metalness stays at 0.95: lowering it to "fix" a dark metal is forbidden
+// (HANDBOOK §3.1) — it would make the padlock a plastic toy that happens to be brighter.
+const matLock   = new THREE.MeshStandardMaterial({ color:0xc6cbcf, metalness:0.95, roughness:0.36 });
+const matWood   = new THREE.MeshStandardMaterial({ color:0xa8814f, metalness:0.0, roughness:0.82 });
+const matLoad   = new THREE.MeshStandardMaterial({ color:0xb8a184, metalness:0.0, roughness:0.90 });
+const matShelf  = new THREE.MeshStandardMaterial({ color:0x3a4046, metalness:0.0, roughness:0.65 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Everything under `root` (the gate and the probes both walk `root`).
+// ============================================================================
+const root = new THREE.Group();
+const roof   = new THREE.Group();
+const load   = new THREE.Group();
+const doorGp = new THREE.Group();
+
+// --- diamond mesh ------------------------------------------------------------
+// A woven diamond mesh is two families of wires at +-45 deg, NOT an orthogonal grid. Each wire is
+// clipped to its panel: for the +45 family the line v = u + c meets the rectangle over
+// u in [max(0,-c), min(W, H-c)], and symmetrically for -45. Wires are collected as world matrices
+// and issued as ONE InstancedMesh per group, so the whole cage costs 2 draw calls of mesh.
+const Z_AXIS = new THREE.Vector3(0,0,1);
+function meshPanel(out, panelMatrix, W, H){
+  const q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
+  const push = (u0,u1,cFn,ang)=>{
+    if (u1 - u0 < 0.02) return;                       // a stub shorter than the aperture is not a wire
+    const uc = (u0 + u1)/2;
+    pos.set(uc - W/2, cFn(uc) - H/2, 0);
+    q.setFromAxisAngle(Z_AXIS, ang);
+    scl.set((u1 - u0) * Math.SQRT2, 1, 1);
+    out.push(panelMatrix.clone().multiply(new THREE.Matrix4().compose(pos, q, scl)));
+  };
+  for(let c = -W; c <= H; c += S)  push(Math.max(0,-c), Math.min(W, H-c), u => u + c,  Math.PI/4);
+  for(let c = 0; c <= W + H; c += S) push(Math.max(0, c-H), Math.min(W, c), u => c - u, -Math.PI/4);
+}
+// panel frame: 4 channel members around the border, as unit boxes scaled along their length
+function frameRect(out, panelMatrix, W, H){
+  const q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
+  const bar = (x,y,len,ang)=>{
+    pos.set(x, y, 0); q.setFromAxisAngle(Z_AXIS, ang); scl.set(len,1,1);
+    out.push(panelMatrix.clone().multiply(new THREE.Matrix4().compose(pos, q, scl)));
+  };
+  bar(0, -H/2 + FR_H/2, W, 0); bar(0, H/2 - FR_H/2, W, 0);
+  bar(-W/2 + FR_H/2, 0, H, Math.PI/2); bar(W/2 - FR_H/2, 0, H, Math.PI/2);
+}
+const panelM = (x,y,z,ry=0,rx=0)=> new THREE.Matrix4().compose(
+  new THREE.Vector3(x,y,z),
+  new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, 0)),
+  new THREE.Vector3(1,1,1));
+
+const wireM = [], frameM = [], roofWireM = [], roofFrameM = [];
+const addPanel = (m, W, H, wOut = wireM, fOut = frameM) => { meshPanel(wOut, m, W, H); frameRect(fOut, m, W, H); };
+
+// front wall, built AROUND its two openings (a door hole and a service-window hole)
+const midY = (a,b) => (a+b)/2;
+addPanel(panelM(midY(-HW, DX0), midY(Y0,Y1), -HD), DX0 - (-HW), PANEL_H);                    // left of door
+addPanel(panelM(midY(DX0, DX1), midY(Y0+DOOR_H, Y1), -HD), DOOR_W, Y1 - (Y0+DOOR_H));       // over door
+addPanel(panelM(midY(DX1, WIN_X0), midY(Y0,Y1), -HD), WIN_X0 - DX1, PANEL_H);               // door -> window
+addPanel(panelM(midY(WIN_X0+WIN_W, HW), midY(Y0,Y1), -HD), HW - (WIN_X0+WIN_W), PANEL_H);   // window -> corner
+addPanel(panelM(midY(WIN_X0, WIN_X0+WIN_W), midY(Y0, WIN_Y0), -HD), WIN_W, WIN_Y0 - Y0);    // under window
+addPanel(panelM(midY(WIN_X0, WIN_X0+WIN_W), midY(WIN_Y0+WIN_H, Y1), -HD), WIN_W, Y1-(WIN_Y0+WIN_H));
+// back and sides
+addPanel(panelM(0, midY(Y0,Y1),  HD), CAGE_W, PANEL_H);
+addPanel(panelM(-HW, midY(Y0,Y1), 0, Math.PI/2), CAGE_D, PANEL_H);
+addPanel(panelM( HW, midY(Y0,Y1), 0, Math.PI/2), CAGE_D, PANEL_H);
+// roof — its own group so TECHO can lift it; nothing rests on it, so hiding it removes nothing else
+addPanel(panelM(0, Y1, 0, 0, -Math.PI/2), CAGE_W, CAGE_D, roofWireM, roofFrameM);
+
+const instFrom = (mats, geo, mat, parent = root, shadows = true) => {
+  const im = new THREE.InstancedMesh(geo, mat, mats.length);
+  im.castShadow = shadows; im.receiveShadow = shadows;
+  mats.forEach((m,i)=>im.setMatrixAt(i,m));
+  im.instanceMatrix.needsUpdate = true; parent.add(im); return im;
+};
+instFrom(wireM,  new THREE.BoxGeometry(1, WIRE, WIRE), matEnamel);
+instFrom(frameM, new THREE.BoxGeometry(1, FR_H, FR_D), matFrame);
+instFrom(roofWireM,  new THREE.BoxGeometry(1, WIRE, WIRE), matEnamel, roof);
+instFrom(roofFrameM, new THREE.BoxGeometry(1, FR_H, FR_D), matFrame, roof);
+
+// --- posts, shoes and base plates: the cage stands 64 mm OFF the slab ---
+const POSTS = [
+  [-HW,-HD,1],[ HW,-HD,1],[-HW, HD,1],[ HW, HD,1],          // corners  (1 = corner section)
+  [DX0,-HD,0],[DX1,-HD,0],[0, HD,0],[-HW,0,0],[HW,0,0],     // line posts / door jambs
+];
+{
+  const dummy = new THREE.Object3D();
+  const mk = (sec, sel) => {
+    const list = POSTS.filter(p=>p[2]===sel);
+    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(sec, PANEL_H + 0.06, sec), matEnamel, list.length);
+    im.castShadow = im.receiveShadow = true;
+    list.forEach((p,i)=>{ dummy.position.set(p[0], Y0 + (PANEL_H + 0.06)/2, p[1]);
+      dummy.rotation.set(0,0,0); dummy.scale.set(1,1,1); dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix); });
+    im.instanceMatrix.needsUpdate = true; root.add(im);
+  };
+  mk(POST_C, 1); mk(POST_L, 0);
+  const shoe = new THREE.InstancedMesh(new THREE.BoxGeometry(0.09, SHOE_H, 0.09), matPlate, POSTS.length);
+  const plate = new THREE.InstancedMesh(new THREE.BoxGeometry(PLATE, PLATE_T, PLATE), matPlate, POSTS.length);
+  shoe.castShadow = plate.castShadow = plate.receiveShadow = true;
+  POSTS.forEach((p,i)=>{
+    dummy.position.set(p[0], SHOE_H/2, p[1]); dummy.rotation.set(0,0,0); dummy.scale.set(1,1,1);
+    dummy.updateMatrix(); shoe.setMatrixAt(i, dummy.matrix);
+    dummy.position.set(p[0], PLATE_T/2, p[1]); dummy.updateMatrix(); plate.setMatrixAt(i, dummy.matrix);
+  });
+  shoe.instanceMatrix.needsUpdate = plate.instanceMatrix.needsUpdate = true;
+  root.add(shoe); root.add(plate);
+  // continuous capping bar over the top frames
+  const cap = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.030, 0.045), matFrame, 4);
+  cap.castShadow = true;
+  [[0, -HD, CAGE_W, 0],[0, HD, CAGE_W, 0],[-HW, 0, CAGE_D, Math.PI/2],[HW, 0, CAGE_D, Math.PI/2]]
+    .forEach((b,i)=>{ dummy.position.set(b[0], Y1 + 0.022, b[1]); dummy.rotation.set(0, b[3], 0);
+      dummy.scale.set(b[2],1,1); dummy.updateMatrix(); cap.setMatrixAt(i, dummy.matrix); });
+  cap.instanceMatrix.needsUpdate = true; root.add(cap);
+}
+
+// --- service window: framed cut-out + shelf. A cage is an INTERFACE, not just a fence (§68.3) ---
+{
+  const wm = [];
+  frameRect(wm, panelM(WIN_X0 + WIN_W/2, WIN_Y0 + WIN_H/2, -HD), WIN_W, WIN_H);
+  instFrom(wm, new THREE.BoxGeometry(1, WINCH, WINCH*1.4), matFrame);
+  const shelf = new THREE.Mesh(new THREE.BoxGeometry(SHELF_W, 0.014, SHELF_D), matShelf);
+  shelf.castShadow = shelf.receiveShadow = true;
+  shelf.position.set(WIN_X0 + WIN_W/2, WIN_Y0 - 0.01, -HD - SHELF_D/2 + 0.02);
+  root.add(shelf);
+  const brk = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.16, SHELF_D*0.8), matFrame);
+  brk.position.set(WIN_X0 + 0.06, WIN_Y0 - 0.09, -HD - SHELF_D/2); root.add(brk);
+  const brk2 = brk.clone(); brk2.position.x = WIN_X0 + WIN_W - 0.06; root.add(brk2);
+}
+
+// --- hinged door leaf. HINGE ON THE FAR JAMB and swinging OUTWARD, so the open leaf never crosses
+//     the opening the camera is looking through (ONBOARD: a near-side hinge blanks the interior). ---
+{
+  doorGp.position.set(DX0, Y0, -HD);
+  const dm = [], dfm = [];
+  const local = panelM(DOOR_W/2, DOOR_H/2, 0);
+  meshPanel(dm, local, DOOR_W - 0.02, DOOR_H - 0.02);
+  frameRect(dfm, local, DOOR_W - 0.02, DOOR_H - 0.02);
+  instFrom(dm,  new THREE.BoxGeometry(1, WIRE, WIRE), matEnamel, doorGp);
+  instFrom(dfm, new THREE.BoxGeometry(1, 0.032, 0.013), matFrame, doorGp);   // [CERT-doc] 32x13x3 channel
+  // the hinge stile is reinforced differently from the rest of the leaf (§2.3.7)
+  const stile = new THREE.Mesh(new THREE.BoxGeometry(0.032, DOOR_H - 0.02, 0.006), matFrame);
+  stile.position.set(0.022, DOOR_H/2, -0.010); stile.castShadow = true; doorGp.add(stile);
+  for(const hy of [0.28, DOOR_H/2, DOOR_H - 0.28]){
+    const h = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.075, 10), matFrame);
+    h.position.set(0.004, hy, -0.012); h.castShadow = true; doorGp.add(h);
+  }
+  // hasp + padlock, in BARE metal: the only non-dielectric on the asset, and the reason it is a cage
+  // Read at 1:1, not at thumbnail size. The first build merged hasp + body into one pale slab and
+  // the half-torus shackle stair-stepped at 8x16 segments — a defect the DOWNSCALED frame hid
+  // completely, which is why the kit demands a native-resolution crop for fine detail.
+  const hasp = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.042, 0.007), matLock);
+  hasp.position.set(DOOR_W - 0.065, 1.050, -0.012); hasp.castShadow = true; doorGp.add(hasp);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.058, 0.024), matLock);
+  body.position.set(DOOR_W - 0.022, 0.992, -0.027); body.castShadow = true; doorGp.add(body);
+  const shackle = new THREE.Mesh(new THREE.TorusGeometry(0.0195, 0.0055, 10, 28, Math.PI), matLock);
+  shackle.position.set(DOOR_W - 0.022, 1.021, -0.027); shackle.castShadow = true; doorGp.add(shackle);
+  const keyway = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.005, 10), matPlate);
+  keyway.rotation.x = Math.PI/2;                       // the one detail that says "lock" instantly
+  keyway.position.set(DOOR_W - 0.022, 0.980, -0.040); doorGp.add(keyway);
+  root.add(doorGp);
+}
+
+// --- the interior, because 82% open area means it WILL be seen (§68.4) ---
+{
+  const dummy = new THREE.Object3D();
+  const spots = [[-1.05, 0.35],[-1.05, -0.45],[0.75, 0.30]];
+  const deck = new THREE.InstancedMesh(new THREE.BoxGeometry(0.80, 0.022, 1.20), matWood, spots.length);
+  const blocks = new THREE.InstancedMesh(new THREE.BoxGeometry(0.80, 0.122, 0.145), matWood, spots.length*3);
+  const boxes = new THREE.InstancedMesh(new THREE.BoxGeometry(0.76, 0.90, 1.14), matLoad, spots.length);
+  [deck, blocks, boxes].forEach(m=>{ m.castShadow = m.receiveShadow = true; });
+  spots.forEach((p,i)=>{
+    dummy.rotation.set(0,0,0); dummy.scale.set(1,1,1);
+    dummy.position.set(p[0], 0.144 - 0.011, p[1]); dummy.updateMatrix(); deck.setMatrixAt(i, dummy.matrix);
+    for(let j=0;j<3;j++){ dummy.position.set(p[0], 0.061, p[1] + (j-1)*0.525); dummy.updateMatrix();
+      blocks.setMatrixAt(i*3+j, dummy.matrix); }
+    dummy.position.set(p[0], 0.144 + 0.45, p[1]); dummy.updateMatrix(); boxes.setMatrixAt(i, dummy.matrix);
+  });
+  [deck, blocks, boxes].forEach(m=>{ m.instanceMatrix.needsUpdate = true; load.add(m); });
+  root.add(load);
+}
+
+root.add(roof);
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// PUERTA is a ROTATION (no geometry appears or disappears); TECHO and CONTENIDO hide groups that
+// nothing else rests on — so no toggle here can leave a piece floating.
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+let doorOpen = false;
+const btnDoor = document.getElementById('btnDoor');
+btnDoor.onclick = ()=>{ doorOpen = !doorOpen;
+  doorGp.rotation.y = doorOpen ? Math.PI/2 : 0;                 // swings OUTWARD, away from the opening
+  btnDoor.classList.toggle('on', doorOpen);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+const toggle = (id, obj)=>{ const b = document.getElementById(id);
+  b.onclick = ()=>{ obj.visible = !obj.visible; b.classList.toggle('on', obj.visible);
+    renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle('btnRoof', roof);
+toggle('btnLoad', load);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__jaulaSeguridadApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__jaula-seguridadApp'] = globalThis.__jaulaSeguridadApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
