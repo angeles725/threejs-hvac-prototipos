@@ -1,0 +1,316 @@
+<!doctype html>
+<!--
+  fan-coil — catalog asset, family `hvac`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Type: 4-WAY CEILING CASSETTE. Chosen over a horizontal ducted unit because the cassette is the
+  variant whose identity survives at catalog thumbnail size: a square decorative panel with four
+  swing louvres, hung in a T-bar ceiling.
+  Dimensional anchor: research/HANDBOOK.md §3.0 ("Minisplit (evaporadora) | ~0.9 m") — this is the
+  cassette of that family; the 600 mm ceiling module fixes the panel size.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fan-coil tipo cassette — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Fan-coil tipo cassette — 4 vías, plenum en falso techo</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· serpentín · turbina centrífuga · bomba de condensados</span></div>
+  <div class="dim">panel 0.95 × 0.95 m · cuerpo 0.84 × 0.84 × 0.30 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnLouv">ALETAS</button>
+  <button id="btnFan">TURBINA</button>
+  <button id="btnCeil">FALSO TECHO</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const CEIL_Y = 2.60;                       // finished ceiling plane
+const PAN = 0.95, PAN_T = 0.055;           // decorative panel: side, thickness
+const BODY = 0.84, BODY_H = 0.30;          // chassis above the ceiling
+const RET = 0.44;                          // central return grille
+const SLOT_W = 0.13;                       // supply slot width, one per side
+const HANG_Y = CEIL_Y + BODY_H + 0.34;     // slab / hanger level
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 6, 22);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+// A cassette is a CEILING product: the review camera sits in the room, below the panel, looking up.
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+// EL is NEGATIVE: the camera stands in the room BELOW the unit and looks up at the soffit, which
+// is the only face that carries the cassette's identity. The first capture used a positive
+// elevation and the asset was a speck under a wall of ceiling tile.
+const R = 2.35, AZ = 0.85, EL = -0.30;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 2.46 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 2.46, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 2.46, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.0;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+sun.position.set(3, 5, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-2.5; sun.shadow.camera.right=2.5; sun.shadow.camera.top=3.5; sun.shadow.camera.bottom=0;
+scene.add(sun);
+// DEVIATION (design-spec.yaml `lighting`): the house rig lights a subject from ABOVE, but the face
+// that matters here is the DOWNWARD one — the panel soffit and the louvre blades. An uplight from
+// the room floor supplies the bounce a real room gives; PBR values unchanged (HANDBOOK §3.1).
+const uplight = new THREE.DirectionalLight(0xdfe8f2, 1.45);
+uplight.position.set(2.2, -2.0, 2.6);
+scene.add(uplight);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.42));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+// Plenum lamp (shadowless): with FALSO TECHO off, the chassis internals sit in a dark void.
+const plenumLamp = new THREE.PointLight(0xe6eef8, 3, 2.0, 2);
+plenumLamp.position.set(0.30, CEIL_Y + 0.22, 0.30);
+scene.add(plenumLamp);
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(16,16),
+  new THREE.MeshStandardMaterial({ color:0x0d1219, roughness:0.9, metalness:0 }));
+floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Decorative panel, louvre blades, ceiling tiles and the drain tray are DIELECTRIC.
+//   Chassis sheet, T-bar grid, hanger rod and copper connections are bare metal.
+// ============================================================================
+function finTexture(){
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#aab4b9'; g.fillRect(0,0,256,64);
+  for(let x=0; x<256; x+=4){ g.fillStyle = (x % 8 === 0) ? '#d6dde0' : '#8b959a'; g.fillRect(x,0,2,64); }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(14, 1);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const matPanel  = new THREE.MeshStandardMaterial({ color:0xeceef0, metalness:0.0,  roughness:0.42 });
+const matLouv   = new THREE.MeshStandardMaterial({ color:0xdadde0, metalness:0.0,  roughness:0.46 });
+const matGrille = new THREE.MeshStandardMaterial({ color:0xc7cbcf, metalness:0.0,  roughness:0.52 });
+const matChas   = new THREE.MeshStandardMaterial({ color:0xb6bdc1, metalness:0.95, roughness:0.44 });
+const matTile   = new THREE.MeshStandardMaterial({ color:0xdcdcd6, metalness:0.0,  roughness:0.92 });
+// A suspended-ceiling T-bar is PAINTED steel, so it is a dielectric. Modelled as bare metal it
+// reflects the dark room below and the grid rendered as black bands across the ceiling.
+const matTbar   = new THREE.MeshStandardMaterial({ color:0xdfe2e4, metalness:0.0,  roughness:0.55 });
+const matFin    = new THREE.MeshStandardMaterial({ color:0xd2dade, metalness:1.0,  roughness:0.42, map:finTexture() });
+const matDrain  = new THREE.MeshStandardMaterial({ color:0x9aa2a8, metalness:0.0,  roughness:0.70 });
+const matCopper = new THREE.MeshStandardMaterial({ color:0xf0a67a, metalness:1.0,  roughness:0.30 });
+const matLag    = new THREE.MeshStandardMaterial({ color:0x191c20, metalness:0.0,  roughness:0.92 });
+const matMotor  = new THREE.MeshStandardMaterial({ color:0x2c343d, metalness:0.0,  roughness:0.55 });
+const matDark   = new THREE.MeshStandardMaterial({ color:0x15181b, metalness:0.0,  roughness:0.70 });
+const matInsul  = new THREE.MeshStandardMaterial({ color:0x2a2f34, metalness:0.0,  roughness:0.94 });
+const matFilter = new THREE.MeshStandardMaterial({ color:0x545c63, metalness:0.0,  roughness:0.95 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=18)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+const SIDES = [{a:0, nx:0, nz:1}, {a:Math.PI/2, nx:1, nz:0}, {a:Math.PI, nx:0, nz:-1}, {a:-Math.PI/2, nx:-1, nz:0}];
+
+// --- suspended ceiling: tiles around a 1.20 x 1.20 opening + exposed T-bar grid ---
+const ceiling = new THREE.Group();
+const CEIL_S = 2.40, OPEN = PAN + 0.06;
+for(const [w, d, x, z] of [
+  [CEIL_S, (CEIL_S - OPEN)/2, 0,  (OPEN + (CEIL_S - OPEN)/2)/2],
+  [CEIL_S, (CEIL_S - OPEN)/2, 0, -(OPEN + (CEIL_S - OPEN)/2)/2],
+  [(CEIL_S - OPEN)/2, OPEN,  (OPEN + (CEIL_S - OPEN)/2)/2, 0],
+  [(CEIL_S - OPEN)/2, OPEN, -(OPEN + (CEIL_S - OPEN)/2)/2, 0],
+]) put(ceiling, w, 0.016, d, matTile, x, CEIL_Y, z);
+for(const gx of [-1.2, -0.6, 0.6, 1.2]) put(ceiling, 0.024, 0.030, CEIL_S, matTbar, gx, CEIL_Y - 0.012, 0);
+for(const gz of [-1.2, -0.6, 0.6, 1.2]) put(ceiling, CEIL_S, 0.030, 0.024, matTbar, 0, CEIL_Y - 0.012, gz);
+root.add(ceiling);
+
+// --- chassis above the ceiling: sheet-metal box, insulated, on threaded hanger rods ---
+const chassis = new THREE.Group();
+for(const {nx, nz} of SIDES)
+  put(chassis, nz ? BODY : 0.02, BODY_H, nz ? 0.02 : BODY, matChas,
+      nx*(BODY/2 - 0.01), CEIL_Y + BODY_H/2, nz*(BODY/2 - 0.01));
+put(chassis, BODY, 0.02, BODY, matChas, 0, CEIL_Y + BODY_H - 0.01, 0);              // chassis top
+put(chassis, BODY - 0.06, 0.015, BODY - 0.06, matInsul, 0, CEIL_Y + BODY_H - 0.03, 0);
+for(const sx of [-1,1]) for(const sz of [-1,1]){                                     // hanger rods + brackets
+  cyl(chassis, 0.008, HANG_Y - (CEIL_Y + BODY_H), matChas,
+      sx*(BODY/2 + 0.04), (HANG_Y + CEIL_Y + BODY_H)/2, sz*(BODY/2 + 0.04), 0, 0, 8);
+  put(chassis, 0.10, 0.02, 0.06, matChas, sx*(BODY/2 + 0.02), CEIL_Y + BODY_H - 0.02, sz*(BODY/2 + 0.02));
+}
+put(chassis, 1.60, 0.04, 1.60, matDark, 0, HANG_Y + 0.02, 0);                        // structural slab soffit
+root.add(chassis);
+
+// --- internals: ring coil around the fan, centrifugal turbine, drain pan, condensate pump ---
+const guts = new THREE.Group();
+for(const {a, nx, nz} of SIDES){                                                     // 4-sided coil ring
+  const g = new THREE.Group();
+  g.position.set(nx*(BODY/2 - 0.10), CEIL_Y + BODY_H/2 + 0.01, nz*(BODY/2 - 0.10));
+  g.rotation.y = a;
+  put(g, BODY - 0.24, BODY_H - 0.10, 0.06, matFin, 0, 0, 0);
+  guts.add(g);
+}
+const turbine = new THREE.Group();
+turbine.position.set(0, CEIL_Y + BODY_H/2 + 0.02, 0);
+cyl(turbine, 0.10, 0.05, matMotor, 0, 0.07, 0, 0, 0, 14);                            // motor
+{ const bl = new THREE.InstancedMesh(new THREE.BoxGeometry(0.018, 0.12, 0.05), matGrille, 18);
+  for(let i=0;i<18;i++){ const a = i*Math.PI*2/18;
+    _q.setFromEuler(new THREE.Euler(0, a, 0));
+    _p.set(Math.cos(a)*0.20, 0, Math.sin(a)*0.20);
+    bl.setMatrixAt(i, _m.compose(_p, _q, _s)); }
+  bl.instanceMatrix.needsUpdate = true; bl.castShadow = true; turbine.add(bl); }
+cyl(turbine, 0.22, 0.012, matChas, 0, 0.07, 0, 0, 0, 22);                            // impeller backplate
+guts.add(turbine);
+put(guts, BODY - 0.06, 0.03, BODY - 0.06, matDrain, 0, CEIL_Y + 0.02, 0);            // drain pan
+put(guts, 0.14, 0.12, 0.14, matDark, -(BODY/2 - 0.14), CEIL_Y + 0.10, BODY/2 - 0.14); // condensate pump
+put(guts, 0.16, 0.20, 0.24, matDark, BODY/2 - 0.12, CEIL_Y + 0.14, -(BODY/2 - 0.16)); // control box
+root.add(guts);
+
+// --- connections: lagged chilled-water pair + condensate line, out of one corner ---
+const pipes = new THREE.Group();
+for(const [i, pz] of [[0, 0.10], [1, 0.24]]){
+  cyl(pipes, 0.028, 0.46, matLag, -(BODY/2 + 0.20), CEIL_Y + 0.14 + i*0.10, pz, 0, Math.PI/2, 12);
+  cyl(pipes, 0.016, 0.18, matCopper, -(BODY/2 + 0.02), CEIL_Y + 0.14 + i*0.10, pz, 0, Math.PI/2, 10);
+  put(pipes, 0.05, 0.06, 0.05, matGrille, -(BODY/2 + 0.44), CEIL_Y + 0.14 + i*0.10, pz);   // isolation valve
+}
+cyl(pipes, 0.014, 0.40, matDrain, -(BODY/2 + 0.16), CEIL_Y + 0.30, -0.16, 0, Math.PI/2, 10);
+root.add(pipes);
+
+// --- decorative panel below the ceiling: frame, central return grille, 4 swing louvres ---
+const face = new THREE.Group();
+const PY = CEIL_Y - PAN_T/2;
+for(const {nx, nz} of SIDES)                                                          // panel frame ring
+  put(face, nz ? PAN : (PAN - RET)/2, PAN_T, nz ? (PAN - RET)/2 : PAN, matPanel,
+      nx*(PAN/2 - (PAN - RET)/4), PY, nz*(PAN/2 - (PAN - RET)/4));
+// Return frame as a RING, not a plate: a solid square here is a lid over the return opening and
+// buries the grille bars and the filter behind it (that is what the first capture showed).
+for(const {nx, nz} of SIDES)
+  put(face, nz ? RET : 0.045, PAN_T, nz ? 0.045 : RET, matPanel,
+      nx*(RET/2 - 0.0225), PY, nz*(RET/2 - 0.0225));
+{ const bars = new THREE.InstancedMesh(new THREE.BoxGeometry(RET - 0.05, 0.014, 0.016), matGrille, 13);
+  for(let i=0;i<13;i++){ _p.set(0, PY - PAN_T/2 - 0.010, -(RET - 0.06)/2 + i*((RET - 0.06)/12));
+    _q.setFromEuler(new THREE.Euler(0,0,0));
+    bars.setMatrixAt(i, _m.compose(_p, _q, _s)); }
+  bars.instanceMatrix.needsUpdate = true; bars.castShadow = true; face.add(bars); }
+put(face, RET - 0.03, 0.014, RET - 0.03, matFilter, 0, PY - PAN_T/2 - 0.045, 0);     // return filter behind the grille
+// four supply slots, each with a swinging louvre blade on its own hinge line
+const louvres = [];
+for(const {a, nx, nz} of SIDES){
+  const slotC = (PAN/2) - (PAN - RET)/4;
+  put(face, nz ? RET : SLOT_W, 0.012, nz ? SLOT_W : RET, matDark,
+      nx*slotC, PY - PAN_T/2 - 0.006, nz*slotC);                                      // slot throat
+  const hinge = new THREE.Group();
+  hinge.position.set(nx*(slotC - (nx ? SLOT_W/2 : 0)), PY - PAN_T/2 - 0.012, nz*(slotC - (nz ? SLOT_W/2 : 0)));
+  hinge.rotation.y = a;
+  const blade = put(hinge, RET, 0.012, SLOT_W, matLouv, 0, 0, SLOT_W/2);
+  blade.castShadow = true;
+  face.add(hinge); louvres.push(hinge);
+}
+root.add(face);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const LOUV_OPEN = -0.75;                  // ~43 deg down-blow
+let louvTarget = 0, fanOn = false;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnLouv = document.getElementById('btnLouv');
+btnLouv.onclick = ()=>{ louvTarget = louvTarget === 0 ? LOUV_OPEN : 0;
+  btnLouv.classList.toggle('on', louvTarget !== 0); requestRender(); };
+
+const btnFan = document.getElementById('btnFan');
+btnFan.onclick = ()=>{ fanOn = !fanOn; btnFan.classList.toggle('on', fanOn); requestRender(); };
+
+const btnCeil = document.getElementById('btnCeil');
+btnCeil.onclick = ()=>{ ceiling.visible = !ceiling.visible; btnCeil.classList.toggle('on', !ceiling.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const d = louvTarget - louvres[0].rotation.x;
+  if(Math.abs(d) > 0.0008){ for(const h of louvres) h.rotation.x += d * 0.12; needsRender = true; }
+  if(fanOn){ turbine.rotation.y += 0.16; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__fanCoilApp = __app;
+globalThis['__fan-coilApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
