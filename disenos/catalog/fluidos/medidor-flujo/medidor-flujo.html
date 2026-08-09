@@ -1,0 +1,302 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — fluidos/medidor-flujo · electromagnetic flow meter, DN100 PN16, flanged, compact.
+  Built from disenos/catalog/shell-template.html. Contract: __medidorFlujoApp.runtime + __qaRenderInfo
+  + data-app-ready, render-on-demand, shadows frozen (autoUpdate=false, 1024), DPR<=2.
+  Instancing (block54 §2.3): the two flange bolt circles (8 + 8) are the only real repetition.
+  Flange/pipe geometry reuses the DN100 PN16 figures already established by fluidos/valvula-motorizada
+  ([CERT-a], medium): same line, same standard, so the two assets bolt to each other.
+  The METER itself has no datasheet -> its own dimensions stay [INFER]/low and the HUD says so.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Medidor de flujo electromagnético — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">MEDIDOR DE FLUJO ELECTROMAGNÉTICO — DN100 PN16, compacto</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· cuerpo pintado · bridas de acero · convertidor de aluminio</span></div>
+  <div><span class="dim">bridas Ø 0.220 m · 8 × M16 sobre PCD 0.180 · tubo Ø 0.1143 m · eje a 0.45 m</span></div>
+  <div><span class="dim">SIN FICHA del medidor: cara a cara y envolvente del convertidor son [INFER]; las bridas son EN 1092-2 recordada, no una tabla preservada</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnCut">CORTE DEL TUBO</button>
+  <button id="btnConv" class="on">CONVERTIDOR</button>
+  <button id="btnPipe" class="on">TRAMO Y SOPORTES</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const PIPE_OD = 0.1143;    // [CERT-a] DN100 steel pipe OD — misma cifra que fluidos/valvula-motorizada
+const FL_OD   = 0.220;     // [CERT-a] EN 1092-2 PN16 DN100
+const FL_T    = 0.020;     // [INFER] espesor de brida
+const PCD     = 0.180;     // [CERT-a] 8 x M16
+const BOLTS   = 8;         // [CERT-a] por brida
+const F2F     = 0.200;     // [INFER] cara a cara del medidor mag DN100 (sin ficha)
+const COIL_OD = 0.205;     // [INFER] envolvente de bobinas
+const COIL_L  = 0.135;     // [INFER]
+const BORE    = 0.100;     // [INFER] paso libre = DN
+const AXIS_Y  = 0.450;     // eje de tubería (convención de la familia fluidos)
+const RUN_X   = 0.460;     // medio tramo — corto a propósito: el MEDIDOR debe dominar, no el tubo
+const CONV_Y  = 0.16;      // altura del cuello del convertidor sobre el cuerpo
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 5, 20);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 2.30, AZ = 0.803, EL = 0.235;                         // 46° azimut / 13.5° elevación (spec camera)
+// R 1.95 dejaba la base del soporte derecho fuera del cuadro: los soportes bajan hasta el suelo y el
+// convertidor sube a 0.85, así que el sujeto ocupa 0.85 m de alto y necesita más distancia.
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.60 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.52, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.52, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.6;   // bridas y tubo son METAL DESNUDO vertical/cilíndrico: el brillo
+                                    // lo da el IBL, no una luz de relleno (ONBOARD, formulación torniquete)
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.2, 4.2, 2.6); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+sun.shadow.camera.left=-1.2; sun.shadow.camera.right=1.2; sun.shadow.camera.top=1.2; sun.shadow.camera.bottom=-1.2;
+scene.add(sun);
+// El fill lateral solo aporta al término DIFUSO (cuerpo pintado del medidor); el especular del
+// metal ya lo cubre environmentIntensity.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 0.85);
+fill.position.set(-2.0, 1.5, 2.6);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(12,12),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: tubo y bridas son metal DESNUDO; el cuerpo del medidor va
+// pintado (dieléctrico), el liner es PTFE y el convertidor es aluminio recubierto.
+// ============================================================================
+const matPipe  = new THREE.MeshStandardMaterial({ color:0xb8bdc1, metalness:0.92, roughness:0.38 });
+const matFlg   = new THREE.MeshStandardMaterial({ color:0xa9aeb3, metalness:0.92, roughness:0.44 });
+const matBolt  = new THREE.MeshStandardMaterial({ color:0x9aa0a5, metalness:0.92, roughness:0.40 });
+const matBody  = new THREE.MeshStandardMaterial({ color:0x2f6a86, metalness:0.0,  roughness:0.46 });
+const matConv  = new THREE.MeshStandardMaterial({ color:0xd2d6d9, metalness:0.0,  roughness:0.44 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x22262b, metalness:0.0,  roughness:0.55 });
+const matDisp  = new THREE.MeshStandardMaterial({ color:0x0d2b22, metalness:0.0,  roughness:0.20,
+                                                  emissive:0x18c07a, emissiveIntensity:1.4 });
+const matLiner = new THREE.MeshStandardMaterial({ color:0xe8e6df, metalness:0.0,  roughness:0.30,
+                                                  side:THREE.DoubleSide });
+const matElec  = new THREE.MeshStandardMaterial({ color:0xc9a227, metalness:0.90, roughness:0.32 });
+const matCoil  = new THREE.MeshStandardMaterial({ color:0x8a5a2b, metalness:0.0,  roughness:0.52 });
+  // bobina de alambre ESMALTADO: es un conductor recubierto, o sea dieléctrico. HANDBOOK §3.1 pide
+  // metalness casi binaria; 0.6 era un intermedio sin justificar (lo marcó lint-asset-source).
+const matStand = new THREE.MeshStandardMaterial({ color:0xa3a8ad, metalness:0.90, roughness:0.44 });
+const matTag   = new THREE.MeshStandardMaterial({ color:0xe6e9eb, metalness:0.0,  roughness:0.5 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const dummy = new THREE.Object3D();
+const box = (parent,w,h,d,mat,x,y,z)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); parent.add(m); return m; };
+const cyl = (parent, r0, r1, h, seg, mat, x,y,z, rx=0, rz=0, open=false)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, h, seg, 1, open), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz);
+  parent.add(m); return m;
+};
+
+// --- tramo de tubería adyacente + soportes (togglable) ---
+const pipeRun = new THREE.Group();
+for(const s of [-1,1]){
+  const x0 = s*(F2F/2 + FL_T);
+  const len = RUN_X - (F2F/2 + FL_T);
+  cyl(pipeRun, PIPE_OD/2, PIPE_OD/2, len, 24, matPipe, x0 + s*len/2, AXIS_Y, 0, 0, Math.PI/2);
+  cyl(pipeRun, FL_OD/2, FL_OD/2, FL_T, 26, matFlg, s*RUN_X, AXIS_Y, 0, 0, Math.PI/2);   // brida de línea
+  // soporte con silleta
+  const sx = s*(RUN_X - 0.10);
+  box(pipeRun, 0.07, AXIS_Y - PIPE_OD/2 - 0.02, 0.07, matStand, sx, (AXIS_Y - PIPE_OD/2 - 0.02)/2, 0);
+  box(pipeRun, 0.15, 0.014, 0.15, matStand, sx, 0.007, 0);
+  const saddle = new THREE.Mesh(new THREE.CylinderGeometry(PIPE_OD/2 + 0.010, PIPE_OD/2 + 0.010, 0.05,
+                                                           18, 1, true, Math.PI, Math.PI), matStand);
+  saddle.castShadow = true; saddle.rotation.z = Math.PI/2; saddle.position.set(sx, AXIS_Y, 0);
+  pipeRun.add(saddle);
+}
+root.add(pipeRun);
+
+// --- cuerpo del medidor: bridas propias, envolvente de bobinas, placa de datos ---
+const meterShell = [];
+for(const s of [-1,1]){
+  meterShell.push(cyl(root, FL_OD/2, FL_OD/2, FL_T, 26, matFlg, s*(F2F/2 + FL_T/2), AXIS_Y, 0, 0, Math.PI/2));
+}
+const shellBody = cyl(root, COIL_OD/2, COIL_OD/2, COIL_L, 26, matBody, 0, AXIS_Y, 0, 0, Math.PI/2);
+const shellCone = [];
+for(const s of [-1,1]){
+  shellCone.push(cyl(root, COIL_OD/2, PIPE_OD/2 + 0.006, (F2F - COIL_L)/2, 26, matBody,
+      s*(COIL_L/2 + (F2F - COIL_L)/4), AXIS_Y, 0, 0, s > 0 ? -Math.PI/2 : Math.PI/2));
+}
+box(root, 0.075, 0.045, 0.004, matTag, 0, AXIS_Y - COIL_OD/2 + 0.02, COIL_OD/2*0.72);
+
+// --- pernos de brida: única repetición real -> un batch instanciado ---
+{
+  const geo = new THREE.CylinderGeometry(0.008, 0.008, 2*FL_T + 0.030, 6);
+  const im = new THREE.InstancedMesh(geo, matBolt, BOLTS*2);
+  im.castShadow = im.receiveShadow = true;
+  let k = 0;
+  for(const s of [-1,1]) for(let i=0;i<BOLTS;i++){
+    const a = (i/BOLTS)*Math.PI*2 + Math.PI/BOLTS;
+    dummy.position.set(s*(F2F/2 + FL_T), AXIS_Y + Math.sin(a)*PCD/2, Math.cos(a)*PCD/2);
+    dummy.rotation.set(0, 0, Math.PI/2); dummy.updateMatrix();
+    im.setMatrixAt(k++, dummy.matrix);
+  }
+  im.instanceMatrix.needsUpdate = true;
+  root.add(im);
+}
+
+// --- corte: medio cuerpo + liner + electrodos + bobinas (estado de visibilidad, no destructivo) ---
+const cut = new THREE.Group();
+{
+  const half = new THREE.Mesh(new THREE.CylinderGeometry(COIL_OD/2, COIL_OD/2, COIL_L, 26, 1, true,
+                                                         Math.PI*0.5, Math.PI),
+                              new THREE.MeshStandardMaterial({ color:0x2f6a86, metalness:0.0,
+                                                               roughness:0.46, side:THREE.DoubleSide }));
+  half.castShadow = true; half.rotation.z = Math.PI/2; half.position.set(0, AXIS_Y, 0); cut.add(half);
+  // MEDIOS CONOS de transición, con el mismo recorte angular. Sin ellos el corte ocultaba los conos
+  // completos y solo reponía el medio cuerpo: quedaban 0.032 m de hueco a cada lado hasta la cara
+  // interior de la brida. Es el mismo defecto que la auditoría encontró en utilities/suavizador-agua
+  // (allí el domo); lo busqué aquí a propósito y lo medí antes de corregirlo.
+  for(const s of [-1,1]){
+    const rz = s > 0 ? -Math.PI/2 : Math.PI/2;
+    const halfCone = new THREE.Mesh(
+      new THREE.CylinderGeometry(COIL_OD/2, PIPE_OD/2 + 0.006, (F2F - COIL_L)/2, 26, 1, true,
+                                 rz > 0 ? Math.PI*0.5 : Math.PI*1.5, Math.PI),
+      new THREE.MeshStandardMaterial({ color:0x2f6a86, metalness:0.0, roughness:0.46,
+                                       side:THREE.DoubleSide }));
+    halfCone.castShadow = true;
+    halfCone.position.set(s*(COIL_L/2 + (F2F - COIL_L)/4), AXIS_Y, 0);
+    halfCone.rotation.z = rz;
+    cut.add(halfCone);
+  }
+  // tubo de medición con liner: cilindro abierto, DoubleSide, para que se vea la pared interior
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(BORE/2, BORE/2, F2F - 0.01, 24, 1, true), matLiner);
+  tube.castShadow = true; tube.rotation.z = Math.PI/2; tube.position.set(0, AXIS_Y, 0); cut.add(tube);
+  // dos electrodos enfrentados, perpendiculares al campo
+  for(const s of [-1,1]){
+    cyl(cut, 0.007, 0.007, 0.030, 10, matElec, 0, AXIS_Y, s*(BORE/2 + 0.012), Math.PI/2);
+  }
+  // bobinas arriba y abajo
+  for(const s of [-1,1]){
+    const c = new THREE.Mesh(new THREE.TorusGeometry(0.042, 0.011, 8, 20), matCoil);
+    c.castShadow = true; c.position.set(0, AXIS_Y + s*(BORE/2 + 0.030), 0);
+    c.rotation.x = Math.PI/2; cut.add(c);
+  }
+}
+cut.visible = false;
+root.add(cut);
+
+// --- convertidor compacto: cuello, caja, display, dos prensaestopas ---
+const conv = new THREE.Group();
+cyl(conv, 0.038, 0.042, CONV_Y, 16, matConv, 0, AXIS_Y + COIL_OD/2 + CONV_Y/2 - 0.01, 0);
+const cy = AXIS_Y + COIL_OD/2 + CONV_Y + 0.055;
+box(conv, 0.17, 0.13, 0.135, matConv, 0, cy, 0);
+box(conv, 0.10, 0.055, 0.008, matDisp, 0, cy + 0.01, 0.072);
+for(let i=0;i<3;i++) box(conv, 0.016, 0.012, 0.006, matDark, -0.03 + i*0.03, cy - 0.042, 0.072);
+for(const s of [-1,1]) cyl(conv, 0.013, 0.013, 0.035, 12, matDark, s*0.055, cy - 0.075, 0);
+box(conv, 0.055, 0.026, 0.004, matTag, 0, cy + 0.058, 0.05);
+root.add(conv);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // hornea la sombra congelada una vez
+
+// ============================================================================
+// ZONE 3 — UI. El render está GATEADO: cada handler llama requestRender().
+// ============================================================================
+const btnRot  = document.getElementById('btnRot');
+const btnCut  = document.getElementById('btnCut');
+const btnConv = document.getElementById('btnConv');
+const btnPipe = document.getElementById('btnPipe');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+btnCut.onclick = ()=>{ const on = !cut.visible;
+  cut.visible = on;
+  shellBody.visible = !on; shellCone.forEach(m=>{ m.visible = !on; });
+  btnCut.classList.toggle('on', on);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(btnConv, conv);
+toggle(btnPipe, pipeRun);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__medidorFlujoApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__medidor-flujoApp'] = globalThis.__medidorFlujoApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
