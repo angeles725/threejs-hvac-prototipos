@@ -1,0 +1,264 @@
+<!doctype html>
+<!--
+  puerta-cuarto-frio — catalog asset, family `puertas`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block57.md  (DAN-doors MH1001K/MH1001F datasheets)
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Puerta de cuarto frío 100 mm — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Puerta de cuarto frío — hoja aislada 100 mm</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· AISI 304 · PIR 100 mm · Fermod</span></div>
+  <div class="dim">hueco 1.20 × 2.10 m · hoja 1.30 × 2.15 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnOpen">OPEN / CLOSE</button>
+  <button id="btnRail">FREEZE RAIL</button>
+  <button id="btnWall" class="on">WALL</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 57]) ----------
+const OPEN_W = 1.20, OPEN_H = 2.10;        // clear opening [INFER, inside the certified envelope]
+const LEAF_W = 1.30, LEAF_H = 2.15;        // opening + 0.05 overlap per side (overlapping door)
+const LEAF_T = 0.100;                      // [CERT-doc] 100 mm PIR leaf
+const FRAME_FACE = 0.09, FRAME_D = 0.14;   // frame face width / depth
+const WALL_T = 0.100, WALL_W = 3.20, WALL_H = 2.62;
+const KICK_H = 0.30;                       // [CERT-doc] door width x 300 mm
+const WIN_W = 0.40, WIN_H = 0.60, WIN_CY = 1.55;   // [CERT-doc] 400 x 600 mm standard
+const GASKET_W = 0.020;
+const HINGE_Y = [0.26, 1.08, 1.90];        // 3 hinges [INFER — count unstated in the datasheets]
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 10, 30);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 5.0, AZ = 0.733, EL = 0.26;                           // 42° azimuth / 15° elevation (spec camera)
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.15 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.15, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.15, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.2;   // vertical bare-metal needs a brighter IBL to read as satin 304
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4, 6, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-4; sun.shadow.camera.right=4; sun.shadow.camera.top=4; sun.shadow.camera.bottom=-4;
+scene.add(sun);
+// VERTICAL-SUBJECT DEVIATION from the house rig (documented in design-spec.yaml `lighting`):
+// the rig was calibrated on horizontal equipment surfaces, which reflect the bright upper IBL.
+// A door is a VERTICAL bare-metal plane — it reflects the dark horizon and reads as flat grey.
+// This fill sits at the mirror of the camera about the leaf normal (+Z), so the 304 skin has
+// something bright to reflect and the satin gradient appears. HANDBOOK §3.1 metalness unchanged.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.25);
+fill.position.set(-4.5, 3.2, 6.0);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   AISI 304 skin/frame = bare metal (0.95). TPE gasket + PPGI panel = DIELECTRIC (0.0):
+//   [Block 57] §57.7 — if the gasket inherits the steel material the seal line disappears.
+// ============================================================================
+const matLeaf  = new THREE.MeshStandardMaterial({ color:0xc6cacc, metalness:0.95, roughness:0.36 });
+const matFrame = new THREE.MeshStandardMaterial({ color:0xbcc0c2, metalness:0.95, roughness:0.42 });
+const matKick  = new THREE.MeshStandardMaterial({ color:0xc9cdcf, metalness:0.95, roughness:0.30 });
+const matGask  = new THREE.MeshStandardMaterial({ color:0x15181b, metalness:0.0,  roughness:0.88 });
+const matPanel = new THREE.MeshStandardMaterial({ color:0xe6e9ea, metalness:0.0,  roughness:0.62 });
+const matAlu   = new THREE.MeshStandardMaterial({ color:0x9fa5a9, metalness:0.90, roughness:0.48 });
+const matGlass = new THREE.MeshPhysicalMaterial({ color:0xcfe2e8, metalness:0.0, roughness:0.05,
+                                                  transmission:0.85, thickness:0.02, transparent:true, opacity:0.55 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x2a2e33, metalness:0.0,  roughness:0.65 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (parent,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); parent.add(m); return m; };
+
+// --- context wall: pre-painted sandwich panel, same 100 mm as the leaf insulation ---
+const wall = new THREE.Group();
+const jamb = OPEN_W/2 + FRAME_FACE;                      // outer edge of the frame
+const head = OPEN_H + FRAME_FACE;
+put(wall, (WALL_W/2 - jamb), WALL_H, WALL_T, matPanel, -(jamb + (WALL_W/2 - jamb)/2), WALL_H/2, 0);
+put(wall, (WALL_W/2 - jamb), WALL_H, WALL_T, matPanel,  (jamb + (WALL_W/2 - jamb)/2), WALL_H/2, 0);
+put(wall, 2*jamb, WALL_H - head, WALL_T, matPanel, 0, head + (WALL_H - head)/2, 0);
+root.add(wall);
+
+// --- frame: 1,5 mm AISI 304, always insulated (reads as a THICK surround, not an architrave) ---
+const frame = new THREE.Group();
+put(frame, FRAME_FACE, head, FRAME_D, matFrame, -(OPEN_W/2 + FRAME_FACE/2), head/2, 0);
+put(frame, FRAME_FACE, head, FRAME_D, matFrame,  (OPEN_W/2 + FRAME_FACE/2), head/2, 0);
+put(frame, 2*jamb, FRAME_FACE, FRAME_D, matFrame, 0, OPEN_H + FRAME_FACE/2, 0);
+// gasket strips are mounted IN THE FRAME [CERT-doc MH1001K :p.2] — not on the leaf
+const gz = FRAME_D/2 - GASKET_W/2;
+put(frame, GASKET_W, OPEN_H, GASKET_W, matGask, -(OPEN_W/2 - GASKET_W/2), OPEN_H/2, gz);
+put(frame, GASKET_W, OPEN_H, GASKET_W, matGask,  (OPEN_W/2 - GASKET_W/2), OPEN_H/2, gz);
+put(frame, OPEN_W, GASKET_W, GASKET_W, matGask, 0, OPEN_H - GASKET_W/2, gz);
+root.add(frame);
+
+// --- leaf: pivots on the HINGE LINE (spec hierarchy), overlapping the frame face ---
+const leafPivot = new THREE.Group();
+leafPivot.position.set(-LEAF_W/2, 0, FRAME_D/2);
+const leaf = new THREE.Group();
+leaf.position.set(LEAF_W/2, 0, LEAF_T/2);
+const winX0 = -WIN_W/2, winY0 = WIN_CY - WIN_H/2, winY1 = WIN_CY + WIN_H/2;
+// the 100 mm slab, built as 4 panels around the window aperture (a real hole, not a decal)
+put(leaf, LEAF_W, winY0, LEAF_T, matLeaf, 0, winY0/2, 0);
+put(leaf, LEAF_W, LEAF_H - winY1, LEAF_T, matLeaf, 0, winY1 + (LEAF_H - winY1)/2, 0);
+put(leaf, (LEAF_W/2 + winX0), WIN_H, LEAF_T, matLeaf, -(LEAF_W/2 + winX0)/2 - WIN_W/2, WIN_CY, 0);
+put(leaf, (LEAF_W/2 + winX0), WIN_H, LEAF_T, matLeaf,  (LEAF_W/2 + winX0)/2 + WIN_W/2, WIN_CY, 0);
+// window: anodised-aluminium surround + 2-layer thermo glass
+for(const [w,h,x,y] of [[WIN_W+0.04,0.02,0,winY0-0.01],[WIN_W+0.04,0.02,0,winY1+0.01],
+                        [0.02,WIN_H,winX0-0.01,WIN_CY],[0.02,WIN_H,-winX0+0.01,WIN_CY]]){
+  put(leaf, w, h, LEAF_T+0.006, matAlu, x, y, 0);
+}
+put(leaf, WIN_W, WIN_H, 0.016, matGlass, 0, WIN_CY, 0);
+// kick plate — width DERIVED from the door width [CERT-doc]
+put(leaf, LEAF_W, KICK_H, 0.004, matKick, 0, KICK_H/2, LEAF_T/2 + 0.002);
+// Fermod-style vertical latch handle on the swing edge
+const hx = LEAF_W/2 - 0.075;
+put(leaf, 0.065, 0.30, 0.012, matFrame, hx, 1.05, LEAF_T/2 + 0.006);
+put(leaf, 0.042, 0.20, 0.055, matFrame, hx, 1.05, LEAF_T/2 + 0.040);
+put(leaf, 0.030, 0.05, 0.030, matDark, hx, 0.90, LEAF_T/2 + 0.055);
+leafPivot.add(leaf);
+root.add(leafPivot);
+
+// --- hinges: stainless, height + side adjustable, frictionless bushings [CERT-doc] ---
+// On an OVERLAPPING door the hinge is surface-mounted on the FRONT face (the leaf laps the frame,
+// so a rebated hinge has nothing to sit in) — knuckle proud of the leaf edge, one plate on the
+// frame and one on the leaf. Modelling it behind the leaf would hide the whole hardware read.
+const HZ = FRAME_D/2 + LEAF_T;                    // front plane of the closed leaf
+const hinges = new THREE.Group();
+for(const y of HINGE_Y){
+  const knuckle = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.125, 14), matFrame);
+  knuckle.castShadow = knuckle.receiveShadow = true;
+  knuckle.position.set(-(LEAF_W/2 + 0.012), y, HZ - 0.018);
+  hinges.add(knuckle);
+  put(hinges, 0.085, 0.072, 0.010, matFrame, -(LEAF_W/2 + 0.055), y, FRAME_D/2 + 0.005);
+}
+root.add(hinges);
+// the leaf-side hinge plates travel WITH the leaf
+for(const y of HINGE_Y) put(leaf, 0.085, 0.072, 0.009, matFrame, -(LEAF_W/2 - 0.048), y, LEAF_T/2 + 0.004);
+
+// --- FREEZE variant (MH1001F): anodised-aluminium bottom rail cast into the floor ---
+const rail = new THREE.Group();
+put(rail, 2*jamb, 0.020, 0.24, matAlu, 0, 0.010, 0);
+rail.visible = false;
+root.add(rail);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+//          The swing is a per-frame animation — it holds needsRender while moving.
+// ============================================================================
+const SWING_OPEN = -1.85;                 // ~106° — a cold-room leaf swings clear of the opening
+let swingTarget = 0;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnOpen = document.getElementById('btnOpen');
+btnOpen.onclick = ()=>{ swingTarget = swingTarget === 0 ? SWING_OPEN : 0;
+  btnOpen.classList.toggle('on', swingTarget !== 0); requestRender(); };
+
+const btnRail = document.getElementById('btnRail');
+btnRail.onclick = ()=>{ rail.visible = !rail.visible; btnRail.classList.toggle('on', rail.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnWall = document.getElementById('btnWall');
+btnWall.onclick = ()=>{ wall.visible = !wall.visible; btnWall.classList.toggle('on', wall.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const d = swingTarget - leafPivot.rotation.y;
+  if(Math.abs(d) > 0.0008){ leafPivot.rotation.y += d * 0.12; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__puertaCuartoFrioApp = __app;
+globalThis['__puerta-cuarto-frioApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

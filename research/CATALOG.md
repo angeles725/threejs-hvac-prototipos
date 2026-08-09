@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **52 blocks**
+Total: **58 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -58,5 +58,9 @@ Total: **52 blocks**
 | 50 | [threejs-block50.md](threejs-block50.md) | Isosurface extraction: Marching Cubes (Lorensen-Cline 1987) vs Dual Contouring (Ju et al. 2002) — the maths, what `three.js/MarchingCubes.js` ACTUALLY runs, the honest JS-ecosystem maturity, and where isosurfaces fit the HVAC prototypes |
 | 51 | [threejs-block51.md](threejs-block51.md) | Curves & surfaces: Bézier (Bernstein basis / De Casteljau), Catmull-Rom (why three.js defaults to **centripetal**), B-spline/NURBS (Cox-de Boor + the rational weight for exact conics) — what the three.js `Curve` API ACTUALLY computes, the arc-length reparametrisation, the Frenet-frame flip, and where curved pipes/ducts fit the HVAC tools |
 | 52 | [threejs-block52.md](threejs-block52.md) | Procedural placement for Three.js scenes: Poisson-disk / blue-noise (Bridson 2007), Wave Function Collapse (constraint solving, not quantum), and L-systems — and how each feeds `InstancedMesh` |
-| 54 | [threejs-block54.md](threejs-block54.md) | GPU-budget rendering for the client equipment visor (DOCUMENT-mode, §20): the top-5 GPU-cost levers ranked by savings × applicability ÷ cost — render-on-demand (+damping-tail caveat, issue #23090), KTX2/Basis+Draco+meshopt VRAM compression, InstancedMesh/BatchedMesh, frozen static-rig shadows, DPR cap — plus baked lightmaps for static shells and an honest "what does NOT apply" (LOD, low-repeat instancing); scoped to the real-GPU visor, SwiftShader QA path unaffected |
-| 55 | [threejs-block55.md](threejs-block55.md) | Turf.js is geospatial, not planar-CAD (DOCUMENT-mode, §20): why `@turf/buffer` (reproject→JSTS→reproject) and `@turf/area` (geodesic/spherical) are wrong-by-design on CAD metres (issue #1750: [0,0]→[100,0] = 99.88°), what IS planar-safe in Turf (booleans via polyclip-ts, centroid = vertex-mean), and the right Cartesian libraries for DXF→mesh offset/boolean (js-angusj-clipper, polygon-clipping, martinez, jsts) with verified licenses (jsts = EDL/EPL, NOT MIT) |
+| 53 | [threejs-block53.md](threejs-block53.md) | Objectively anchoring the design3d material-read gate: a MEASURED reviewer-variance failure and the CIEDE2000 ΔE00 fix adopted from img2threejs (Object Sculptor upstream) |
+| 54 | [threejs-block54.md](threejs-block54.md) | GPU-budget rendering for the Three.js equipment visor: the levers that cut GPU cost without losing quality |
+| 55 | [threejs-block55.md](threejs-block55.md) | Turf.js is geospatial, not planar-CAD: the offset/boolean libraries to use for DXF→mesh reconstruction |
+| 56 | [threejs-block56.md](threejs-block56.md) | Measured GPU-budget of the nave-Panccadia equipment visor, and the damping-safe render-on-demand implementation that follows from the data |
+| 57 | [threejs-block57.md](threejs-block57.md) | The industrial cold-room door: measured dimensional envelope, hardware vocabulary, and the one number the datasheets refuse to fix |
+| 58 | [threejs-block58.md](threejs-block58.md) | Selective pallet racking: the rack is SHORTER than the pallet, and a single bay is not a legal rack |

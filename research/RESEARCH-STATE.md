@@ -9,17 +9,26 @@
 > cameras/controls, procedural geometry/textures, versioning) — not the whole library.
 <!-- research-state.v1 -->
 schema: research-state.v1
-covered_blocks: 55
-gaps_closed: 48
-known_gaps: 48
-investigable_open: 0
+covered_blocks: 58
+gaps_closed: 50
+known_gaps: 52
+investigable_open: 2
 requires_execution_open: 1
 blocked_open: 0
+deferred_open: 0
+undocumented_findings: 0
 <!-- /research-state.v1 -->
 
 
 ## Coverage
 
+- **RUN 10 (REOPEN §8, 2026-08-08, user-driven — NEW AXIS: real-world DIMENSIONAL references for the
+  `disenos/catalog/` asset build)**: the catalog families are being modelled from `catalog.yaml` prose
+  notes ("cold-room door: insulated leaf, hinge, gasket, latch handle"), which is not a measurable spec.
+  Every prior run studied the RENDERER; none studied the SUBJECT being rendered. This axis closes that:
+  manufacturer-datasheet dimensional envelopes so `dimensions_real` in each design-spec carries
+  `[CERT-doc]` evidence instead of invented numbers — the same discipline `mesa-trabajo` got from its CAD
+  block. Seeded gaps: G67 (doors — **B57**), G68 (storage/racking — **B58**); both CLOSED, each spawning a siblings gap (G69 doors, G70 storage) that stays open.
 - **RUN 9 (REOPEN §8, 2026-08-07, user scope-expansion — NEW AXIS)**: procedural/algorithmic
   generation + numerical methods & mathematics for building BETTER Three.js **design tools** (not
   rendering — B1-B44 covered that). Motivated by the `nave-panccadia` build tool, whose `collapseWalls`
@@ -36,11 +45,15 @@ blocked_open: 0
 - **RUN 8 (REOPEN §8, 2026-07-06, AUTO — build-phase §19, user-driven client-satisfaction loop)**: voxel→realistic parity map + living-environment build on `hotel-realista-ensamblado.html` (G42, [Block 41]). Replaces the flat "infinite plane" ground + static sea with procedural terrain relief + per-vertex biomes (1 draw call), a GPU wave-displaced sea (0 CPU cost), and a gradient sky background. Spawns G43 (vegetation/paths/furniture), G44 (voxel-parity interactions + duct audit), G45 (per-floor temperature) as in-loop requires-execution gaps. Visual QA deferred: WSL headless has no WebGL context — syntax-checked only (`node --check` PASS).
 - **RUN 7 (REOPEN §8, 2026-07-06, supervised — user present)**: applied+measured LOD on the assembled hotel (G40). Cap +1 (B40). Prompted by live implementation of a building LOD in `hotel-realista-ensamblado.html`; documents the before/after with a `[CERT-hw]` browser probe. Emergent G41 (equipment LOD) is **requires-execution**, not read-only → does not reopen the static count.
 - **RUN 6 (REOPEN §8, 2026-07-04, AUTO/orchestrated — queued behind the WORKFLOW.md fix writers)**: design-craft completion from the graphic-designer + 3D-designer lens (G33-G39). Cap +7 (B33-B39). Order per driver recommendation: template-system first (multiplier), then motion/UX, then 2D tokens/accessibility, then art direction/deliverables/dataviz.
-- **Covered blocks**: 55 (B1-B55). **B53/B54/B55 = DOCUMENT-mode captures (§20)**, not discovery gaps, all on the "design tools/toolchain" axis (siblings of B52); none change the RUN 9 read-only=0 STOP.
+- **Covered blocks**: 58 (B1-B58). **B53/B54/B55/B56 = DOCUMENT-mode captures (§20)**, not discovery gaps, all on the "design tools/toolchain" axis (siblings of B52); none change the RUN 9 read-only=0 STOP.
   - **B53** = the design3d material-read gate is measured reviewer-variance-dominated + the CIEDE2000 ΔE00 objective anchor adopted from the img2threejs upstream (validated ΔE00 0.13 vs 11.7).
   - **B54** = GPU-budget rendering for the client visor (real GPU; SwiftShader QA path unaffected): top-5 levers (render-on-demand + damping-tail caveat issue #23090, KTX2/Basis+Draco+meshopt VRAM compression, InstancedMesh/BatchedMesh, frozen static-rig shadows `autoUpdate=false`+`needsUpdate`, DPR cap) + baked lightmaps for static shells + honest "does NOT apply" (LOD/low-repeat instancing). All API claims verified against three.js `dev` docs `[CERT-web]`; 8 new doc sources + issue #23090 preserved before citing.
   - **B55** = Turf.js is geospatial, not planar-CAD: `@turf/buffer` (reproject→JSTS→reproject) + `@turf/area` (geodesic) are wrong-by-design on CAD metres (issue #1750: [0,0]→[100,0] = 99.88°); right Cartesian libs for DXF→mesh = js-angusj-clipper (offset), polygon-clipping/martinez (boolean), jsts (one-lib). Two verified CORRECTIONS: current Turf booleans delegate to `polyclip-ts` (not `polygon-clipping` directly); `jsts` = `(EDL-1.0 OR EPL-1.0)`, NOT MIT. 12 new sources preserved before citing.
-- **Coverage metric**: 48 / 48 closed — **RUN 9 STOPPED (read-only-investigable=0). B45+B46+B47+B48+B49+B50+B51+B52 written.** (Runs 7-8 history below; G41 remains as requires-execution §19 build phase.)
+  - **B56** = measured GPU budget of the 18 nave-Panccadia equipment inspectors (headless CDP read of
+    `renderer.info`, `sources/probes/B56-visor-perf/`): the scenes are far under the [Block 54] gates, so the
+    heavy playbook is premature — the ONE data-justified lever is damping-safe render-on-demand, written from
+    primary sources. Closes the [Block 54] "measure before applying" next-step.
+- **Coverage metric**: 50 / 52 closed (RUN 10 reopened the count: G67→B57, G68→B58; G69 + G70 open) — **RUN 9 STOPPED (read-only-investigable=0). B45+B46+B47+B48+B49+B50+B51+B52 written.** (Runs 7-8 history below; G41 remains as requires-execution §19 build phase.)
 - **RUN 5 STOPPED (2026-07-04): read-only-investigable = 0 — ALL RUNS COMPLETE (32/32 gaps, 5 runs)**
 - **RUN 5 (2026-07-04, AUTO/orchestrated)**: HVAC-domain design (G29-G32) — G29 (HVAC/industrial equipment visualization domain, B29), G30 (dashboards & telemetry, B30), G31 (terrain/relief, B31), and G32 (buildings/BIM, B32) covered — **RUN 5 COMPLETE, all 4 gaps closed**. User authorized auto-chaining incl. emergent gaps; RUN 5 ran to exhaustion of the backlog with no new gaps left. Hard-stops: failed self-report, cap, exhaustion, destructive step.
 - **RUN 4 (REOPEN §8, 2026-07-04, AUTO/orchestrated)**: 3D-design craft + optimization (G22-G28) — **RUN 4 COMPLETE**, all 7 gaps covered (B22-B28).
@@ -100,6 +113,10 @@ blocked_open: 0
 | medium | G63 — Isosurfaces: marching cubes vs dual contouring — three.js MarchingCubes addon, metaballs/scalar-field surfacing for ducts/blobs (run 9) | context7 + web | **covered → [Block 50]** (MC linear-interp `mu=(iso−v0)/(v1−v0)` verified in three.js source; DC=QEF-over-Hermite-normals preserves sharp features; HONEST: no maintained JS dual-contouring lib — surfaceNets is dual but not feature-preserving; isosurface of a temperature/CFD field = real unbuilt HVAC app) |
 | medium | G64 — Curves & surfaces: Bézier / Catmull-Rom / B-spline / NURBS — three.js Curve API, CatmullRomCurve3, NURBSCurve/NURBSSurface addons, pipe/duct centreline sweeping (run 9) | context7 + web | **covered → [Block 51]** (Bernstein/Cox-de Boor/rational-weight maths verified in three.js source; centripetal α=0.5 default proven cusp-free by Yuksel 2011; getPointAt arc-length reparam; computeFrenetFrames = rotation-minimising frame w/ closed-curve twist fix; NURBS is examples/jsm addon, NURBSSurface a bare evaluator) |
 | medium | G66 — Procedural placement: poisson-disk / blue-noise sampling + Wave Function Collapse / L-systems for scattering & layout generation (run 9) | web + corpus | **covered → [Block 52]** (Bridson 2007 O(N) blue-noise verified in the SIGGRAPH sketch PDF: grid cell r/√n, active list, k=30 candidates in the r..2r annulus, 2N−1 iters; WFC honestly = constraint solving NOT quantum [mxgmn README], lowest-Shannon-entropy cell + AC-4 propagation + contradiction/restart; L-system = rewriting grammar G=(V,ω,P) + turtle [ ] branching; corpus scatters bushes/grass by UNIFORM-RANDOM-in-rectangle [CERT] = the clustering Bridson names; three.js ships only MeshSurfaceSampler [area-uniform, NOT blue-noise], Poisson/WFC/L-sys are external MIT libs feeding InstancedMesh; decision rule per job) |
+| high | G67 — Industrial DOOR dimensional + construction reference for the catalog build: cold-room hinged door (leaf thickness, max leaf envelope, frame gauge, hinge/handle/gasket hardware), and the sectional/roll-up/security siblings — the measured envelope a design-spec needs instead of invented numbers (run 10) | manufacturer datasheets (web, preserved) | **covered → [Block 57]** (cold-room door envelope CERTIFIED: 100 mm PIR leaf, max 1400 × 2500 mm per leaf, 1,5 mm AISI 304 insulated frame, 1 mm skin, Fermod 920/921 latch, kick plate = door-width × 300/800 mm; freeze variant adds heating cables + a cast-in aluminium bottom rail = a GEOMETRIC delta; HONEST NEGATIVE: datasheets publish a MAXIMUM and no nominal size, so a chosen 1.20 × 2.20 m leaf is [INFER]/med, never high. Sectional/roll-up/security siblings NOT covered → G69)
+| medium | G70 — The other three `almacenamiento` assets: boltless shelving (level pitch, upright angle/gauge, chipboard deck), structural mezzanine (column grid, joist depth, deck build-up, handrail heights), stackable metal tote — same axis as G68, different subjects, needs its own preserved sources (NEW, from B58) | manufacturer catalogues (web) | pending |
+| medium | G69 — The other three `puertas` assets: sectional overhead door (panel height, track geometry), roll-up shutter (curtain profile pitch, drum box, side guides), industrial security door (leaf gauge, push-bar) — same axis as G67, different subjects, needs its own preserved sources (NEW, from B57) | manufacturer datasheets (web) | pending |
+| high | G68 — Warehouse STORAGE dimensional reference for the catalog build: selective pallet racking (rack depth vs pallet, beam lengths, beam/upright profile sizes, hole pattern, compartment heights, RAL colours) anchored on the EUR pallet, plus the shelving/mezzanine/tote siblings (run 10) | manufacturer catalogues (web, preserved) | **covered → [Block 58]** (EUR pallet EN 13698-1 800 × 1,200 × 144 mm is the sizing anchor; CORE FINDING: rack depth 1,050 mm under a 1,200 mm pallet — the pallet overhangs 75 mm each side, so a frame deeper than the pallet reads as shelving; beam lengths 1,800-3,900 mm, profile number = section height 80-140 mm, hole pattern 50:50, beams RAL 5010 blue on galvanized/RAL 7037 uprights; DGUV 108-007 forbids the single bay — row ≥ 3 bays, ≥ 2 levels, compartment ≤ 2,500 mm; Dexion brochure REJECTED as non-dimensional and recorded. Shelving/mezzanine/tote siblings NOT covered → G70)
 
 ## Iteration history
 
@@ -152,6 +169,9 @@ blocked_open: 0
 | 49 | 2026-08-07 | G62 QEM mesh simplification (run 9); premise CORRECTED — SimplifyModifier is Melax 1998 then a meshopt wrapper, not hand-rolled QEM | B49 | inline (constraint: single-block reopen executor; web-primary DESIGN/APPLIED block, 5 NEW sources preserved+hashed before citing — Garland-Heckbert 1997 paper PDF, three.js SimplifyModifier dev+r160, meshoptimizer README+simplifier.cpp) · scout: CERTIFIABLE-NOW | 0 (forward gaps G63/G64/G66 already queued; documentation half of G41 supplied) |
 | 50 | 2026-08-07 | G63 isosurfaces: marching cubes vs dual contouring (run 9) | B50 | inline (constraint: single-block reopen executor; web-primary DESIGN/APPLIED block, 6 NEW sources preserved+hashed before citing — three.js MarchingCubes.js, Bourke polygonise, Wikipedia MC, Ju-et-al 2002 DC paper PDF, boris-the-brave DC tutorial, isosurface npm README) · scout: CERTIFIABLE-NOW | 0 (forward gaps G64/G66 already queued) |
 | 51 | 2026-08-07 | G64 curves & surfaces: Bézier/Catmull-Rom/NURBS (run 9) | B51 | inline (constraint: single-block reopen executor; source+web-primary DESIGN/APPLIED block, 13 sources preserved+hashed before citing — 9 three.js source files [Curve/Interpolations/CatmullRomCurve3/{Cubic,Quadratic}BezierCurve3/TubeGeometry/NURBS{Curve,Surface,Utils}], Wikipedia Bézier/centripetal-CatmullRom/NURBS, Yuksel-2011 centripetal PDF) · scout: CERTIFIABLE-NOW | 0 (forward gap G66 already queued) |
+| 54 | 2026-08-08 | G68 warehouse STORAGE dimensional reference — selective pallet racking (run 10) | B58 | inline (constraint: session directive — no sub-agents; doc-primary EVIDENCE block, 5 NEW sources preserved+hashed before citing — SSI SCHÄFER chapter extracts PR 350 + PR 600, Dexion P90 brochure [REJECTED, recorded], mecalux euro-pallet, Wikipedia EUR-pallet) · scout: CERTIFIABLE-NOW ×2, INSUFFICIENT ×1 (Dexion) | 1 (G70 — shelving/mezzanine/tote siblings) |
+| 53 | 2026-08-08 | G67 industrial DOOR dimensional + construction reference (run 10 — NEW AXIS) | B57 | inline (constraint: session directive — no sub-agents; web+doc-primary EVIDENCE block, 3 NEW manufacturer datasheets preserved+hashed+text-extracted before citing — DAN-doors MH1001K/MH1001F/MH0601K; 2 web checks dan-doors.dk MH1002K + fermod.com) · scout: CERTIFIABLE-NOW | 1 (G69 — sectional/roll-up/security door siblings) |
+| — | — | ARCHIVE AUDIT: iterations for B53-B56 (DOCUMENT-mode §20 captures) were never appended to this table; they are recorded in the Coverage section instead. Noted, not back-filled. | B53-B56 | — | — |
 | 52 | 2026-08-07 | G66 procedural placement: poisson-disk/blue-noise (Bridson 2007) + WFC + L-systems (run 9 — LAST read-only gap) | B52 | inline (constraint: single-block reopen executor; web+source-primary DESIGN/APPLIED block, 8 NEW sources preserved+hashed before citing — Bridson SIGGRAPH07 PDF, kchapelier poisson-disk-sampling + fast-2d READMEs, mxgmn WaveFunctionCollapse + kchapelier JS-port READMEs, three.js MeshSurfaceSampler.js, nylki lindenmayer README, Wikipedia L-system; corpus scatter grounded [CERT] hotel-realista-ensamblado.html) · scout: CERTIFIABLE-NOW | 0 (RUN 9 read-only set EXHAUSTED = STOP; G41 requires-execution remains) |
 
 **RUN 4 gaps complete** (G22-G28, all covered). **RUN 5 COMPLETE** (G29-G32 — HVAC domain,
