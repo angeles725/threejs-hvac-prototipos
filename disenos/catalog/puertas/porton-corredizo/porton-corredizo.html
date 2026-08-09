@@ -1,0 +1,363 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — puertas/porton-corredizo · CANTILEVER sliding gate, 5.00 m clear opening.
+  Built from disenos/catalog/shell-template.html. Contract: __portonCorredizoApp.runtime +
+  __qaRenderInfo + data-app-ready, render-on-demand, frozen shadows (autoUpdate=false, 1024), DPR<=2.
+
+  Dimensional evidence: research/threejs-block69.md (Hoover installation manual + Quiko design guide,
+  both preserved and token-checked).
+
+  THE TWO THINGS THIS ASSET EXISTS TO GET RIGHT, and both are things a modeller builds backwards:
+   1. NOTHING TOUCHES THE GROUND under the opening. No track across the road, no wheel under the
+      leading edge — that is a ROLLING gate, a different product. The daylight under the leading half
+      IS the product (block69 §69.1).
+   2. THE COUNTERBALANCE IS NOT FILLED IN. Half the leaf carries no mesh at all: "The counterbalance
+      is not stretched with chain link as it is typically behind the rest of the fence… designed for
+      structural integrity only". Filling it doubles the visual mass and hides the bracing that is the
+      tail's only reason to exist (block69 §69.2).
+
+  The diamond-mesh generator is reused verbatim from almacenamiento/jaula-seguridad — same mechanism,
+  second use, which is the argument for extracting it to the design3d library.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portón corredizo cantilever — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">PORTÓN CORREDIZO CANTILEVER — vano libre 5.00 m, contrapeso 2.50 m (50%)</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· acero galvanizado desnudo · hormigón · motorreductor pintado</span></div>
+  <div><span class="dim">hoja 7.50 × 2.00 m · bastidor RHS 60×40×3 · postes 4" (0.102 m) · viga de cimiento 0.45 × 0.38 m</span></div>
+  <div><span class="dim">NADA toca el suelo en el vano: sin riel en la calzada ni rueda delantera — eso sería un portón RODANTE</span></div>
+  <div><span class="dim">el contrapeso NO lleva malla: vive detrás de la cerca y es solo estructura</span></div>
+  <div><span class="pass" id="passLabel">PASE: MATERIALS</span> <span class="dim" id="viewLabel">· vista neutral</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnOpen">ABRIR</button>
+  <button id="btnMesh" class="on">MALLA</button>
+  <button id="btnFence" class="on">CERCA</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · research/threejs-block69.md) ----------
+const OPEN_W  = 5.00;                 // [CERT-web] the ceiling of the certified 60x40x3 RHS rule
+const TAIL    = 2.50;                 // [CERT-doc] "counter balance should be 1/2 the length of the
+                                      //            gate opening"; [CERT-web] 40-50% band, top of it
+const LEAF_L  = OPEN_W + TAIL;        // 7.50 m
+const LEAF_H  = 2.00;                 // [INFER] inside the manual's "6' high gates and shorter"
+const CLEAR_Y = 0.100;                // [INFER] daylight under the leaf — the product itself (§69.1)
+const RHS_W = 0.060, RHS_D = 0.040;   // [CERT-web] "60x40x3mm RHS" main frame perimeter
+const BRACE_PITCH = 1.500;            // [CERT-doc] "5' spacing is adequate" (1.524 m), rounded
+const POST_D  = 0.102;                // [CERT-doc] 4" O.D. roller posts for openings up to 20 ft
+const POST_H  = 2.400;
+const FDN_D = 0.450, FDN_W = 0.380;   // [CERT-web] "400-500mm deep and 350-400mm wide"
+const RAIL_H = 0.075, RAIL_W = 0.070; // [INFER] the rail welded to the frame's lower member
+const APER = 0.050, WIRE = 0.0030;    // [INFER] chain-link infill, wire at a true chain-link gauge
+const S = APER * Math.SQRT2;
+const RACK_PITCH = 0.01257;           // [INFER] module-4 rack: pi x 4 mm
+const X_GATE = -OPEN_W/2, X_CATCH = OPEN_W/2;   // gate post / catch post
+const CAR_X = [-3.00, -4.60];         // carriages, INSIDE the span the leaf covers in BOTH states
+const FDN_X0 = -(OPEN_W/2 + LEAF_L) - 0.10, FDN_X1 = X_GATE + 0.10;   // full travel path (§69.2)
+
+// The carriages must stay under the leaf whether the gate is open or closed, or the panel is
+// cantilevered off nothing. Closed the leaf covers [-5.00, +2.50]; open it covers [-10.00, -2.50];
+// the intersection is [-5.00, -2.50] and BOTH carriages must live inside it.
+for (const cx of CAR_X) {
+  console.assert(cx <= X_GATE - 0.1 && cx >= X_GATE - TAIL,
+    `carriage ${cx} leaves the leaf unsupported in one of the two states`);
+}
+console.assert(Math.abs(TAIL / OPEN_W - 0.5) < 1e-9, 'counterbalance is not 50% of the opening');
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 18, 52);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+// LOOK-DEV EVIDENCE SET (GATES.md §Capture). No `reference-match` view: the evidence is two textual
+// installation documents, no photographs — the spec records p6_comparison: spec-only.
+const VIEWS = {
+  // MEASURED, and then measured AGAIN after the pre-look, because the first measurement was green on
+  // a bad picture. Two corrections the arithmetic alone did not catch:
+  //  · SIDE. The camera sat on the FENCE side, so the fence stood between the eye and the
+  //    counterbalance — the one thing the tail is supposed to be seen against. It now views from the
+  //    approach (road) side, with the fence line BEHIND the tail where it belongs.
+  //  · CRITERION. Maximising the bbox rectangle in NDC rewarded a steep DIAGONAL: a long thin
+  //    subject seen end-on has a huge bbox and a thin actual footprint, so the frame scored 61% while
+  //    reading as a fence receding to the horizon rather than as a gate. The search now forces a
+  //    near-perpendicular azimuth and an explicitly CENTRED result, and takes 41% honestly.
+  // Framing envelope = the leaf and its posts (7.60 x 2.45 m). The foundation beam and the fence are
+  // a ground-level STRIP that is allowed to run out of frame, like a road: they are not the subject.
+  // Result: ndcX -0.80..+0.90, ndcY -0.43..+0.54, centre (+0.05,+0.06), top 183 px clear of the HUD.
+  neutral: { pos:[-2.93, 4.42, -9.52], target:[-1.25, 1.00, 0.00], fov:32, label:'· vista neutral' },
+  // Low and close on the leading edge, where the two claims of this asset live: daylight under the
+  // leaf, and galvanized steel that must not collapse to flat grey.
+  grazing: { pos:[4.30, 0.72, -3.30], target:[1.55, 0.55, 0.00], fov:34,
+             label:'· vista grazing (holgura bajo la hoja + galvanizado)' },
+  // KINEMATIC EVIDENCE (GATES.md §Capture): an asset with an animation channel owes captures at >=2
+  // states. It is also the ONLY state in which the counterbalance rule is legible — with the leaf
+  // parked you can see 2.50 m of tail against a 5.00 m clear opening. The pre-look caught that the
+  // hero camera cuts the parked leaf clean off the right edge, so this view is framed on the FULL
+  // travel envelope (12.60 m), which costs occupancy (27%) and buys the evidence the spec claims.
+  abierto: { pos:[-1.00, 7.23, -15.58], target:[-3.75, 1.00, 0.00], fov:32, open:true,
+             label:'· vista ABIERTO (evidencia cinemática: contrapeso 50% del vano)' },
+};
+const VIEW = VIEWS[new URLSearchParams(location.search).get('view')] || VIEWS.neutral;
+const camera = new THREE.PerspectiveCamera(VIEW.fov, innerWidth/innerHeight, 0.1, 300);
+const CAM_TARGET = new THREE.Vector3(...VIEW.target);
+camera.position.set(...VIEW.pos);
+camera.lookAt(CAM_TARGET);
+document.getElementById('viewLabel').textContent = VIEW.label;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.copy(CAM_TARGET);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// BARE galvanized steel on a VERTICAL subject: the specular term comes from the IBL, never from a
+// fill (ONBOARD + LEARNINGS 2026-08-07 equipos-library). env 2.15 + hemisphere + a FRONTAL
+// directional fill + roughness ~0.30 is the measured headless recipe; metalness stays ~0.92.
+scene.environmentIntensity = 2.15;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(8, 11, -9); sun.castShadow = true;   // key on the APPROACH side, with the camera
+sun.shadow.mapSize.set(1024,1024);
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.05;   // long thin members on a big ground plane
+sun.shadow.camera.left=-11; sun.shadow.camera.right=11; sun.shadow.camera.top=8; sun.shadow.camera.bottom=-8;
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 40;
+scene.add(sun);
+const frontFill = new THREE.DirectionalLight(0xeaf2ff, 0.9);   // frontal, camera side
+frontFill.position.set(7, 2.6, -10);        // frontal = camera side, per the bare-metal recipe
+scene.add(frontFill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(80,80),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: galvanized steel = BARE metal (0.9-1.0); concrete and the
+// painted gear-motor housing = DIELECTRIC (0.0). Near-binary, no middle band.
+// ============================================================================
+const matSteel = new THREE.MeshStandardMaterial({ color:0xbfc4c6, metalness:0.92, roughness:0.30 });
+const matMesh  = new THREE.MeshStandardMaterial({ color:0xb2b7ba, metalness:0.92, roughness:0.34 });
+const matRail  = new THREE.MeshStandardMaterial({ color:0x9aa0a4, metalness:0.92, roughness:0.38 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x2b3036, metalness:0.0,  roughness:0.65 });
+const matConc  = new THREE.MeshStandardMaterial({ color:0x6d7176, metalness:0.0,  roughness:0.92 });
+const matMotor = new THREE.MeshStandardMaterial({ color:0xd9a21c, metalness:0.0,  roughness:0.55 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Everything under `root`.
+// ============================================================================
+const root = new THREE.Group();
+const dummy = new THREE.Object3D();
+const gate  = new THREE.Group();     // the whole leaf; ABRIR translates this
+const infill = new THREE.Group();    // chain-link on the LEADING 5.00 m only
+const fence  = new THREE.Group();    // the fence line the counterbalance hides behind
+
+const box = (parent,w,h,d,mat,x,y,z)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+  m.castShadow=m.receiveShadow=true; m.position.set(x,y,z); parent.add(m); return m; };
+const cyl = (parent,r,h,seg,mat,x,y,z,rx=0,rz=0)=>{ const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg),mat);
+  m.castShadow=m.receiveShadow=true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); parent.add(m); return m; };
+
+// --- diamond mesh, reused from almacenamiento/jaula-seguridad (block68 §68.5) ---
+const Z_AXIS = new THREE.Vector3(0,0,1);
+function meshPanel(out, panelMatrix, W, H){
+  const q=new THREE.Quaternion(), pos=new THREE.Vector3(), scl=new THREE.Vector3();
+  const push=(u0,u1,cFn,ang)=>{
+    if (u1-u0 < 0.02) return;
+    const uc=(u0+u1)/2;
+    pos.set(uc-W/2, cFn(uc)-H/2, 0); q.setFromAxisAngle(Z_AXIS, ang); scl.set((u1-u0)*Math.SQRT2,1,1);
+    out.push(panelMatrix.clone().multiply(new THREE.Matrix4().compose(pos,q,scl)));
+  };
+  for(let c=-W;c<=H;c+=S)   push(Math.max(0,-c), Math.min(W,H-c), u=>u+c,  Math.PI/4);
+  for(let c=0;c<=W+H;c+=S)  push(Math.max(0,c-H), Math.min(W,c),  u=>c-u, -Math.PI/4);
+}
+const panelM = (x,y,z)=> new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),
+  new THREE.Quaternion(), new THREE.Vector3(1,1,1));
+const instFrom = (mats, geo, mat, parent)=>{
+  const im=new THREE.InstancedMesh(geo, mat, mats.length);
+  im.castShadow=true; mats.forEach((m,i)=>im.setMatrixAt(i,m));
+  im.instanceMatrix.needsUpdate=true; parent.add(im); return im;
+};
+
+// --- THE LEAF. Local x runs from the leading edge (0) back into the tail (-LEAF_L). ---
+{
+  const yTop = CLEAR_Y + LEAF_H, yBot = CLEAR_Y + RHS_W/2;
+  // perimeter: top and bottom rails run the FULL leaf, including the tail
+  box(gate, LEAF_L, RHS_W, RHS_D, matSteel, -LEAF_L/2, yTop, 0);
+  box(gate, LEAF_L, RHS_W, RHS_D, matSteel, -LEAF_L/2, yBot, 0);
+  box(gate, RHS_D, LEAF_H, RHS_D, matSteel, -RHS_D/2, CLEAR_Y + LEAF_H/2, 0);            // leading stile
+  box(gate, RHS_D, LEAF_H, RHS_D, matSteel, -LEAF_L + RHS_D/2, CLEAR_Y + LEAF_H/2, 0);   // tail end
+  box(gate, RHS_D, LEAF_H, RHS_D, matSteel, -OPEN_W, CLEAR_Y + LEAF_H/2, 0);             // infill/tail joint
+  // vertical bracing at the certified pitch, across the whole leaf
+  for(let x = -BRACE_PITCH; x > -LEAF_L + 0.1; x -= BRACE_PITCH)
+    box(gate, RHS_D*0.7, LEAF_H - RHS_W, RHS_D*0.7, matSteel, x, CLEAR_Y + LEAF_H/2, 0);
+  // the TAIL is a braced open frame: diagonals, and NO infill (§69.2)
+  {
+    const x0 = -LEAF_L + RHS_D, x1 = -OPEN_W - RHS_D;
+    const seg = (x1 - x0) / 2;
+    for(let i=0;i<2;i++){
+      const cxm = x0 + seg*(i+0.5);
+      const len = Math.hypot(seg, LEAF_H - RHS_W);
+      const ang = Math.atan2(LEAF_H - RHS_W, seg) * (i % 2 ? 1 : -1);
+      const d = new THREE.Mesh(new THREE.BoxGeometry(len, RHS_D*0.6, RHS_D*0.6), matSteel);
+      d.castShadow = true; d.position.set(cxm, CLEAR_Y + LEAF_H/2, 0); d.rotation.z = ang;
+      gate.add(d);
+    }
+  }
+  // the rail welded along the lower member — the carriages' rollers run INSIDE this
+  box(gate, LEAF_L, RAIL_H, RAIL_W, matRail, -LEAF_L/2, CLEAR_Y - RAIL_H/2, 0);
+  // drive rack under the rail, module 4
+  {
+    const n = Math.floor(LEAF_L / RACK_PITCH);
+    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(0.005, 0.010, 0.016), matDark, n);
+    im.castShadow = true;
+    for(let i=0;i<n;i++){ dummy.position.set(-0.05 - i*RACK_PITCH, CLEAR_Y - RAIL_H - 0.005, RAIL_W/2 + 0.010);
+      dummy.rotation.set(0,0,0); dummy.scale.set(1,1,1); dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix); }
+    im.instanceMatrix.needsUpdate = true; gate.add(im);
+    box(gate, LEAF_L, 0.014, 0.016, matDark, -LEAF_L/2, CLEAR_Y - RAIL_H - 0.016, RAIL_W/2 + 0.010);
+  }
+  // chain-link infill on the LEADING 5.00 m ONLY
+  {
+    const wires = [];
+    meshPanel(wires, panelM(-OPEN_W/2, CLEAR_Y + LEAF_H/2, 0), OPEN_W - RHS_D, LEAF_H - RHS_W);
+    instFrom(wires, new THREE.BoxGeometry(1, WIRE, WIRE), matMesh, infill);
+    gate.add(infill);
+  }
+}
+// CLOSED by default; the `abierto` evidence view boots the leaf parked, so a blind reviewer driving
+// the page BY URL sees the same state a human sees after clicking (GATES.md: the capture URL is a
+// first-class code path — assert the state ON LOAD, not after simulated interaction).
+gate.position.x = VIEW.open ? X_CATCH - OPEN_W : X_CATCH;
+root.add(gate);
+
+// --- posts, carriages, guide rollers, foundation ---
+{
+  cyl(root, POST_D/2, POST_H, 16, matSteel, X_GATE,  POST_H/2, 0);        // gate post
+  cyl(root, POST_D/2, POST_H, 16, matSteel, X_CATCH, POST_H/2, 0);        // catch post
+  cyl(root, POST_D/2*1.15, 0.05, 16, matSteel, X_GATE,  POST_H, 0);
+  cyl(root, POST_D/2*1.15, 0.05, 16, matSteel, X_CATCH, POST_H, 0);
+  // catch fork: the leading edge is CAUGHT, not landed (§69.4-4)
+  box(root, 0.10, 0.22, 0.030, matSteel, X_CATCH - 0.08, CLEAR_Y + LEAF_H*0.55, -0.055);
+  box(root, 0.10, 0.22, 0.030, matSteel, X_CATCH - 0.08, CLEAR_Y + LEAF_H*0.55,  0.055);
+  // guide rollers at the TOP of the gate post — without them a bottom-supported panel falls over
+  for(const sz of [-1, 1])
+    cyl(root, 0.035, 0.09, 12, matDark, X_GATE, CLEAR_Y + LEAF_H - 0.12, sz*0.075);
+  box(root, 0.16, 0.06, 0.22, matSteel, X_GATE, CLEAR_Y + LEAF_H - 0.06, 0);
+  // foundation beam: runs the FULL travel path, opening PLUS counterbalance (§69.2)
+  box(root, FDN_X1 - FDN_X0, 0.06, FDN_W, matConc, (FDN_X0 + FDN_X1)/2, 0.03, 0);
+  // carriages
+  for(const cx of CAR_X){
+    box(root, 0.26, 0.16, 0.24, matDark, cx, 0.06 + 0.08, 0);
+    for(const sz of [-1, 1]) for(const dx of [-0.075, 0.075])
+      cyl(root, 0.038, 0.030, 14, matRail, cx + dx, CLEAR_Y - RAIL_H/2, sz*(RAIL_W/2 + 0.016), Math.PI/2);
+  }
+  // gear motor beside the first carriage
+  box(root, 0.24, 0.34, 0.20, matMotor, CAR_X[0] + 0.42, 0.06 + 0.17, 0.10);
+  box(root, 0.10, 0.06, 0.06, matDark,  CAR_X[0] + 0.42 - 0.14, 0.06 + 0.14, 0.10);
+}
+
+// --- the fence line the counterbalance hides behind (§69.2) ---
+{
+  const FZ = 0.62, FX0 = FDN_X0, FX1 = X_GATE - 0.20, FH = LEAF_H;
+  for(let x = FX0; x <= FX1 + 0.01; x += 2.50) cyl(fence, 0.030, FH, 12, matSteel, x, FH/2, FZ);
+  box(fence, FX1 - FX0, 0.035, 0.035, matSteel, (FX0 + FX1)/2, FH - 0.04, FZ);
+  const w = [];
+  meshPanel(w, panelM((FX0 + FX1)/2, FH/2, FZ), FX1 - FX0, FH - 0.08);
+  instFrom(w, new THREE.BoxGeometry(1, WIRE, WIRE), matMesh, fence);
+  root.add(fence);
+}
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED. ABRIR is a TRANSLATION (no geometry appears or disappears); MALLA
+// and CERCA hide groups nothing rests on, so no toggle can leave a piece floating.
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+let isOpen = !!VIEW.open;
+const btnOpen = document.getElementById('btnOpen');
+btnOpen.classList.toggle('on', isOpen);   // the HUD must not contradict the state it booted into
+btnOpen.onclick = ()=>{ isOpen = !isOpen;
+  gate.position.x = isOpen ? X_CATCH - OPEN_W : X_CATCH;   // travel = the clear opening, exactly
+  btnOpen.classList.toggle('on', isOpen);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+const toggle = (id, obj)=>{ const b=document.getElementById(id);
+  b.onclick = ()=>{ obj.visible = !obj.visible; b.classList.toggle('on', obj.visible);
+    renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle('btnMesh', infill);
+toggle('btnFence', fence);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__portonCorredizoApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__porton-corredizoApp'] = globalThis.__portonCorredizoApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

@@ -133,6 +133,8 @@
 | B66-locker-dims/link51-locker-handbook.pdf | B66-locker-dims | https://total-locker-service.com/Doc/Link51-product-infomation.pdf | 2026-08-09T04:58:33Z | 8a6fab11995c2d6c5dc124911531eface58293a1bee6e4c994173bbeac4ba93f | B66 |
 | B67-drive-in-dims/mecalux-drive-in-racking | B67-drive-in-dims | https://www.mecalux.com/warehouse-racking-and-shelving/drive-in-racking | 2026-08-09T05:56:00Z | aa78e19382057678c782613fc1de8e8acefb0927b68d123307d40ca0a49fda49 | B67 |
 | B68-cage-dims/ufgs-10-22-13-wire-mesh-partitions.pdf | B68-cage-dims | https://www.wbdg.org/FFC/DOD/UFGS/UFGS%2010%2022%2013.pdf | 2026-08-09T06:15:38Z | bc55c482fed315aeedf8e4c4db4e772e37d32a8df72d5e3c8ae4bdd36883a245 | B68 |
+| B69-gate-dims/hoover-cantilever-gate-installation.pdf | B69-gate-dims | https://www.hooverfence.com/mas_assets/theme/hooverfence/pdfs/cantilever-gate-installation.pdf | 2026-08-09T06:55:56Z | 1c4971ef4a3881257d41faef3698b912effdccd129b596e35a3e90a1bc637ce1 | B69 |
+| B69-gate-dims/quiko-cantilever-guide | B69-gate-dims | https://www.quikoitaly.com/en/cantilever-sliding-gates-complete-installation-guide-and-design-insights/ | 2026-08-09T06:55:59Z | 4df67dd44494eb74d80e878cece424f7bdbd4f98468b3315fb79132fce0193f0 | B69 |
 
 ## Structure
 
