@@ -79,6 +79,13 @@
 | web-snapshots/raw.githubusercontent.com_w8r_martinez_master_package.json.md | web-snapshot | https://raw.githubusercontent.com/w8r/martinez/master/package.json | 2026-08-08T03:00:20Z | acc0cc5ae78af67e04cfa6b466f6b24d33e87780d45fc2a12d0fd238e9bfd481 | B55 |
 | web-snapshots/raw.githubusercontent.com_xaviergonz_js-angusj-clipper_master_package.json.md | web-snapshot | https://raw.githubusercontent.com/xaviergonz/js-angusj-clipper/master/package.json | 2026-08-08T03:00:20Z | 0ff648cb2dd855eb05e06d54a51ca746f9ce47404b3798657bb4cfb19598d837 | B55 |
 | web-snapshots/raw.githubusercontent.com_mfogel_polygon-clipping_master_package.json.md | web-snapshot | https://raw.githubusercontent.com/mfogel/polygon-clipping/master/package.json | 2026-08-08T03:00:20Z | daf2df6d80ba8c8c3abd17f71638f2f7a486961326e880cf3af511d89cbff924 | B55 |
+| B57-catalog-dims/ssi-schaefer-pallet-racking-2022.pdf | B57-catalog-dims | https://www.ssi-schaefer.com/resource/blob/1444728/63e9e96a4c9504c0477820c384e37498/pallet-racking-systems-dam-download-en-15750--data.pdf | 2026-08-09T01:11:22Z | a51d855793ddcf6302b639496c6bd3b2726ed69175856b0181c41e3bddad20e7 | |
+| B57-catalog-dims/dan-doors-MH1001K.pdf | B57-catalog-dims | https://dan-doors.dk/wp-content/uploads/EN-Datablad-MH1001K.pdf | 2026-08-09T01:11:34Z | 87cbd42ef2c9609f3496eed718e6967917b4e29a07217e20a118503ec0efc012 | B57 |
+| B57-catalog-dims/dan-doors-MH1001F.pdf | B57-catalog-dims | https://dan-doors.dk/wp-content/uploads/EN-Datablad-MH1001F.pdf | 2026-08-09T01:11:35Z | 8a1a3f9c507beb5938531d52105d60329b22a184ccdf4fc9a96f41d9b46deacf | B57 |
+| B57-catalog-dims/dan-doors-MH0601K.pdf | B57-catalog-dims | https://dan-doors.dk/wp-content/uploads/EN-Datablad-MH0601K.pdf | 2026-08-09T01:11:36Z | c4f1749ee27f1dfb88cf40da049b48761203fd3482d1b0bbdeedafa82bf7f1a8 | B57 |
+| B57-catalog-dims/dexion-p90-silverline.pdf | B57-catalog-dims | https://www.stodec.com/pdf/Racking/DexionP90Silverline.pdf | 2026-08-09T01:13:36Z | e8fe69870a651bbb0f1dc40e4c2a34312ac7878e89d420895a1c8aef6b777d75 | |
+| B57-catalog-dims/mecalux-euro-pallet | B57-catalog-dims | https://www.mecalux.com/warehouse-manual/pallet/euro-pallet | 2026-08-09T01:13:37Z | c963d7fc9cd3c670e16fc2bbedb032aa7b61944027bd437ea5d0e78f0c7f90fb | |
+| B57-catalog-dims/ssi-schaefer-pallet-racking-2018.pdf | B57-catalog-dims | https://www.ssi-schaefer.com/resource/blob/490780/10112b951333e455c0a64a8d8fc91292/d4-d27-general-catalogue-chapter-d-pallet-racking-systems-pdf-dam-download-en-15831--data.pdf | 2026-08-09T01:14:36Z | 04576a0b7da0fab9c51e29547d1e9ba5000519854e3306eaa25ccf93369357e4 | |
 
 ## Structure
 
