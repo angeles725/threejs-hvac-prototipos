@@ -1,0 +1,172 @@
+# DesignSpec — welded-mesh machine guarding with an interlocked access door
+# Catalog family `seguridad` (worktree catalog-retail-lab).
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: guarda-maquina
+family: seguridad
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # a 4.2 mm wire on a 40 mm pitch is sub-voxel: built as segments
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 14 -> moderate.
+  scores: {silhouette: 2, components: 2, hierarchy: 2, repetition: 3,
+           material_layers: 1, detail: 2, occlusion: 1, action_readiness: 1}
+  tier: moderate
+  notes: >
+    repetition 3: ~300 wires across five panels, collected into TWO shared instanced batches (plus
+    two more inside the door leaf, which must move independently). The aperture is the functional
+    dimension — it is what sets how far the guard has to stand from the hazard.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    instanced_wire: "disenos/catalog/retail/carrito-compras/ (wire-as-instances pattern)"
+    swing_direction: "disenos/catalog/seguridad/barandal/ (a safety swing direction is a requirement)"
+
+references:
+  - source: "fixed/movable guard practice (EN ISO 14120 + reach-distance rules of EN ISO 13857)"
+    evidences: >
+      [INFER] The standards are RECALLED, not preserved as documents in sources/ — treat every value
+      as inference. The rules modelled: a guard tall enough to prevent reaching over (2.0 m here),
+      a floor gap small enough that it cannot be crawled or reached under, an aperture small enough
+      that the guard can stand close to the hazard, and an access door whose interlock signals the
+      machine when it opens.
+    suitability: partial
+
+dimensions_real:
+  height_m:      {value: 2.00, confidence: med}    # [INFER] guard height
+  floor_gap_m:   {value: 0.05, confidence: med}    # [INFER] deliberately small
+  bay_w_m:       {value: 1.00, confidence: low}    # [INFER] panel width
+  bays:          {value: 4,    confidence: low}    # [INFER] plus one corner return
+  mesh_pitch_m:  {value: 0.04, confidence: med}    # [INFER] 40 mm aperture
+  wire_d_m:      {value: 0.0084, confidence: low}  # [INFER]
+  post_mm:       {value: 45,   confidence: low}    # [INFER] profile post
+  frame_mm:      {value: 28,   confidence: low}    # [INFER] panel frame stock
+  door_w_m:      {value: 0.955, confidence: low}   # derived: bay - post
+  interlock_y_m: {value: 1.28, confidence: low}    # [INFER] switch head height
+
+hierarchy:
+  - name: root
+    children:
+      - name: posts           # 6 posts on baseplates + anchor bolts (incl. the corner return)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: mesh_batches    # two shared InstancedMeshes for all FIXED panels
+        pivot: [0, 0, 0]
+        animation: none
+      - name: frames          # coated border of each fixed panel
+        pivot: [0, 0, 0]
+        animation: none
+      - name: doorPivot       # door leaf: own frame + own two mesh batches; hinge on the LEFT post
+        pivot: [-0.978, 0, 0]
+        animation: swing
+        attachment:
+          parent_socket: door_post
+          contact_type: hinge
+          gap_tolerance: 0.003
+      - name: lock            # interlock switch head + cable gland on the closing post
+        pivot: [0, 0, 0]
+        animation: none
+      - name: signs           # warning plate on the adjacent panel (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: machine         # the hazard the guard exists for (togglable context)
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: post-yellow
+    family: painted-metal
+    color: "#d8b41e"
+    metalness: 0.0             # powder-coated profile -> dielectric
+    roughness: 0.50
+    evidence: "HANDBOOK §3.1 painted/coated 0.0-0.05"
+    confidence: 0.85
+  - id: mesh-wire
+    family: painted-metal
+    color: "#3b4147"
+    metalness: 0.0
+    roughness: 0.58
+    evidence: >
+      HANDBOOK §3.1 — guard mesh is coated, not bare. Lightened from the first pass: at 0x2b3036 the
+      grid read as one dark screen instead of an open mesh in the QA capture.
+    confidence: 0.8
+  - id: panel-frame
+    family: painted-metal
+    color: "#2f3439"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1"
+    confidence: 0.8
+  - id: interlock-body
+    family: plastic
+    color: "#e8a317"
+    metalness: 0.0
+    roughness: 0.45
+    evidence: "[INFER] moulded switch housing — dielectric, safety orange"
+    confidence: 0.75
+  - id: tongue-steel
+    family: bare-metal
+    color: "#b9bec2"
+    metalness: 0.92
+    roughness: 0.36
+    evidence: "HANDBOOK §3.1 bare-metal — the actuator tongue and the anchor bolts"
+    confidence: 0.8
+
+critical_features:
+  - id: aperture-and-gap
+    desc: >
+      A real 40 mm grid with a small floor gap. Both are safety dimensions: the aperture governs how
+      close the guard may stand to the hazard, and a large floor gap would defeat the guard entirely.
+    threshold: 0.78
+  - id: interlocked-door
+    desc: >
+      The door carries a tongue on its free edge and the closing post carries the switch head that
+      receives it — the pair that tells the machine the guard is open.
+    threshold: 0.78
+  - id: door-opens-away-from-the-hazard
+    desc: >
+      The leaf swings OUT of the guarded zone (the machine sits behind the fence). Certified by
+      review-puerta-abierta.png, not by the counts.
+    threshold: 0.78
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 80
+    tris: 20000
+  measured:             # SwiftShader headless capture, 1280x800 — COUNTS are valid, frame time is NOT
+    draws: 58
+    tris: 5078
+    geometries: 59
+    root_meshes: 57
+
+camera:
+  azimuth_deg: 55
+  elevation_deg: 12.6
+  fov: 38
+  target_y_m: 1.05
+  radius_m: 5.6
+
+lighting: house-rig + camera-side fill
+  # DOCUMENTED DEVIATION: wire mesh has no flat face to catch the upper IBL, so it needs a
+  # camera-side fill (1.05) with environmentIntensity 1.75, or the grid reads as grey haze.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ABRIR PUERTA"   # damped swing, outward, away from the machine
+  - "MÁQUINA"        # the guarded hazard (context)
+  - "SEÑALIZACIÓN"   # warning plate
+
+colorTarget:
+  # MEASURED from a rendered post face (headless SwiftShader capture at 1280x800): flattest 7x40
+  # strip found by scan on the coated profile, per-channel std 0.0.
+  srgb: [235, 219, 112]
+  deltaE00Max: 8
+  crop: "7x40+634+395"   # guard post face at 1280x800
