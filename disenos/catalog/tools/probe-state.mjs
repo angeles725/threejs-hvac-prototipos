@@ -58,6 +58,13 @@ const clicked = await send('Runtime.evaluate', {returnByValue:true, sessionId, e
      for(const b of ids){ const el=document.getElementById(b); if(el){ el.click(); hit.push(b); } }
      return {clicked:hit, missing:ids.filter(b=>!document.getElementById(b))}; })()`}, sessionId);
 await sleep(2500);                       // let any eased animation settle before the capture
+// Render-on-demand assets stop repainting once the eased animation ends, so with
+// preserveDrawingBuffer:false the swapchain holds a DISCARDED (black) buffer at capture time.
+// Force ONE render through the QA contract so captureScreenshot reads a live frame. A black PNG
+// is otherwise a probe artifact (INCONCLUSIVE), never a verdict that the asset is broken.
+await send('Runtime.evaluate', {returnByValue:true, sessionId, expression:
+  `(()=>{ const k=Object.keys(globalThis).find(x=>/^__.*App$/.test(x)&&globalThis[x]&&globalThis[x].runtime);
+     if(!k) return false; const r=globalThis[k].runtime; r.renderer.render(r.scene,r.camera); return true; })()`}, sessionId);
 const shot = await send('Page.captureScreenshot',{format:'png'},sessionId);
 writeFileSync(`${SHOT_DIR}/${slug}-${suffix}.png`, Buffer.from(shot.data,'base64'));
 console.log(JSON.stringify({target, buttons:clicked.result?.value, errors}, null, 2));

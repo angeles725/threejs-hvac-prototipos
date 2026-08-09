@@ -202,6 +202,13 @@ elige otra familia libre si queda, o detente.
   veredictos idénticos y confiados sin medir nada (gate verde sobre su propio defecto). SIEMPRE hashea
   Page.captureScreenshot (que sí compone), NUNCA el canvas. Si alguien reportó ausencias con canvas-hash,
   DESCARTA esos reportes, no los revises.
+- CAPTURA NEGRA POR BUFFER DESCARTADO (distinta del canvas-hash; artefacto de sonda, NO asset roto): incluso
+  Page.captureScreenshot puede salir NEGRO en assets render-on-demand. Con preserveDrawingBuffer=false, cuando
+  la animación suavizada termina ya nada repinta y el swapchain queda con un buffer DESCARTADO; la captura toma
+  ese frame muerto. El asset NO tiene culpa (su handler sí llama requestRender()). FIX en probe-state.mjs: forzar
+  UN render vía el contrato QA (buscar __<slug>App.runtime → r.renderer.render(r.scene,r.camera)) justo antes de
+  cada captureScreenshot. REGLA: una captura negra es NO CONCLUYENTE, igual que exit 2 (servidor caído); nunca es
+  veredicto de asset roto. Frecuencia ~1/40 capturas, intermitente (depende de cuándo asienta la animación).
 - MÉTODO NO-RENDER vs NO-PIXELS (distingue defecto de límite de vista, con control): por cada botón NO-default-on:
   hash → clic → hash. Si cambió = ok. Si NO cambió, CONTROL: fuerza renderer.render(scene,camera) y re-hashea;
   si ahora cambia = NO-RENDER (la escena mutó pero no se dibujó → falta requestRender(), DEFECTO decisivo); si
