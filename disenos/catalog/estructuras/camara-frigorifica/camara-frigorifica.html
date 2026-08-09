@@ -1,0 +1,378 @@
+<!doctype html>
+<!--
+  camara-frigorifica — catalog asset, family `estructuras`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  A cold room is a BUILDING made of insulated sandwich panel: the panel joint grid, the door set
+  and the unit cooler inside are what make it a cold room rather than a white box.
+  Door vocabulary and panel evidence: disenos/catalog/puertas/puerta-cuarto-frio (Block 57,
+  DAN-doors datasheets: 100 mm PIR leaf, 1.5 mm AISI 304 frame, Fermod latch, kick plate).
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cámara frigorífica — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Cámara frigorífica — panel sándwich 100 mm</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· puerta pivotante · evaporador · cortina de bandas</span></div>
+  <div class="dim">4.40 × 3.40 × 3.00 m exterior · 4.20 × 3.20 × 2.70 m interior</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">PUERTA</button>
+  <button id="btnCut">CORTE</button>
+  <button id="btnFan">EVAPORADOR</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const PT = 0.10;                            // [CERT-doc Block 57] 100 mm PIR sandwich panel
+const IW = 4.20, ID = 3.20, IH = 2.70;      // internal clear dimensions
+const OW = IW + 2*PT, OD = ID + 2*PT;       // external footprint
+const FLOOR_T = 0.12;                       // insulated floor panel + wearing screed
+const Y0 = FLOOR_T;                         // internal floor level
+const YT = Y0 + IH;                         // internal ceiling level
+const PANEL_MOD = 1.10;                     // panel module width -> the visible joint grid
+// door set, dimensions from the puerta-cuarto-frio spec [CERT-doc / INFER]
+const OPEN_W = 1.20, OPEN_H = 2.10, LEAF_W = 1.30, LEAF_H = 2.15, LEAF_T = 0.10;
+const FRAME_FACE = 0.09;
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 16, 52);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+// Elevation is high enough to look INTO the room when TECHO is off — a cold room whose interior
+// cannot be seen is just a white box, and the interior is where the asset earns its name.
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 9.4, AZ = 0.80, EL = 0.42;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.50 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.50, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.50, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.0;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(6, 9, 5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-6; sun.shadow.camera.right=6; sun.shadow.camera.top=6; sun.shadow.camera.bottom=-4;
+scene.add(sun);
+// VERTICAL-SUBJECT DEVIATION (design-spec.yaml `lighting`): the cladding is a coated FLAT panel
+// wall — the same case as puerta-cuarto-frio. Camera-side fill mirrored about the door-wall
+// normal (+Z). PBR values unchanged (HANDBOOK §3.1). NOT applicable to curved subjects.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.10);
+fill.position.set(-5.0, 3.6, 7.0);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+// Cold-room lamp (shadowless): the room is a closed white box, so with TECHO off its interior
+// would otherwise render as a black cavity. Slightly cool, as a cold-room luminaire reads.
+const roomLamp = new THREE.PointLight(0xdff0ff, 9, 6.5, 2);
+roomLamp.position.set(0.0, YT - 0.35, 0.0);
+scene.add(roomLamp);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Pre-painted sandwich panel is COATED -> dielectric 0.0. Only the door hardware, the
+//   evaporator casing, the condensing unit and the pipework are bare metal 0.9-1.0.
+//   NOTE: the three estructuras assets already in the catalog use intermediate metalness
+//   (0.35-0.7). That is the §3.1 violation, not a house style; this asset does not copy it.
+// ============================================================================
+const matPanel  = new THREE.MeshStandardMaterial({ color:0xe4e7e9, metalness:0.0,  roughness:0.58 });
+const matPanelIn= new THREE.MeshStandardMaterial({ color:0xeef1f2, metalness:0.0,  roughness:0.62 });
+const matJoint  = new THREE.MeshStandardMaterial({ color:0xc3c8cb, metalness:0.0,  roughness:0.66 });
+const matFloor  = new THREE.MeshStandardMaterial({ color:0x9aa0a2, metalness:0.0,  roughness:0.94 });
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xc6cacc, metalness:0.95, roughness:0.36 });
+const matSteelD = new THREE.MeshStandardMaterial({ color:0xa8aeb2, metalness:0.95, roughness:0.46 });
+const matGask   = new THREE.MeshStandardMaterial({ color:0x15181b, metalness:0.0,  roughness:0.88 });
+const matDark   = new THREE.MeshStandardMaterial({ color:0x1b1f23, metalness:0.0,  roughness:0.72 });
+const matBlade  = new THREE.MeshStandardMaterial({ color:0x2b3138, metalness:0.0,  roughness:0.45 });
+const matCopper = new THREE.MeshStandardMaterial({ color:0xf0a67a, metalness:1.0,  roughness:0.30 });
+const matLag    = new THREE.MeshStandardMaterial({ color:0x191c20, metalness:0.0,  roughness:0.92 });
+const matPvc    = new THREE.MeshStandardMaterial({ color:0xd8d2c4, metalness:0.0,  roughness:0.55,
+                                                   transparent:true, opacity:0.55, side:THREE.DoubleSide });
+const matPallet = new THREE.MeshStandardMaterial({ color:0x8a6a3f, metalness:0.0,  roughness:0.90 });
+const matBox    = new THREE.MeshStandardMaterial({ color:0xb8925a, metalness:0.0,  roughness:0.85 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=18)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+
+// --- floor: insulated panel + wearing screed, on a plinth ---
+const floor = new THREE.Group();
+put(floor, OW + 0.12, 0.06, OD + 0.12, matSteelD, 0, 0.03, 0);           // kerb / plinth
+put(floor, OW, FLOOR_T - 0.06, OD, matPanel, 0, 0.06 + (FLOOR_T - 0.06)/2, 0);
+put(floor, IW, 0.012, ID, matFloor, 0, Y0 + 0.006, 0);                   // internal wearing surface
+root.add(floor);
+
+// --- walls: the DOOR wall (+Z) is built around its opening; the other three are solid ---
+const walls = new THREE.Group();
+const jamb = OPEN_W/2 + FRAME_FACE, head = OPEN_H + FRAME_FACE;
+// +Z wall in pieces around the door opening. It lives in its own group because the CUTAWAY has
+// to take it away WITH the roof: dropping only the roof leaves the near wall standing between the
+// camera and everything the reveal exists to show (first capture showed exactly the upper 40 cm).
+const nearWall = new THREE.Group();
+put(nearWall, (OW/2 - jamb), IH, PT, matPanel, -(jamb + (OW/2 - jamb)/2), Y0 + IH/2, ID/2 + PT/2);
+put(nearWall, (OW/2 - jamb), IH, PT, matPanel,  (jamb + (OW/2 - jamb)/2), Y0 + IH/2, ID/2 + PT/2);
+put(nearWall, 2*jamb, IH - head, PT, matPanel, 0, Y0 + head + (IH - head)/2, ID/2 + PT/2);
+walls.add(nearWall);
+// the other three walls
+put(walls, OW, IH, PT, matPanel, 0, Y0 + IH/2, -(ID/2 + PT/2));
+put(walls, PT, IH, ID, matPanel, -(IW/2 + PT/2), Y0 + IH/2, 0);
+put(walls, PT, IH, ID, matPanel,  (IW/2 + PT/2), Y0 + IH/2, 0);
+// internal liner faces, so the inside is a lighter, cleaner white than the outside
+put(walls, IW, IH, 0.012, matPanelIn, 0, Y0 + IH/2, -(ID/2 - 0.006));
+put(walls, 0.012, IH, ID, matPanelIn, -(IW/2 - 0.006), Y0 + IH/2, 0);
+put(walls, 0.012, IH, ID, matPanelIn,  (IW/2 - 0.006), Y0 + IH/2, 0);
+// PANEL JOINT GRID — the single feature that says "sandwich panel" and not "rendered wall".
+// One InstancedMesh per wall orientation (real repetition, block54 §2.3).
+{
+  const nZ = Math.max(2, Math.round(OW / PANEL_MOD)), nX = Math.max(2, Math.round(OD / PANEL_MOD));
+  const vGeoZ = new THREE.BoxGeometry(0.02, IH, 0.014);
+  const vGeoX = new THREE.BoxGeometry(0.014, IH, 0.02);
+  const jz = new THREE.InstancedMesh(vGeoZ, matJoint, (nZ - 1) * 2);
+  const jx = new THREE.InstancedMesh(vGeoX, matJoint, (nX - 1) * 2);
+  let i = 0, k = 0;
+  for(let n = 1; n < nZ; n++){
+    const x = -OW/2 + n * (OW / nZ);
+    for(const sz of [-1, 1]){
+      _q.setFromEuler(new THREE.Euler(0,0,0));
+      // the near-face joints ride with the cutaway; park them out of sight instead of a 2nd mesh
+      _p.set(x, Y0 + IH/2, sz*(ID/2 + PT + 0.006));
+      jz.setMatrixAt(i++, _m.compose(_p, _q, _s));
+    }
+  }
+  for(let n = 1; n < nX; n++){
+    const z = -OD/2 + n * (OD / nX);
+    for(const sx of [-1, 1]){
+      _q.setFromEuler(new THREE.Euler(0,0,0));
+      _p.set(sx*(IW/2 + PT + 0.006), Y0 + IH/2, z);
+      jx.setMatrixAt(k++, _m.compose(_p, _q, _s));
+    }
+  }
+  jz.instanceMatrix.needsUpdate = true; jx.instanceMatrix.needsUpdate = true;
+  jz.castShadow = jx.castShadow = true;
+  walls.add(jz); walls.add(jx);
+}
+// corner trims
+for(const sx of [-1,1]) for(const sz of [-1,1])
+  put(walls, 0.06, IH + 0.04, 0.06, matSteelD, sx*(OW/2 - 0.03), Y0 + IH/2, sz*(OD/2 - 0.03));
+root.add(walls);
+
+// --- roof: removable ceiling panel set (TECHO) + external condensing unit sat on it ---
+const roof = new THREE.Group();
+put(roof, OW, PT, OD, matPanel, 0, YT + PT/2, 0);
+put(roof, IW - 0.04, 0.012, ID - 0.04, matPanelIn, 0, YT - 0.006, 0);        // internal ceiling face
+{ const nR = Math.max(2, Math.round(OD / PANEL_MOD));
+  const jr = new THREE.InstancedMesh(new THREE.BoxGeometry(OW, 0.014, 0.02), matJoint, nR - 1);
+  for(let n = 1; n < nR; n++){
+    _q.setFromEuler(new THREE.Euler(0,0,0));
+    _p.set(0, YT + PT + 0.007, -OD/2 + n * (OD / nR));
+    jr.setMatrixAt(n - 1, _m.compose(_p, _q, _s)); }
+  jr.instanceMatrix.needsUpdate = true; jr.castShadow = true; roof.add(jr); }
+root.add(roof);
+
+const cond = new THREE.Group();                                              // condensing unit on the roof
+const CX = -1.10, CZ = -0.55, CY = YT + PT;
+put(cond, 1.10, 0.10, 0.72, matSteelD, CX, CY + 0.05, CZ);                   // anti-vibration rails
+put(cond, 1.00, 0.62, 0.64, matSteel, CX, CY + 0.41, CZ);
+put(cond, 0.94, 0.02, 0.58, matDark, CX, CY + 0.72, CZ);
+const condFan = new THREE.Group(); condFan.position.set(CX, CY + 0.74, CZ);
+{ const bl = new THREE.InstancedMesh(new THREE.BoxGeometry(0.24, 0.014, 0.14), matBlade, 3);
+  for(let i=0;i<3;i++){ const a = i*Math.PI*2/3;
+    _q.setFromEuler(new THREE.Euler(0, a, 0.32));
+    _p.set(Math.cos(a)*0.16, 0, Math.sin(a)*0.16);
+    bl.setMatrixAt(i, _m.compose(_p, _q, _s)); }
+  bl.instanceMatrix.needsUpdate = true; bl.castShadow = true; condFan.add(bl); }
+cond.add(condFan);
+cyl(cond, 0.30, 0.03, matSteelD, CX, CY + 0.79, CZ, 0, 0, 20);               // fan guard ring
+root.add(cond);
+
+// --- refrigerant line set from the condensing unit down the wall to the evaporator ---
+const pipes = new THREE.Group();
+for(const [i, dz] of [[0, -0.14], [1, 0.02]]){
+  const r = i ? 0.026 : 0.018;
+  cyl(pipes, r + 0.014, CY - (YT - 0.40), matLag, -(IW/2 + PT + 0.12), (CY + YT - 0.40)/2, CZ + dz, 0, 0, 10);
+  cyl(pipes, r, 0.60, matCopper, -(IW/2 + PT + 0.12), YT - 0.55, CZ + dz, 0, 0, 10);
+}
+put(pipes, 0.10, 0.16, 0.34, matSteelD, -(IW/2 + PT + 0.12), YT - 0.90, CZ - 0.06);   // pipe cleat
+root.add(pipes);
+
+// --- interior: unit cooler (evaporator) high on the back wall, strip curtain, pallet load ---
+const guts = new THREE.Group();
+const EV_Y = YT - 0.42;
+put(guts, 1.30, 0.44, 0.46, matSteel, 0.30, EV_Y, -(ID/2 - 0.30));           // evaporator casing
+put(guts, 1.34, 0.05, 0.50, matSteelD, 0.30, EV_Y - 0.24, -(ID/2 - 0.30));   // drip tray
+put(guts, 1.22, 0.30, 0.06, matSteelD, 0.30, EV_Y, -(ID/2 - 0.30) + 0.24);   // finned face toward the room
+const evFans = [];
+for(const fx of [-0.10, 0.70]){
+  const g = new THREE.Group(); g.position.set(fx, EV_Y, -(ID/2 - 0.30) + 0.26);
+  { const bl = new THREE.InstancedMesh(new THREE.BoxGeometry(0.16, 0.012, 0.09), matBlade, 4);
+    for(let i=0;i<4;i++){ const a = i*Math.PI/2;
+      _q.setFromEuler(new THREE.Euler(0, 0, 0));
+      _p.set(Math.cos(a)*0.10, Math.sin(a)*0.10, 0);
+      const q2 = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, a + 0.35));
+      bl.setMatrixAt(i, _m.compose(_p, q2, _s)); }
+    bl.instanceMatrix.needsUpdate = true; bl.castShadow = true; g.add(bl); }
+  cyl(g, 0.17, 0.02, matSteelD, 0, 0, 0.03, Math.PI/2, 0, 18);
+  guts.add(g); evFans.push(g);
+}
+cyl(guts, 0.020, 0.90, matSteelD, 1.05, EV_Y - 0.30, -(ID/2 - 0.30), 0, Math.PI/2, 8);  // condensate drain
+// PVC strip curtain in the doorway: instanced strips, translucent
+{ const N = 9, w = OPEN_W / N;
+  const st = new THREE.InstancedMesh(new THREE.BoxGeometry(w * 0.94, OPEN_H - 0.10, 0.004), matPvc, N);
+  for(let i=0;i<N;i++){
+    _q.setFromEuler(new THREE.Euler(0, 0, 0));
+    _p.set(-OPEN_W/2 + (i + 0.5) * w, Y0 + (OPEN_H - 0.10)/2, ID/2 - 0.05);
+    st.setMatrixAt(i, _m.compose(_p, _q, _s)); }
+  st.instanceMatrix.needsUpdate = true; guts.add(st); }
+// a loaded pallet, so the room has a readable use and a human-scale reference
+put(guts, 1.20, 0.14, 0.80, matPallet, -1.10, Y0 + 0.07, 0.55);
+for(const [bx, bz, by] of [[-1.10, 0.55, 0.50], [-1.10, 0.55, 0.92]])
+  put(guts, 1.10, 0.40, 0.72, matBox, bx, Y0 + by, bz);
+root.add(guts);
+
+// --- door set: frame with gaskets + hinged leaf (puerta-cuarto-frio vocabulary) ---
+const frame = new THREE.Group();
+const FRAME_D = 0.14;
+put(frame, FRAME_FACE, head, FRAME_D, matSteel, -(OPEN_W/2 + FRAME_FACE/2), Y0 + head/2, ID/2 + PT/2);
+put(frame, FRAME_FACE, head, FRAME_D, matSteel,  (OPEN_W/2 + FRAME_FACE/2), Y0 + head/2, ID/2 + PT/2);
+put(frame, 2*jamb, FRAME_FACE, FRAME_D, matSteel, 0, Y0 + OPEN_H + FRAME_FACE/2, ID/2 + PT/2);
+const gz = ID/2 + PT/2 + FRAME_D/2 - 0.01;
+put(frame, 0.02, OPEN_H, 0.02, matGask, -(OPEN_W/2 - 0.01), Y0 + OPEN_H/2, gz);
+put(frame, 0.02, OPEN_H, 0.02, matGask,  (OPEN_W/2 - 0.01), Y0 + OPEN_H/2, gz);
+put(frame, OPEN_W, 0.02, 0.02, matGask, 0, Y0 + OPEN_H - 0.01, gz);
+root.add(frame);
+
+const doorPivot = new THREE.Group();
+doorPivot.position.set(-LEAF_W/2, 0, ID/2 + PT/2 + FRAME_D/2);
+const leaf = new THREE.Group();
+leaf.position.set(LEAF_W/2, Y0, LEAF_T/2);
+put(leaf, LEAF_W, LEAF_H, LEAF_T, matPanel, 0, LEAF_H/2, 0);
+put(leaf, LEAF_W, 0.30, 0.004, matSteel, 0, 0.15, LEAF_T/2 + 0.003);            // kick plate [CERT-doc]
+put(leaf, 0.065, 0.30, 0.012, matSteel, LEAF_W/2 - 0.075, 1.05, LEAF_T/2 + 0.006);
+put(leaf, 0.042, 0.20, 0.055, matSteel, LEAF_W/2 - 0.075, 1.05, LEAF_T/2 + 0.040);  // Fermod-style latch
+for(const hy of [0.26, 1.08, 1.90]){                                             // 3 stainless hinges
+  cyl(leaf, 0.021, 0.12, matSteel, -(LEAF_W/2 + 0.012), hy, LEAF_T/2 - 0.02, 0, 0, 12);
+  put(leaf, 0.085, 0.07, 0.009, matSteel, -(LEAF_W/2 - 0.048), hy, LEAF_T/2 + 0.004);
+}
+doorPivot.add(leaf);
+root.add(doorPivot);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const DOOR_OPEN = -1.85;                  // swings clear of the opening, away from the camera side
+let doorTarget = 0, fansOn = false;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnDoor = document.getElementById('btnDoor');
+btnDoor.onclick = ()=>{ doorTarget = doorTarget === 0 ? DOOR_OPEN : 0;
+  btnDoor.classList.toggle('on', doorTarget !== 0); requestRender(); };
+
+// CORTE: roof + near wall + door set, so the reveal is a real section and not a peek over a wall.
+const CUT_PARTS = [roof, nearWall, frame, doorPivot];
+const btnCut = document.getElementById('btnCut');
+btnCut.onclick = ()=>{ const v = !roof.visible;
+  for(const g of CUT_PARTS) g.visible = v;
+  btnCut.classList.toggle('on', !v);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnFan = document.getElementById('btnFan');
+btnFan.onclick = ()=>{ fansOn = !fansOn; btnFan.classList.toggle('on', fansOn); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const d = doorTarget - doorPivot.rotation.y;
+  if(Math.abs(d) > 0.0008){ doorPivot.rotation.y += d * 0.11; needsRender = true; }
+  if(fansOn){ for(const f of evFans) f.rotation.z += 0.22; condFan.rotation.y += 0.13; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__camaraFrigorificaApp = __app;
+globalThis['__camara-frigorificaApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

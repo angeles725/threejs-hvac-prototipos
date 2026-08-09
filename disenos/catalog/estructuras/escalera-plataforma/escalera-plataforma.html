@@ -1,0 +1,311 @@
+<!doctype html>
+<!--
+  escalera-plataforma — catalog asset, family `estructuras`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Industrial access stair + elevated platform. This is the one asset in the family whose
+  proportions are governed by an ACCESS STANDARD rather than by taste, so the rise/going, the
+  handrail height and the toe board are declared as the design drivers in design-spec.yaml.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Escalera y plataforma industrial — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Escalera industrial + plataforma de acceso</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· 16 huellas · baranda 1.10 m · rodapié 0.10 m</span></div>
+  <div class="dim">plataforma 2.60 × 1.60 m a 3.04 m · escalera 38° · huella 0.24 / contrahuella 0.19 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnRail">BARANDA</button>
+  <button id="btnGrate">REJILLA</button>
+  <button id="btnKick">RODAPIÉ</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) — the ACCESS GEOMETRY drives everything ----------
+const RISE = 0.19, GOING = 0.24;            // 38.4 deg pitch: inside the industrial-stair band
+const N_RISERS = 16;                        // 16 x 0.19 = 3.04 m
+const PLAT_Y = N_RISERS * RISE;             // platform walking level
+const PLAT_W = 2.60, PLAT_D = 1.60;         // platform plan
+const STAIR_W = 0.90;                       // clear stair width
+const RAIL_H = 1.10, MID_H = 0.55;          // top rail / mid rail above the walking surface
+const TOE_H = 0.10;                         // toe board
+const POST_PITCH = 1.15;                    // handrail post spacing
+const STR_D = 0.24, STR_T = 0.012;          // stringer depth / plate thickness
+const RUN = N_RISERS * GOING;               // horizontal run of the flight
+const X_TOP = -PLAT_W/2;                    // the flight lands on the -X edge of the platform
+const COL = 0.10;                           // column section
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 14, 46);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 9.8, AZ = 0.68, EL = 0.30;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.70 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(-0.6, 1.70, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(-0.6, 1.70, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.1;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(6, 9, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-6; sun.shadow.camera.right=6; sun.shadow.camera.top=6; sun.shadow.camera.bottom=-3;
+scene.add(sun);
+// VERTICAL-SUBJECT DEVIATION (design-spec.yaml `lighting`): this asset is almost entirely thin
+// VERTICAL galvanised members — posts, stringers, toe boards. Their flanks reflect the dark
+// horizon and the whole structure collapses to a grey lattice. Camera-side fill; PBR unchanged.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.20);
+fill.position.set(-4.5, 3.2, 7.0);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.26));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Everything structural is hot-dip galvanised bare steel (0.9-1.0). The only dielectrics are
+//   the safety-yellow nosings and the rubber pads under the base plates.
+//   The three estructuras assets already in the catalog use intermediate metalness (0.35-0.7);
+//   that is a §3.1 violation and is deliberately not copied here.
+// ============================================================================
+const matGalv   = new THREE.MeshStandardMaterial({ color:0xbcc3c7, metalness:0.95, roughness:0.42 });
+const matGalvD  = new THREE.MeshStandardMaterial({ color:0x9aa2a7, metalness:0.95, roughness:0.50 });
+const matGrate  = new THREE.MeshStandardMaterial({ color:0xa7aeb3, metalness:0.95, roughness:0.55 });
+const matRail   = new THREE.MeshStandardMaterial({ color:0xc6ccd0, metalness:0.95, roughness:0.38 });
+const matNose   = new THREE.MeshStandardMaterial({ color:0xc9a227, metalness:0.0,  roughness:0.52 });
+const matPad    = new THREE.MeshStandardMaterial({ color:0x101316, metalness:0.0,  roughness:0.95 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=12)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+
+// --- platform structure: 4 columns on base plates, perimeter beams, bearers ---
+const struct = new THREE.Group();
+const COLS = [[-PLAT_W/2 + 0.12, -PLAT_D/2 + 0.12], [-PLAT_W/2 + 0.12, PLAT_D/2 - 0.12],
+              [ PLAT_W/2 - 0.12, -PLAT_D/2 + 0.12], [ PLAT_W/2 - 0.12, PLAT_D/2 - 0.12]];
+for(const [cx, cz] of COLS){
+  put(struct, COL, PLAT_Y - 0.10, COL, matGalv, cx, (PLAT_Y - 0.10)/2, cz);
+  put(struct, 0.24, 0.02, 0.24, matGalvD, cx, 0.012, cz);                   // base plate
+  put(struct, 0.26, 0.008, 0.26, matPad, cx, 0.003, cz);                    // bedding pad
+}
+for(const sz of [-1,1]) put(struct, PLAT_W, 0.16, 0.08, matGalv, 0, PLAT_Y - 0.08, sz*(PLAT_D/2 - 0.04));
+for(const sx of [-1,1]) put(struct, 0.08, 0.16, PLAT_D - 0.16, matGalv, sx*(PLAT_W/2 - 0.04), PLAT_Y - 0.08, 0);
+for(const bx of [-0.65, 0, 0.65])                                            // bearers under the grating
+  put(struct, 0.06, 0.10, PLAT_D - 0.16, matGalvD, bx, PLAT_Y - 0.13, 0);
+// knee braces, so the frame is not a table on four sticks
+for(const [cx, cz] of COLS){
+  const bx = Math.sign(cx), bz = Math.sign(cz);
+  const br = put(struct, 0.06, 0.60, 0.06, matGalvD, cx - bx*0.20, PLAT_Y - 0.40, cz - bz*0.02);
+  br.rotation.z = bx * 0.62;
+}
+root.add(struct);
+
+// --- platform deck: open grating, instanced bearing bars (real repetition) ---
+const grating = new THREE.Group();
+{
+  const N = 42, pitch = (PLAT_D - 0.20) / (N - 1);
+  const bar = new THREE.InstancedMesh(new THREE.BoxGeometry(PLAT_W - 0.20, 0.03, 0.006), matGrate, N);
+  for(let i=0;i<N;i++){
+    _q.setFromEuler(new THREE.Euler(0,0,0));
+    _p.set(0, PLAT_Y - 0.015, -(PLAT_D - 0.20)/2 + i*pitch);
+    bar.setMatrixAt(i, _m.compose(_p, _q, _s));
+  }
+  bar.instanceMatrix.needsUpdate = true; bar.castShadow = bar.receiveShadow = true;
+  grating.add(bar);
+  // cross rods, at the coarser pitch a grating actually uses
+  const M = 9, cpitch = (PLAT_W - 0.20) / (M - 1);
+  const rod = new THREE.InstancedMesh(new THREE.BoxGeometry(0.006, 0.010, PLAT_D - 0.20), matGrate, M);
+  for(let i=0;i<M;i++){
+    _q.setFromEuler(new THREE.Euler(0,0,0));
+    _p.set(-(PLAT_W - 0.20)/2 + i*cpitch, PLAT_Y - 0.004, 0);
+    rod.setMatrixAt(i, _m.compose(_p, _q, _s));
+  }
+  rod.instanceMatrix.needsUpdate = true; rod.castShadow = true;
+  grating.add(rod);
+}
+put(grating, PLAT_W - 0.18, 0.02, PLAT_D - 0.18, matGalvD, 0, PLAT_Y - 0.04, 0);   // banding frame
+root.add(grating);
+
+// --- stair flight: two stringers + instanced treads, landing on the -X platform edge ---
+const stair = new THREE.Group();
+const pitchAng = Math.atan2(RISE, GOING);
+const strLen = Math.hypot(RUN, PLAT_Y) + 0.30;
+for(const sz of [-1,1]){
+  const st = put(stair, strLen, STR_D, 0.012 + STR_T, matGalv,
+                 X_TOP - RUN/2, PLAT_Y/2 - STR_D*0.20, sz*(STAIR_W/2 + 0.02));
+  st.rotation.z = pitchAng;
+}
+{
+  const tread = new THREE.InstancedMesh(new THREE.BoxGeometry(GOING - 0.01, 0.028, STAIR_W), matGrate, N_RISERS);
+  const nose  = new THREE.InstancedMesh(new THREE.BoxGeometry(0.035, 0.032, STAIR_W), matNose, N_RISERS);
+  for(let i=0;i<N_RISERS;i++){
+    const y = (i + 1) * RISE;                       // top of tread i
+    const x = X_TOP - RUN + (i + 0.5) * GOING;
+    _q.setFromEuler(new THREE.Euler(0,0,0));
+    _p.set(x, y - 0.014, 0);
+    tread.setMatrixAt(i, _m.compose(_p, _q, _s));
+    _p.set(x + GOING/2 - 0.02, y - 0.014, 0);
+    nose.setMatrixAt(i, _m.compose(_p, _q, _s));
+  }
+  tread.instanceMatrix.needsUpdate = true; nose.instanceMatrix.needsUpdate = true;
+  tread.castShadow = tread.receiveShadow = true; nose.castShadow = true;
+  stair.add(tread); stair.add(nose);
+}
+put(stair, 0.40, 0.03, STAIR_W + 0.10, matGalvD, X_TOP - RUN - 0.18, 0.015, 0);    // bottom landing plate
+root.add(stair);
+
+// --- handrails: platform perimeter (open at the stair) + raking stair rail ---
+const rails = new THREE.Group();
+function railRun(x0, z0, x1, z1, y0, y1){
+  const dx = x1 - x0, dz = z1 - z0, dy = y1 - y0;
+  const len = Math.hypot(dx, dz, dy);
+  const g = new THREE.Group();
+  for(const h of [RAIL_H, MID_H]){
+    const bar = box(len, 0.032, 0.032, matRail);
+    bar.position.set((x0 + x1)/2, (y0 + y1)/2 + h, (z0 + z1)/2);
+    bar.rotation.y = -Math.atan2(dz, dx);
+    bar.rotation.z = Math.atan2(dy, Math.hypot(dx, dz));
+    g.add(bar);
+  }
+  const nPosts = Math.max(2, Math.round(len / POST_PITCH) + 1);
+  for(let i=0;i<nPosts;i++){
+    const t = i / (nPosts - 1);
+    put(g, 0.045, RAIL_H + 0.02, 0.045, matRail, x0 + dx*t, (y0 + dy*t) + RAIL_H/2, z0 + dz*t);
+  }
+  rails.add(g);
+  return g;
+}
+// platform: three closed sides, the -X side is left open for the stair opening
+railRun(-PLAT_W/2, -PLAT_D/2,  PLAT_W/2, -PLAT_D/2, PLAT_Y, PLAT_Y);
+railRun(-PLAT_W/2,  PLAT_D/2,  PLAT_W/2,  PLAT_D/2, PLAT_Y, PLAT_Y);
+railRun( PLAT_W/2, -PLAT_D/2,  PLAT_W/2,  PLAT_D/2, PLAT_Y, PLAT_Y);
+// stair rails, both sides, following the 38 deg rake
+for(const sz of [-1,1])
+  railRun(X_TOP - RUN, sz*(STAIR_W/2 + 0.04), X_TOP, sz*(STAIR_W/2 + 0.04), 0, PLAT_Y);
+root.add(rails);
+
+// --- toe boards: platform perimeter + both stringer tops ---
+const toes = new THREE.Group();
+for(const sz of [-1,1]) put(toes, PLAT_W, TOE_H, 0.012, matGalvD, 0, PLAT_Y + TOE_H/2, sz*(PLAT_D/2 - 0.006));
+put(toes, 0.012, TOE_H, PLAT_D, matGalvD, PLAT_W/2 - 0.006, PLAT_Y + TOE_H/2, 0);
+for(const sz of [-1,1]){
+  const t = put(toes, strLen - 0.30, TOE_H, 0.012, matGalvD,
+                X_TOP - RUN/2, PLAT_Y/2 + TOE_H/2 + 0.02, sz*(STAIR_W/2 + 0.028));
+  t.rotation.z = pitchAng;
+}
+root.add(toes);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+//   The toggles here are the SAFETY elements, because the point of this asset is that a stair is
+//   only compliant with all three present: rail, toe board and a non-slip walking surface.
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnRail = document.getElementById('btnRail');
+btnRail.onclick = ()=>{ rails.visible = !rails.visible; btnRail.classList.toggle('on', !rails.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnGrate = document.getElementById('btnGrate');
+btnGrate.onclick = ()=>{ grating.visible = !grating.visible; btnGrate.classList.toggle('on', !grating.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnKick = document.getElementById('btnKick');
+btnKick.onclick = ()=>{ toes.visible = !toes.visible; btnKick.classList.toggle('on', !toes.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__escaleraPlataformaApp = __app;
+globalThis['__escalera-plataformaApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
