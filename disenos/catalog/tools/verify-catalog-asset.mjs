@@ -7,7 +7,10 @@ import { writeFileSync } from 'node:fs';
 
 const BIN = process.env.HOME + '/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell';
 const PORT = 9334;
-const BASE = 'http://127.0.0.1:8899';
+// PARALLEL SESSIONS: each worktree serves ITS OWN copy of the repo, so two sessions sharing one
+// port would silently measure the wrong tree (asset 404s -> ready:false -> a good asset fails the
+// gate). QA_BASE lets a session bind its own port; the default keeps the documented 8899 flow.
+const BASE = process.env.QA_BASE || 'http://127.0.0.1:8899';
 const TARGETS = process.argv.slice(2);
 const SHOT_DIR = process.env.SHOT_DIR || '.';
 
