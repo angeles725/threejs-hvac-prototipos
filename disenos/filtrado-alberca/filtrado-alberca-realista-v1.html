@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Equipo de Filtrado de Alberca — realista</title>
+<link rel="icon" href="data:,">                     <!-- favicon 404 pollutes the console sidecar -->
+<!-- SCALE: 1 unit = 1 m (original voxel scale was 1 vox = 0.05 m; re-authored as smooth geometry) -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700} #hud .pass{color:var(--accent)}
+  #hud .dim{color:var(--text-muted)}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Equipo de Filtrado de Alberca — realista</div>
+  <div><span class="pass">PASS: rounded-equipment</span> <span class="dim">· cuarto de máquinas · lathe + superquadric + swept-tube toolkit</span></div>
+  <div class="dim">Filtro de arena Ø1.20×1.50 m · Bomba centrífuga · Válvula multipuerto</div>
+</div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { makeLatheBody } from '../showcase-rounded/lib/lathe-body.mjs';
+import { makeSweptTube } from '../showcase-rounded/lib/rmf-frames.mjs';
+import { makeSuperquadric } from '../showcase-rounded/lib/superquadric.mjs';
+import { makeProceduralMetalRough } from '../showcase-rounded/lib/procedural-pbr-canvas.mjs';
+
+// ---------------------------------------------------------------- scene / renderer
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 40);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;              // geometry added after boot needs one forced bake
+document.body.appendChild(renderer.domElement);
+
+// hero camera — framed on the whole `plant` group (built below). Subject AABB ≈ x[0.25,2.55],
+// y[0,1.90], z[-0.90,1.10]; center ≈ (1.40, 0.90, 0.20). Modest margin, plant fills the frame
+// without cropping (framing gate requires fullyVisible AND rejects too-wide).
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(4.90, 3.00, 3.30);
+camera.lookAt(1.40, 0.90, 0.20);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(1.40, 0.90, 0.20);
+controls.autoRotate = false;                        // OFF — gate captures need a settled frame
+controls.maxPolarAngle = Math.PI * 0.495;
+
+// ---------------------------------------------------------------- IBL + house light rig
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// NOTE r160: scene.environmentIntensity is INERT here. Push bare metal per-material with
+// material.envMapIntensity (set to ~1.4 below).
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4, 6, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left = -3.5; sun.shadow.camera.right = 3.5;
+sun.shadow.camera.top = 3.5;   sun.shadow.camera.bottom = -3.5;
+sun.shadow.camera.near = 0.1;  sun.shadow.camera.far = 24;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));                    // cool fill
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));                    // accent rim
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));           // lifts upward-facing steel
+const frontFill = new THREE.DirectionalLight(0xffffff, 0.55);           // lights the VERTICAL faces
+frontFill.position.set(2.5, 2.0, 5.0);
+scene.add(frontFill);
+
+// ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  new THREE.MeshStandardMaterial({ color: 0x0a0d12, roughness: 0.95, metalness: 0.0 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.001;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ---------------------------------------------------------------- materials
+const steelTex = await makeProceduralMetalRough({ roughnessBase: 0.30, metalness: 0.85 });
+// roughness/metalness are MULTIPLIERS over the packed map (three multiplies), so keep them at 1 and
+// let the map's painted values (roughnessBase 0.30, metalness 0.85) drive — else 0.30*0.30 reads too glossy.
+const steelMat = new THREE.MeshStandardMaterial({ color: 0xd0d4d8, metalness: 1, roughness: 1 });
+steelMat.roughnessMap = steelTex;                   // packed: roughness from GREEN
+steelMat.metalnessMap = steelTex;                   // packed: metalness from BLUE
+steelMat.envMapIntensity = 1.4;
+
+// pump casing — colored HVAC-blue metal, SAME multiplier idiom (scalars=1, packed map drives).
+const pumpMat = new THREE.MeshStandardMaterial({ color: 0x2f6db0, metalness: 1, roughness: 1 });
+pumpMat.roughnessMap = steelTex;
+pumpMat.metalnessMap = steelTex;
+pumpMat.envMapIntensity = 1.4;
+
+// motor body — a darker cast-iron grey, same idiom.
+const motorMat = new THREE.MeshStandardMaterial({ color: 0x3d4450, metalness: 1, roughness: 1 });
+motorMat.roughnessMap = steelTex;
+motorMat.metalnessMap = steelTex;
+motorMat.envMapIntensity = 1.3;
+
+// valve body — dark drum (multiport head), plain scalar metal.
+const valveMat = new THREE.MeshStandardMaterial({ color: 0x22262e, metalness: 0.55, roughness: 0.45 });
+valveMat.envMapIntensity = 1.2;
+
+const pipeMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ab, metalness: 0.85, roughness: 0.34 });
+pipeMat.envMapIntensity = 1.4;
+
+const padMat   = new THREE.MeshStandardMaterial({ color: 0x2c3138, metalness: 0.02, roughness: 0.95 });
+const dialMat  = new THREE.MeshStandardMaterial({ color: 0xf3f5f8, metalness: 0.1, roughness: 0.3 });
+const bezelMat = new THREE.MeshStandardMaterial({ color: 0x22262e, metalness: 0.5, roughness: 0.6 });
+const knobMat  = new THREE.MeshStandardMaterial({ color: 0xd93030, metalness: 0.2, roughness: 0.5 });
+
+// ---------------------------------------------------------------- subject root
+const plant = new THREE.Group();
+scene.add(plant);
+
+// vessel profile for LatheGeometry (revolve around Y; x = radius, y = height).
+// dished BOTTOM head -> straight WALL -> dished TOP head, with shared wall points deduped.
+function vesselProfile({ R, H, hHead, seg = 12 }) {
+  const pts = [];
+  for (let k = 0; k <= seg; k++) {                          // bottom head: (0,0) -> (R,hHead)
+    const a = (Math.PI / 2) * (k / seg);
+    pts.push({ x: R * Math.sin(a), y: hHead * (1 - Math.cos(a)) });
+  }
+  pts.push({ x: R, y: H - hHead });                         // wall top (bottom already at (R,hHead))
+  for (let k = 1; k <= seg; k++) {                          // top head: (R,H-hHead) -> (0,H); skip dup a=0
+    const a = (Math.PI / 2) * (k / seg);
+    pts.push({ x: R * Math.cos(a), y: (H - hHead) + hHead * Math.sin(a) });
+  }
+  return pts;
+}
+
+// ============================================================================================
+// 1) SAND FILTER VESSEL — Ø1.20×1.50 m (R=0.60). Original TCX=17 vox -> x=0.85 m; domed top.
+//    A cylindrical pressure vessel with a strongly dished top head (the classic sand filter dome).
+// ============================================================================================
+const FX = 0.85, FZ = 0.0, F_BASE = 0.08, F_R = 0.60, F_H = 1.50, F_HH = 0.30; // hHead 0.30 m dome
+const filter = await makeLatheBody(vesselProfile({ R: F_R, H: F_H, hHead: F_HH }), { segments: 40 }, steelMat);
+filter.position.set(FX, F_BASE, 0);
+plant.add(filter);
+const F_TOP = F_BASE + F_H;                                 // 1.58 m — top of the dome
+
+// inspection collar + clamp cap + knob on the dome (original collar/tapa/perilla, y=30..35 vox).
+const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.20, 0.10, 24), steelMat);
+collar.position.set(FX, F_TOP + 0.02, FZ); collar.castShadow = true; collar.receiveShadow = true;
+plant.add(collar);
+const clampRing = new THREE.Mesh(new THREE.TorusGeometry(0.20, 0.022, 12, 28), steelMat);
+clampRing.rotation.x = Math.PI / 2;
+clampRing.position.set(FX, F_TOP + 0.06, FZ); clampRing.castShadow = true;
+plant.add(clampRing);
+const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, 0.07, 24), steelMat);
+cap.position.set(FX, F_TOP + 0.11, FZ); cap.castShadow = true; cap.receiveShadow = true;
+plant.add(cap);
+const knob = new THREE.Mesh(new RoundedBoxGeometry(0.06, 0.10, 0.06, 3, 0.02), knobMat);
+knob.position.set(FX, F_TOP + 0.19, FZ); knob.castShadow = true;
+plant.add(knob);
+
+// tank-side flanged nozzles (upper return + lower drain), on the +side wall facing the valve.
+function addNozzle(x, y, z, dir, len = 0.09, r = 0.045, axis = 'x') {
+  const stub = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 20), steelMat);
+  const flange = new THREE.Mesh(new THREE.TorusGeometry(r + 0.022, 0.013, 12, 24), steelMat);
+  if (axis === 'x') { stub.rotation.z = Math.PI / 2; flange.rotation.y = Math.PI / 2;
+    stub.position.set(x + dir * len / 2, y, z); flange.position.set(x + dir * len, y, z); }
+  else { stub.rotation.x = Math.PI / 2; // z axis
+    stub.position.set(x, y, z + dir * len / 2); flange.position.set(x, y, z + dir * len); }
+  stub.castShadow = stub.receiveShadow = true; flange.castShadow = true;
+  plant.add(stub); plant.add(flange);
+}
+const F_WALL = FX + F_R;                                    // right wall x = 1.45 m
+addNozzle(F_WALL, 0.90, 0.0, +1);                          // upper (return from valve)
+addNozzle(F_WALL, 0.35, 0.0, +1);                          // lower (to valve, drain side)
+
+// ============================================================================================
+// 2) VÁLVULA MULTIPUERTO — original VX=36 vox -> x=1.80 m. Drum R=0.15 m, y12..21 -> H=0.45 m.
+//    Short cylinder body + rounded bonnet + torus handwheel, on a support column.
+// ============================================================================================
+const VX = 1.80, VZ = 0.0;
+const V_BOT = 0.60, V_H = 0.45, V_R = 0.15;                 // body spans y 0.60..1.05 m
+const valveBody = new THREE.Mesh(new THREE.CylinderGeometry(V_R, V_R, V_H, 28), valveMat);
+valveBody.position.set(VX, V_BOT + V_H / 2, VZ);
+valveBody.castShadow = valveBody.receiveShadow = true;
+plant.add(valveBody);
+// rounded bonnet on top of the multiport head
+const bonnet = new THREE.Mesh(new RoundedBoxGeometry(0.20, 0.10, 0.20, 3, 0.04), valveMat);
+bonnet.position.set(VX, V_BOT + V_H + 0.05, VZ); bonnet.castShadow = true;
+plant.add(bonnet);
+// handwheel (torus, axis vertical)
+const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.018, 12, 28), steelMat);
+wheel.rotation.x = Math.PI / 2;
+wheel.position.set(VX, V_BOT + V_H + 0.13, VZ); wheel.castShadow = true;
+plant.add(wheel);
+const wheelHub = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.06, 12), steelMat);
+wheelHub.position.set(VX, V_BOT + V_H + 0.13, VZ); wheelHub.castShadow = true;
+plant.add(wheelHub);
+// support column down to the skid (original pipeY 1..11 vox)
+const vColumn = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, V_BOT, 18), steelMat);
+vColumn.position.set(VX, V_BOT / 2, VZ); vColumn.castShadow = vColumn.receiveShadow = true;
+plant.add(vColumn);
+
+// generic inline valve helper (small ball valves + bonnet + handwheel on the pipe runs)
+function addInlineValve(x, y, z, r = 0.05, len = 0.12) {
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 20), valveMat);
+  body.rotation.z = Math.PI / 2;                            // along X
+  body.position.set(x, y, z); body.castShadow = body.receiveShadow = true;
+  plant.add(body);
+  const bn = new THREE.Mesh(new RoundedBoxGeometry(0.07, 0.06, 0.07, 3, 0.02), valveMat);
+  bn.position.set(x, y + 0.06, z); bn.castShadow = true; plant.add(bn);
+  const hw = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.01, 10, 22), steelMat);
+  hw.rotation.x = Math.PI / 2; hw.position.set(x, y + 0.11, z); hw.castShadow = true; plant.add(hw);
+}
+addInlineValve(1.80, 0.80, 0.55);                          // return-line ball valve
+addInlineValve(2.30, 0.35, 0.85, 0.05, 0.12);             // suction ball valve near hair trap
+
+// ============================================================================================
+// 3) CENTRIFUGAL PUMP — original PX=47 vox -> x=2.35 m. Volute R=0.20 m at y=0.40 m; motor
+//    R=0.15 m along -z (z -0.60..-0.20 m). Rounded scroll volute (superquadric) + motor barrel.
+// ============================================================================================
+const PX = 2.35, PY = 0.40;
+// round VOLUTE casing — a rounded scroll-ish body (superquadric, soft chamfer).
+const volute = await makeSuperquadric(
+  { a: 0.21, b: 0.21, c: 0.14, e1: 0.35, e2: 0.40, uSeg: 24, vSeg: 18 }, pumpMat);
+volute.position.set(PX, PY, 0.05);
+plant.add(volute);
+// discharge neck rising from the volute (up toward the pump riser)
+const discharge = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.22, 20), pumpMat);
+discharge.position.set(PX - 0.05, PY + 0.22, 0.05); discharge.castShadow = true;
+plant.add(discharge);
+// suction stub in front of the volute (toward the hair trap)
+const suctionStub = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.14, 20), pumpMat);
+suctionStub.rotation.x = Math.PI / 2;
+suctionStub.position.set(PX, PY, 0.20); suctionStub.castShadow = true;
+plant.add(suctionStub);
+// MOTOR barrel behind the volute (axis along z), original discZ z -12..-4.
+const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.40, 28), motorMat);
+motor.rotation.x = Math.PI / 2;
+motor.position.set(PX, PY, -0.40); motor.castShadow = motor.receiveShadow = true;
+plant.add(motor);
+// motor cooling fins (thin discs) + rear fan cover
+for (const z of [-0.25, -0.35, -0.45, -0.55]) {
+  const fin = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.012, 28), motorMat);
+  fin.rotation.x = Math.PI / 2; fin.position.set(PX, PY, z); fin.castShadow = true;
+  plant.add(fin);
+}
+const fanCap = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.13, 0.06, 24), motorMat);
+fanCap.rotation.x = Math.PI / 2; fanCap.position.set(PX, PY, -0.63); fanCap.castShadow = true;
+plant.add(fanCap);
+// terminal / junction box on top of the motor (original VBLACK box)
+const jbox = new THREE.Mesh(new RoundedBoxGeometry(0.12, 0.10, 0.16, 3, 0.02), valveMat);
+jbox.position.set(PX, PY + 0.17, -0.35); jbox.castShadow = true;
+plant.add(jbox);
+
+// HAIR TRAP / STRAINER POT — vertical pot in front of the pump (original HZ=7 -> z=0.35 m).
+const trap = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.34, 24), steelMat);
+trap.position.set(PX, 0.32, 0.42); trap.castShadow = trap.receiveShadow = true;
+plant.add(trap);
+const trapLid = new THREE.Mesh(new THREE.SphereGeometry(0.115, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), steelMat);
+trapLid.position.set(PX, 0.49, 0.42); trapLid.castShadow = true;
+plant.add(trapLid);
+
+// ============================================================================================
+// 4) PIPES — swept tubes (radius 0.03 m) along the original voxel runs (waypoints ×0.05).
+// ============================================================================================
+const PIPE_R = 0.03;
+const runs = [
+  // pump discharge -> up -> across into the valve pump port (riser, original pipeY/pipeX at x=46)
+  [[PX - 0.05, PY + 0.30, 0.05], [PX - 0.05, 0.82, 0.05], [2.00, 0.82, 0.05], [1.86, 0.82, 0.02]],
+  // valve upper port -> filter upper nozzle (original pipeX 29..33 y18)
+  [[1.70, 0.90, 0.0], [1.55, 0.90, 0.0]],
+  // valve lower -> riser down -> filter lower nozzle (original pipeX/pipeY/pipeX bottom)
+  [[1.66, 0.65, 0.0], [1.52, 0.65, 0.0], [1.52, 0.35, 0.0], [1.55, 0.35, 0.0]],
+  // return line from valve going +z (to pool) — original pipeZ 4..19 at x=1.80 y=0.80
+  [[1.80, 0.80, 0.22], [1.80, 0.80, 0.95]],
+  // backwash line from valve going -z then down to drain — original pipeZ -15..-5 + drop
+  [[1.80, 0.65, -0.20], [1.80, 0.65, -0.75], [1.80, 0.18, -0.75], [1.80, 0.18, -0.92]],
+  // suction from pool into the hair trap (original pipeZ 11..21 at x=2.30 y=7)
+  [[2.30, 0.35, 1.05], [2.30, 0.35, 0.52]],
+];
+for (const wp of runs) {
+  const pipe = await makeSweptTube(wp, { radius: PIPE_R, targetEdgeLength: 0.04 }, pipeMat);
+  pipe.receiveShadow = true;
+  plant.add(pipe);
+}
+
+// ============================================================================================
+// 5) GAUGES — manometers (dial + bezel) where the original had AMBER/GREEN carátula voxels.
+// ============================================================================================
+function addGauge(x, y, z, r, axis) {
+  const dial = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.02, 24), dialMat);
+  const bezel = new THREE.Mesh(new THREE.TorusGeometry(r, 0.008, 12, 24), bezelMat);
+  if (axis === 'z') { dial.rotation.x = Math.PI / 2; }      // cylinder axis Y -> Z; torus already ⊥ Z
+  else { bezel.rotation.x = Math.PI / 2; }                  // face up: rotate the bezel ⊥ Y
+  dial.position.set(x, y, z); bezel.position.set(x, y, z);
+  dial.castShadow = true; bezel.castShadow = true;
+  plant.add(dial); plant.add(bezel);
+}
+addGauge(VX, 1.15, 0.10, 0.05, 'z');                       // multiport valve pressure gauge (front)
+addGauge(1.80, 0.90, 0.30, 0.045, 'z');                   // return-line gauge
+
+// ============================================================================================
+// 6) SKID / BASE — a simple channel-beam pad under the plant (original patín/PAD boxes).
+// ============================================================================================
+const pad = new THREE.Mesh(new RoundedBoxGeometry(2.70, 0.06, 1.90, 3, 0.02), padMat);
+pad.position.set(1.35, 0.03, 0.12); pad.receiveShadow = true;
+plant.add(pad);
+for (const bz of [-0.55, 0.75]) {                           // two channel beams across the skid
+  const beam = new THREE.Mesh(new RoundedBoxGeometry(2.60, 0.05, 0.10, 3, 0.02), steelMat);
+  beam.position.set(1.35, 0.075, bz); beam.castShadow = beam.receiveShadow = true;
+  plant.add(beam);
+}
+
+// ---------------------------------------------------------------- QA hooks (install AFTER all awaits)
+globalThis.__qaRenderInfo = () => renderer.info.render;
+
+const SUBJECT = plant;
+globalThis.__qaFraming = () => {
+  camera.updateMatrixWorld(); camera.updateProjectionMatrix();
+  const mvp = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  const b = new THREE.Box3().setFromObject(SUBJECT, true);
+  const mn = b.min, mx = b.max;
+  const corners = [
+    [mn.x, mn.y, mn.z], [mx.x, mn.y, mn.z], [mn.x, mx.y, mn.z], [mx.x, mx.y, mn.z],
+    [mn.x, mn.y, mx.z], [mx.x, mn.y, mx.z], [mn.x, mx.y, mx.z], [mx.x, mx.y, mx.z],
+  ];
+  const hudEl = document.querySelector('#hud');
+  const hud = hudEl ? (r => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }))(hudEl.getBoundingClientRect()) : null;
+  return { mvpElements: Array.from(mvp.elements), corners, W: innerWidth, H: innerHeight, hud };
+};
+
+// ---------------------------------------------------------------- render loop (starts after the build)
+renderer.shadowMap.needsUpdate = true;                     // one forced bake for post-boot geometry
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+document.documentElement.dataset.appReady = 'true';        // ready LAST
+</script>
+</body>
+</html>
