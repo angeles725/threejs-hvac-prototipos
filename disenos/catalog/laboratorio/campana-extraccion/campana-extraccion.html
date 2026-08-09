@@ -1,0 +1,291 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — laboratorio/campana-extraccion · bench-mounted fume hood with a vertical sash.
+  Built from disenos/catalog/shell-template.html. Contract: __campanaExtraccionApp.runtime +
+  __qaRenderInfo + data-app-ready, render-on-demand, shadows frozen (autoUpdate=false, 1024), DPR<=2.
+  Instancing (block54 §2.3): none — nothing on this asset repeats enough to earn a batch.
+  Lesson carried from retail/refrigerador-vertical: the sash is glass, so the chamber gets a real
+  lamp; an emissive strip would leave the interior black behind the pane.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Campana de extracción — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">CAMPANA DE EXTRACCIÓN — epoxi + guillotina de vidrio</div>
+  <div><span class="dim">1.50 × 0.80 × 2.35 m · mesa a 0.90 m · apertura de trabajo 0.50 m</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnSash">SUBIR GUILLOTINA</button>
+  <button id="btnServ" class="on">SERVICIOS</button>
+  <button id="btnLight" class="on">LUZ INTERIOR</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const W = 1.50, D = 0.80;
+const BENCH_Y = 0.90;                  // work surface height
+const CAB_H = BENCH_Y - 0.05;          // base cabinet
+const HOOD_H = 1.35;                   // superstructure above the work surface
+const TOP_Y = BENCH_Y + HOOD_H;        // 2.25 — top of the hood shell
+const DUCT_R = 0.125, DUCT_H = 0.22;   // exhaust collar
+const POST = 0.075;                    // side posts of the opening
+const SASH_H = 0.80;                   // sash leaf height
+const SASH_OPEN = 0.50;                // working opening when raised
+const SILL = 0.055;                    // airfoil sill at the front edge
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 8, 24);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.04;                            // white epoxy panels clip at 1.15
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 4.6, AZ = 0.88, EL = 0.16;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.30 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.24, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.24, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.5;   // COATED steel + epoxy: no bare-metal IBL boost
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.5, 6, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+sun.shadow.camera.left=-2.6; sun.shadow.camera.right=2.6; sun.shadow.camera.top=3; sun.shadow.camera.bottom=-3;
+scene.add(sun);
+// VERTICAL-SUBJECT FILL: a 2.35 m cabinet face is a vertical plane facing the dark horizon.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 0.85);
+fill.position.set(-3.5, 2.6, 5.0);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: the epoxy-coated shell and the phenolic worktop are
+// DIELECTRIC; the sash frame and the service fittings are bare metal; the sash is glass.
+// ============================================================================
+const matShell  = new THREE.MeshStandardMaterial({ color:0xe3e6e8, metalness:0.0, roughness:0.44 });
+const matLiner  = new THREE.MeshStandardMaterial({ color:0xa4aab0, metalness:0.0, roughness:0.62 });   // dark
+  // enough that the three baffle SLOTS read as gaps; at liner-white the airflow feature disappears
+const matTop    = new THREE.MeshStandardMaterial({ color:0x23272b, metalness:0.0, roughness:0.42 });
+const matBaffle = new THREE.MeshStandardMaterial({ color:0xe6eaed, metalness:0.0, roughness:0.5 });   // lighter
+  // than the liner: at the same tone the slotted baffle is invisible against the chamber wall
+const matAlu    = new THREE.MeshStandardMaterial({ color:0xb6bbbf, metalness:0.92, roughness:0.34 });
+const matFix    = new THREE.MeshStandardMaterial({ color:0xc6cacd, metalness:0.93, roughness:0.28 });
+const matValveG = new THREE.MeshStandardMaterial({ color:0x3f8f5a, metalness:0.0, roughness:0.45 });
+const matValveB = new THREE.MeshStandardMaterial({ color:0x2f6fb0, metalness:0.0, roughness:0.45 });
+const matPanel  = new THREE.MeshStandardMaterial({ color:0x22262b, metalness:0.0, roughness:0.55 });
+const matScreen = new THREE.MeshStandardMaterial({ color:0x0c2a22, metalness:0.0, roughness:0.35,
+                                                   emissive:0x0d6b4f, emissiveIntensity:1.2 });
+const matLed    = new THREE.MeshStandardMaterial({ color:0xffffff, emissive:0xdff0ff, emissiveIntensity:1.5,
+                                                   metalness:0.0, roughness:0.4 });
+const matGlass  = new THREE.MeshPhysicalMaterial({ color:0xe6f2f7, metalness:0.0, roughness:0.03,
+                                                   transmission:0.9, thickness:0.006, ior:1.5,
+                                                   transparent:true, opacity:0.26 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const box = (parent,w,h,d,mat,x,y,z)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); parent.add(m); return m; };
+
+// --- base cabinet with two doors and a plinth ---
+box(root, W, 0.10, D - 0.10, matPanel, 0, 0.05, 0);
+box(root, W, CAB_H - 0.10, D, matShell, 0, 0.10 + (CAB_H - 0.10)/2, 0);
+for(const sx of [-1,1]){
+  box(root, W/2 - 0.03, CAB_H - 0.20, 0.014, matLiner, sx*(W/4), 0.15 + (CAB_H - 0.20)/2, D/2 + 0.008);
+  box(root, 0.10, 0.018, 0.020, matAlu, sx*0.06, 0.62, D/2 + 0.020);      // door pulls
+}
+
+// --- work surface: dished phenolic top with a raised rim and a cup sink ---
+box(root, W, 0.05, D, matTop, 0, BENCH_Y - 0.025, 0);
+box(root, W - 0.10, 0.014, D - 0.14, matTop, 0, BENCH_Y + 0.004, -0.02);
+const sink = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.045, 0.03, 16), matFix);
+sink.receiveShadow = true; sink.position.set(-W/2 + 0.18, BENCH_Y + 0.005, -0.22); root.add(sink);
+
+// --- superstructure: side walls, back, top plenum, sloped fascia ---
+for(const sx of [-1,1]) box(root, 0.03, HOOD_H, D, matShell, sx*(W/2 - 0.015), BENCH_Y + HOOD_H/2, 0);
+box(root, W, HOOD_H, 0.03, matShell, 0, BENCH_Y + HOOD_H/2, -(D/2 - 0.015));
+box(root, W, 0.10, D, matShell, 0, TOP_Y - 0.05, 0);
+// The fascia must be at least as tall as the sash TRAVEL: it is what the leaf disappears behind.
+// At 0.30 m the raised sash poked straight through the roof (seen only in the sash-up capture).
+box(root, W, 0.55, 0.05, matShell, 0, TOP_Y - 0.275, D/2 - 0.03);         // fascia above the opening
+// interior liner so the chamber is a lit white box, not a hole
+box(root, W - 0.08, HOOD_H - 0.12, 0.010, matLiner, 0, BENCH_Y + HOOD_H/2 - 0.02, -(D/2 - 0.038));
+
+// --- rear baffle with its three slots: the airflow feature that identifies a fume hood ---
+const baffleZ = -(D/2 - 0.11);
+const slots = [ [BENCH_Y + 0.045, 0.05], [BENCH_Y + 0.62, 0.06], [TOP_Y - 0.22, 0.07] ];
+let prevTop = BENCH_Y;
+for(const [sy, gap] of slots){
+  const h = sy - prevTop;
+  if(h > 0.02) box(root, W - 0.10, h, 0.014, matBaffle, 0, prevTop + h/2, baffleZ);
+  prevTop = sy + gap;
+}
+box(root, W - 0.10, Math.max(0.02, TOP_Y - 0.12 - prevTop), 0.014, matBaffle, 0,
+    prevTop + Math.max(0.02, TOP_Y - 0.12 - prevTop)/2, baffleZ);
+
+// --- exhaust collar on the roof ---
+const duct = new THREE.Mesh(new THREE.CylinderGeometry(DUCT_R, DUCT_R, DUCT_H, 20), matAlu);
+duct.castShadow = duct.receiveShadow = true; duct.position.set(0, TOP_Y + DUCT_H/2, -0.10);
+root.add(duct);
+const collar = new THREE.Mesh(new THREE.CylinderGeometry(DUCT_R + 0.02, DUCT_R + 0.02, 0.03, 20), matAlu);
+collar.position.set(0, TOP_Y + 0.015, -0.10); root.add(collar);
+
+// --- airfoil sill: the shaped bar across the bottom of the opening ---
+box(root, W - 0.06, SILL, 0.05, matAlu, 0, BENCH_Y + SILL/2 + 0.01, D/2 - 0.035);
+
+// --- side posts framing the opening ---
+for(const sx of [-1,1]) box(root, POST, HOOD_H - 0.30, 0.06, matShell, sx*(W/2 - POST/2 - 0.03),
+                            BENCH_Y + (HOOD_H - 0.30)/2, D/2 - 0.035);
+
+// --- interior light + chamber lamp (an emissive strip alone lights nothing) ---
+const lights = new THREE.Group();
+box(lights, W - 0.20, 0.02, 0.05, matLed, 0, TOP_Y - 0.115, D/2 - 0.16);
+const lamp = new THREE.PointLight(0xe8f4ff, 1.7, 2.0, 2);
+lamp.position.set(0, TOP_Y - 0.22, -0.02);
+lights.add(lamp);
+root.add(lights);
+
+// --- vertical sash: glass in an aluminium frame, sliding on the side posts ---
+const sash = new THREE.Group();
+const sashY0 = BENCH_Y + 0.05;                    // closed: leaf sits on the airfoil sill,
+                                                  // raised: its top lands exactly at the roof line
+{
+  const sw = W - 2*POST - 0.02;
+  box(sash, sw, 0.05, 0.03, matAlu, 0, SASH_H/2 - 0.025, 0);
+  box(sash, sw, 0.06, 0.03, matAlu, 0, -SASH_H/2 + 0.03, 0);
+  for(const sx of [-1,1]) box(sash, 0.03, SASH_H, 0.03, matAlu, sx*(sw/2 - 0.015), 0, 0);
+  const pane = new THREE.Mesh(new THREE.BoxGeometry(sw - 0.06, SASH_H - 0.09, 0.006), matGlass);
+  sash.add(pane);
+  box(sash, sw*0.5, 0.022, 0.035, matAlu, 0, -SASH_H/2 + 0.075, 0.03);    // pull handle
+}
+sash.position.set(0, sashY0 + SASH_H/2, D/2 - 0.055);
+root.add(sash);
+
+// --- services: two taps and two valve handles on the side posts, plus the control panel ---
+const services = new THREE.Group();
+for(const [sx, mat] of [[-1, matValveB], [1, matValveG]]){
+  const px = sx*(W/2 - POST/2 - 0.03);
+  box(services, 0.05, 0.05, 0.045, matFix, px, BENCH_Y + 0.30, D/2 - 0.06);
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.016, 12), mat);
+  handle.castShadow = true; handle.rotation.x = Math.PI/2;
+  handle.position.set(px, BENCH_Y + 0.30, D/2 - 0.028);
+  services.add(handle);
+}
+// gooseneck tap over the cup sink
+const tapBase = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.16, 12), matFix);
+tapBase.castShadow = true; tapBase.position.set(-W/2 + 0.18, BENCH_Y + 0.09, -0.30);
+services.add(tapBase);
+const goose = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.011, 8, 16, Math.PI*0.85), matFix);
+goose.castShadow = true; goose.position.set(-W/2 + 0.18, BENCH_Y + 0.17, -0.30);
+goose.rotation.set(0, Math.PI/2, Math.PI*0.06);
+services.add(goose);
+root.add(services);
+
+// --- control panel with the airflow monitor ---
+box(root, 0.22, 0.16, 0.030, matPanel, W/2 - 0.20, TOP_Y - 0.18, D/2 + 0.002);
+box(root, 0.15, 0.075, 0.006, matScreen, W/2 - 0.20, TOP_Y - 0.16, D/2 + 0.018);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. render is GATED: every handler and the sash travel call requestRender().
+// ============================================================================
+const btnRot   = document.getElementById('btnRot');
+const btnSash  = document.getElementById('btnSash');
+const btnServ  = document.getElementById('btnServ');
+const btnLight = document.getElementById('btnLight');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+let sashTarget = 0, sashPos = 0;                                // 0 = closed, 1 = raised
+btnSash.onclick = ()=>{ sashTarget = sashTarget ? 0 : 1; btnSash.classList.toggle('on', !!sashTarget); requestRender(); };
+btnServ.onclick = ()=>{ services.visible = !services.visible; btnServ.classList.toggle('on', services.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+btnLight.onclick = ()=>{ const on = matLed.emissiveIntensity > 0.1;
+  matLed.emissiveIntensity = on ? 0.0 : 1.5; lamp.intensity = on ? 0.0 : 3.0;
+  btnLight.classList.toggle('on', !on); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  if(Math.abs(sashPos - sashTarget) > 0.001){                   // per-frame branch -> keep rendering
+    sashPos += (sashTarget - sashPos) * 0.13;
+    sash.position.y = sashY0 + SASH_H/2 + SASH_OPEN * sashPos;  // it SLIDES: no rotation anywhere
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__campanaExtraccionApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__campana-extraccionApp'] = globalThis.__campanaExtraccionApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
