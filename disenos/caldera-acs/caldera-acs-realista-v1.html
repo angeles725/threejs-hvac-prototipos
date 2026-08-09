@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caldera Pirotubular + Tanque ACS — realista</title>
+<link rel="icon" href="data:,">                     <!-- favicon 404 pollutes the console sidecar -->
+<!-- SCALE: 1 unit = 1 m (original voxel scale was 1 vox = 0.05 m; re-authored as smooth geometry) -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700} #hud .pass{color:var(--accent)}
+  #hud .dim{color:var(--text-muted)}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Caldera Pirotubular + Tanque ACS — realista</div>
+  <div><span class="pass">PASS: rounded-equipment</span> <span class="dim">· cuarto de calderas · lathe + superquadric + swept-tube toolkit</span></div>
+  <div class="dim">Caldera pirotubular Ø1.30×2.50 m (horizontal) · Tanque ACS Ø1.0×2.0 m · Chimenea 3.6 m</div>
+</div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { makeLatheBody } from '../showcase-rounded/lib/lathe-body.mjs';
+import { makeSweptTube } from '../showcase-rounded/lib/rmf-frames.mjs';
+import { makeSuperquadric } from '../showcase-rounded/lib/superquadric.mjs';
+import { makeProceduralMetalRough } from '../showcase-rounded/lib/procedural-pbr-canvas.mjs';
+
+// ---------------------------------------------------------------- scene / renderer
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 16, 55);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;              // geometry added after boot needs one forced bake
+document.body.appendChild(renderer.domElement);
+
+// hero camera — framed on the whole `plant` group (built below). Subject AABB ≈ x[-0.32,3.35],
+// y[0,3.62], z[0.28,3.12]; center ≈ (1.53, 1.75, 1.70). fov 40, occupancy ~0.4, no crop
+// (framing gate requires fullyVisible AND rejects too-wide).
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(7.20, 4.95, 8.10);
+camera.lookAt(1.53, 1.70, 1.70);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(1.53, 1.70, 1.70);
+controls.autoRotate = false;                        // OFF — gate captures need a settled frame
+controls.maxPolarAngle = Math.PI * 0.495;
+
+// ---------------------------------------------------------------- IBL + house light rig
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// NOTE r160: scene.environmentIntensity is INERT here. Push bare metal per-material with
+// material.envMapIntensity (set to ~1.4 below).
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(5, 8, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left = -4.5; sun.shadow.camera.right = 4.5;
+sun.shadow.camera.top = 4.5;   sun.shadow.camera.bottom = -4.5;
+sun.shadow.camera.near = 0.1;  sun.shadow.camera.far = 30;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));                    // cool fill
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));                    // accent rim
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));           // lifts upward-facing steel
+const frontFill = new THREE.DirectionalLight(0xffffff, 0.55);           // lights the VERTICAL faces
+frontFill.position.set(3.0, 2.4, 6.0);
+scene.add(frontFill);
+
+// ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(80, 80),
+  new THREE.MeshStandardMaterial({ color: 0x0a0d12, roughness: 0.95, metalness: 0.0 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.001;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ---------------------------------------------------------------- materials
+const steelTex = await makeProceduralMetalRough({ roughnessBase: 0.30, metalness: 0.85 });
+// roughness/metalness are MULTIPLIERS over the packed map (three multiplies), so keep them at 1 and
+// let the map's painted values (roughnessBase 0.30, metalness 0.85) drive — else 0.30*0.30 reads too glossy.
+const steelMat = new THREE.MeshStandardMaterial({ color: 0xd0d4d8, metalness: 1, roughness: 1 });
+steelMat.roughnessMap = steelTex;                   // packed: roughness from GREEN
+steelMat.metalnessMap = steelTex;                   // packed: metalness from BLUE
+steelMat.envMapIntensity = 1.4;
+
+// boiler shell — PAINTED ENAMEL (deep boiler-blue, matching original BODY 0x24507c). Enamel reads as
+// a soft dielectric-ish coat: low metalness, medium roughness, NO packed map (it is paint, not bare steel).
+const boilerMat = new THREE.MeshStandardMaterial({ color: 0x24507c, metalness: 0.12, roughness: 0.48 });
+boilerMat.envMapIntensity = 1.0;
+
+// burner casing — darker cast metal, same multiplier idiom as steel.
+const burnerMat = new THREE.MeshStandardMaterial({ color: 0x3d4450, metalness: 1, roughness: 1 });
+burnerMat.roughnessMap = steelTex;
+burnerMat.metalnessMap = steelTex;
+burnerMat.envMapIntensity = 1.3;
+
+const pipeMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ab, metalness: 0.85, roughness: 0.34 });
+pipeMat.envMapIntensity = 1.4;
+const gasMat  = new THREE.MeshStandardMaterial({ color: 0xdfaf28, metalness: 0.4, roughness: 0.5 });   // gas train (yellow)
+gasMat.envMapIntensity = 1.1;
+const hotMat  = new THREE.MeshStandardMaterial({ color: 0xb03a16, metalness: 0.5, roughness: 0.42 });  // hot-water (rust)
+hotMat.envMapIntensity = 1.2;
+const recMat  = new THREE.MeshStandardMaterial({ color: 0xcf7a3a, metalness: 0.5, roughness: 0.42 });  // recirculation (amber)
+recMat.envMapIntensity = 1.2;
+
+const bandMat  = new THREE.MeshStandardMaterial({ color: 0xd96a26, metalness: 0.2, roughness: 0.6 });  // tank color bands
+const brassMat = new THREE.MeshStandardMaterial({ color: 0xb8952e, metalness: 0.9, roughness: 0.35 });
+brassMat.envMapIntensity = 1.3;
+const darkMat  = new THREE.MeshStandardMaterial({ color: 0x22262e, metalness: 0.55, roughness: 0.5 });
+darkMat.envMapIntensity = 1.1;
+const padMat   = new THREE.MeshStandardMaterial({ color: 0x2c3138, metalness: 0.02, roughness: 0.95 });
+const dialMat  = new THREE.MeshStandardMaterial({ color: 0xf3f5f8, metalness: 0.1, roughness: 0.3 });
+const bezelMat = new THREE.MeshStandardMaterial({ color: 0x22262e, metalness: 0.5, roughness: 0.6 });
+
+// ---------------------------------------------------------------- subject root
+const plant = new THREE.Group();
+scene.add(plant);
+
+// vessel profile for LatheGeometry (revolve around Y; x = radius, y = height).
+// dished BOTTOM head -> straight WALL -> dished TOP head, with shared wall points deduped.
+function vesselProfile({ R, H, hHead, seg = 12 }) {
+  const pts = [];
+  for (let k = 0; k <= seg; k++) {                          // bottom head: (0,0) -> (R,hHead)
+    const a = (Math.PI / 2) * (k / seg);
+    pts.push({ x: R * Math.sin(a), y: hHead * (1 - Math.cos(a)) });
+  }
+  pts.push({ x: R, y: H - hHead });                         // wall top (bottom already at (R,hHead))
+  for (let k = 1; k <= seg; k++) {                          // top head: (R,H-hHead) -> (0,H); skip dup a=0
+    const a = (Math.PI / 2) * (k / seg);
+    pts.push({ x: R * Math.cos(a), y: (H - hHead) + hHead * Math.sin(a) });
+  }
+  return pts;
+}
+
+// ============================================================================================
+// 1) FIRE-TUBE (PIROTUBULAR) BOILER — original BX0=6..BX1=56 (2.50 m), R=13 (Ø1.30 m), axis at
+//    CY=16,CZ=20 -> HORIZONTAL along X, center y=0.80 z=1.00. The lathe body revolves around its
+//    local Y; we lay it onto the X axis with rotation.z=-π/2 (local +Y -> world +X). The two dished
+//    heads become the front/back TUBE SHEETS.
+// ============================================================================================
+const B_R = 0.65, B_LEN = 2.50, B_HH = 0.20;               // radius, length, dished-head depth
+const B_Y = 0.80, B_Z = 1.00, B_X0 = 0.30;                 // axis height, axis depth, front-head x
+const boilerShell = await makeLatheBody(vesselProfile({ R: B_R, H: B_LEN, hHead: B_HH }), { segments: 44 }, boilerMat);
+const boilerG = new THREE.Group();
+boilerG.add(boilerShell);
+boilerG.rotation.z = -Math.PI / 2;                          // local +Y (0..2.50) -> world +X
+boilerG.position.set(B_X0, B_Y, B_Z);                      // cylinder runs x 0.30..2.80 at y=0.80,z=1.00
+plant.add(boilerG);
+const B_FRONT = B_X0, B_BACK = B_X0 + B_LEN;               // 0.30 (burner face) .. 2.80 (rear tube sheet)
+const B_TOP = B_Y + B_R;                                   // 1.45 — crown of the shell
+
+// weld/reinforcing bands around the shell (torus rings, axis along X)
+for (const bx of [1.05, 1.80]) {
+  const band = new THREE.Mesh(new THREE.TorusGeometry(B_R + 0.01, 0.02, 12, 40), steelMat);
+  band.rotation.y = Math.PI / 2;                            // torus normal -> X
+  band.position.set(bx, B_Y, B_Z); band.castShadow = true;
+  plant.add(band);
+}
+
+// FRONT DOOR / burner mounting flange on the front dished head (original bombed front cover + studs).
+const door = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.06, 32), burnerMat);
+door.rotation.z = Math.PI / 2;                              // disc normal -> X
+door.position.set(B_FRONT - 0.02, B_Y, B_Z); door.castShadow = door.receiveShadow = true;
+plant.add(door);
+for (let k = 0; k < 14; k++) {                              // flange studs on the door rim
+  const a = k / 14 * Math.PI * 2;
+  const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.05, 8), steelMat);
+  stud.rotation.z = Math.PI / 2;
+  stud.position.set(B_FRONT + 0.01, B_Y + Math.cos(a) * 0.40, B_Z + Math.sin(a) * 0.40);
+  plant.add(stud);
+}
+
+// ============================================================================================
+// 2) BURNER — front-firing, below shell center (original HY=11 -> y=0.55). Superquadric volute +
+//    cylinder motor + nozzle + blower box.
+// ============================================================================================
+const BUR_Y = 0.55;
+const volute = await makeSuperquadric(
+  { a: 0.17, b: 0.17, c: 0.13, e1: 0.35, e2: 0.45, uSeg: 24, vSeg: 18 }, burnerMat);
+volute.position.set(0.10, BUR_Y, B_Z);
+plant.add(volute);
+const burnerMotor = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.095, 0.34, 24), burnerMat);
+burnerMotor.rotation.z = Math.PI / 2;                       // axis along X
+burnerMotor.position.set(-0.18, BUR_Y, B_Z); burnerMotor.castShadow = burnerMotor.receiveShadow = true;
+plant.add(burnerMotor);
+const burnerFan = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.10, 0.06, 24), burnerMat);
+burnerFan.rotation.z = Math.PI / 2;
+burnerFan.position.set(-0.37, BUR_Y, B_Z); burnerFan.castShadow = true;
+plant.add(burnerFan);
+const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.16, 18), darkMat);
+nozzle.rotation.z = Math.PI / 2;                            // fires +X into the door
+nozzle.position.set(0.30, BUR_Y, B_Z); nozzle.castShadow = true;
+plant.add(nozzle);
+const blowerBox = new THREE.Mesh(new RoundedBoxGeometry(0.20, 0.18, 0.24, 3, 0.03), burnerMat);
+blowerBox.position.set(-0.02, 0.86, B_Z + 0.02); blowerBox.castShadow = true;
+plant.add(blowerBox);
+const jbox = new THREE.Mesh(new RoundedBoxGeometry(0.10, 0.12, 0.08, 3, 0.02), darkMat);
+jbox.position.set(-0.12, BUR_Y, B_Z + 0.24); jbox.castShadow = true;
+plant.add(jbox);
+
+// ============================================================================================
+// 3) SADDLE SUPPORTS — original silletas at sx=13,43 -> x=0.65,2.15. Cradle the shell underside
+//    (bottom at y = B_Y - B_R = 0.15) down to the skid.
+// ============================================================================================
+function addSaddle(sx) {
+  const h = B_Y - B_R;                                      // 0.15 m from ground to shell bottom
+  const web = new THREE.Mesh(new RoundedBoxGeometry(0.10, h, 1.16, 2, 0.02), steelMat);
+  web.position.set(sx, h / 2, B_Z); web.castShadow = web.receiveShadow = true;
+  plant.add(web);
+  const cradle = new THREE.Mesh(new THREE.TorusGeometry(B_R + 0.02, 0.035, 10, 28, Math.PI), steelMat);
+  cradle.rotation.y = Math.PI / 2;                          // torus plane -> Y/Z, opening upward
+  cradle.rotation.z = Math.PI;                              // half-ring cradle under the shell
+  cradle.position.set(sx, B_Y, B_Z); cradle.castShadow = true;
+  plant.add(cradle);
+  const foot = new THREE.Mesh(new RoundedBoxGeometry(0.16, 0.04, 1.30, 2, 0.02), steelMat);
+  foot.position.set(sx, 0.02, B_Z); foot.receiveShadow = true;
+  plant.add(foot);
+}
+addSaddle(0.65); addSaddle(2.15);
+
+// ============================================================================================
+// 4) ACS HOT-WATER TANK — original TX=24,TZ=52,TR=10 -> Ø1.0 m, y=2..42 -> H=2.0 m, VERTICAL.
+//    Upright lathe body with domed heads; two colored jacket bands (original orange bands).
+// ============================================================================================
+const T_X = 1.20, T_Z = 2.60, T_R = 0.50, T_H = 2.00, T_HH = 0.15, T_BASE = 0.10;
+const acsTank = await makeLatheBody(vesselProfile({ R: T_R, H: T_H, hHead: T_HH }), { segments: 40 }, steelMat);
+acsTank.position.set(T_X, T_BASE, T_Z);
+plant.add(acsTank);
+const T_TOP = T_BASE + T_H;                                 // 2.10 — crown of the dome
+for (const ty of [T_BASE + 0.70, T_BASE + 1.45]) {         // two color bands on the wall
+  const band = new THREE.Mesh(new THREE.TorusGeometry(T_R + 0.005, 0.035, 12, 40), bandMat);
+  band.rotation.x = Math.PI / 2;                            // torus plane horizontal -> ring around Y
+  band.position.set(T_X, ty, T_Z); band.castShadow = true;
+  plant.add(band);
+}
+// T&P safety valve on the dome
+const tp = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.12, 16), brassMat);
+tp.position.set(T_X, T_TOP + 0.06, T_Z); tp.castShadow = true;
+plant.add(tp);
+const tpOut = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.10, 14), brassMat);
+tpOut.rotation.z = Math.PI / 2; tpOut.position.set(T_X + 0.08, T_TOP + 0.10, T_Z);
+plant.add(tpOut);
+// tank skirt base
+const skirt = new THREE.Mesh(new THREE.CylinderGeometry(T_R + 0.02, T_R + 0.02, 0.12, 32, 1, true), darkMat);
+skirt.position.set(T_X, T_BASE + 0.02, T_Z); skirt.receiveShadow = true;
+plant.add(skirt);
+
+// ============================================================================================
+// 5) FLUE / STACK — rear smokebox (original x57..63,y3..31,z12..28) + vertical chimney (SX=59,SZ=20,
+//    up to y≈75 -> 3.75 m). Smokebox as RoundedBox, stack as CylinderGeometry with a rain cap.
+// ============================================================================================
+const smokebox = new THREE.Mesh(new RoundedBoxGeometry(0.34, 1.40, 0.82, 3, 0.05), steelMat);
+smokebox.position.set(3.00, 0.85, B_Z); smokebox.castShadow = smokebox.receiveShadow = true;
+plant.add(smokebox);
+const registerDoor = new THREE.Mesh(new RoundedBoxGeometry(0.02, 0.42, 0.42, 2, 0.02), darkMat);
+registerDoor.position.set(3.18, 0.80, B_Z); registerDoor.castShadow = true;
+plant.add(registerDoor);
+const S_X = 2.95, S_Z = B_Z;
+const S_BOT = 1.55, S_TOP = 3.60;                           // stack from 1.55 to 3.60 m
+const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.20, 0.10, 24), steelMat);
+collar.position.set(S_X, S_BOT + 0.05, S_Z); collar.castShadow = true;
+plant.add(collar);
+const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, S_TOP - S_BOT, 28), steelMat);
+stack.position.set(S_X, (S_BOT + S_TOP) / 2, S_Z); stack.castShadow = stack.receiveShadow = true;
+plant.add(stack);
+const capDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.03, 24), steelMat);
+capDisc.position.set(S_X, S_TOP + 0.09, S_Z); capDisc.castShadow = true;
+plant.add(capDisc);
+for (let k = 0; k < 3; k++) {                               // rain-cap standoff legs
+  const a = k / 3 * Math.PI * 2;
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.10, 8), steelMat);
+  leg.position.set(S_X + Math.cos(a) * 0.12, S_TOP + 0.05, S_Z + Math.sin(a) * 0.12);
+  plant.add(leg);
+}
+
+// ============================================================================================
+// 6) RECIRCULATION PUMP — original at TX=24, z33..40 -> x=1.20, z≈1.75..2.00. Superquadric volute
+//    + motor barrel along z.
+// ============================================================================================
+const P_X = 1.20, P_Y = 0.22, P_Z = 1.98;
+const pumpVolute = await makeSuperquadric(
+  { a: 0.12, b: 0.12, c: 0.09, e1: 0.35, e2: 0.45, uSeg: 20, vSeg: 16 }, burnerMat);
+pumpVolute.position.set(P_X, P_Y, P_Z);
+plant.add(pumpVolute);
+const pumpMotor = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.26, 24), burnerMat);
+pumpMotor.rotation.x = Math.PI / 2;                         // axis along z
+pumpMotor.position.set(P_X, P_Y, P_Z - 0.22); pumpMotor.castShadow = pumpMotor.receiveShadow = true;
+plant.add(pumpMotor);
+const pumpBase = new THREE.Mesh(new RoundedBoxGeometry(0.26, 0.06, 0.42, 2, 0.02), darkMat);
+pumpBase.position.set(P_X, 0.05, P_Z - 0.08); pumpBase.receiveShadow = true;
+plant.add(pumpBase);
+
+// ============================================================================================
+// 7) PIPES — swept tubes along the original voxel runs (waypoints ×0.05).
+// ============================================================================================
+// Gas train (yellow): manual valve run into the burner (original x=-3 line -> riser -> stub).
+const gasPipe = await makeSweptTube(
+  [[-0.15, 0.10, -0.12], [-0.15, 0.10, 0.68], [-0.15, 0.55, 0.72], [-0.02, 0.55, 0.86], [0.06, 0.55, 0.95]],
+  { radius: 0.026, targetEdgeLength: 0.04 }, gasMat);
+gasPipe.receiveShadow = true; plant.add(gasPipe);
+// Hot-water (rust): boiler crown -> up -> across -> into ACS tank near the top (original [44,30,20]..[35,36,52]).
+const hotPipe = await makeSweptTube(
+  [[2.20, B_TOP, B_Z], [2.20, 1.80, B_Z], [2.20, 1.80, 2.55], [1.72, 1.80, T_Z]],
+  { radius: 0.032, targetEdgeLength: 0.04 }, hotMat);
+hotPipe.receiveShadow = true; plant.add(hotPipe);
+// Recirculation (amber): tank bottom -> pump -> back into the boiler body (original [24,4,41]..[24,8,31]).
+const recPipe = await makeSweptTube(
+  [[T_X, 0.35, 2.12], [P_X, 0.28, 2.02], [P_X, 0.30, 1.90], [P_X, 0.42, 1.58], [P_X, 0.58, 1.48]],
+  { radius: 0.030, targetEdgeLength: 0.04 }, recMat);
+recPipe.receiveShadow = true; plant.add(recPipe);
+
+// inline gate valve on the hot-water riser (dark body + red handwheel)
+const gvBody = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.12, 20), darkMat);
+gvBody.position.set(2.20, 1.62, B_Z); gvBody.castShadow = true; plant.add(gvBody);
+const gvWheel = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.012, 10, 22),
+  new THREE.MeshStandardMaterial({ color: 0xa32424, metalness: 0.2, roughness: 0.5 }));
+gvWheel.position.set(2.30, 1.62, B_Z); gvWheel.rotation.y = Math.PI / 2; gvWheel.castShadow = true;
+plant.add(gvWheel);
+
+// ============================================================================================
+// 8) GAUGES — safety valve + manometer on the boiler crown, thermometer on the tank (original
+//    BRASS safety valve + WHITE dials).
+// ============================================================================================
+const safetyV = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.12, 16), brassMat);
+safetyV.position.set(1.45, B_TOP + 0.06, B_Z); safetyV.castShadow = true;
+plant.add(safetyV);
+function addGauge(x, y, z, r, axis) {
+  const dial = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.02, 24), dialMat);
+  const bezel = new THREE.Mesh(new THREE.TorusGeometry(r, 0.008, 12, 24), bezelMat);
+  if (axis === 'z') { dial.rotation.x = Math.PI / 2; }      // cylinder axis Y -> Z; torus already ⊥ Z
+  else { bezel.rotation.x = Math.PI / 2; }                  // face up: rotate the bezel ⊥ Y
+  dial.position.set(x, y, z); bezel.position.set(x, y, z);
+  dial.castShadow = true; bezel.castShadow = true;
+  plant.add(dial); plant.add(bezel);
+}
+addGauge(0.60, B_TOP + 0.10, B_Z + 0.02, 0.06, 'z');       // boiler manometer on a pedestal-ish crown
+addGauge(T_X - 0.42, 1.55, T_Z + 0.30, 0.05, 'z');         // ACS tank thermometer (front)
+
+// ============================================================================================
+// 9) SKID / HOUSEKEEPING PAD — original losa (x-14..66, z-4..66) trimmed to the equipment footprint.
+// ============================================================================================
+const pad = new THREE.Mesh(new RoundedBoxGeometry(3.85, 0.05, 3.05, 3, 0.02), padMat);
+pad.position.set(1.50, 0.025, 1.72); pad.receiveShadow = true;
+plant.add(pad);
+
+// ---------------------------------------------------------------- QA hooks (install AFTER all awaits)
+globalThis.__qaRenderInfo = () => renderer.info.render;
+
+const SUBJECT = plant;
+globalThis.__qaFraming = () => {
+  camera.updateMatrixWorld(); camera.updateProjectionMatrix();
+  const mvp = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  const b = new THREE.Box3().setFromObject(SUBJECT, true);
+  const mn = b.min, mx = b.max;
+  const corners = [
+    [mn.x, mn.y, mn.z], [mx.x, mn.y, mn.z], [mn.x, mx.y, mn.z], [mx.x, mx.y, mn.z],
+    [mn.x, mn.y, mx.z], [mx.x, mn.y, mx.z], [mn.x, mx.y, mx.z], [mx.x, mx.y, mx.z],
+  ];
+  const hudEl = document.querySelector('#hud');
+  const hud = hudEl ? (r => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }))(hudEl.getBoundingClientRect()) : null;
+  return { mvpElements: Array.from(mvp.elements), corners, W: innerWidth, H: innerHeight, hud };
+};
+
+// ---------------------------------------------------------------- render loop (starts after the build)
+renderer.shadowMap.needsUpdate = true;                     // one forced bake for post-boot geometry
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+document.documentElement.dataset.appReady = 'true';        // ready LAST
+</script>
+</body>
+</html>
