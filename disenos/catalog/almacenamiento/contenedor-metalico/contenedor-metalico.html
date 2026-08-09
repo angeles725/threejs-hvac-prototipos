@@ -1,0 +1,221 @@
+<!doctype html>
+<!--
+  contenedor-metalico — catalog asset, family `almacenamiento`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block61.md  ·  Spec: ./design-spec.yaml
+  The point of this asset is a RELATIONSHIP, not a shape: 600 x 400 is a module of the 1200 x 800
+  EUR pallet used in rack-pallet — exactly 4 per layer. PALLET LAYER shows it on screen.
+  Standard is VDA 4500 / KLT, NOT EN 13199 (premise refuted, B61 §61.1).
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contenedor metálico apilable 600×400 — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.02 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Contenedor apilable — formato euro 600 × 400</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· VDA 4500 KLT · alto 220 / 280 mm</span></div>
+  <div class="dim">4 por capa sobre pallet EUR 1200 × 800 — sin holgura</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnStack">STACK</button>
+  <button id="btnPallet">PALLET LAYER</button>
+  <button id="btnTall">TALL 280</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 61]) ----------
+const L = 0.600, W = 0.400, H = 0.220, H_TALL = 0.280;   // [CERT-web] / [CERT-a]
+const WALL = 0.006, RIM = 0.018;                          // [INFER]
+const PAL_L = 1.200, PAL_W = 0.800, PAL_H = 0.144;        // EUR pallet, same as rack-pallet [Block 58]
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 5, 18);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 100);
+const R = 2.6, AZ = 0.733, EL = 0.384;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.28 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.20, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.20, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 3.2;   // vertical bare metal: the IBL carries the read (see B60/torniquete)
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.4, 4, 2.4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d
+sun.shadow.camera.left=-2.5; sun.shadow.camera.right=2.5; sun.shadow.camera.top=2.5; sun.shadow.camera.bottom=-2.5;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.6);
+fill.position.set(-2.6, 2.2, 3.4); scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x3a424a, 0.9));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. Galvanized steel tote = BARE metal (HANDBOOK §3.1).
+// ============================================================================
+const matSteel = new THREE.MeshStandardMaterial({ color:0xc6cbcd, metalness:0.90, roughness:0.44 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x767c80, metalness:0.90, roughness:0.55 });
+const matWood  = new THREE.MeshStandardMaterial({ color:0xa8814f, metalness:0.0,  roughness:0.82 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+
+// one container, built as 4 walls + base so the interior is a real void
+function makeContainer(h){
+  const g = new THREE.Group();
+  put(g, L, WALL, W, matSteel, 0, WALL/2, 0);                                  // base
+  for(const sz of [-1,1]) put(g, L, h - WALL, WALL, matSteel, 0, WALL + (h-WALL)/2, sz*(W/2 - WALL/2));
+  for(const sx of [-1,1]) put(g, WALL, h - WALL, W - 2*WALL, matSteel, sx*(L/2 - WALL/2), WALL + (h-WALL)/2, 0);
+  // top rim — this is what a stacked unit sits on
+  for(const sz of [-1,1]) put(g, L, RIM, 0.016, matDark, 0, h - RIM/2, sz*(W/2 - 0.008));
+  for(const sx of [-1,1]) put(g, 0.016, RIM, W - 0.032, matDark, sx*(L/2 - 0.008), h - RIM/2, 0);
+  // stamped shell handles on the short ends [CERT-web "two shell handles"]
+  for(const sx of [-1,1]) put(g, 0.014, 0.055, 0.150, matDark, sx*(L/2 + 0.004), h - 0.075, 0);
+  // stacking corner lugs
+  for(const sx of [-1,1]) for(const sz of [-1,1])
+    put(g, 0.055, 0.014, 0.055, matDark, sx*(L/2 - 0.035), h + 0.006, sz*(W/2 - 0.035));
+  return g;
+}
+
+const single = makeContainer(H);
+root.add(single);
+
+const tall = makeContainer(H_TALL);          // [CERT-a] 280 mm variant
+tall.visible = false;
+root.add(tall);
+
+// STACK — three units engaging on their rims
+const stack = new THREE.Group();
+for(let i=0;i<3;i++){ const c = makeContainer(H); c.position.y = i*(H + 0.008); stack.add(c); }
+stack.position.set(0.90, 0, 0);
+stack.visible = false;
+root.add(stack);
+
+// PALLET LAYER — the module proof: 4 containers cover 1200 x 800 exactly
+const palletlayer = new THREE.Group();
+const pal = new THREE.Group();
+put(pal, PAL_L, 0.022, PAL_W, matWood, 0, PAL_H - 0.011, 0);
+put(pal, PAL_L, 0.022, PAL_W*0.82, matWood, 0, 0.011, 0);
+for(const sz of [-1,0,1]) for(const sx of [-1,0,1])
+  put(pal, 0.10, PAL_H - 0.044, 0.10, matWood, sx*(PAL_L/2 - 0.06), PAL_H/2, sz*(PAL_W/2 - 0.06));
+palletlayer.add(pal);
+for(const sx of [-1,1]) for(const sz of [-1,1]){
+  const c = makeContainer(H);
+  c.position.set(sx*L/2, PAL_H, sz*W/2);      // 2 x 600 = 1200 · 2 x 400 = 800 — no gap, no overhang
+  palletlayer.add(c);
+}
+palletlayer.position.set(-1.15, 0, 0);
+palletlayer.visible = false;
+root.add(palletlayer);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+function reframe(){
+  const anyWide = stack.visible || palletlayer.visible;
+  controls.target.set(palletlayer.visible ? -0.55 : 0, 0.20, 0);
+  camera.position.setLength(anyWide ? 4.2 : 2.6);
+  renderer.shadowMap.needsUpdate = true; requestRender();
+}
+const btnStack = document.getElementById('btnStack');
+btnStack.onclick = ()=>{ stack.visible = !stack.visible; btnStack.classList.toggle('on', stack.visible); reframe(); };
+
+const btnPallet = document.getElementById('btnPallet');
+btnPallet.onclick = ()=>{ palletlayer.visible = !palletlayer.visible;
+  btnPallet.classList.toggle('on', palletlayer.visible); reframe(); };
+
+const btnTall = document.getElementById('btnTall');
+btnTall.onclick = ()=>{ const t = !tall.visible; tall.visible = t; single.visible = !t;
+  btnTall.classList.toggle('on', t); renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__contenedorMetalicoApp = __app;
+globalThis['__contenedor-metalicoApp'] = __app;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
