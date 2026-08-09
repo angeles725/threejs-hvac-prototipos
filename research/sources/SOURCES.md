@@ -131,6 +131,7 @@
 | B65-mezzanine-dims/gt-eng-guardrails | B65-mezzanine-dims | https://www.gt-engineering.it/en/technical-standards/en-iso-standards/en-iso-14122-3-eng/guard-rails-en-14122-eng/ | 2026-08-09T03:56:26Z | 33471e1f64e791de433d265e587212b4fd02a41121453ed87e341c84626c7b97 | B65 |
 | B65-mezzanine-dims/safeway360-14122-3 | B65-mezzanine-dims | https://safeway360.com/en/regulatory-handrails-the-guide-to-comply-with-une-en-iso-14122-3/ | 2026-08-09T03:56:30Z | 98e7b2f956e461cda2e909a02fb5e8b8dfaf667e2b3a179e4e9a1ccbf1edf948 | B65 |
 | B66-locker-dims/link51-locker-handbook.pdf | B66-locker-dims | https://total-locker-service.com/Doc/Link51-product-infomation.pdf | 2026-08-09T04:58:33Z | 8a6fab11995c2d6c5dc124911531eface58293a1bee6e4c994173bbeac4ba93f | B66 |
+| B67-drive-in-dims/mecalux-drive-in-racking | B67-drive-in-dims | https://www.mecalux.com/warehouse-racking-and-shelving/drive-in-racking | 2026-08-09T05:56:00Z | aa78e19382057678c782613fc1de8e8acefb0927b68d123307d40ca0a49fda49 | B67 |
 
 ## Structure
 

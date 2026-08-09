@@ -1,0 +1,344 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — almacenamiento/rack-drive-in · drive-in (LIFO) deep-lane pallet racking, 3 lanes.
+  Built from disenos/catalog/shell-template.html. Contract: __rackDriveInApp.runtime + __qaRenderInfo +
+  data-app-ready, render-on-demand, frozen shadows (autoUpdate=false, 1024), DPR<=2.
+
+  Dimensional evidence: research/threejs-block67.md.
+  THE POINT OF THIS ASSET IS THE CHANNEL. A drive-in seen from the side is a grid of posts; the
+  truck-sized tunnel through the block reads only from the mouth, so the camera sits at the mouth
+  (block67 §67.5-1). Two things a modeller invents wrong and no green count can see:
+    · the END STOP at the FAR end — without it this is a drive-THROUGH, a different product;
+    · the rails hang on ATTACHMENT BRACKETS, offset inboard from the upright face, never flush.
+  The lane width is DERIVED, not published: the 75 mm clearance rule measures the FORKLIFT against the
+  uprights, and the truck is wider than the 800 mm pallet it carries (block67 §67.3).
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rack drive-in — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">RACK DRIVE-IN — 3 canales × 4 pallets de fondo × 3 niveles (LIFO)</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· bastidor galvanizado · guías y topes en amarillo de seguridad</span></div>
+  <div><span class="dim">4.30 × 5.00 × 3.95 m · canal libre 1.30 m · fondo de canal 4.90 m · paso de nivel 1.294 m</span></div>
+  <div><span class="dim">ancho de canal DERIVADO (no publicado): lo fija el montacargas, no el pallet — ver block67 §67.3</span></div>
+  <div><span class="dim">carga PARCIAL a propósito: LIFO llena por el fondo, y el canal abierto es lo que hay que ver</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnPallets" class="on">PALLETS</button>
+  <button id="btnGuides" class="on">GUÍAS Y TOPES</button>
+  <button id="btnBrace" class="on">ARRIOSTRAMIENTO</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · research/threejs-block67.md) ----------
+const PAL_D = 1.200, PAL_W = 0.800, PAL_H = 0.144;   // [CERT-web] EUR pallet, entered on its 800 mm face
+const LOAD_H = 1.000;                                // [INFER] unit load — a scale cue, not a certified size
+const UNIT_H = PAL_H + LOAD_H;                       // 1.144 m
+const CLR_D  = 0.025;                                // [CERT-web] ">= 25 mm clearance per unit load"
+const PITCH_D = PAL_D + CLR_D;                       // 1.225 — the clearance ACCUMULATES per pallet
+const N_DEEP = 4, N_LANES = 3, N_LEVELS = 3;         // [CERT-web] lanes run 2-10 deep
+const LANE_W = 1.300;                                // [INFER] truck ~1.15 m + 2 x 0.075 (§67.3)
+const UPR = 0.100;                                   // [CERT-doc] within the published 75-120 mm profiles
+const LANE_PITCH = LANE_W + UPR;                     // 1.400
+const LEVEL_PITCH = UNIT_H + 0.150;                  // 1.294 — [CERT-web] GP rail: pallet height + 150 mm
+const SLOT_PITCH = 0.050;                            // [CERT-web] uprights "slotted every 50 mm"
+const RAIL_W = 0.060, RAIL_H = 0.080, RAIL_OFF = 0.350;
+const DEPTH = N_DEEP * PITCH_D;                      // 4.900 m of channel
+const FRAME_H = 3.950;
+const RAIL_TOPS = [LEVEL_PITCH, 2*LEVEL_PITCH];      // the bottom row sits ON THE FLOOR (§67.5-5)
+const X0 = -(N_LANES * LANE_PITCH) / 2;              // left-hand upright line
+const upX = i => X0 + i * LANE_PITCH;                // i = 0..N_LANES  (4 upright lines for 3 lanes)
+const laneX = l => (upX(l) + upX(l+1)) / 2;
+const frameZ = k => k * PITCH_D;                     // k = 0..N_DEEP   (5 transverse frames)
+
+// The derived envelope is asserted, not trusted (ONBOARD: chained offsets drift silently).
+console.assert(Math.abs((upX(N_LANES) - upX(0)) - N_LANES*LANE_PITCH) < 1e-9, 'lane pitch drift');
+console.assert(RAIL_TOPS[RAIL_TOPS.length-1] + UNIT_H < FRAME_H, 'top unit load pokes through the frame');
+console.assert(RAIL_OFF + RAIL_W/2 < PAL_W/2, 'rail is not under the pallet');
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 14, 40);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen shadow
+document.body.appendChild(renderer.domElement);
+
+// The camera sits AT THE MOUTH (block67 §67.5-1). A side view of a drive-in is a grid of posts:
+// the tunnel is the subject, so the azimuth stays small and the eye rides above the top load.
+// Framing MEASURED, not eyeballed. The eight world corners of the envelope project to
+// ndcX -0.61..+0.59, ndcY -0.92..+0.75 at 1280x800: inside the frame, centred on x to 0.006, and
+// — the constraint that actually drove this camera — the top of the frame lands 100 px below the
+// edge, CLEARING the 4-line HUD. A green gate sees neither a cropped subject nor one behind the
+// text; the first framing here put the top bracing straight through the HUD with exit 0.
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const CAM_TARGET = new THREE.Vector3(-0.20, 1.70, DEPTH*0.42);
+camera.position.set(0.80, 4.20, -6.80);
+camera.lookAt(CAM_TARGET);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.copy(CAM_TARGET);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(5, 9, -4); sun.castShadow = true;              // keyed from the MOUTH side, so the
+sun.shadow.mapSize.set(1024,1024);                              // channel interior is not a black slot
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
+sun.shadow.camera.left=-5; sun.shadow.camera.right=5; sun.shadow.camera.top=6; sun.shadow.camera.bottom=-6;
+sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 30;
+scene.add(sun);
+// Galvanized sections are a LATTICE, not a flat vertical plane: the house rig is enough (no deviation).
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+// Bounce INTO the channels from the mouth — without it the tunnel reads as a dark hole and the
+// end stops (the part that makes this drive-IN) disappear.
+const mouthFill = new THREE.DirectionalLight(0xdfe8f5, 0.85);
+mouthFill.position.set(0.8, 2.2, -8);
+scene.add(mouthFill);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: galvanized frame = BARE metal (0.9-1.0);
+// safety-yellow guards and wooden pallets = DIELECTRIC (0.0). Near-binary metalness, no middle band.
+// ============================================================================
+const matFrame = new THREE.MeshStandardMaterial({ color:0xb9bdbe, metalness:0.92, roughness:0.46 });
+const matRail  = new THREE.MeshStandardMaterial({ color:0xa9aeb1, metalness:0.92, roughness:0.42 });
+const matBrkt  = new THREE.MeshStandardMaterial({ color:0x9fa4a7, metalness:0.92, roughness:0.50 });
+const matGuard = new THREE.MeshStandardMaterial({ color:0xd8a413, metalness:0.0,  roughness:0.60 });
+const matWood  = new THREE.MeshStandardMaterial({ color:0xa8814f, metalness:0.0,  roughness:0.82 });
+const matLoad  = new THREE.MeshStandardMaterial({ color:0xb8a184, metalness:0.0,  roughness:0.90 });
+const matSlot  = new THREE.MeshStandardMaterial({ color:0x2a3037, metalness:0.0,  roughness:0.85 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Everything hangs off `root` (ONBOARD: an object parented to `scene` is
+// invisible to the gate AND to the probes, which both walk `root`).
+// ============================================================================
+const root = new THREE.Group();
+const dummy = new THREE.Object3D();
+const pallets = new THREE.Group();      // toggle: load in / empty block
+const guides  = new THREE.Group();      // toggle: floor guide rails + buffers (guidance, not support)
+const braces  = new THREE.Group();      // toggle: horizontal + cross bracing
+
+// An InstancedMesh built from a list of matrices — one draw call per part family.
+const instance = (geo, mat, place, n, parent = root, shadows = true) => {
+  const im = new THREE.InstancedMesh(geo, mat, n);
+  im.castShadow = shadows; im.receiveShadow = shadows;
+  for(let i=0;i<n;i++){ place(i, dummy); dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix); }
+  im.instanceMatrix.needsUpdate = true;
+  parent.add(im);
+  return im;
+};
+const at = (d, x, y, z) => { d.position.set(x,y,z); d.rotation.set(0,0,0); d.scale.set(1,1,1); };
+
+// --- uprights: (N_LANES+1) lines x (N_DEEP+1) transverse frames ---
+{
+  const n = (N_LANES+1) * (N_DEEP+1);
+  instance(new THREE.BoxGeometry(UPR, FRAME_H, UPR), matFrame, (i,d)=>{
+    at(d, upX(i % (N_LANES+1)), FRAME_H/2, frameZ(Math.floor(i / (N_LANES+1))));
+  }, n);
+}
+
+// --- the 50 mm slot pattern, on the MOUTH-facing posts only (the only face the camera reads) ---
+{
+  const rows = Math.floor((FRAME_H - 0.30) / SLOT_PITCH);
+  const n = rows * (N_LANES+1);
+  instance(new THREE.BoxGeometry(0.030, 0.016, 0.004), matSlot, (i,d)=>{
+    at(d, upX(i % (N_LANES+1)), 0.20 + Math.floor(i / (N_LANES+1)) * SLOT_PITCH, frameZ(0) - UPR/2 - 0.002);
+  }, n, root, false);
+}
+
+// --- support rails: 2 per lane per elevated level, spanning the whole channel depth ---
+{
+  const n = N_LANES * RAIL_TOPS.length * 2;
+  instance(new THREE.BoxGeometry(RAIL_W, RAIL_H, DEPTH + UPR), matRail, (i,d)=>{
+    const lane  = i % N_LANES;
+    const level = Math.floor(i / N_LANES) % RAIL_TOPS.length;
+    const side  = Math.floor(i / (N_LANES * RAIL_TOPS.length)) ? 1 : -1;
+    at(d, laneX(lane) + side*RAIL_OFF, RAIL_TOPS[level] - RAIL_H/2, DEPTH/2);
+  }, n);
+}
+
+// --- attachment brackets: the rail does NOT touch the post (block67 §67.2). One per rail per frame. ---
+{
+  const armLen = (LANE_W/2) - (RAIL_OFF + RAIL_W/2);          // clear span from post face to rail face
+  const n = N_LANES * RAIL_TOPS.length * 2 * (N_DEEP+1);
+  console.assert(armLen > 0, 'bracket arm is negative — the rail would be inside the upright');
+  instance(new THREE.BoxGeometry(armLen, 0.050, 0.070), matBrkt, (i,d)=>{
+    const k     = i % (N_DEEP+1);
+    const lane  = Math.floor(i / (N_DEEP+1)) % N_LANES;
+    const level = Math.floor(i / ((N_DEEP+1) * N_LANES)) % RAIL_TOPS.length;
+    const side  = Math.floor(i / ((N_DEEP+1) * N_LANES * RAIL_TOPS.length)) ? 1 : -1;
+    at(d, laneX(lane) + side*(RAIL_OFF + RAIL_W/2 + armLen/2),
+          RAIL_TOPS[level] - RAIL_H - 0.025, frameZ(k));
+  }, n);
+}
+
+// --- END STOPS at the FAR end: this is what makes it drive-IN and not drive-THROUGH ---
+{
+  const n = N_LANES * N_LEVELS;
+  instance(new THREE.BoxGeometry(LANE_W - 0.02, 0.090, 0.050), matGuard, (i,d)=>{
+    const lane = i % N_LANES, row = Math.floor(i / N_LANES);
+    const y = row === 0 ? 0.16 : RAIL_TOPS[row-1] + 0.10;
+    at(d, laneX(lane), y, DEPTH - 0.03);
+  }, n);
+}
+
+// --- horizontal bracing overhead + cross bracing at the CLOSED back (never across a mouth) ---
+{
+  // top run: post line to post line, at every transverse frame
+  instance(new THREE.BoxGeometry(LANE_PITCH, 0.055, 0.055), matFrame, (i,d)=>{
+    const lane = i % N_LANES, k = Math.floor(i / N_LANES);
+    at(d, laneX(lane), FRAME_H - 0.08, frameZ(k));
+  }, N_LANES * (N_DEEP+1), braces);
+  // top spine: along the channel, over each upright line
+  instance(new THREE.BoxGeometry(0.055, 0.055, DEPTH), matFrame, (i,d)=>{
+    at(d, upX(i), FRAME_H - 0.14, DEPTH/2);
+  }, N_LANES+1, braces);
+  // back cross bracing: diagonals in the CLOSED plane only
+  const diagLen = Math.hypot(LANE_PITCH, FRAME_H - 0.6);
+  const ang = Math.atan2(FRAME_H - 0.6, LANE_PITCH);
+  instance(new THREE.BoxGeometry(diagLen, 0.040, 0.040), matFrame, (i,d)=>{
+    const lane = i % N_LANES, sign = Math.floor(i / N_LANES) ? 1 : -1;
+    d.position.set(laneX(lane), 0.6 + (FRAME_H - 0.6)/2, DEPTH);
+    d.rotation.set(0, 0, sign * ang);
+    d.scale.set(1,1,1);
+  }, N_LANES * 2, braces);
+}
+
+// --- floor guide rails + entry buffers (guidance and protection, NOT support: §67.5-5) ---
+{
+  instance(new THREE.BoxGeometry(0.080, 0.110, DEPTH), matGuard, (i,d)=>{
+    const lane = i % N_LANES, side = Math.floor(i / N_LANES) ? 1 : -1;
+    at(d, laneX(lane) + side*(LANE_W/2 - 0.09), 0.055, DEPTH/2);
+  }, N_LANES*2, guides);
+  // buffers at the mouth uprights — the part a reversing truck actually hits
+  instance(new THREE.BoxGeometry(0.150, 0.320, 0.150), matGuard, (i,d)=>{
+    at(d, upX(i), 0.16, frameZ(0) - 0.12);
+  }, N_LANES+1, guides);
+}
+
+// --- pallets + unit loads ---
+// A drive-in is LIFO: a lane fills from the BACK forward and empties front-first, so a block in
+// service is PARTIALLY loaded. Modelling all three lanes full would be the single worst framing
+// error available here — the mouth becomes a wall of cartons and the channel, the rails, the
+// brackets and the end stop (i.e. everything this asset exists to show) are hidden behind it.
+// FREE_FRONT[lane] = positions left empty at the mouth. Lane 0 full, lane 1 open two deep, lane 2 one.
+const FREE_FRONT = [0, 2, 1];
+{
+  const rowY = r => (r === 0 ? 0 : RAIL_TOPS[r-1]);
+  const cells = [];
+  for(let row=0; row<N_LEVELS; row++)
+    for(let lane=0; lane<N_LANES; lane++)
+      for(let deep=FREE_FRONT[lane]; deep<N_DEEP; deep++) cells.push({ lane, deep, row });
+  const n = cells.length;
+  console.assert(n === N_LANES*N_DEEP*N_LEVELS - N_LEVELS*FREE_FRONT.reduce((a,b)=>a+b,0),
+                 'occupied-cell count does not match the fill rule');
+  const zOf = c => (c.deep + 0.5) * PITCH_D;
+  // top deck
+  instance(new THREE.BoxGeometry(PAL_W, 0.022, PAL_D), matWood, (i,d)=>{
+    const c = cells[i]; at(d, laneX(c.lane), rowY(c.row) + PAL_H - 0.011, zOf(c));
+  }, n, pallets);
+  // bottom deckboards + blocks: 3 bars per pallet (front / middle / rear)
+  instance(new THREE.BoxGeometry(PAL_W, PAL_H - 0.022, 0.145), matWood, (i,d)=>{
+    const c = cells[i % n], j = Math.floor(i / n);
+    at(d, laneX(c.lane), rowY(c.row) + (PAL_H - 0.022)/2, zOf(c) + (j-1) * (PAL_D/2 - 0.075));
+  }, n*3, pallets);
+  // unit load
+  instance(new THREE.BoxGeometry(PAL_W - 0.04, LOAD_H, PAL_D - 0.06), matLoad, (i,d)=>{
+    const c = cells[i]; at(d, laneX(c.lane), rowY(c.row) + PAL_H + LOAD_H/2, zOf(c));
+  }, n, pallets);
+}
+
+root.add(pallets); root.add(guides); root.add(braces);
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender(). Each toggle here hides a
+// SELF-SUPPORTING part family (loads, guidance, bracing) — nothing is left resting on a hidden
+// piece, which is the failure mode the ONBOARD's continuity rule exists to catch.
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+const toggle = (id, obj)=>{ const b = document.getElementById(id);
+  b.onclick = ()=>{ obj.visible = !obj.visible; b.classList.toggle('on', obj.visible);
+    renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle('btnPallets', pallets);
+toggle('btnGuides',  guides);
+toggle('btnBrace',   braces);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__rackDriveInApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__rack-drive-inApp'] = globalThis.__rackDriveInApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
