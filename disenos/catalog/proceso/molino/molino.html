@@ -1,0 +1,498 @@
+<!doctype html>
+<!--
+  molino — large-chamber hammer mill (GD class)
+  Spec:     disenos/catalog/proceso/molino/design-spec.yaml
+  Evidence: research/sources/B102-proceso-cooling/hammer-mill-gd.md  [B102]
+
+  Two shape facts from the datasheet drive everything:
+   · the SCREEN wraps ~275 deg of the 1200 mm chamber (published chamber area / screen width gives
+     the same 2.88 m arc on all three models = 76% of the circumference), leaving ONE ~85 deg gap at
+     the top for the inlet "with hardened impact plates on both sides". A grate under the rotor is
+     the intuitive shape and it is the wrong one.
+   · the motor drives through a "Flexible cam coupling with coupling guard", so motor and rotor are
+     COAXIAL on one base — not belt-driven from underneath.
+
+  CORTE is a MATERIAL swap AND it cuts a PAIR: housing + screen are two CONCENTRIC closed envelopes.
+  Ghosting only the housing would reveal the OUTSIDE of the screen and hide the rotor, while looking
+  like a successful cutaway (the skid-hidroneumatico shell/bladder precedent). Contents — rotor,
+  beaters, impact plates — stay opaque in both states, so the cut only ever OPENS and never creates.
+
+  Build guards use console.error, never console.assert: the gate reads errors and is blind to asserts.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Molino de martillos — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Molino de martillos — cámara grande</div>
+  <div><span class="dim">2.61 × 1.60 × 1.60 m · cámara Ø1.20 m · criba 640 mm</span></div>
+  <div class="pass">Pase MATERIALS</div>
+  <div><span class="dim">criba 275° · batidores en bastidor · 1500 rpm · 160 kW</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnRun">MARCHA</button>
+  <button id="btnCut">CORTE</button>
+  <button id="btnDim">COTAS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 10, 30);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;      // DEVIATION: painted subject, see the light rig below
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+// Spec camera: az 42, el 12, fov 38, target_y 0.82, R 4.70. This subject is nearly cubic, so the
+// VERTICAL extent binds (the opposite of the cooling tunnel) — the elevation adds the plan depth to
+// the projected height. Asserted against the projected bbox below, never assumed.
+const AZ = 42*Math.PI/180, EL = 12*Math.PI/180, R = 4.70, TY = 0.82;
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TY + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TY, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TY, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;   // OFF: a rotating scene never settles
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// DEVIATION, and it is the OPPOSITE of this family's stainless assets: a coated machine housing is a
+// dielectric and burns out under the env ~2.3 / exposure 1.15 rig that bare metal needs. The bare
+// metal here lives INSIDE the housing and is only ever seen through CORTE, so the rig is tuned for
+// the surface the default capture actually shows.
+scene.environmentIntensity = 1.55;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(3.4, 5.2, 2.6); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.05;
+sun.shadow.camera.left=-2.6; sun.shadow.camera.right=2.6; sun.shadow.camera.top=2.6; sun.shadow.camera.bottom=-2.6;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+const fill = new THREE.DirectionalLight(0xffffff, 0.75);   // camera-side fill: diffuse term on the vertical painted faces
+fill.position.set(3.6, 1.8, 3.6);
+scene.add(fill);
+scene.add(new THREE.AmbientLight(0xffffff, 0.28));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(24,24),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS (HANDBOOK §3; metalness near-binary)
+// ============================================================================
+const matHouse  = new THREE.MeshStandardMaterial({ color:0x56636e, metalness:0.0,  roughness:0.55 });
+const matFrame  = new THREE.MeshStandardMaterial({ color:0x2f353b, metalness:0.0,  roughness:0.62 });
+const matRotor  = new THREE.MeshStandardMaterial({ color:0xb9c0c4, metalness:0.92, roughness:0.35 });
+const matBeater = new THREE.MeshStandardMaterial({ color:0x9aa2a8, metalness:0.95, roughness:0.45 });
+const matScreen = new THREE.MeshStandardMaterial({ color:0xa8b0b6, metalness:0.90, roughness:0.42 });
+
+// Door furniture gets its OWN material even though it looks like the frame. It belongs to the
+// envelope: ghosting the door while its hinges and handles stay opaque leaves hardware hanging in
+// mid-air — the same asymmetry as a hide-list that does not match its restore-list, expressed in
+// materials. Sharing matFrame would have forced the choice between floating hinges and ghosting the
+// base rails, the pedestal and the outlet flange with them.
+const matDoorHw = new THREE.MeshStandardMaterial({ color:0x2f353b, metalness:0.0, roughness:0.62 });
+
+// CORTE = material swap over the ENVELOPE PAIR. Both closed shells are here; the contents are not.
+const CUTTABLE = [
+  { m: matHouse,   on: 1.00, cut: 0.16 },   // envelope 1: the housing
+  { m: matScreen,  on: 1.00, cut: 0.42 },   // envelope 2: the screen, concentric INSIDE it
+  { m: matDoorHw,  on: 1.00, cut: 0.16 },   // the envelope's own hardware, so nothing is left floating
+];
+matHouse.transparent = true; matScreen.transparent = true; matDoorHw.transparent = true;
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+
+const box = (w,h,d,m)=>{ const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), m);
+                         o.castShadow=true; o.receiveShadow=true; return o; };
+const put = (o,x,y,z)=>{ o.position.set(x,y,z); return o; };   // Object3D.position has NO setter
+const inst = (geo, mat, xforms)=>{
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = true; im.receiveShadow = true;
+  const m = new THREE.Matrix4();
+  xforms.forEach((t,i)=>{ m.makeTranslation(t[0],t[1],t[2]); im.setMatrixAt(i,m); });
+  im.instanceMatrix.needsUpdate = true;
+  return im;
+};
+
+// ---- LAYOUT in ONE block; every x derived from the one before it ----
+const LEN = 2.610, WID = 1.600, HGT = 1.600;      // [CERT-doc] GD 12 (height: printed 16000, read as 1600)
+const CHAM_R = 0.600;                             // [CERT-doc] chamber Ø1200
+const SCREEN_W = 0.640;                           // [CERT-doc] GD 12 screen width
+const SCREEN_T = 0.020;                           // [INFER]
+const WRAP = 275*Math.PI/180, GAP = 2*Math.PI - WRAP;   // [INFER from CERT-doc] 2.88 m arc / 3.770 m
+const NSEG = 4;                                   // [CERT-doc] "4-part screen segments"
+const HAM_R = 0.520;                              // [INFER] Ø1.04 hammer circle, 0.06 clearance to the screen
+const BASE_TOP = 0.160, DAMP_H = 0.060;
+const CH_X = -0.550, CH_Y = 0.880;                // chamber axis
+const HOUSE_HX = 0.400, HOUSE_HY = 0.720, HOUSE_HZ = 0.750;   // half-extents of the housing shell
+const WALL = 0.030;
+const GUARD_X0 = CH_X + HOUSE_HX, GUARD_X1 = GUARD_X0 + 0.42, GUARD_R = 0.165;
+const MOT_X0 = GUARD_X1, MOT_L = 0.640, MOT_R = 0.240;
+const INLET_TOP = 1.720;                          // [INFER] the customer's feed connection sits above the stated envelope
+const NROW = 6, NPER = 5;                         // [INFER] beater rows / beaters per row
+
+// ---- base frame on height-adjustable vibration dampers ----
+// TWO longitudinal rails with cross members, NOT a slab. The chamber floor is at the top of this
+// frame, so a slab would leave the grist outlet nowhere to go: the first build derived the outlet's
+// height as (housing bottom - base top) and got a NEGATIVE box — a machine with no discharge, and
+// the gate returned exit 0 with an empty console over it. The mill has to stand over its own outlet.
+const base = new THREE.Group();
+const RAIL_Z = 0.380, RAIL_H = BASE_TOP - DAMP_H;
+base.add(inst(new THREE.BoxGeometry(LEN, RAIL_H, 0.16), matFrame,
+  [[0, DAMP_H+RAIL_H/2, -RAIL_Z],[0, DAMP_H+RAIL_H/2, RAIL_Z]]));
+base.add(inst(new THREE.BoxGeometry(0.16, RAIL_H, RAIL_Z*2-0.16), matFrame,
+  [[-LEN/2+0.20, DAMP_H+RAIL_H/2, 0],[LEN/2-0.20, DAMP_H+RAIL_H/2, 0],[MOT_X0+MOT_L/2, DAMP_H+RAIL_H/2, 0]]));
+const dampXf = [];
+for (const dx of [-LEN/2+0.16, LEN/2-0.16]) for (const dz of [-RAIL_Z, RAIL_Z]) dampXf.push([dx, DAMP_H/2, dz]);
+base.add(inst(new THREE.CylinderGeometry(0.055,0.070,DAMP_H,14), matBeater, dampXf));
+root.add(base);
+
+// ---- housing: a 5-PANEL SHELL, never a solid box. The +Z face is the doors. ----
+// A solid box would seal the chamber and CORTE would ghost a lid with nothing behind it; worse, the
+// screen and rotor would be inside a closed volume that no state could show.
+const house = new THREE.Group();
+house.add(put(box(HOUSE_HX*2, WALL, HOUSE_HZ*2, matHouse), 0,  HOUSE_HY, 0));          // top
+// bottom: TWO strips with a slot between them. A full bottom panel seals the grist in — the same
+// defect family as a solid lid, one surface lower down, and equally invisible to every count.
+house.add(inst(new THREE.BoxGeometry(HOUSE_HX*2, WALL, HOUSE_HZ-0.25), matHouse,
+  [[0, -HOUSE_HY, -(HOUSE_HZ+0.25)/2],[0, -HOUSE_HY, (HOUSE_HZ+0.25)/2]]));
+house.add(put(box(HOUSE_HX*2, HOUSE_HY*2, WALL, matHouse), 0, 0, -HOUSE_HZ));          // back
+house.add(put(box(WALL, HOUSE_HY*2, HOUSE_HZ*2, matHouse), -HOUSE_HX, 0, 0));          // end (drive side is open to the guard)
+house.add(put(box(WALL, HOUSE_HY*2, HOUSE_HZ*2, matHouse),  HOUSE_HX, 0, 0));          // end
+house.position.set(CH_X, CH_Y, 0);
+root.add(house);
+
+// ---- wide-opening doors on the +Z face: two leaves, hinges out, latches meeting in the middle ----
+const doors = new THREE.Group();
+const DOOR_W = HOUSE_HX - 0.02, DOOR_H = HOUSE_HY*2 - 0.10;
+for (const s of [-1, 1]){
+  doors.add(put(box(DOOR_W, DOOR_H, 0.026, matHouse), s*(DOOR_W/2+0.01), 0, HOUSE_HZ+0.012));
+  // hinges on the OUTER edge of each leaf, latch handles meeting at the centre joint
+  for (const hy of [-DOOR_H/2+0.12, 0, DOOR_H/2-0.12])
+    doors.add(put(box(0.05,0.09,0.045,matDoorHw), s*(DOOR_W+0.005), hy, HOUSE_HZ+0.020));
+  const lever = box(0.03,0.20,0.03, matDoorHw);
+  doors.add(put(lever, s*0.045, 0.05, HOUSE_HZ+0.040));
+}
+doors.position.set(CH_X, CH_Y, 0);
+root.add(doors);
+
+// ---- screen: 4 segments over 275 deg, ONE gap at the TOP for the inlet ----
+// Built in the YZ plane from a Shape so the gap's direction is unambiguous: angles are measured in
+// the shape's own XY plane where +Y is exactly up, and the extrusion is then swung onto the X axis
+// by a rotation ABOUT Y, which leaves +Y untouched. Placing an arc by trial-and-error rotation is
+// how a screen ends up with its gap facing the floor.
+const screen = new THREE.Group();
+const segSpan = WRAP/NSEG;
+for (let i=0;i<NSEG;i++){
+  const a0 = Math.PI/2 + GAP/2 + i*segSpan, a1 = a0 + segSpan - 0.035;   // 0.035 rad joint: at 0.012 the four segments read as one continuous haze under CORTE
+  const sh = new THREE.Shape();
+  sh.absarc(0,0, CHAM_R, a0, a1, false);
+  sh.absarc(0,0, CHAM_R-SCREEN_T, a1, a0, true);
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: SCREEN_W, bevelEnabled:false, curveSegments: 24 });
+  geo.translate(0,0,-SCREEN_W/2);
+  const seg = new THREE.Mesh(geo, matScreen);
+  seg.castShadow = true; seg.receiveShadow = true;
+  seg.rotation.y = Math.PI/2;                 // extrusion +Z -> +X; +Y (and therefore the gap) preserved
+  screen.add(seg);
+}
+// Segment EDGE RAILS. A translucent shell has no silhouette of its own, so under CORTE the four
+// segments merged into one soft veil and `screen-wraps-the-rotor` was unreadable — raising the
+// opacity instead would have hidden the rotor behind it, trading one critical feature for another.
+// Real segments have edges; the edges are opaque, and an opaque line reads at any opacity.
+{
+  const railGeo = new THREE.BoxGeometry(SCREEN_W+0.02, 0.045, 0.030);
+  const rails = new THREE.InstancedMesh(railGeo, matBeater, NSEG*2);
+  rails.castShadow = true;
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(),
+        p = new THREE.Vector3(), s1 = new THREE.Vector3(1,1,1);
+  let n = 0;
+  for (let i=0;i<NSEG;i++){
+    for (const a of [Math.PI/2 + GAP/2 + i*segSpan, Math.PI/2 + GAP/2 + (i+1)*segSpan - 0.035]){
+      e.set(a - Math.PI/2, 0, 0); q.setFromEuler(e);
+      p.set(0, Math.sin(a)*(CHAM_R-SCREEN_T/2), -Math.cos(a)*(CHAM_R-SCREEN_T/2));
+      m.compose(p,q,s1); rails.setMatrixAt(n++, m);
+    }
+  }
+  rails.instanceMatrix.needsUpdate = true;
+  screen.add(rails);
+}
+screen.position.set(CH_X, CH_Y, 0);
+root.add(screen);
+
+// ---- impact plates: hardened, one on each side of the inlet, filling the screen gap ----
+const impacts = new THREE.Group();
+// ANGLE CONVENTION, and it is not optional to get right. The screen is a Shape in its own XY plane
+// swung onto the X axis by rotation.y = PI/2, which maps (x,y,z) -> (z, y, -x). So a screen angle a
+// lands at world (extrusion, r*sin(a), -r*cos(a)), and a part that must sit AT that angle rotates
+// about X by (a - PI/2). Reusing the shape's (cos a, sin a) directly as world (x, y) — the obvious
+// thing to write — spreads the parts along the machine's LENGTH instead of around the chamber, and
+// it fails silently: the plates were built, lit and counted, just in the wrong place.
+for (const sgn of [-1,1]){
+  const a = Math.PI/2 + sgn*GAP/2;
+  const pl = box(SCREEN_W, 0.030, 0.10, matBeater);
+  pl.position.set(0, Math.sin(a)*(CHAM_R-0.015), -Math.cos(a)*(CHAM_R-0.015));
+  pl.rotation.x = a - Math.PI/2;
+  impacts.add(pl);
+}
+impacts.position.set(CH_X, CH_Y, 0);
+root.add(impacts);
+
+// ---- rotor: shaft + beater FRAMES carrying the beaters (not loose hammers on a pin) ----
+const rotor = new THREE.Group();
+const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.060,0.060, HOUSE_HX*2 + 0.52, 18), matRotor);
+shaft.rotation.z = Math.PI/2; shaft.castShadow = true;
+rotor.add(put(shaft, 0.20, 0, 0));
+// discs the frames are bolted between
+rotor.add(inst((()=>{ const g=new THREE.CylinderGeometry(0.170,0.170,0.030,20); g.rotateZ(Math.PI/2); return g; })(),
+  matRotor, [[-SCREEN_W/2-0.02,0,0],[0,0,0],[SCREEN_W/2+0.02,0,0]]));
+// frames + beaters: one InstancedMesh each, matrices composed with a real rotation per row
+const frameGeo  = new THREE.BoxGeometry(SCREEN_W+0.02, 0.040, 0.070);
+const beaterGeo = new THREE.BoxGeometry(0.070, 0.180, 0.026);
+const frames  = new THREE.InstancedMesh(frameGeo,  matRotor,  NROW);
+const beaters = new THREE.InstancedMesh(beaterGeo, matBeater, NROW*NPER);
+frames.castShadow = true; beaters.castShadow = true;
+{
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(1,1,1);
+  const p = new THREE.Vector3();
+  for (let r=0;r<NROW;r++){
+    const ang = r*2*Math.PI/NROW;
+    e.set(ang,0,0); q.setFromEuler(e);
+    p.set(0, Math.cos(ang)*0.330, Math.sin(ang)*0.330);
+    m.compose(p,q,s); frames.setMatrixAt(r,m);
+    for (let k=0;k<NPER;k++){
+      const bx = -SCREEN_W/2 + (k+0.5)*(SCREEN_W/NPER);
+      p.set(bx, Math.cos(ang)*(HAM_R-0.090), Math.sin(ang)*(HAM_R-0.090));
+      m.compose(p,q,s); beaters.setMatrixAt(r*NPER+k,m);
+    }
+  }
+  frames.instanceMatrix.needsUpdate = true; beaters.instanceMatrix.needsUpdate = true;
+}
+rotor.add(frames); rotor.add(beaters);
+rotor.position.set(CH_X, CH_Y, 0);
+root.add(rotor);
+
+// ---- inlet: flanged collar in the screen gap, with the manual flap and its lever ----
+const inlet = new THREE.Group();
+const IN_H = INLET_TOP - (CH_Y + HOUSE_HY);
+inlet.add(put(box(0.34, IN_H, 0.42, matHouse), 0, IN_H/2, 0));
+inlet.add(put(box(0.40, 0.022, 0.48, matFrame), 0, IN_H, 0));            // top flange
+const flap = box(0.30, 0.016, 0.34, matBeater);
+flap.rotation.z = 0.45;                                                   // the flap sits part-open
+inlet.add(put(flap, 0, IN_H*0.45, 0));
+inlet.add(put(box(0.030,0.030,0.22,matFrame), 0.17, IN_H*0.45, 0.26));    // the manual lever
+inlet.position.set(CH_X, CH_Y + HOUSE_HY, 0);
+root.add(inlet);
+
+// ---- grist outlet: sealing flange under the chamber, discharging DOWN ----
+const outlet = new THREE.Group();
+const OUT_TOP = CH_Y - HOUSE_HY, OUT_BOT = 0.030;      // it drops BETWEEN the rails to floor level:
+const OUT_H = OUT_TOP - OUT_BOT;                        // the mill discharges into a floor opening,
+outlet.add(put(box(0.46, OUT_H, 0.44, matHouse), 0, (OUT_TOP+OUT_BOT)/2, 0));   // which is the only
+outlet.add(put(box(0.54, 0.024, 0.52, matFrame), 0, OUT_BOT+0.012, 0));         // place left under a
+outlet.position.set(CH_X, 0, 0);                        // 1.20 m chamber inside a 1.60 m envelope.
+root.add(outlet);
+
+// ---- coupling guard: OPEN-ENDED, so the shaft is visibly continuous through it ----
+const guardGeo = new THREE.CylinderGeometry(GUARD_R, GUARD_R, GUARD_X1-GUARD_X0, 22, 1, true);
+guardGeo.rotateZ(Math.PI/2);
+const guard = new THREE.Mesh(guardGeo, matFrame);
+guard.castShadow = true; guard.material.side = THREE.DoubleSide;
+root.add(put(guard, (GUARD_X0+GUARD_X1)/2, CH_Y, 0));
+
+// ---- motor: COAXIAL with the rotor, on its own pedestal on the same base ----
+const motor = new THREE.Group();
+const body = new THREE.Mesh(new THREE.CylinderGeometry(MOT_R, MOT_R, MOT_L, 24), matHouse);
+body.rotation.z = Math.PI/2; body.castShadow = true;
+motor.add(put(body, MOT_X0 + MOT_L/2, CH_Y, 0));
+const cowl = new THREE.Mesh(new THREE.CylinderGeometry(MOT_R*0.78, MOT_R*0.78, 0.16, 20), matFrame);
+cowl.rotation.z = Math.PI/2; motor.add(put(cowl, MOT_X0 + MOT_L + 0.08, CH_Y, 0));
+motor.add(put(box(0.20,0.13,0.24, matFrame), MOT_X0 + MOT_L*0.45, CH_Y + MOT_R + 0.055, 0));  // terminal box
+// cooling ribs. Kept few, thin and DARK: seven proud rings in the body's own colour read as a
+// corrugated bellows, not as a motor — the first build measured fine and looked like a concertina.
+const ribXf = [];
+for (let i=0;i<5;i++) ribXf.push([MOT_X0 + 0.11 + i*((MOT_L-0.22)/4), CH_Y, 0]);
+motor.add(inst((()=>{ const g=new THREE.CylinderGeometry(MOT_R+0.006, MOT_R+0.006, 0.010, 20); g.rotateZ(Math.PI/2); return g; })(),
+  matFrame, ribXf));
+motor.add(put(box(0.52, CH_Y-MOT_R-BASE_TOP+0.02, 0.44, matFrame), MOT_X0 + MOT_L/2, (BASE_TOP + CH_Y-MOT_R)/2, 0));  // pedestal
+root.add(motor);
+
+// ---- COTAS: lines WITH THEIR FIGURES. A dimension line carrying no number is not a dimension,
+// it is a stray edge — the blind reviewer said exactly that about the sibling asset.
+const cotas = new THREE.Group();
+cotas.visible = false;
+const matCota = new THREE.LineBasicMaterial({ color:0x00d4aa });
+const lineOf = (pts)=> new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+  pts.map(p=>new THREE.Vector3(...p))), matCota);
+const label = (text, x, y, z)=>{
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#06080d'; g.fillRect(0,0,256,64);
+  g.font = 'bold 34px ui-monospace, monospace'; g.fillStyle = '#00d4aa';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, 128, 34);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+  sp.scale.set(0.44, 0.11, 1);
+  return put(sp, x, y, z);
+};
+const CZ = 0.94, CY = 0.05;
+cotas.add(lineOf([[-LEN/2,CY,CZ],[LEN/2,CY,CZ]]));
+cotas.add(lineOf([[-LEN/2,CY-0.07,CZ],[-LEN/2,CY+0.07,CZ]]));
+cotas.add(lineOf([[LEN/2,CY-0.07,CZ],[LEN/2,CY+0.07,CZ]]));
+cotas.add(label('2.61 m', 0, CY+0.14, CZ));
+cotas.add(lineOf([[-LEN/2-0.10,0,CZ],[-LEN/2-0.10,HGT,CZ]]));
+cotas.add(lineOf([[-LEN/2-0.18,HGT,CZ],[-LEN/2-0.02,HGT,CZ]]));
+cotas.add(label('1.60 m', -LEN/2-0.10, HGT+0.12, CZ));
+cotas.add(lineOf([[CH_X,CH_Y-CHAM_R,CZ],[CH_X,CH_Y+CHAM_R,CZ]]));
+cotas.add(lineOf([[CH_X-0.07,CH_Y-CHAM_R,CZ],[CH_X+0.07,CH_Y-CHAM_R,CZ]]));
+cotas.add(lineOf([[CH_X-0.07,CH_Y+CHAM_R,CZ],[CH_X+0.07,CH_Y+CHAM_R,CZ]]));
+cotas.add(label('Ø1.20 m', CH_X-0.30, CH_Y, CZ));
+root.add(cotas);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ---- build-time guards (console.error — the gate reads errors, not asserts) ----
+{
+  const bb = new THREE.Box3().setFromObject(root), sz = new THREE.Vector3();
+  bb.getSize(sz);
+  if (sz.x > LEN + 0.10)  console.error('BUILD: envelope X drift', sz.x, '>', LEN+0.10);
+  if (sz.z > WID + 0.10)  console.error('BUILD: envelope Z drift', sz.z);
+  if (sz.y > INLET_TOP + 0.05) console.error('BUILD: envelope Y drift', sz.y);
+
+  // The screen must fit inside the housing and outside the beaters, or the machine cannot turn.
+  if (!(CHAM_R < Math.min(HOUSE_HY, HOUSE_HZ) - WALL))
+    console.error('BUILD: screen Ø', CHAM_R*2, 'does not fit inside the housing');
+  if (!(HAM_R + 0.02 < CHAM_R - SCREEN_T))
+    console.error('BUILD: beater tips at', HAM_R, 'foul the screen bore at', CHAM_R-SCREEN_T);
+  // The 4 segments plus their joints must add up to the derived wrap, not to whatever looks right.
+  const covered = NSEG*(segSpan - 0.035);
+  if (Math.abs(covered - (WRAP - NSEG*0.035)) > 1e-6)
+    console.error('BUILD: screen segments cover', covered, 'rad, not the derived', WRAP);
+  // COAXIAL DRIVE: rotor axis, guard axis and motor axis are one line, or the mill cannot be assembled.
+  if (Math.abs(guard.position.y - CH_Y) > 1e-6 || Math.abs(body.position.y + motor.position.y - CH_Y) > 1e-6)
+    console.error('BUILD: drive line is not coaxial', CH_Y, guard.position.y, body.position.y);
+  if (GUARD_X0 < CH_X + HOUSE_HX - 1e-6 || MOT_X0 < GUARD_X1 - 1e-6)
+    console.error('BUILD: guard does not bridge housing to motor', GUARD_X0, GUARD_X1, MOT_X0);
+  // Everything stands ON the base, nothing floats.
+  if (bb.min.y < -1e-6) console.error('BUILD: geometry below the floor at', bb.min.y);
+  // The REDUCTION PATH must be open end to end: a chamber floor with no slot and an outlet with no
+  // height are both "sealed mill", and both render as a perfectly plausible cabinet. The first build
+  // computed OUT_H = -0.02 (a degenerate box) and nothing complained.
+  if (!(OUT_H > 0.05)) console.error('BUILD: grist outlet has no height', OUT_H, '- the mill cannot discharge');
+  if (!(OUT_BOT >= 0 && OUT_TOP > OUT_BOT)) console.error('BUILD: outlet inverted', OUT_TOP, OUT_BOT);
+
+  // FRAMING: the gate scores that the scene renders, never that it FITS.
+  camera.updateMatrixWorld(); camera.updateProjectionMatrix();
+  const v = new THREE.Vector3();
+  for (const cx of [bb.min.x, bb.max.x]) for (const cy of [bb.min.y, bb.max.y]) for (const cz of [bb.min.z, bb.max.z]){
+    v.set(cx,cy,cz).project(camera);
+    if (Math.abs(v.x) > 0.93 || v.y < -0.93 || v.y > 0.75)
+      console.error('BUILD: corner', cx.toFixed(2), cy.toFixed(2), cz.toFixed(2),
+                    'projects outside the frame at ndc', v.x.toFixed(3), v.y.toFixed(3));
+  }
+}
+
+// ============================================================================
+// ZONE 3 — UI
+// ============================================================================
+let running = false, cut = false;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnRun = document.getElementById('btnRun');
+btnRun.onclick = ()=>{ running = !running; btnRun.classList.toggle('on', running); requestRender(); };
+
+const btnCut = document.getElementById('btnCut');
+btnCut.onclick = ()=>{
+  cut = !cut;
+  for (const c of CUTTABLE) c.m.opacity = cut ? c.cut : c.on;
+  btnCut.classList.toggle('on', cut);
+  requestRender();
+};
+
+const btnDim = document.getElementById('btnDim');
+btnDim.onclick = ()=>{ cotas.visible = !cotas.visible;
+  btnDim.classList.toggle('on', cotas.visible); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  if (running){
+    rotor.rotation.x += 0.16;
+    // The rotor turns INSIDE a closed housing, so its own shadow contribution barely changes — but
+    // MARCHA is a continuous, indefinite motion of geometry, and the rule keys on the CLASS of
+    // motion, not on how much it happens to show. Re-bake inside the branch.
+    renderer.shadowMap.needsUpdate = true;
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract ----------
+globalThis.__molinoApp = { runtime:{ scene, renderer, camera, root } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
