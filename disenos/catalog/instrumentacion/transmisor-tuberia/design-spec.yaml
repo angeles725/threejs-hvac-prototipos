@@ -1,0 +1,181 @@
+# DesignSpec — DP flow measurement on a DN100 line (orifice + manifold + transmitter)
+# Catalog family `instrumentacion` (worktree catalog-retail-lab).
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: transmisor-tuberia
+family: instrumentacion
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # 14 mm impulse tubing and a 6 mm orifice plate are material
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 13 -> moderate.
+  scores: {silhouette: 2, components: 3, hierarchy: 1, repetition: 1,
+           material_layers: 2, detail: 3, occlusion: 0, action_readiness: 1}
+  tier: moderate
+  notes: >
+    The asset is a LOOP, not a device: taps on the line, root valves, impulse tubing routed with
+    real runs, a 3-valve manifold and only then the transmitter. A transmitter hanging near a pipe
+    with nothing connecting it is the failure mode this spec exists to prevent.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    bare_metal_ibl: "disenos/catalog/laboratorio/refrigerador-lab/ (metal is lit by environmentIntensity)"
+    instanced_bolts: "disenos/catalog/seguridad/hidrante/ (flange/breakaway bolt circles)"
+
+references:
+  - source: "differential-pressure flow installation practice (orifice plate + 3-valve manifold)"
+    evidences: >
+      [INFER] No standard document is preserved in sources/ — treat every value as inference. The
+      arrangement modelled: an orifice plate clamped between a pair of flanges with a projecting
+      stamped tab, pressure taps either side of the plate, a root valve at each tap, impulse tubing
+      falling to a 3-valve manifold, and the DP transmitter bolted to the manifold on a 2 in stand.
+    suitability: partial
+
+dimensions_real:
+  pipe_dn:       {value: 100,  confidence: med}   # [INFER] DN100 line
+  pipe_od_m:     {value: 0.114, confidence: med}  # [INFER]
+  pipe_y_m:      {value: 1.10, confidence: low}   # [INFER] centreline height
+  run_len_m:     {value: 2.20, confidence: low}   # [INFER] length shown
+  flange_od_m:   {value: 0.22, confidence: low}   # [INFER] orifice flange
+  flange_bolts:  {value: 8,    confidence: med}   # [INFER] bolt circle
+  tap_spacing_m: {value: 0.32, confidence: low}   # [INFER] upstream + downstream about the plate
+  impulse_od_m:  {value: 0.014, confidence: med}  # [INFER] 1/2 in impulse tubing
+  manifold_valves:{value: 3,   confidence: high}  # a 3-valve manifold IS three valves
+  xmtr_housing_d_m:{value: 0.11, confidence: low} # [INFER] electronics housing
+  insulation_t_m:{value: 0.045, confidence: low}  # [INFER] cladding thickness
+
+hierarchy:
+  - name: root
+    children:
+      - name: pipe            # two spools + end flanges + orifice flange pair + plate and tab
+        pivot: [0, 0, 0]
+        animation: none
+      - name: bolts           # InstancedMesh, orifice flange bolt circle
+        pivot: [0, 0, 0]
+        animation: none
+      - name: supports        # two pipe stands with saddles
+        pivot: [0, 0, 0]
+        animation: none
+      - name: insul           # cladding over the spools, stopping short of the taps (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: impulse         # taps, root valves, tubing runs (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: transmitter     # stand, 3-valve manifold, sensor module, housing, LCD, conduit, tag
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: pipe-carbon
+    family: bare-metal
+    color: "#b8bdc1"
+    metalness: 0.92
+    roughness: 0.38
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0"
+    confidence: 0.85
+  - id: flange
+    family: bare-metal
+    color: "#a9aeb3"
+    metalness: 0.92
+    roughness: 0.44
+    evidence: "HANDBOOK §3.1 — machined face, duller than the pipe body"
+    confidence: 0.8
+  - id: impulse-tube
+    family: bare-metal
+    color: "#cbd0d3"
+    metalness: 0.93
+    roughness: 0.24
+    evidence: "HANDBOOK §3.1 — polished stainless instrument tubing"
+    confidence: 0.85
+  - id: transmitter-housing
+    family: bare-metal
+    color: "#b9bfc4"
+    metalness: 0.90
+    roughness: 0.36
+    evidence: "[INFER] epoxy-coated aluminium housing, modelled toward the metal end"
+    confidence: 0.75
+  - id: valve-handle
+    family: plastic
+    color: "#b02a1e"
+    metalness: 0.0
+    roughness: 0.50
+    evidence: "[INFER] coated handle — dielectric; the only strong colour on the asset"
+    confidence: 0.75
+  - id: insulation-cladding
+    family: painted-metal
+    color: "#d7dbde"
+    metalness: 0.60
+    roughness: 0.55
+    evidence: >
+      [INFER] Thin aluminium cladding: modelled BETWEEN bare metal and coated because that is what
+      cladding looks like — bright but diffuse.
+    confidence: 0.7
+  - id: lcd
+    family: glass
+    color: "#0d2b22"
+    metalness: 0.0
+    roughness: 0.20
+    evidence: "[INFER] emissive when powered, dark when not — two states via the DISPLAY toggle"
+    confidence: 0.75
+
+critical_features:
+  - id: the-loop-is-connected
+    desc: >
+      Every element is joined: tap boss -> root valve -> impulse tubing -> manifold -> transmitter.
+      Toggling the impulse lines off leaves a visible gap, which is the point of the toggle.
+    threshold: 0.80
+  - id: orifice-assembly
+    desc: >
+      A flange pair with a bolt circle, a plate proud of the gap and a stamped tab above the line —
+      the detail that says DP flow rather than "a gauge on a pipe".
+    threshold: 0.78
+  - id: insulation-respects-the-taps
+    desc: >
+      Cladding covers the spools but stops short of the taps and flanges, so the instrument
+      connections stay accessible.
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 60
+    tris: 20000
+  measured:             # SwiftShader headless capture, 1280x800 — COUNTS are valid, frame time is NOT
+    draws: 48
+    tris: 2322
+    geometries: 49
+    root_meshes: 51
+
+camera:
+  azimuth_deg: 58
+  elevation_deg: 15.5    # higher than the house default: the stands stand close to the camera
+  fov: 38
+  target_y_m: 0.88
+  radius_m: 3.3
+
+lighting: house-rig + camera-side fill, environmentIntensity 2.1
+  # DOCUMENTED DEVIATION: everything on this asset is bare metal, and a metal has no diffuse term —
+  # the IBL is what lights it. 2.1 with a camera-side fill at 1.05 for the vertical transmitter,
+  # manifold and stands. Metalness/roughness untouched (HANDBOOK §3.1).
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "LÍNEAS DE IMPULSO"   # taps, root valves and tubing
+  - "AISLAMIENTO"         # cladding over the spools
+  - "DISPLAY"             # LCD emissive on/off
+
+colorTarget:
+  # MEASURED from the rendered pipe (headless SwiftShader capture at 1280x800). The strip is 5 px
+  # tall because the pipe is a cylinder: a taller crop measures its shading gradient, not the
+  # material. Per-channel std ~1.5.
+  srgb: [246, 246, 247]
+  deltaE00Max: 8
+  crop: "22x5+956+360"   # lit band of the pipe at 1280x800

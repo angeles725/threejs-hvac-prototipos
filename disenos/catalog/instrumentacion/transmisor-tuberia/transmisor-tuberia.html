@@ -1,0 +1,280 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — instrumentacion/transmisor-tuberia · DP flow measurement on a DN100 line:
+  orifice flange pair, root valves, impulse lines, 3-valve manifold and a DP transmitter on a stand.
+  Built from disenos/catalog/shell-template.html. Contract: __transmisorTuberiaApp.runtime +
+  __qaRenderInfo + data-app-ready, render-on-demand, shadows frozen (autoUpdate=false, 1024), DPR<=2.
+  Instancing (block54 §2.3): the flange bolt circles. The point of the asset is the LOOP — a
+  transmitter with no impulse lines back to real taps is a prop, not an instrument installation.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transmisor en tubería — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">TRANSMISOR DP EN LÍNEA — placa de orificio + manifold de 3 válvulas</div>
+  <div><span class="dim">DN100 a 1.10 m · tomas aguas arriba/abajo · transmisor sobre pie de 2"</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnImp" class="on">LÍNEAS DE IMPULSO</button>
+  <button id="btnIns">AISLAMIENTO</button>
+  <button id="btnDisp" class="on">DISPLAY</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const PIPE_R = 0.057, PIPE_L = 2.20;   // DN100 outside radius
+const PIPE_Y = 1.10;                   // centreline height
+const FLG_R = 0.11, FLG_T = 0.024;     // orifice flange pair
+const BOLTS = 8;
+const TAP_DX = 0.16;                   // upstream / downstream tap spacing about the plate
+const XMTR = { x: 0.52, y: 0.62, z: 0.34 };   // transmitter position on its stand
+const INS_R = PIPE_R + 0.045;          // insulation outside radius
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 5, 18);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.10;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 3.3, AZ = 1.02, EL = 0.27;   // higher than the house default: the stands sit close to the
+                                        // camera and their bases fell out of frame at 0.18
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.95 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0.12, 0.88, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0.12, 0.88, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.1;   // bare pipe and bare fittings: the IBL is what lights a metal
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.5, 5, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+sun.shadow.camera.left=-1.8; sun.shadow.camera.right=1.8; sun.shadow.camera.top=1.6; sun.shadow.camera.bottom=-1.6;
+scene.add(sun);
+// VERTICAL-SUBJECT FILL: a horizontal pipe reads fine under the house rig, but the transmitter,
+// the manifold and the stand are all vertical bare metal facing the dark horizon.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.05);
+fill.position.set(-2.8, 1.8, 3.4);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(16,16),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: pipe, flanges, tubing and the transmitter housing are BARE
+// metal; the insulation cladding, the valve handles and the display are dielectrics.
+// ============================================================================
+const matPipe  = new THREE.MeshStandardMaterial({ color:0xb8bdc1, metalness:0.92, roughness:0.38 });
+const matFlg   = new THREE.MeshStandardMaterial({ color:0xa9aeb3, metalness:0.92, roughness:0.44 });
+const matBolt  = new THREE.MeshStandardMaterial({ color:0x9aa0a5, metalness:0.92, roughness:0.40 });
+const matTube  = new THREE.MeshStandardMaterial({ color:0xcbd0d3, metalness:0.93, roughness:0.24 });
+const matXmtr  = new THREE.MeshStandardMaterial({ color:0xb9bfc4, metalness:0.90, roughness:0.36 });
+const matMani  = new THREE.MeshStandardMaterial({ color:0xc2c7cb, metalness:0.92, roughness:0.30 });
+const matHandle= new THREE.MeshStandardMaterial({ color:0xb02a1e, metalness:0.0,  roughness:0.5 });
+const matStand = new THREE.MeshStandardMaterial({ color:0xa3a8ad, metalness:0.90, roughness:0.44 });
+const matIns   = new THREE.MeshStandardMaterial({ color:0xd7dbde, metalness:0.60, roughness:0.55 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x22262b, metalness:0.0,  roughness:0.55 });
+const matDisp  = new THREE.MeshStandardMaterial({ color:0x0d2b22, metalness:0.0,  roughness:0.2,
+                                                  emissive:0x18c07a, emissiveIntensity:1.4 });
+const matTag   = new THREE.MeshStandardMaterial({ color:0xe6e9eb, metalness:0.0,  roughness:0.5 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const dummy = new THREE.Object3D();
+const box = (parent,w,h,d,mat,x,y,z)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); parent.add(m); return m; };
+const cyl = (parent, r0, r1, h, seg, mat, x,y,z, rx=0, rz=0)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, h, seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz);
+  parent.add(m); return m;
+};
+
+// --- pipe run: two spools meeting at the orifice flange pair ---
+for(const s of [-1,1]){
+  cyl(root, PIPE_R, PIPE_R, PIPE_L/2 - 0.05, 24, matPipe, s*(PIPE_L/4 + 0.025), PIPE_Y, 0, 0, Math.PI/2);
+  cyl(root, FLG_R, FLG_R, FLG_T, 28, matFlg, s*0.014, PIPE_Y, 0, 0, Math.PI/2);       // orifice flange
+  cyl(root, FLG_R*0.82, FLG_R*0.82, FLG_T, 24, matFlg, s*(PIPE_L/2 - 0.012), PIPE_Y, 0, 0, Math.PI/2);
+}
+// the orifice plate itself, proud of the flange gap so the tab reads
+cyl(root, FLG_R + 0.012, FLG_R + 0.012, 0.006, 28, matTube, 0, PIPE_Y, 0, 0, Math.PI/2);
+box(root, 0.05, 0.075, 0.006, matTube, 0, PIPE_Y + FLG_R + 0.045, 0);                  // plate tab
+box(root, 0.035, 0.020, 0.004, matTag, 0, PIPE_Y + FLG_R + 0.062, 0.006);              // tab stamping
+
+// --- flange bolt circle: real repetition -> one instanced batch ---
+{
+  const geo = new THREE.CylinderGeometry(0.008, 0.008, 2*FLG_T + 0.042, 6);
+  const im = new THREE.InstancedMesh(geo, matBolt, BOLTS);
+  im.castShadow = im.receiveShadow = true;
+  for(let i=0;i<BOLTS;i++){
+    const a = (i/BOLTS)*Math.PI*2 + Math.PI/BOLTS;
+    dummy.position.set(0, PIPE_Y + Math.sin(a)*(FLG_R - 0.020), Math.cos(a)*(FLG_R - 0.020));
+    dummy.rotation.set(0, 0, Math.PI/2); dummy.updateMatrix();
+    im.setMatrixAt(i, dummy.matrix);
+  }
+  im.instanceMatrix.needsUpdate = true;
+  root.add(im);
+}
+
+// --- pipe supports ---
+for(const s of [-1,1]){
+  const sx = s*(PIPE_L/2 - 0.28);
+  box(root, 0.09, PIPE_Y - PIPE_R - 0.06, 0.09, matStand, sx, (PIPE_Y - PIPE_R - 0.06)/2, 0);
+  box(root, 0.18, 0.016, 0.18, matStand, sx, 0.008, 0);
+  const saddle = new THREE.Mesh(new THREE.CylinderGeometry(PIPE_R + 0.012, PIPE_R + 0.012, 0.05, 20, 1, true,
+                                                           Math.PI, Math.PI), matStand);
+  saddle.castShadow = true; saddle.rotation.z = Math.PI/2; saddle.position.set(sx, PIPE_Y, 0);
+  root.add(saddle);
+}
+
+// --- insulation cladding over the two spools (togglable) ---
+const insul = new THREE.Group();
+for(const s of [-1,1]){
+  cyl(insul, INS_R, INS_R, PIPE_L/2 - 0.24, 24, matIns, s*(PIPE_L/4 + 0.12), PIPE_Y, 0, 0, Math.PI/2);
+  cyl(insul, INS_R + 0.006, INS_R + 0.006, 0.014, 24, matIns, s*(PIPE_L/2 - 0.16), PIPE_Y, 0, 0, Math.PI/2);
+}
+insul.visible = false;
+root.add(insul);
+
+// --- impulse loop: taps -> root valves -> tubing -> manifold -> transmitter (togglable) ---
+const impulse = new THREE.Group();
+const legs = [];
+for(const s of [-1,1]){
+  const tx = s*TAP_DX;
+  // tap boss + root valve on the pipe wall, on the camera side
+  cyl(impulse, 0.020, 0.020, 0.07, 12, matTube, tx, PIPE_Y + PIPE_R*0.55, PIPE_R*0.72, 0.9, 0);
+  const rv = box(impulse, 0.05, 0.05, 0.05, matMani, tx, PIPE_Y + 0.075, PIPE_R + 0.055);
+  cyl(impulse, 0.017, 0.017, 0.055, 10, matHandle, tx, PIPE_Y + 0.115, PIPE_R + 0.055);
+  legs.push({ tx, y: PIPE_Y + 0.075, z: PIPE_R + 0.055 });
+}
+// tubing: down from each root valve, across to the manifold, into it
+for(const s of [0,1]){
+  const L = legs[s], mz = XMTR.z, mx = XMTR.x + (s ? 0.035 : -0.035);
+  cyl(impulse, 0.007, 0.007, L.y - (XMTR.y + 0.16), 10, matTube, L.tx, (L.y + XMTR.y + 0.16)/2, L.z);
+  const runX = Math.abs(mx - L.tx), runZ = Math.abs(mz - L.z);
+  cyl(impulse, 0.007, 0.007, runX, 10, matTube, (L.tx + mx)/2, XMTR.y + 0.16, L.z, 0, Math.PI/2);
+  cyl(impulse, 0.007, 0.007, runZ, 10, matTube, mx, XMTR.y + 0.16, (L.z + mz)/2, Math.PI/2, 0);
+  cyl(impulse, 0.007, 0.007, 0.10, 10, matTube, mx, XMTR.y + 0.11, mz);
+}
+root.add(impulse);
+
+// --- stand, 3-valve manifold and the DP transmitter ---
+box(root, 0.06, XMTR.y + 0.10, 0.06, matStand, XMTR.x, (XMTR.y + 0.10)/2, XMTR.z);
+box(root, 0.20, 0.016, 0.20, matStand, XMTR.x, 0.008, XMTR.z);
+box(root, 0.13, 0.055, 0.075, matMani, XMTR.x, XMTR.y + 0.06, XMTR.z);          // manifold body
+for(let i=0;i<3;i++){
+  const hx = XMTR.x - 0.045 + i*0.045;
+  cyl(root, 0.011, 0.011, 0.045, 10, matMani, hx, XMTR.y + 0.10, XMTR.z);
+  cyl(root, 0.019, 0.019, 0.012, 14, matHandle, hx, XMTR.y + 0.125, XMTR.z);    // valve handles
+}
+// transmitter: sensor module + cylindrical electronics housing with two covers
+box(root, 0.10, 0.055, 0.085, matXmtr, XMTR.x, XMTR.y + 0.115, XMTR.z);
+const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.135, 24), matXmtr);
+housing.castShadow = housing.receiveShadow = true;
+housing.rotation.z = Math.PI/2; housing.position.set(XMTR.x, XMTR.y + 0.20, XMTR.z);
+root.add(housing);
+for(const s of [-1,1]) cyl(root, 0.052, 0.048, 0.022, 24, matXmtr, XMTR.x + s*0.078, XMTR.y + 0.20, XMTR.z, 0, Math.PI/2);
+// LCD window facing the walkway + conduit entry + tag plate
+const disp = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.030, 0.006), matDisp);
+disp.position.set(XMTR.x - 0.078, XMTR.y + 0.20, XMTR.z + 0.004);
+disp.rotation.y = -Math.PI/2; root.add(disp);
+cyl(root, 0.016, 0.016, 0.06, 12, matDark, XMTR.x + 0.02, XMTR.y + 0.27, XMTR.z);
+cyl(root, 0.011, 0.011, 0.22, 10, matDark, XMTR.x + 0.02, XMTR.y + 0.38, XMTR.z);
+box(root, 0.055, 0.028, 0.004, matTag, XMTR.x, XMTR.y + 0.135, XMTR.z + 0.045);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot  = document.getElementById('btnRot');
+const btnImp  = document.getElementById('btnImp');
+const btnIns  = document.getElementById('btnIns');
+const btnDisp = document.getElementById('btnDisp');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(btnImp, impulse);
+toggle(btnIns, insul);
+btnDisp.onclick = ()=>{ const on = matDisp.emissiveIntensity > 0.1;
+  matDisp.emissiveIntensity = on ? 0.0 : 1.4;
+  btnDisp.classList.toggle('on', !on); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__transmisorTuberiaApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__transmisor-tuberiaApp'] = globalThis.__transmisorTuberiaApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
