@@ -1,0 +1,180 @@
+# DesignSpec — upright laboratory refrigerator (+4 °C, solid insulated door)
+# Catalog family `laboratorio` (worktree catalog-retail-lab).
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: refrigerador-lab
+family: laboratorio
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # the 26 mm gasket and the 12 mm liner are material, not voxels
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 12 -> moderate.
+  scores: {silhouette: 1, components: 2, hierarchy: 2, repetition: 2,
+           material_layers: 2, detail: 2, occlusion: 2, action_readiness: 1}
+  tier: moderate
+  notes: >
+    The design question for this asset is what makes it a LAB unit rather than the merchandiser
+    already in this repo (retail/refrigerador-vertical): a solid thick insulated door, a controller
+    strip with an alarm lamp and a data port, a lock, and shelves carrying sample boxes instead of
+    facings. Same family of geometry, different object.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    shell_not_solid: "disenos/catalog/laboratorio/autoclave/ (a solid box seals its own opening)"
+    perimeter_gasket: "disenos/catalog/retail/refrigerador-vertical/ (a full-panel gasket blacks out the interior)"
+    hinge_side: "hinge away from the catalogue camera, or the leaf hides what it reveals"
+
+references:
+  - source: "upright laboratory refrigerator class (~350-400 L, solid door)"
+    evidences: >
+      [INFER] No manufacturer datasheet is preserved in sources/ — treat every value as inference.
+      The layout modelled: castored cabinet around 0.7 m wide and 1.9 m tall, thick insulated solid
+      door with a lever handle and lock, five adjustable shelves, a controller strip at eye height
+      with display, keys, alarm lamp and a data/chart port, and a toe grille over the condenser.
+    suitability: partial
+
+dimensions_real:
+  width_m:      {value: 0.70, confidence: low}    # [INFER]
+  depth_m:      {value: 0.76, confidence: low}    # [INFER]
+  height_m:     {value: 1.92, confidence: low}    # [INFER] incl. castors
+  wall_t_m:     {value: 0.06, confidence: low}    # [INFER] insulated wall
+  door_t_m:     {value: 0.075, confidence: med}   # [INFER] thicker than a merchandiser door — the read
+  door_h_m:     {value: 1.42, confidence: low}    # [INFER]
+  shelves:      {value: 5,    confidence: med}    # [INFER]
+  shelf_pitch_m:{value: 0.26, confidence: low}    # [INFER]
+  castor_d_m:   {value: 0.075, confidence: low}   # [INFER]
+  controller_y_m:{value: 1.82, confidence: med}   # [INFER] readable standing
+
+hierarchy:
+  - name: root
+    children:
+      - name: castors
+        pivot: [0, 0, 0]
+        animation: none
+      - name: cabinet         # SHELL: back, sides, top, bottom, front frame, liner, perimeter gasket
+        pivot: [0, 0, 0]
+        animation: none
+      - name: shelves         # InstancedMesh, 5 levels
+        pivot: [0, 0, 0]
+        animation: none
+      - name: load            # instanced sample boxes with per-instance colour (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: doorPivot       # hinge on the LEFT, away from the catalogue camera
+        pivot: [-0.34, 0, 0.384]
+        animation: swing
+        attachment:
+          parent_socket: cabinet_face
+          contact_type: hinge
+          gap_tolerance: 0.003
+      - name: controller      # display, keys, alarm lamp, data port
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: skin-304
+    family: bare-metal
+    color: "#c4c8cb"
+    metalness: 0.93
+    roughness: 0.32
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0"
+    confidence: 0.85
+  - id: door-304
+    family: bare-metal
+    color: "#cbcfd2"
+    metalness: 0.93
+    roughness: 0.28
+    evidence: "HANDBOOK §3.1 — the door face is the most handled and most polished panel"
+    confidence: 0.85
+  - id: liner
+    family: plastic
+    color: "#e6e9ec"
+    metalness: 0.0
+    roughness: 0.60
+    evidence: "[INFER] moulded interior liner — dielectric; it is what makes the open cabinet read"
+    confidence: 0.8
+  - id: gasket
+    family: rubber
+    color: "#15181b"
+    metalness: 0.0
+    roughness: 0.88
+    evidence: "HANDBOOK §3.1 dielectric — modelled as a PERIMETER, never a panel"
+    confidence: 0.85
+  - id: wire-shelf
+    family: bare-metal
+    color: "#d2d6d9"
+    metalness: 0.92
+    roughness: 0.26
+    evidence: "HANDBOOK §3.1"
+    confidence: 0.8
+  - id: alarm-lamp
+    family: plastic
+    color: "#6b1d17"
+    metalness: 0.0
+    roughness: 0.40
+    evidence: >
+      [INFER] Dark red lens when idle; the ALARMA toggle switches its emissive on, so the lamp has
+      two real states instead of being painted permanently red.
+    confidence: 0.75
+
+critical_features:
+  - id: solid-insulated-door
+    desc: >
+      A thick blind door with a perimeter gasket, lever handle and lock — the feature that separates
+      a laboratory refrigerator from the glass-door merchandiser in the retail family.
+    threshold: 0.78
+  - id: open-cabinet-reads
+    desc: >
+      With the door swung clear, the liner, five shelves and the sample boxes are all visible: the
+      cabinet is a shell with a real opening, not a solid box with a door glued on.
+    threshold: 0.78
+  - id: controller-with-alarm
+    desc: >
+      Controller strip at eye height carrying a display, keys, an alarm lamp with two states and a
+      data port — the monitoring surface a lab unit is bought for.
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 60
+    tris: 20000
+  measured:             # SwiftShader headless capture, 1280x800 — COUNTS are valid, frame time is NOT
+    draws: 48
+    tris: 1002
+    geometries: 49
+    root_meshes: 47
+
+camera:
+  azimuth_deg: 62
+  elevation_deg: 9.2
+  fov: 38
+  target_y_m: 1.00
+  radius_m: 4.0
+
+lighting: house-rig + camera-side fill, environmentIntensity 2.4
+  # DOCUMENTED DEVIATION: a metal surface has no diffuse term, so a directional fill barely touches
+  # it — what lights bare 304 is the IBL. At 1.85 the whole cabinet read near-black; 2.4 restores it.
+  # This is the vertical-bare-metal rule applied through environmentIntensity rather than a lamp.
+  # Metalness/roughness untouched (HANDBOOK §3.1).
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ABRIR PUERTA"  # damped swing, hinged away from the camera
+  - "MUESTRAS"      # instanced sample boxes
+  - "ALARMA"        # alarm lamp emissive on/off
+
+colorTarget:
+  # MEASURED from the rendered door face (headless SwiftShader capture at 1280x800): flattest 26x26
+  # patch found by scan, per-channel std ~0.3. The value is DARK because bare 304 reflects the dark
+  # catalogue room — that is the honest read of the material in this rig, not a modelling error.
+  srgb: [96, 100, 105]
+  deltaE00Max: 8
+  crop: "26x26+528+456"   # door face at 1280x800
