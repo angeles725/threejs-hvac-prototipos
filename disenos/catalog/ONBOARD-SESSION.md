@@ -174,5 +174,14 @@ elige otra familia libre si queda, o detente.
 - Un pixel-diff que NO cambia solo prueba AUSENCIA si ANTES demuestras que el objeto era visible en ese estado.
   Si vive tras una tapa/puerta CERRADA, "ocultarlo no cambia el hash" es tautológico. Orden correcto: abre la
   tapa que lo cubre → confirma que aporta píxeles → recién entonces el diff prueba ausencia.
+- RAYCAST al CENTRO de una instancia NO es prueba de visibilidad: el rayo choca con la carátula/manija del
+  PROPIO dispositivo (autooclusión) → 0 hits aunque el cuerpo SÍ renderice. Da falsos positivos en casi todo
+  (cualquier asset con detalle frontal). Trátalo como PISTA, nunca veredicto; excluye el objeto y sus
+  accesorios, o muestrea la cara frontal, no el centro.
+- MÉTODO DE AUDITORÍA (orden estricto, obligatorio antes de reportar un defecto de visibilidad):
+  1) identidad por geometry.parameters (nunca count ni orden de traversal);
+  2) probar PRESENCIA: abre lo que lo cubra y confirma que el hash del canvas CAMBIA;
+  3) solo entonces un hash que NO cambia significa ausencia;
+  4) raycast como pista, con el objeto y sus accesorios excluidos.
 - Todo hallazgo de auditoría se REFUTA (verificación adversarial de la sesión dueña) ANTES de aplicarse como
   fix. Un reporte medido pero con la identidad de malla mal anclada parece sólido y no lo es.
