@@ -1,0 +1,251 @@
+<!doctype html>
+<!--
+  rack-cantilever — catalog asset, family `almacenamiento`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block64.md  ·  Spec: ./design-spec.yaml
+  The load path is a LEVER, not a beam span: each arm cantilevers from one column, and the base is
+  deliberately ASYMMETRIC (800 mm forward under the load, 300 mm behind). B64 §64.1-64.2.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rack cantilever — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Rack cantilever — brazos 1.20 m</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· columna 120 mm · 1000 kg/brazo</span></div>
+  <div class="dim">base asimétrica 800 mm adelante / 300 mm atrás · flecha máx. L/200 = 6 mm</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnLoad" class="on">LOAD</button>
+  <button id="btnArms" class="on">ARMS</button>
+  <button id="btnScale" class="on">SCALE 1.8 m</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 64]) ----------
+const ARM_L = 1.20;                        // [CERT-web] published arm length
+const COL_W = 0.12, COL_H = 3.60;          // [CERT-web] 100-150 mm band · [INFER] height
+const BASE_F = 0.80, BASE_B = 0.30;        // [CERT-web] ASYMMETRIC: forward under load / short back
+const BASE_T = 0.09;
+const ARM_Y = [0.60, 1.40, 2.20, 3.00];    // [INFER] multiples of the 400 mm practical pitch
+const ARM_T = 0.055, ARM_H = 0.10;
+const ARM_TILT = 0.045;                    // slight upward tilt so stock cannot roll off
+const COLS = 3, BAY = 1.50;                // [INFER] spacing not published
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 34);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 120);
+const R = 8.5, AZ = 0.733, EL = 0.244;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.70 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.70, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.70, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// DELIBERATE NON-DEVIATION: painted steel is a dielectric — the vertical bare-metal rescue used on
+// the stainless/aluminium assets does NOT apply here (see spec `lighting:`).
+scene.environmentIntensity = 1.9;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(6, 9, 6); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d
+sun.shadow.camera.left=-6; sun.shadow.camera.right=6; sun.shadow.camera.top=6; sun.shadow.camera.bottom=-6;
+sun.shadow.camera.far = 30;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. Painted structural steel = DIELECTRIC (HANDBOOK §3.1).
+// ============================================================================
+const matCol   = new THREE.MeshStandardMaterial({ color:0xc2622b, metalness:0.0, roughness:0.58 });
+const matArm   = new THREE.MeshStandardMaterial({ color:0x9aa0a4, metalness:0.0, roughness:0.55 });
+const matBrace = new THREE.MeshStandardMaterial({ color:0xa9682f, metalness:0.0, roughness:0.60 });
+const matStock = new THREE.MeshStandardMaterial({ color:0x9d7c52, metalness:0.0, roughness:0.85 });
+const matSkin  = new THREE.MeshStandardMaterial({ color:0x6f7c86, metalness:0.0, roughness:0.85 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xf, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xf.length);
+  im.castShadow = im.receiveShadow = true;
+  xf.forEach((t,i)=>{ _p.set(t[0],t[1],t[2]); _q.setFromEuler(new THREE.Euler(t[3]||0,0,0));
+    im.setMatrixAt(i, _m.compose(_p,_q,_s)); });
+  im.instanceMatrix.needsUpdate = true; parent.add(im); return im;
+}
+
+const colX = i => (i - (COLS-1)/2) * BAY;
+
+// --- columns on ASYMMETRIC bases: long foot forward (+Z, load side), short leg behind ---
+const columns = new THREE.Group();
+for(let i=0;i<COLS;i++){
+  const x = colX(i);
+  put(columns, COL_W, COL_H, COL_W, matCol, x, BASE_T + COL_H/2, 0);
+  // base: the whole point — it is NOT a symmetric cross
+  put(columns, 0.20, BASE_T, BASE_F, matCol, x, BASE_T/2, BASE_F/2);     // forward, under the load
+  put(columns, 0.20, BASE_T, BASE_B, matCol, x, BASE_T/2, -BASE_B/2);    // short back leg
+  put(columns, 0.34, 0.016, 0.30, matCol, x, 0.008, 0.02);               // floor plate + anchors
+  for(const sz of [0.10, BASE_F - 0.10]){
+    const anc = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.05, 8), matArm);
+    anc.position.set(x, 0.025, sz); columns.add(anc);
+  }
+}
+root.add(columns);
+
+// --- arms: cantilevered from each column, tilted slightly up ---
+const arms = new THREE.Group();
+const armXf = [];
+for(const y of ARM_Y) for(let i=0;i<COLS;i++) armXf.push([colX(i), y, ARM_L/2 + COL_W/2, -ARM_TILT]);
+instanced(new THREE.BoxGeometry(ARM_T, ARM_H, ARM_L), matArm, armXf, arms);
+// arm-root gussets — the lever needs a visible moment connection at the column
+const gus = [];
+for(const y of ARM_Y) for(let i=0;i<COLS;i++) gus.push([colX(i), y - 0.10, COL_W/2 + 0.12]);
+instanced(new THREE.BoxGeometry(ARM_T, 0.20, 0.24), matArm, gus, arms);
+// end stops so stock cannot slide off the tip
+const stops = [];
+for(const y of ARM_Y) for(let i=0;i<COLS;i++) stops.push([colX(i), y + 0.09, COL_W/2 + ARM_L - 0.03]);
+instanced(new THREE.BoxGeometry(ARM_T, 0.13, 0.030), matArm, stops, arms);
+root.add(arms);
+
+// --- bracing between columns (the spine is only stable as a row) ---
+const bracing = new THREE.Group();
+for(let i=0;i<COLS-1;i++){
+  const x0 = colX(i), x1 = colX(i+1), mid = (x0+x1)/2;
+  for(const y of [1.00, 2.60]) put(bracing, BAY - COL_W, 0.06, 0.05, matBrace, mid, y, -0.02);
+  const len = Math.hypot(BAY - COL_W, 1.60);
+  const d = new THREE.Mesh(new THREE.BoxGeometry(len, 0.045, 0.04), matBrace);
+  d.position.set(mid, 1.80, -0.02); d.rotation.z = Math.atan2(1.60, BAY - COL_W);
+  d.castShadow = true; bracing.add(d);
+}
+root.add(bracing);
+
+// --- load: long stock spanning all three columns, resting ON the arms ---
+const load = new THREE.Group();
+for(const [k, y] of ARM_Y.entries()){
+  if(k === 3) continue;
+  const n = 2 + (k % 2);
+  for(let j=0;j<n;j++){
+    const dia = 0.10 + 0.02*(k%2);
+    const s = new THREE.Mesh(new THREE.CylinderGeometry(dia/2, dia/2, (COLS-1)*BAY + 1.10, 10), matStock);
+    s.rotation.z = Math.PI/2;
+    s.position.set(0, y + ARM_H/2 + dia/2, COL_W/2 + 0.28 + j*(dia + 0.06));
+    s.castShadow = s.receiveShadow = true; load.add(s);
+  }
+}
+root.add(load);
+
+// --- 1.8 m scale figure ---
+const scaleFig = new THREE.Group();
+const fx = -2.75, fz = 0.90;
+const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.52, 6, 12), matSkin);
+torso.position.set(fx, 1.16, fz); torso.castShadow = true; scaleFig.add(torso);
+const headM = new THREE.Mesh(new THREE.SphereGeometry(0.115, 14, 12), matSkin);
+headM.position.set(fx, 1.62, fz); headM.castShadow = true; scaleFig.add(headM);
+for(const s of [-1,1]){
+  const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.62, 6, 10), matSkin);
+  leg.position.set(fx + s*0.10, 0.46, fz); leg.castShadow = true; scaleFig.add(leg);
+}
+root.add(scaleFig);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const toggle = (btn, obj, also)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible;
+  if(also) also.visible = obj.visible;
+  btn.classList.toggle('on', obj.visible); renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(document.getElementById('btnLoad'), load);
+toggle(document.getElementById('btnArms'), arms, load);   // stripping the arms strips their load too
+toggle(document.getElementById('btnScale'), scaleFig);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__rackCantileverApp = __app;
+globalThis['__rack-cantileverApp'] = __app;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
