@@ -130,6 +130,11 @@ GOTCHAS ya detectados (evítalos):
 - INFRA (no es fallo de asset): con varias sesiones corriendo QA a la vez, chrome-headless-shell se cae
   intermitente ("unsettled top-level await", exit 13) → REINTENTA, da exit 0. Junto con exit 2 (servidor
   caído) son los dos casos de "no concluyente"; nunca los trates como asset roto.
+- CAUSA RAÍZ de la flakiness (medida): es CONTENCIÓN, no caídas aleatorias — ~70 chromes headless en 16
+  núcleos (load 54.9) hacen que el arranque de chrome supere el timeout del WebSocket y el proceso muera sin
+  decir por qué (la firma exit 13). REINTENTAR BAJO ESA CARGA LA EMPEORA (cada reintento suma otro chrome).
+  El arreglo estructural es SERIALIZAR la QA entre sesiones: un flock sobre un archivo compartido alrededor de
+  cada invocación de sonda encola las corridas en vez de que 7 sesiones disparen chrome a la vez.
 - Bajo alta CONTENCIÓN (muchas sesiones con chrome a la vez) la captura puede salir VACÍA (HUD presente,
   canvas NEGRO) en un asset que en la corrida siguiente renderiza perfecto — y el gate da ready=undefined.
   Si auditas o integras POR CAPTURA, REINTENTA antes de reportar/rechazar; una captura vacía aislada es infra.
