@@ -191,6 +191,15 @@ elige otra familia libre si queda, o detente.
   4) raycast como pista, con el objeto y sus accesorios excluidos.
 - Todo hallazgo de auditoría se REFUTA (verificación adversarial de la sesión dueña) ANTES de aplicarse como
   fix. Un reporte medido pero con la identidad de malla mal anclada parece sólido y no lo es.
+- HERRAMIENTAS DE AUDITORÍA (read-only, en tools/): audit-asset.mjs (inventario por geometry.type+parameters
+  + diff por botón + PNG por estado) y hole-probe.mjs (FONDO CENTINELA: repinta scene.background/fog a magenta
+  y fuerza un render; todo píxel magenta = la cámara atraviesa el modelo → distingue PANEL oscuro de AGUJERO,
+  cosa que el pixel-diff no puede). Úsalas para medir, no opinar.
+- RECORRE Object3D COMPLETOS, no solo mallas: una animación casi siempre rota un GROUP, no una malla; un
+  inventario solo-de-mallas dirá "el botón no hace nada" (falso). La identidad y el ALCANCE del recorrido
+  importan tanto como el criterio.
+- PUNTO CIEGO gate+sonda: ambos recorren `root`. Un objeto colgado de `scene` (no de root) no aparece en la
+  cuenta. Cuelga todo de root salvo el plano de suelo.
 - LA SEÑAL VIENE DE MEDIR EL ESTADO CONCRETO, casi nunca de un patrón general. Los chequeos ESTÁTICOS/de-patrón
   fallan por ruido en este catálogo: "botón sin requestRender()" (24 falsos: el wiring usa helpers variados),
   cruce cita↔título (cruces legítimos), regex de geometría (casa dentro de Math.PI/2). El wiring y la geometría
