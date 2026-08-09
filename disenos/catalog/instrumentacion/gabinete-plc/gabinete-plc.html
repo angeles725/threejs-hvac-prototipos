@@ -1,0 +1,293 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — instrumentacion/gabinete-plc · floor-standing PLC control cabinet.
+  Built from disenos/catalog/shell-template.html. Contract: __gabinetePlcApp.runtime + __qaRenderInfo +
+  data-app-ready, render-on-demand, shadows frozen (autoUpdate=false, 1024), DPR<=2.
+  Instancing (block54 §2.3): terminal blocks, PLC I/O modules, MCBs and relays — the inside of a
+  control cabinet is repetition by definition. The enclosure, door and ducts are unique meshes.
+  Two rules already certified in this worktree are applied up front: the enclosure is a SHELL (a
+  solid box seals its own opening) and the door hinges AWAY from the catalogue camera.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gabinete de PLC — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">GABINETE DE CONTROL PLC — IP55, placa de montaje</div>
+  <div><span class="dim">0.80 × 0.60 × 2.10 m · 4 rieles DIN · seccionador con mando en puerta</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">ABRIR PUERTA</button>
+  <button id="btnDuct" class="on">CANALETAS</button>
+  <button id="btnLeds">ENERGIZADO</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const W = 0.80, D = 0.60, H = 2.00;
+const PLINTH = 0.10;
+const SHEET = 0.02;
+const DOOR_T = 0.028;
+const PLATE_Z = -(D/2 - 0.16);         // mounting plate: set back, cables run in front of it
+const ROWS = [                          // DIN rail rows, top to bottom
+  { y: 1.72, kind: 'plc' },
+  { y: 1.42, kind: 'mcb' },
+  { y: 1.12, kind: 'relay' },
+  { y: 0.70, kind: 'term' },
+];
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 7, 22);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.06;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 4.1, AZ = 1.34, EL = 0.15;   // near-frontal: the payload is INSIDE, and an oblique eye
+                                        // lets the open leaf cover half the mounting plate
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.15 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.08, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.08, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.6;   // the enclosure is COATED steel: no bare-metal boost
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3, 5.5, 3.5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+sun.shadow.camera.left=-2.4; sun.shadow.camera.right=2.4; sun.shadow.camera.top=2.6; sun.shadow.camera.bottom=-2.6;
+scene.add(sun);
+// VERTICAL-SUBJECT FILL: a 2 m cabinet face is a vertical plane facing the dark horizon.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 0.9);
+fill.position.set(-3.4, 2.4, 4.6);
+scene.add(fill);
+// The interior only exists with the door open, and a shadowed cavity swallows it: this short-range
+// lamp is what makes the rails, modules and wiring read (lesson from laboratorio/autoclave).
+const bayLamp = new THREE.PointLight(0xf2f6ff, 0.75, 2.0, 2);
+bayLamp.position.set(0, 1.30, 0.10);
+scene.add(bayLamp);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(18,18),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: the RAL-coated enclosure and the polymer components are
+// DIELECTRIC; only the zinc mounting plate and the DIN rails are bare metal.
+// ============================================================================
+const matBody  = new THREE.MeshStandardMaterial({ color:0xcfd3d6, metalness:0.0,  roughness:0.50 });
+const matDoor  = new THREE.MeshStandardMaterial({ color:0xd6dade, metalness:0.0,  roughness:0.46 });
+const matPlinth= new THREE.MeshStandardMaterial({ color:0x2b2f34, metalness:0.0,  roughness:0.66 });
+const matPlate = new THREE.MeshStandardMaterial({ color:0x969ba1, metalness:0.85, roughness:0.48 });   // darker
+  // than the enclosure on purpose: white-on-white swallowed the DIN rows in the open-door capture
+const matRail  = new THREE.MeshStandardMaterial({ color:0xd0d4d7, metalness:0.90, roughness:0.34 });
+const matDuct  = new THREE.MeshStandardMaterial({ color:0x8e9298, metalness:0.0,  roughness:0.55 });
+const matPlc   = new THREE.MeshStandardMaterial({ color:0x2c4a63, metalness:0.0,  roughness:0.50 });
+const matMcb   = new THREE.MeshStandardMaterial({ color:0xe7e9ea, metalness:0.0,  roughness:0.48 });
+const matRelay = new THREE.MeshStandardMaterial({ color:0xcfd3d6, metalness:0.0,  roughness:0.45 });
+const matTerm  = new THREE.MeshStandardMaterial({ color:0xa8b4c0, metalness:0.0,  roughness:0.50 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x22262b, metalness:0.0,  roughness:0.55 });
+const matHandle= new THREE.MeshStandardMaterial({ color:0x1c1f23, metalness:0.0,  roughness:0.5 });
+const matDisc  = new THREE.MeshStandardMaterial({ color:0xd8b41e, metalness:0.0,  roughness:0.45 });
+const matDiscK = new THREE.MeshStandardMaterial({ color:0xb02a1e, metalness:0.0,  roughness:0.45 });
+const matLed   = new THREE.MeshStandardMaterial({ color:0x1a3a2a, metalness:0.0,  roughness:0.35,
+                                                  emissive:0x000000, emissiveIntensity:0.0 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const dummy = new THREE.Object3D();
+const box = (parent,w,h,d,mat,x,y,z)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); parent.add(m); return m; };
+
+// --- plinth ---
+box(root, W, PLINTH, D - 0.04, matPlinth, 0, PLINTH/2, 0);
+
+// --- enclosure SHELL (never a solid box: it would seal its own opening) ---
+const Y0 = PLINTH, TOP = PLINTH + H;
+{
+  box(root, W, H, SHEET, matBody, 0, Y0 + H/2, -(D/2 - SHEET/2));            // back
+  for(const sx of [-1,1]) box(root, SHEET, H, D, matBody, sx*(W/2 - SHEET/2), Y0 + H/2, 0);
+  box(root, W, SHEET, D, matBody, 0, TOP - SHEET/2, 0);                      // roof
+  box(root, W, SHEET, D, matBody, 0, Y0 + SHEET/2, 0);                       // floor
+  // door frame: a narrow return all around the opening
+  const fr = 0.03;
+  box(root, W, fr, SHEET, matBody, 0, TOP - fr/2, D/2 - SHEET/2);
+  box(root, W, fr, SHEET, matBody, 0, Y0 + fr/2, D/2 - SHEET/2);
+  for(const sx of [-1,1]) box(root, fr, H - 2*fr, SHEET, matBody, sx*(W/2 - fr/2), Y0 + H/2, D/2 - SHEET/2);
+}
+// roof fan + filter grille (the IP55 thermal detail)
+box(root, 0.16, 0.02, 0.16, matDark, -0.20, TOP + 0.005, -0.10);
+for(let i=0;i<5;i++) box(root, 0.14, 0.006, 0.008, matDark, -0.20, TOP + 0.014, -0.16 + i*0.03);
+
+// --- mounting plate + DIN rails + wiring ducts ---
+box(root, W - 0.10, H - 0.16, 0.012, matPlate, 0, Y0 + H/2, PLATE_Z);
+const ducts = new THREE.Group();
+for(const r of ROWS){
+  box(root, W - 0.16, 0.012, 0.035, matRail, 0, r.y - 0.055, PLATE_Z + 0.022);   // DIN rail
+  box(ducts, W - 0.16, 0.055, 0.045, matDuct, 0, r.y + 0.11, PLATE_Z + 0.028);   // duct above the row
+}
+for(const sx of [-1,1]) box(ducts, 0.045, H - 0.30, 0.045, matDuct, sx*(W/2 - 0.10), Y0 + H/2, PLATE_Z + 0.028);
+root.add(ducts);
+
+// --- components: one instanced batch per device type (a control cabinet IS repetition) ---
+const leds = [];
+function rowBatch(y, geo, mat, n, pitch, depth, yOff){
+  const im = new THREE.InstancedMesh(geo, mat, n);
+  im.castShadow = im.receiveShadow = true;
+  const span = pitch*n;
+  for(let i=0;i<n;i++){
+    dummy.position.set(-span/2 + pitch*(i + 0.5), y + yOff, PLATE_Z + depth);
+    dummy.rotation.set(0,0,0); dummy.updateMatrix();
+    im.setMatrixAt(i, dummy.matrix);
+  }
+  im.instanceMatrix.needsUpdate = true;
+  root.add(im);
+  return im;
+}
+// PLC rack: CPU + I/O modules
+rowBatch(ROWS[0].y, new THREE.BoxGeometry(0.048, 0.125, 0.075), matPlc, 9, 0.052, 0.062, 0.02);
+// status LEDs on the PLC row — their own batch so they can be energised
+{
+  const geo = new THREE.BoxGeometry(0.010, 0.006, 0.004);
+  const im = new THREE.InstancedMesh(geo, matLed, 9*3);
+  let k = 0;
+  for(let i=0;i<9;i++) for(let j=0;j<3;j++){
+    dummy.position.set(-0.234 + 0.052*(i + 0.5), ROWS[0].y + 0.06 - j*0.014, PLATE_Z + 0.101);
+    dummy.rotation.set(0,0,0); dummy.updateMatrix();
+    im.setMatrixAt(k++, dummy.matrix);
+  }
+  im.instanceMatrix.needsUpdate = true;
+  root.add(im); leds.push(im);
+}
+// MCB row + a wider main breaker at the left end
+rowBatch(ROWS[1].y, new THREE.BoxGeometry(0.018, 0.085, 0.070), matMcb, 22, 0.020, 0.060, 0.006);
+box(root, 0.075, 0.11, 0.085, matDark, -(W/2 - 0.16), ROWS[1].y + 0.010, PLATE_Z + 0.065);
+// relay row
+rowBatch(ROWS[2].y, new THREE.BoxGeometry(0.028, 0.075, 0.070), matRelay, 14, 0.031, 0.060, 0.002);
+// terminal row: two banks
+rowBatch(ROWS[3].y, new THREE.BoxGeometry(0.008, 0.062, 0.058), matTerm, 46, 0.0105, 0.052, -0.004);
+// power supply + a 24 V distribution block on the relay row
+box(root, 0.075, 0.115, 0.090, matMcb, W/2 - 0.16, ROWS[2].y + 0.02, PLATE_Z + 0.070);
+
+// --- door: hinged on the LEFT, away from the catalogue camera ---
+const doorPivot = new THREE.Group();
+doorPivot.position.set(-(W/2 - 0.005), 0, D/2 + 0.004);
+const door = new THREE.Group();
+door.position.set(W/2 - 0.005, 0, 0);                         // leaf at local +X -> NEGATIVE opens it
+const dcy = Y0 + H/2;
+box(door, W - 0.01, H - 0.01, DOOR_T, matDoor, 0, dcy, DOOR_T/2);
+box(door, W - 0.09, H - 0.09, 0.008, matPlinth, 0, dcy, -0.005);          // inner stiffener frame
+// door-mounted disconnect handle + pilot lights + a nameplate
+box(door, 0.075, 0.075, 0.030, matDiscK, W/2 - 0.13, Y0 + H - 0.20, DOOR_T + 0.014);
+box(door, 0.030, 0.075, 0.022, matDisc, W/2 - 0.13, Y0 + H - 0.20, DOOR_T + 0.030);
+for(let i=0;i<3;i++){
+  const l = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.012, 14), matLed);
+  l.rotation.x = Math.PI/2; l.position.set(-0.10 + i*0.06, Y0 + H - 0.20, DOOR_T + 0.008);
+  l.castShadow = true; door.add(l); leds.push(l);
+}
+box(door, 0.18, 0.055, 0.006, matDark, 0, Y0 + 0.24, DOOR_T + 0.004);      // nameplate
+box(door, 0.030, 0.14, 0.030, matHandle, -(W/2 - 0.06), dcy - 0.10, DOOR_T + 0.018);   // handle
+doorPivot.add(door);
+root.add(doorPivot);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. render is GATED: every handler and the swing call requestRender().
+// ============================================================================
+const btnRot  = document.getElementById('btnRot');
+const btnDoor = document.getElementById('btnDoor');
+const btnDuct = document.getElementById('btnDuct');
+const btnLeds = document.getElementById('btnLeds');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+let doorTarget = 0, doorAngle = 0;
+btnDoor.onclick = ()=>{ doorTarget = doorTarget ? 0 : 1; btnDoor.classList.toggle('on', !!doorTarget); requestRender(); };
+btnDuct.onclick = ()=>{ ducts.visible = !ducts.visible; btnDuct.classList.toggle('on', ducts.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+btnLeds.onclick = ()=>{ const on = matLed.emissiveIntensity > 0.1;
+  matLed.emissive.setHex(on ? 0x000000 : 0x2ee08a);
+  matLed.emissiveIntensity = on ? 0.0 : 2.4;
+  btnLeds.classList.toggle('on', !on); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  if(Math.abs(doorAngle - doorTarget) > 0.001){                 // per-frame branch -> keep rendering
+    doorAngle += (doorTarget - doorAngle) * 0.12;
+    doorPivot.rotation.y = -2.0 * doorAngle;                    // leaf at local +X -> NEGATIVE opens outward
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__gabinetePlcApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__gabinete-plcApp'] = globalThis.__gabinetePlcApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

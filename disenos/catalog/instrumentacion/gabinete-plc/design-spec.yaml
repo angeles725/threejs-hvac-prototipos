@@ -1,0 +1,188 @@
+# DesignSpec — floor-standing PLC control cabinet (IP55, mounting plate)
+# Catalog family `instrumentacion` (worktree catalog-retail-lab).
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: gabinete-plc
+family: instrumentacion
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # an 8 mm terminal block and a 18 mm MCB are material, not voxels
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 14 -> moderate.
+  scores: {silhouette: 1, components: 3, hierarchy: 2, repetition: 3,
+           material_layers: 1, detail: 2, occlusion: 3, action_readiness: 1}
+  tier: moderate
+  notes: >
+    repetition 3 and occlusion 3 together define this asset: the whole subject is rows of identical
+    devices that only exist once the door opens. Four instanced batches carry ~90 devices, and the
+    enclosure is a SHELL from the start — the trap already certified on laboratorio/autoclave.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    shell_not_solid: "disenos/catalog/laboratorio/autoclave/"
+    hinge_side: "disenos/catalog/laboratorio/refrigerador-lab/ (hinge away from the camera)"
+    bay_lamp: "disenos/catalog/retail/refrigerador-vertical/ (a cavity needs a real lamp)"
+
+references:
+  - source: "floor-standing control enclosure class (800 x 600 x 2000 mm bay, DIN-rail interior)"
+    evidences: >
+      [INFER] No manufacturer datasheet is preserved in sources/ — treat every value as inference.
+      The layout modelled: a coated sheet-steel bay on a 100 mm plinth, a rear mounting plate set
+      back so cable ducts pass in front of it, four DIN rail rows (PLC I/O at the top, MCBs, relays,
+      terminals at the bottom), wiring ducts above each row and up both sides, a roof fan/filter,
+      and a door carrying the disconnect handle and pilot lights.
+    suitability: partial
+
+dimensions_real:
+  width_m:      {value: 0.80, confidence: med}    # [INFER] the common bay width
+  depth_m:      {value: 0.60, confidence: med}    # [INFER]
+  height_m:     {value: 2.00, confidence: med}    # [INFER] plus a 0.10 m plinth
+  plinth_m:     {value: 0.10, confidence: med}    # [INFER]
+  sheet_t_m:    {value: 0.02, confidence: low}    # [INFER] folded sheet
+  door_t_m:     {value: 0.028, confidence: low}   # [INFER]
+  din_rows:     {value: 4,    confidence: low}    # [INFER]
+  row_pitch_m:  {value: 0.30, confidence: low}    # [INFER] rail-to-rail
+  duct_w_m:     {value: 0.045, confidence: low}   # [INFER] wiring duct
+  terminals:    {value: 46,   confidence: low}    # [INFER] one bank
+  io_modules:   {value: 9,    confidence: low}    # [INFER] CPU + I/O
+
+hierarchy:
+  - name: root
+    children:
+      - name: plinth
+        pivot: [0, 0, 0]
+        animation: none
+      - name: enclosure       # SHELL: back, sides, roof, floor, door frame return
+        pivot: [0, 0, 0]
+        animation: none
+      - name: plate_rails     # mounting plate + 4 DIN rails
+        pivot: [0, 0, 0]
+        animation: none
+      - name: ducts           # horizontal duct per row + two vertical risers (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: devices         # 4 InstancedMeshes: I/O modules, MCBs, relays, terminals + LED batch
+        pivot: [0, 0, 0]
+        animation: none
+      - name: doorPivot       # hinge on the LEFT, away from the catalogue camera
+        pivot: [-0.395, 0, 0.304]
+        animation: swing
+        attachment:
+          parent_socket: enclosure_face
+          contact_type: hinge
+          gap_tolerance: 0.003
+
+materials:
+  - id: enclosure-ral
+    family: painted-metal
+    color: "#cfd3d6"
+    metalness: 0.0             # RAL-coated sheet steel -> dielectric
+    roughness: 0.50
+    evidence: "HANDBOOK §3.1 painted/coated 0.0-0.05"
+    confidence: 0.85
+  - id: mounting-plate
+    family: bare-metal
+    color: "#969ba1"
+    metalness: 0.85
+    roughness: 0.48
+    evidence: >
+      HANDBOOK §3.1 zinc-plated plate. Deliberately DARKER than the enclosure: white-on-white
+      swallowed the DIN rows in this asset's first open-door capture.
+    confidence: 0.8
+  - id: din-rail
+    family: bare-metal
+    color: "#d0d4d7"
+    metalness: 0.90
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1"
+    confidence: 0.8
+  - id: io-module
+    family: plastic
+    color: "#2c4a63"
+    metalness: 0.0
+    roughness: 0.50
+    evidence: "[INFER] moulded I/O module housing — dielectric"
+    confidence: 0.75
+  - id: mcb
+    family: plastic
+    color: "#e7e9ea"
+    metalness: 0.0
+    roughness: 0.48
+    evidence: "[INFER] moulded breaker housing"
+    confidence: 0.75
+  - id: terminal
+    family: plastic
+    color: "#a8b4c0"
+    metalness: 0.0
+    roughness: 0.50
+    evidence: "[INFER] moulded terminal block"
+    confidence: 0.75
+  - id: status-led
+    family: plastic
+    color: "#1a3a2a"
+    metalness: 0.0
+    roughness: 0.35
+    evidence: >
+      [INFER] LED lens with TWO states: dark when the ENERGIZADO toggle is off, emissive green when
+      on. Painting them permanently lit would be a decal, not a state.
+    confidence: 0.75
+
+critical_features:
+  - id: interior-is-the-subject
+    desc: >
+      With the door open, four populated DIN rows, the wiring ducts and the mounting plate all read.
+      A control cabinet whose interior is empty or sealed is the wrong object.
+    threshold: 0.80
+  - id: row-hierarchy
+    desc: >
+      The rows are ordered the way a panel builder orders them: I/O at the top, protection, relays,
+      terminals at the bottom, with a duct above each row and risers up both sides.
+    threshold: 0.75
+  - id: door-mounted-controls
+    desc: >
+      Disconnect handle, three pilot lights and a nameplate on the door — the operating surface that
+      exists precisely so the door does not have to be opened.
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 60
+    tris: 20000
+  measured:             # SwiftShader headless capture, 1280x800 — COUNTS are valid, frame time is NOT
+    draws: 44
+    tris: 2006
+    geometries: 45
+    root_meshes: 43
+
+camera:
+  azimuth_deg: 77      # near-frontal on purpose: the payload is inside
+  elevation_deg: 8.6
+  fov: 38
+  target_y_m: 1.08
+  radius_m: 4.1
+
+lighting: house-rig + camera-side fill + bay lamp
+  # DOCUMENTED DEVIATION: environmentIntensity 1.6 (coated steel, no bare-metal boost), a
+  # camera-side fill 0.9 for the 2 m vertical face, and a short-range PointLight inside the bay —
+  # a shadowed cavity swallows the devices, exactly as certified on laboratorio/autoclave.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ABRIR PUERTA"  # damped swing, hinged left
+  - "CANALETAS"     # wiring ducts, to expose the rails
+  - "ENERGIZADO"    # LED batch + door pilot lights switch to emissive green
+
+colorTarget:
+  # MEASURED from the rendered enclosure/door skin (headless SwiftShader capture at 1280x800):
+  # flattest 26x26 patch found by scan, per-channel std 0.0.
+  srgb: [231, 232, 234]
+  deltaE00Max: 8
+  crop: "26x26+630+150"   # cabinet roof/door skin at 1280x800
