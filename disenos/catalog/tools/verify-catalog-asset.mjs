@@ -4,10 +4,18 @@
 // Usage: node verify-catalog-asset.mjs <family>/<slug> [...]   (server must serve repo root at :8899)
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 
 const BIN = process.env.HOME + '/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell';
-const PORT = 9334;
-const BASE = 'http://127.0.0.1:8899';
+// A FIXED debug port is unsafe with parallel catalog sessions: if it is already taken, this driver
+// attaches to SOMEONE ELSE'S browser and measures the wrong page (or hangs). Take a free one.
+const freePort = () => new Promise((res, rej) => {
+  const s = createServer();
+  s.on('error', rej);
+  s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); });
+});
+const PORT = Number(process.env.CDP_PORT || await freePort());
+const BASE = process.env.BASE_URL || 'http://127.0.0.1:8899';
 const TARGETS = process.argv.slice(2);
 const SHOT_DIR = process.env.SHOT_DIR || '.';
 
@@ -30,14 +38,27 @@ const sleep = ms => new Promise(r=>setTimeout(r,ms));
 // genuinely broken asset. That ambiguity would fail a good asset at the merge gate, so refuse to
 // run at all rather than emit a verdict the run cannot support.
 if(!TARGETS.length){ console.error('usage: verify-catalog-asset.mjs <family>/<slug> [...]'); process.exit(2); }
-try{
-  const ping = await fetch(`${BASE}/disenos/catalog/`, {signal: AbortSignal.timeout(4000)});
-  if(!ping.ok) throw new Error(`HTTP ${ping.status}`);
-}catch(e){
-  console.error(`PREFLIGHT FAILED: no server at ${BASE} (${e.message}).`);
-  console.error('Start one from the repo root:  python3 -m http.server 8899 --bind 127.0.0.1 &');
-  console.error('NOT a verdict on the assets — nothing was measured.');
-  process.exit(2);
+// It is NOT enough that *a* server answers: another checkout (or another session's worktree) may
+// be serving :8899, in which case every target 404s and the run would report a fake failure.
+// So fetch each target URL itself and require 200 before measuring anything.
+for(const t of TARGETS){
+  const slug = t.split('/').pop();
+  const url = `${BASE}/disenos/catalog/${t}/${slug}.html`;
+  let status;
+  try{ status = (await fetch(url, {signal: AbortSignal.timeout(4000)})).status; }
+  catch(e){
+    console.error(`PREFLIGHT FAILED: no server at ${BASE} (${e.message}).`);
+    console.error('Start one from THIS repo root:  python3 -m http.server 8899 --bind 127.0.0.1 &');
+    console.error('NOT a verdict on the assets — nothing was measured.');
+    process.exit(2);
+  }
+  if(status !== 200){
+    console.error(`PREFLIGHT FAILED: ${url} → HTTP ${status}.`);
+    console.error('A server IS answering, but it is not serving this checkout (another worktree on');
+    console.error('the same port?). Point BASE_URL at the right one, or restart the server from');
+    console.error('THIS repo root. NOT a verdict on the assets — nothing was measured.');
+    process.exit(2);
+  }
 }
 
 const args = ['--headless=new','--no-sandbox','--use-gl=angle','--use-angle=swiftshader',
