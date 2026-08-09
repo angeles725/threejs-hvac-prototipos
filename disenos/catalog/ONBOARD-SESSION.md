@@ -166,3 +166,13 @@ GOTCHAS ya detectados (evítalos):
 Trabaja en bucle por todos los assets pendientes de tu familia. Cuando tu familia quede en done, avisa y
 elige otra familia libre si queda, o detente.
 ```
+
+## Auditoría de defectos — anclas obligatorias (evita falsos positivos)
+- Identifica una InstancedMesh por `geometry.parameters` (width/height/depth), NUNCA por `count` ni por índice
+  de traversal: varias mallas comparten conteo por casualidad (24 aisladores vs 28 MCCB) y el orden de
+  traversal cambia con cualquier edición → agarras la malla de al lado y reportas un defecto que no existe.
+- Un pixel-diff que NO cambia solo prueba AUSENCIA si ANTES demuestras que el objeto era visible en ese estado.
+  Si vive tras una tapa/puerta CERRADA, "ocultarlo no cambia el hash" es tautológico. Orden correcto: abre la
+  tapa que lo cubre → confirma que aporta píxeles → recién entonces el diff prueba ausencia.
+- Todo hallazgo de auditoría se REFUTA (verificación adversarial de la sesión dueña) ANTES de aplicarse como
+  fix. Un reporte medido pero con la identidad de malla mal anclada parece sólido y no lo es.
