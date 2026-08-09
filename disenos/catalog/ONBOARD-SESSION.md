@@ -213,6 +213,13 @@ elige otra familia libre si queda, o detente.
 - Identifica una InstancedMesh por `geometry.parameters` (width/height/depth), NUNCA por `count` ni por índice
   de traversal: varias mallas comparten conteo por casualidad (24 aisladores vs 28 MCCB) y el orden de
   traversal cambia con cualquier edición → agarras la malla de al lado y reportas un defecto que no existe.
+- EL GATE NO VE EL BORDE DEL CUADRO: un sujeto puede salir RECORTADO con exit 0, ready true, 0 excepciones y
+  conteos verdes — el gate mide que la escena renderiza, no que ENCUADRA. Confirmado por dos sesiones (bomba: el
+  motor a ndcY 1.172; rack-drive-in: el arriostramiento superior por encima del HUD). Chequeo barato y que
+  discrimina: proyecta las 8 esquinas del bounding box MUNDO del root a NDC y exige |ndc| <= ~0.93, con el tope por
+  debajo de +0.75 para dejar libre el HUD de 4 líneas. Si algo se sale, reencuadra moviendo la CÁMARA (R/target),
+  nunca bajando el sujeto para esquivar el HUD (eso recorta por el otro lado). Es la misma familia que "los conteos
+  no ven geometría", un escalón más arriba: tampoco ven el encuadre.
 - SOMBRA CONGELADA (autoUpdate=false) vs MOVIMIENTO: el criterio es la CLASE DE MOVIMIENTO, NO la convención de
   la familia. (a) Movimiento CONTINUO e indefinido (una traslación de MARCHA): la sombra congelada nunca se
   corrige mientras dure → re-hornea CADA frame DENTRO de la rama de movimiento (`if(moving){ ...needsUpdate=true }`).
