@@ -1,0 +1,334 @@
+<!doctype html>
+<!--
+  compresor-tornillo — catalog asset, family `utilities`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/sources/B59-proceso-dims/atlas-copco-g15-22-screw.pdf (G 22 FM FF)
+  Spec: ./design-spec.yaml
+  NOTE: the subject is a BOX — everything that says "compressor" is inside it. The panels come off
+  for real (PANELES) instead of going translucent: on bomba-centrifuga a translucent cut turned out
+  to reveal nothing, and removing a service panel is what actually happens to this machine.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compresor de tornillo 22 kW — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Compresor de tornillo lubricado — 22 kW / 10 bar, full feature</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· gabinete pintado · tubería desnuda</span></div>
+  <div class="dim">1 280 × 833 × 1 220 mm · 194.7 m³/h · 70 dB(A) · 408 kg</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnPan" class="on">PANELES</button>
+  <button id="btnRun">OPERANDO</button>
+  <button id="btnDim">COTAS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · Atlas Copco G 22 FM Full Feature) ----------
+const L = 1.280, W = 0.833, H = 1.220;   // [CERT-doc] the one absolute the datasheet fixes
+const BASE_H = 0.120;                    // [INFER] frame + anti-vibration feet
+const WALL   = 0.026;                    // [INFER] acoustic panel thickness (lined sheet)
+const HL = L/2, HW = W/2;
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 6, 24);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.05, 100);
+const R = 3.60, AZ = 0.803, EL = 0.244;                         // 46° azimuth / 14° elevation (spec camera)
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.60 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.60, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.60, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;      // house value: this subject is flat painted faces, not a
+                                       // bare vertical cylinder — the vertical-metal fill would
+                                       // wash out the panel-to-panel separation.
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.2, 3.2, 1.9); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-1.6; sun.shadow.camera.right=1.6; sun.shadow.camera.top=1.6; sun.shadow.camera.bottom=-1.6;
+sun.shadow.camera.far = 9;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(24,24),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. Canopy and castings PAINTED (dielectric); only pipework/cooler are bare.
+// ============================================================================
+const matCanopy = new THREE.MeshStandardMaterial({ color:0xb4babd, metalness:0.0,  roughness:0.52 });
+const matTrim   = new THREE.MeshStandardMaterial({ color:0x2c3237, metalness:0.0,  roughness:0.60 });
+const matMotor  = new THREE.MeshStandardMaterial({ color:0x24506b, metalness:0.0,  roughness:0.55 });
+const matCast   = new THREE.MeshStandardMaterial({ color:0x565e63, metalness:0.0,  roughness:0.58 });
+const matPipe   = new THREE.MeshStandardMaterial({ color:0xa8aeb1, metalness:0.88, roughness:0.38 });
+const matHose   = new THREE.MeshStandardMaterial({ color:0x1c1f22, metalness:0.0,  roughness:0.85 });
+const matDim    = new THREE.MeshStandardMaterial({ color:0x00d4aa, metalness:0.0,  roughness:0.6,
+                                                   emissive:0x0b3b32, emissiveIntensity:1.0 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Only the two real runs are instanced: louvre slats and cooler fins.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xforms, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = im.receiveShadow = true;
+  xforms.forEach((t,i)=>{ _p.set(t[0],t[1],t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0)); _s.set(1,1,1);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s)); });
+  im.instanceMatrix.needsUpdate = true; parent.add(im); return im;
+}
+function mesh(geo, mat, parent){ const m = new THREE.Mesh(geo, mat);
+  m.castShadow = m.receiveShadow = true; if(parent) parent.add(m); return m; }
+const box = (w,h,d)=> new THREE.BoxGeometry(w,h,d);
+function cylX(r, len, seg=24){ const g = new THREE.CylinderGeometry(r, r, len, seg); g.rotateZ(Math.PI/2); return g; }
+
+// --- base frame: skid with forklift channels and anti-vibration feet ---
+const base = new THREE.Group();
+mesh(box(L, 0.014, W), matTrim, base).position.y = BASE_H - 0.007;
+for(const sz of [-1,1]) mesh(box(L, BASE_H - 0.014, 0.050), matTrim, base)
+  .position.set(0, (BASE_H-0.014)/2, sz*(HW - 0.030));
+for(const sx of [-1,1]) mesh(box(0.050, BASE_H - 0.014, W - 0.060), matTrim, base)
+  .position.set(sx*(HL - 0.030), (BASE_H-0.014)/2, 0);
+for(const sx of [-1,1]) for(const sz of [-1,1])                       // anti-vibration feet
+  mesh(new THREE.CylinderGeometry(0.030, 0.034, 0.022, 12), matHose, base)
+    .position.set(sx*(HL - 0.075), 0.011, sz*(HW - 0.075));
+root.add(base);
+
+// --- canopy: roof, two ends, back wall, corner posts (the parts that never come off) ---
+const canopy = new THREE.Group();
+const panels = new THREE.Group();          // declared here so panel-mounted parts can join it
+const TOP = BASE_H, CH = H - BASE_H;                                  // canopy sits on the base
+mesh(box(L, WALL, W), matCanopy, canopy).position.y = H - WALL/2;     // roof
+mesh(box(L, 0.020, W - 0.10), matTrim, canopy).position.y = H - WALL - 0.010;
+for(const sx of [-1,1])                                               // end walls
+  mesh(box(WALL, CH - WALL, W), matCanopy, canopy).position.set(sx*(HL - WALL/2), TOP + (CH-WALL)/2, 0);
+mesh(box(L - 2*WALL, CH - WALL, WALL), matCanopy, canopy)             // back wall
+  .position.set(0, TOP + (CH-WALL)/2, -(HW - WALL/2));
+for(const sx of [-1,1]) for(const sz of [-1,1])                       // corner posts
+  mesh(box(0.034, CH, 0.034), matTrim, canopy).position.set(sx*(HL-0.020), TOP + CH/2, sz*(HW-0.020));
+// discharge louvre on the +X end, intake louvre on the -X end: the cooling air must CROSS the machine
+// The louvre must sit PROUD of the end wall. Anything placed inside the 26 mm panel thickness is
+// simply invisible — the wall is a solid box, so a recessed slat is occluded by the very panel it
+// is meant to perforate, and the whole cabinet then reads as a featureless white crate.
+function louvre(sx, y0, y1, n){
+  const g = new THREE.Group();
+  const xFace = sx*(HL + 0.002);
+  mesh(box(0.008, y1 - y0 + 0.030, W - 0.12), matTrim, g).position.set(xFace, (y0+y1)/2, 0);
+  const slats = [];
+  // Tilt about Z, the slat's LONG axis. Rotating about X instead swings the slat inside the YZ
+  // plane, which renders the louvre as a set of diagonal bars rather than a stack of horizontals.
+  for(let k=0;k<n;k++) slats.push([sx*(HL + 0.012), y0 + (k+0.5)*(y1-y0)/n, 0, 0, 0, 0.35*sx]);
+  instanced(box(0.014, 0.028, W - 0.15), matCanopy, slats, g);
+  canopy.add(g); return g;
+}
+louvre( 1, TOP + 0.20, TOP + 0.86, 11);
+louvre(-1, TOP + 0.14, TOP + 0.52, 7);
+// Control panel — parented to `panels`, NOT to `canopy`. It is mounted ON the front service panel,
+// so leaving it on the canopy makes it hang in mid-air the moment the panel comes off. Same defect
+// class as the orphaned bolt rings on bomba-centrifuga.
+const cp = new THREE.Group();
+mesh(box(0.230, 0.170, 0.020), matTrim, cp).position.set(HL - 0.30, TOP + 0.80, HW - 0.006);
+mesh(box(0.150, 0.080, 0.008), matPipe, cp).position.set(HL - 0.30, TOP + 0.82, HW + 0.006);
+for(let k=0;k<3;k++) mesh(new THREE.CylinderGeometry(0.012,0.012,0.010,10).rotateX(Math.PI/2), matCanopy, cp)
+  .position.set(HL - 0.36 + k*0.06, TOP + 0.74, HW + 0.006);
+panels.add(cp);
+// compressed-air outlet, back end
+mesh(cylX(0.020, 0.110), matPipe, canopy).position.set(-(HL + 0.030), TOP + 0.62, HW - 0.20);
+mesh(new THREE.CylinderGeometry(0.034,0.034,0.014,16).rotateZ(Math.PI/2), matPipe, canopy)
+  .position.set(-(HL + 0.080), TOP + 0.62, HW - 0.20);
+root.add(canopy);
+
+// --- internals (visible when PANELES is off): motor → airend → separator → cooler → outlet ---
+const internals = new THREE.Group();
+const FLOOR = BASE_H + 0.02;
+// DRYER MODULE, at the -X end. This is not decoration: the 1,280 mm length I used is the FM FULL
+// FEATURE row, and the only thing separating it from the 1,130 mm FM Standard is the 150 mm of
+// integrated refrigerant dryer. Quoting the longer dimension while modelling the shorter machine
+// would make the envelope evidence a lie.
+const MX = -0.47;
+mesh(box(0.190, 0.470, 0.520), matCast, internals).position.set(MX, FLOOR + 0.34, 0.02);
+const dryFins = [];
+for(let k=0;k<16;k++) dryFins.push([MX + 0.100, FLOOR + 0.16 + k*0.024, 0.02]);
+instanced(box(0.010, 0.006, 0.500), matPipe, dryFins, internals);   // condenser face
+mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.190, 20), matTrim, internals)
+  .position.set(MX - 0.02, FLOOR + 0.095, -0.24);                    // hermetic refrigerant compressor
+mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.180, 16), matPipe, internals)
+  .position.set(MX + 0.05, FLOOR + 0.66, 0.20);                      // condensate separator
+mesh(cylX(0.018, 0.150, 12), matPipe, internals).position.set(MX + 0.16, FLOOR + 0.62, 0.20);
+
+// motor, horizontal along X
+mesh(cylX(0.150, 0.420, 32), matMotor, internals).position.set(-0.16, FLOOR + 0.30, -0.13);
+const fins = [];
+for(let k=0;k<24;k++){ const a = k*Math.PI*2/24;
+  if(Math.abs(Math.PI - a) < 0.9) continue;                           // no fins where it is footed
+  fins.push([-0.16, FLOOR + 0.30 + Math.cos(a)*0.156, -0.13 + Math.sin(a)*0.156, a, 0, 0]); }
+instanced(box(0.400, 0.020, 0.006), matMotor, fins, internals);
+mesh(box(0.360, 0.070, 0.240), matCast, internals).position.set(-0.16, FLOOR + 0.115, -0.13);
+mesh(box(0.130, 0.100, 0.110), matMotor, internals).position.set(-0.16, FLOOR + 0.505, -0.13);
+// airend: the screw element, coupled to the motor
+mesh(cylX(0.120, 0.300, 24), matCast, internals).position.set(0.16, FLOOR + 0.30, -0.13);
+mesh(cylX(0.145, 0.040, 24), matCast, internals).position.set(0.02, FLOOR + 0.30, -0.13);
+mesh(box(0.120, 0.150, 0.190), matCast, internals).position.set(0.27, FLOOR + 0.30, -0.13);
+// oil separator vessel, vertical
+mesh(new THREE.CylinderGeometry(0.140, 0.140, 0.520, 28), matCast, internals).position.set(0.22, FLOOR + 0.34, 0.19);
+mesh(new THREE.CylinderGeometry(0.140, 0.140, 0.030, 28), matPipe, internals).position.set(0.22, FLOOR + 0.615, 0.19);
+mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.090, 16), matPipe, internals).position.set(0.22, FLOOR + 0.670, 0.19);
+// hoses: airend → separator, and the oil return
+const hoseA = mesh(cylX(0.028, 0.180, 12), matHose, internals);
+hoseA.position.set(0.24, FLOOR + 0.34, 0.03); hoseA.rotation.y = -0.9;
+mesh(new THREE.CylinderGeometry(0.020,0.020,0.300,12).rotateZ(0.4), matHose, internals)
+  .position.set(0.19, FLOOR + 0.20, 0.06);
+// starter / control cubicle, high on the back wall — this is what occupies the upper third of the
+// canopy on a real package, and without it the enclosure reads as mostly empty air
+mesh(box(0.340, 0.300, 0.260), matTrim, internals).position.set(-0.16, FLOOR + 0.800, -0.20);
+mesh(box(0.300, 0.260, 0.010), matCanopy, internals).position.set(-0.16, FLOOR + 0.800, -0.068);
+mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.020, 10).rotateX(Math.PI/2), matCast, internals)
+  .position.set(-0.03, FLOOR + 0.800, -0.058);                        // isolator handle
+mesh(cylX(0.016, 0.170, 10), matHose, internals).position.set(-0.16, FLOOR + 0.640, -0.20);
+// combined cooler (aftercooler + oil cooler) at the discharge end, with a finned core
+mesh(box(0.060, 0.560, 0.520), matPipe, internals).position.set(0.50, FLOOR + 0.46, -0.02);
+const core = [];
+for(let k=0;k<22;k++) core.push([0.50, FLOOR + 0.20 + k*0.024, -0.02]);
+instanced(box(0.052, 0.006, 0.500), matTrim, core, internals);
+mesh(cylX(0.024, 0.420, 12), matPipe, internals).position.set(0.30, FLOOR + 0.70, -0.02);
+root.add(internals);
+
+// --- cooling fan, drawing across the machine and out through the discharge louvre ---
+const fan = new THREE.Group();
+fan.position.set(0.42, FLOOR + 0.86, -0.02);
+mesh(cylX(0.045, 0.060, 16), matTrim, fan);
+for(let k=0;k<7;k++){                                                 // blades, pitched
+  const b = mesh(box(0.020, 0.150, 0.045), matTrim, fan);
+  b.position.set(0, Math.cos(k*Math.PI*2/7)*0.105, Math.sin(k*Math.PI*2/7)*0.105);
+  b.rotation.x = k*Math.PI*2/7; b.rotation.z = 0.5;
+}
+mesh(new THREE.TorusGeometry(0.175, 0.010, 6, 28).rotateY(Math.PI/2), matTrim, fan);
+internals.add(fan);
+
+// --- removable service panels: the state this asset exists for ---
+for(const sz of [-1,1]){
+  if(sz === -1) continue;                                             // back is a fixed wall, not a panel
+  mesh(box(L - 2*WALL - 0.02, CH - WALL - 0.02, WALL), matCanopy, panels)
+    .position.set(0, TOP + (CH-WALL)/2, sz*(HW - WALL/2));
+  for(const sx of [-1,1])                                             // quarter-turn latches
+    mesh(new THREE.CylinderGeometry(0.012,0.012,0.014,10).rotateX(Math.PI/2), matTrim, panels)
+      .position.set(sx*(HL - 0.10), TOP + 0.10, sz*(HW + 0.004));
+}
+// the two ends carry removable access covers too
+mesh(box(WALL, 0.520, W - 0.12), matCanopy, panels).position.set(-(HL - WALL/2) - 0.002, TOP + 0.72, 0);
+root.add(panels);
+
+// --- COTAS: the evidenced 1,280 x 833 x 1,220 envelope ---
+const dims = new THREE.Group(); dims.visible = false;
+const bar = (w,h,d,x,y,z)=> mesh(box(w,h,d), matDim, dims).position.set(x,y,z);
+bar(L, 0.010, 0.010, 0, 0.004, HW + 0.10);                             // length
+bar(0.010, 0.010, W, HL + 0.10, 0.004, 0);                             // width
+bar(0.010, H, 0.010, HL + 0.10, H/2, HW + 0.10);                       // height
+for(const sx of [-1,1]) bar(0.008, 0.070, 0.008, sx*HL, 0.035, HW + 0.10);
+for(const sz of [-1,1]) bar(0.070, 0.008, 0.008, HL + 0.10, 0.035, sz*HW);
+root.add(dims);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let running = false;
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnPan = document.getElementById('btnPan');
+btnPan.onclick = ()=>{ panels.visible = !panels.visible; btnPan.classList.toggle('on', panels.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnRun = document.getElementById('btnRun');
+btnRun.onclick = ()=>{ running = !running; btnRun.classList.toggle('on', running); requestRender(); };
+
+const btnDim = document.getElementById('btnDim');
+btnDim.onclick = ()=>{ dims.visible = !dims.visible; btnDim.classList.toggle('on', dims.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(running){ fan.rotation.x += 0.22; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__compresorTornilloApp = __app;
+globalThis['__compresor-tornilloApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
