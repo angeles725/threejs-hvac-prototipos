@@ -38,8 +38,8 @@ PASO 1 — CONTRATO (cada asset, o no integra):
   no aplica.
 
 PASO 2 — QA OBLIGATORIA antes de cada commit (mismo gate que usa la integración):
-    python3 -m http.server 8899 --bind 127.0.0.1 &
-    SHOT_DIR=/tmp/shots disenos/catalog/tools/qa-lock.sh node disenos/catalog/tools/verify-catalog-asset.mjs <familia>/<slug>
+    PORT=<tu-puerto-libre>; python3 -m http.server $PORT --bind 127.0.0.1 &
+    SHOT_DIR=/tmp/shots BASE_URL=http://127.0.0.1:$PORT disenos/catalog/tools/qa-lock.sh node disenos/catalog/tools/verify-catalog-asset.mjs <familia>/<slug>
   OJO PUERTO: 8899 suele estar OCUPADO por un servidor que sirve OTRO root — si lo levantas y "funciona", mides el
   repo equivocado sin enterarte. Usa un PUERTO PROPIO, pasa `BASE_URL`/`BASE` explícito a las sondas, y confirma con
   `curl` contra una ruta que solo exista en TU worktree antes de fiarte. Y `SHOT_DIR` debe EXISTIR (si no, ENOENT y parece fallo del asset).
