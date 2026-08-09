@@ -1,0 +1,194 @@
+# DesignSpec — bench-mounted laboratory fume hood with a vertical sash
+# Catalog family `laboratorio` (worktree catalog-retail-lab).
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: campana-extraccion
+family: laboratorio
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # the 6 mm pane and the 14 mm baffle are material, not voxels
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 15 -> moderate.
+  scores: {silhouette: 2, components: 3, hierarchy: 2, repetition: 0,
+           material_layers: 3, detail: 2, occlusion: 2, action_readiness: 1}
+  tier: moderate
+  notes: >
+    repetition 0 -> NO instancing (block54 §2.3 is a licence, not an obligation). The two hard axes
+    are material_layers (lit white chamber seen through a transmissive sash) and occlusion (the
+    baffle only reads if the liner behind it is darker than the baffle itself).
+    action_readiness 1: the sash SLIDES — no rotation anywhere in this asset.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    lit_chamber: "disenos/catalog/retail/refrigerador-vertical/ (real lamp, not emissive-only)"
+    coated_exposure: "disenos/catalog/retail/gondola/ (white coated panels clip at exposure 1.15)"
+
+references:
+  - source: "bench fume hood class (1.5 m nominal width, bench at 0.9 m)"
+    evidences: >
+      [INFER] No manufacturer datasheet is preserved in sources/ — treat every value as inference.
+      The layout modelled: a base cabinet carrying a work surface at bench height, a superstructure
+      with a slotted rear baffle (bottom, middle and top slots), an airfoil sill across the bottom of
+      the opening, a vertical sash that slides up behind the fascia, service fixtures reachable from
+      outside the chamber, and a roof exhaust collar.
+    suitability: partial
+
+dimensions_real:
+  width_m:        {value: 1.50, confidence: med}   # [INFER] nominal bench hood
+  depth_m:        {value: 0.80, confidence: med}   # [INFER]
+  bench_y_m:      {value: 0.90, confidence: med}   # [INFER] work surface height
+  total_h_m:      {value: 2.35, confidence: low}   # incl. the exhaust collar
+  hood_h_m:       {value: 1.35, confidence: low}   # [INFER] superstructure above the bench
+  sash_h_m:       {value: 0.80, confidence: low}   # [INFER] leaf height
+  sash_travel_m:  {value: 0.50, confidence: low}   # [INFER] working opening when raised
+  fascia_h_m:     {value: 0.55, confidence: med}   # DERIVED: must be >= sash travel, see below
+  duct_d_m:       {value: 0.25, confidence: low}   # [INFER] exhaust collar
+  sill_h_m:       {value: 0.055, confidence: low}  # [INFER] airfoil sill
+  post_w_m:       {value: 0.075, confidence: low}  # [INFER] opening side posts
+  baffle_slots:   {value: 3,    confidence: med}   # [INFER] bottom / middle / top
+
+hierarchy:
+  - name: root
+    children:
+      - name: cabinet         # plinth, carcase, two doors with pulls
+        pivot: [0, 0, 0]
+        animation: none
+      - name: worktop         # dished phenolic surface + cup sink
+        pivot: [0, 0, 0]
+        animation: none
+      - name: superstructure  # side walls, back, roof plenum, fascia, interior liner
+        pivot: [0, 0, 0]
+        animation: none
+      - name: baffle          # rear panel split into three slots
+        pivot: [0, 0, 0]
+        animation: none
+      - name: sash            # glass leaf in an aluminium frame — TRANSLATES on Y
+        pivot: [0, 0.95, 0.345]
+        animation: slide
+        attachment:
+          parent_socket: opening_posts
+          contact_type: slide
+          gap_tolerance: 0.003
+      - name: services        # side valve handles + gooseneck tap (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: lights          # LED batten + chamber lamp (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: shell-epoxy
+    family: painted-metal
+    color: "#e3e6e8"
+    metalness: 0.0             # epoxy-coated steel -> dielectric
+    roughness: 0.44
+    evidence: "HANDBOOK §3.1 painted/coated 0.0-0.05"
+    confidence: 0.85
+  - id: chamber-liner
+    family: painted-metal
+    color: "#a4aab0"
+    metalness: 0.0
+    roughness: 0.62
+    evidence: >
+      HANDBOOK §3.1. Deliberately DARKER than the baffle: with both at liner-white the three baffle
+      slots vanished and the airflow feature disappeared in the QA capture.
+    confidence: 0.8
+  - id: baffle
+    family: painted-metal
+    color: "#e6eaed"
+    metalness: 0.0
+    roughness: 0.50
+    evidence: "HANDBOOK §3.1 — lighter than the liner so the slots read as gaps"
+    confidence: 0.8
+  - id: worktop-phenolic
+    family: composite
+    color: "#23272b"
+    metalness: 0.0
+    roughness: 0.42
+    evidence: "[INFER] epoxy/phenolic resin worktop — dielectric, semi-gloss"
+    confidence: 0.8
+  - id: sash-frame-alu
+    family: bare-metal
+    color: "#b6bbbf"
+    metalness: 0.92
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0"
+    confidence: 0.85
+  - id: sash-glass
+    family: glass
+    color: "#e6f2f7"
+    metalness: 0.0
+    roughness: 0.03
+    transmission: 0.90
+    evidence: >
+      [CERT] Higher transmission than retail/vitrina (0.72) is right here: the sash is BACKLIT by the
+      chamber lamp, so it reads as glass without a tint.
+    confidence: 0.8
+  - id: fixtures-chrome
+    family: bare-metal
+    color: "#c6cacd"
+    metalness: 0.93
+    roughness: 0.28
+    evidence: "HANDBOOK §3.1 bare-metal — taps and service fittings"
+    confidence: 0.8
+
+critical_features:
+  - id: sash-hides-behind-the-fascia
+    desc: >
+      Raised, the sash disappears behind the fascia and leaves a clear working opening; it does NOT
+      protrude through the roof. This requires fascia height >= sash travel, and it was wrong until
+      the sash-up capture showed it.
+    threshold: 0.80
+  - id: slotted-rear-baffle
+    desc: >
+      Three horizontal slots across the rear baffle — bottom, middle and top. This is the airflow
+      geometry that separates a fume hood from a glazed cabinet.
+    threshold: 0.75
+  - id: service-and-monitor-set
+    desc: >
+      Valve handles on the opening posts (operable from outside the chamber), a gooseneck tap over a
+      cup sink inside, and an airflow monitor on the fascia.
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 100         # transmission adds a second scene pass
+    tris: 20000
+  measured:            # SwiftShader headless capture, 1280x800 — COUNTS are valid, frame time is NOT
+    draws: 79
+    tris: 2008
+    geometries: 41
+    root_meshes: 39
+
+camera:
+  azimuth_deg: 50
+  elevation_deg: 9.2
+  fov: 38
+  target_y_m: 1.24
+  radius_m: 4.6
+
+lighting: house-rig + vertical-subject fill + chamber lamp (coated exposure)
+  # DOCUMENTED DEVIATION: exposure 1.04 and environmentIntensity 1.5 — white epoxy panels clip at
+  # the house 1.15. A camera-side fill (0.85) covers the vertical faces, and one PointLight lights
+  # the chamber, because an emissive batten illuminates nothing (certified on retail/refrigerador-vertical).
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "SUBIR GUILLOTINA"   # damped vertical slide
+  - "SERVICIOS"          # taps and valve handles
+  - "LUZ INTERIOR"       # batten + chamber lamp
+
+colorTarget:
+  # MEASURED from the rendered hood shell (headless SwiftShader capture at 1280x800): flattest 30x30
+  # patch found by scan on the right side wall, per-channel std 0.0.
+  srgb: [202, 204, 206]
+  deltaE00Max: 8
+  crop: "30x30+796+140"   # hood side wall at 1280x800

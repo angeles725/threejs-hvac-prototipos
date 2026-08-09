@@ -1,0 +1,183 @@
+# DesignSpec — pilot-scale glass-vessel stirred bioreactor on a skid
+# Catalog family `laboratorio` (worktree catalog-retail-lab).
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: biorreactor
+family: laboratorio
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # 6 mm turbine blades and a 5 mm sparger ring are material
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 17 -> complex boundary.
+  scores: {silhouette: 2, components: 3, hierarchy: 2, repetition: 2,
+           material_layers: 3, detail: 3, occlusion: 1, action_readiness: 1}
+  tier: moderate
+  notes: >
+    material_layers 3: glass vessel, turbid medium and bare wetted metal have to coexist and stay
+    readable through one another. detail 3: a bioreactor is recognised by its INTERNALS — shaft,
+    two Rushton turbines, four baffles, sparger ring — so they are modelled rather than implied.
+    action_readiness 1: the agitator spins, and it only sets needsRender WHILE it spins.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    transmissive_read: "disenos/catalog/retail/vitrina/ + refrigerador-vertical (transmission tuning)"
+    instancing: "block54 §2.3 — one blade batch for both turbines, one batch for the baffles"
+
+references:
+  - source: "stirred-tank bioreactor geometry (Rushton turbine convention)"
+    evidences: >
+      [INFER] No datasheet is preserved in sources/ for this asset. The proportions modelled follow
+      the classic stirred-tank convention: impeller diameter roughly a third of the tank diameter,
+      two impellers spaced about one impeller diameter apart, four wall baffles at 90 degrees, a
+      six-blade disc turbine, and a sparger ring below the lower impeller.
+      NOTE: master carries research/sources/B59-proceso-dims/arpn-stirred-tank-rushton.pdf, fetched
+      by the catalog-proceso session for tanque-agitador. It was NOT read for this asset, so these
+      values stay [INFER]; a later pass could upgrade them against that document.
+    suitability: partial
+
+dimensions_real:
+  vessel_d_m:    {value: 0.30, confidence: low}   # [INFER] pilot vessel bore
+  vessel_h_m:    {value: 0.50, confidence: low}   # [INFER] cylindrical height
+  fill_fraction: {value: 0.62, confidence: low}   # [INFER] working volume
+  impeller_d_m:  {value: 0.108, confidence: med}  # [INFER] ~ D/3, the Rushton convention
+  impellers:     {value: 2,    confidence: med}   # [INFER]
+  blades:        {value: 6,    confidence: high}  # a Rushton turbine IS a six-blade disc turbine
+  baffles:       {value: 4,    confidence: high}  # the four-baffle convention
+  shaft_d_m:     {value: 0.020, confidence: low}  # [INFER]
+  base_y_m:      {value: 0.78, confidence: low}   # [INFER] vessel deck height on the skid
+  cabinet_m:     {value: [0.46, 0.40, 1.05], confidence: low}   # [INFER] control cabinet
+
+hierarchy:
+  - name: root
+    children:
+      - name: skid            # frame, feet, vessel deck
+        pivot: [0, 0, 0]
+        animation: none
+      - name: vessel          # borosilicate cylinder + stainless base plate
+        pivot: [0, 0, 0]
+        animation: none
+      - name: medium          # working volume (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: baffles         # InstancedMesh, 4 wall strips
+        pivot: [0, 0, 0]
+        animation: none
+      - name: stirrer         # shaft + 2 turbine discs + instanced blades — ONE rotating group
+        pivot: [0, 0, 0]
+        animation: rotate
+      - name: sparger         # gas ring below the lower turbine
+        pivot: [0, 0, 0]
+        animation: none
+      - name: head            # head plate, port ring, seal housing, drive motor
+        pivot: [0, 0, 0]
+        animation: none
+      - name: probes          # pH/DO probes, port fittings, addition bottle and line (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: cabinet         # control cabinet, touchscreen, 3 peristaltic pumps
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: vessel-borosilicate
+    family: glass
+    color: "#dff0f6"
+    metalness: 0.0
+    roughness: 0.03
+    transmission: 0.82
+    evidence: >
+      [CERT] Between retail/vitrina (0.72, needed a visible surface) and the fume-hood sash (0.90,
+      backlit): here the vessel must show its internals AND still read as a wall, so 0.82.
+    confidence: 0.8
+  - id: wetted-316l
+    family: bare-metal
+    color: "#d6dadd"
+    metalness: 0.93
+    roughness: 0.22
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0 — polished wetted parts"
+    confidence: 0.85
+  - id: medium
+    family: liquid
+    color: "#c9a86a"
+    metalness: 0.0
+    roughness: 0.28
+    transmission: 0.55
+    evidence: >
+      [INFER] Turbid culture medium: LOW transmission on purpose. A clear liquid would be invisible
+      and the vessel would read as empty.
+    confidence: 0.7
+  - id: skid-steel
+    family: bare-metal
+    color: "#b9bec2"
+    metalness: 0.90
+    roughness: 0.40
+    evidence: "HANDBOOK §3.1"
+    confidence: 0.8
+  - id: cabinet-coat
+    family: painted-metal
+    color: "#dfe2e5"
+    metalness: 0.0
+    roughness: 0.45
+    evidence: "HANDBOOK §3.1 painted/coated 0.0-0.05"
+    confidence: 0.85
+
+critical_features:
+  - id: internals-read-through-glass
+    desc: >
+      Shaft, both turbines, the four baffles and the sparger are visible through the vessel wall and
+      through the medium. If the vessel reads as an empty glass tube the asset has failed.
+    threshold: 0.80
+  - id: rushton-proportions
+    desc: >
+      Impeller diameter about a third of the vessel, two stages, six flat blades on a disc, four
+      baffles at 90 degrees — the proportions a process engineer checks first.
+    threshold: 0.78
+  - id: skid-and-control
+    desc: >
+      Vessel deck on a framed skid with a control cabinet carrying a touchscreen and peristaltic
+      pumps — the asset is a unit, not a loose vessel.
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 130         # two transmissive materials -> extra scene passes
+    tris: 30000
+  measured:            # SwiftShader headless capture, 1280x800 — COUNTS are valid, frame time is NOT
+    draws: 107
+    tris: 5788
+    geometries: 54
+    root_meshes: 52
+
+camera:
+  azimuth_deg: 57
+  elevation_deg: 11.5
+  fov: 38
+  target_y_m: 0.82
+  radius_m: 3.45
+
+lighting: house-rig + camera-side fill + a back lamp for the vessel
+  # DOCUMENTED DEVIATION: a PointLight sits BEHIND-LEFT of the vessel. Backlighting is what makes
+  # internals read through glass — with front light only, the turbines dissolve into the wall.
+  # environmentIntensity 1.9 for the bare 316L; metalness/roughness untouched (HANDBOOK §3.1).
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "AGITADOR"   # spins the stirrer group; renders only while spinning
+  - "MEDIO"      # working volume on/off, to inspect the internals dry
+  - "SONDAS"     # probes, fittings, addition bottle and line
+
+colorTarget:
+  # MEASURED from the rendered medium through the vessel wall (headless SwiftShader capture at
+  # 1280x800): flattest 14x14 patch inside the liquid, per-channel std ~0.5. This is deliberately
+  # the LIQUID-through-GLASS read, since that pair is what the asset has to get right.
+  srgb: [151, 144, 118]
+  deltaE00Max: 8
+  crop: "14x14+563+342"   # medium seen through the vessel at 1280x800

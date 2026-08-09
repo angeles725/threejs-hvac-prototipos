@@ -1,0 +1,282 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — laboratorio/refrigerador-lab · upright laboratory refrigerator (+4 °C, solid door).
+  Built from disenos/catalog/shell-template.html. Contract: __refrigeradorLabApp.runtime +
+  __qaRenderInfo + data-app-ready, render-on-demand, shadows frozen (autoUpdate=false, 1024), DPR<=2.
+  Instancing (block54 §2.3): the wire shelves and the sample boxes repeat for real.
+  Deliberately DIFFERENT from retail/refrigerador-vertical in the same repo: a lab unit has a SOLID
+  insulated door, a controller with alarm, a chart port and a lock — it is not a merchandiser.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Refrigerador de laboratorio — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">REFRIGERADOR DE LABORATORIO — puerta ciega aislada, +4 °C</div>
+  <div><span class="dim">0.70 × 0.76 × 1.92 m · 5 parrillas · controlador con alarma y puerto de registro</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">ABRIR PUERTA</button>
+  <button id="btnLoad" class="on">MUESTRAS</button>
+  <button id="btnAlarm">ALARMA</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const W = 0.70, D = 0.76, H = 1.92;
+const CASTER = 0.075;
+const WALL = 0.06;                     // insulated wall thickness
+const DOOR_T = 0.075;                  // the door is THICK: that thickness is the lab-unit read
+const DOOR_Y0 = 0.30, DOOR_H = 1.42;   // door leaf
+const SHELVES = [0.46, 0.72, 0.98, 1.24, 1.50];
+const CTRL_Y = 1.82;                   // controller strip at eye height
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 7, 22);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.06;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 4.0, AZ = 1.08, EL = 0.16;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.05 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.00, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.00, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.4;   // bare 304 on a tall vertical box: the IBL is the only thing
+                                    // a metal surface can reflect, and at 1.85 the whole cabinet read dark
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3, 5.5, 3.5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+sun.shadow.camera.left=-2.2; sun.shadow.camera.right=2.2; sun.shadow.camera.top=2.6; sun.shadow.camera.bottom=-2.6;
+scene.add(sun);
+// VERTICAL-SUBJECT FILL: a 1.9 m stainless front is a vertical bare-metal plane facing a dark horizon.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.0);
+fill.position.set(-3.2, 2.4, 4.4);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(18,18),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: the skin is bare 304, the liner is a coated/moulded dielectric,
+// the gasket is rubber, the controller face is its own dielectric.
+// ============================================================================
+const matSkin  = new THREE.MeshStandardMaterial({ color:0xc4c8cb, metalness:0.93, roughness:0.32 });
+const matDoor  = new THREE.MeshStandardMaterial({ color:0xcbcfd2, metalness:0.93, roughness:0.28 });
+const matLiner = new THREE.MeshStandardMaterial({ color:0xe6e9ec, metalness:0.0,  roughness:0.6 });
+const matGask  = new THREE.MeshStandardMaterial({ color:0x15181b, metalness:0.0,  roughness:0.88 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x22262b, metalness:0.0,  roughness:0.55 });
+const matWire  = new THREE.MeshStandardMaterial({ color:0xd2d6d9, metalness:0.92, roughness:0.26 });
+const matScreen= new THREE.MeshStandardMaterial({ color:0x081d2c, metalness:0.0,  roughness:0.3,
+                                                  emissive:0x1a7fc0, emissiveIntensity:1.3 });
+const matAlarm = new THREE.MeshStandardMaterial({ color:0x6b1d17, metalness:0.0,  roughness:0.4,
+                                                  emissive:0x000000, emissiveIntensity:0.0 });
+const matLoad  = new THREE.MeshStandardMaterial({ metalness:0.0, roughness:0.55 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const dummy = new THREE.Object3D();
+const box = (parent,w,h,d,mat,x,y,z)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); parent.add(m); return m; };
+
+// --- castors ---
+for(const sx of [-1,1]) for(const sz of [-1,1]){
+  const c = new THREE.Mesh(new THREE.CylinderGeometry(CASTER/2, CASTER/2, 0.028, 14), matDark);
+  c.castShadow = true; c.rotation.z = Math.PI/2;
+  c.position.set(sx*(W/2 - 0.09), CASTER/2, sz*(D/2 - 0.10));
+  root.add(c);
+  box(root, 0.05, 0.045, 0.05, matDark, sx*(W/2 - 0.09), CASTER + 0.02, sz*(D/2 - 0.10));
+}
+
+// --- cabinet as a SHELL, so the door opening is a real opening (lesson from the autoclave) ---
+const Y0 = CASTER + 0.045;
+{
+  const ch = H - Y0;
+  box(root, W, ch, WALL, matSkin, 0, Y0 + ch/2, -(D/2 - WALL/2));                 // back
+  for(const sx of [-1,1]) box(root, WALL, ch, D, matSkin, sx*(W/2 - WALL/2), Y0 + ch/2, 0);
+  box(root, W, WALL, D, matSkin, 0, H - WALL/2, 0);                               // top
+  box(root, W, WALL, D, matSkin, 0, Y0 + WALL/2, 0);                              // bottom
+  // front frame around the door opening
+  const oy0 = DOOR_Y0, oy1 = DOOR_Y0 + DOOR_H;
+  box(root, W, oy0 - Y0, WALL, matSkin, 0, (Y0 + oy0)/2, D/2 - WALL/2);
+  box(root, W, H - oy1, WALL, matSkin, 0, (oy1 + H)/2, D/2 - WALL/2);
+  for(const sx of [-1,1]) box(root, 0.035, oy1 - oy0, WALL, matSkin, sx*(W/2 - 0.0175), (oy0 + oy1)/2, D/2 - WALL/2);
+  // interior liner
+  box(root, W - 2*WALL - 0.01, oy1 - oy0, 0.012, matLiner, 0, (oy0 + oy1)/2, -(D/2 - WALL - 0.006));
+  for(const sx of [-1,1]) box(root, 0.012, oy1 - oy0, D - WALL - 0.03, matLiner,
+                              sx*(W/2 - WALL - 0.006), (oy0 + oy1)/2, -0.015);
+  box(root, W - 2*WALL - 0.01, 0.012, D - WALL - 0.03, matLiner, 0, oy0 + 0.01, -0.015);
+  // gasket seat around the opening — a PERIMETER, never a panel
+  const gz = D/2 - WALL - 0.004, gw = 0.026;
+  box(root, W - 0.07, gw, 0.010, matGask, 0, oy0 + gw/2, gz);
+  box(root, W - 0.07, gw, 0.010, matGask, 0, oy1 - gw/2, gz);
+  for(const sx of [-1,1]) box(root, gw, oy1 - oy0 - 2*gw, 0.010, matGask, sx*(W/2 - 0.035 - gw/2), (oy0 + oy1)/2, gz);
+}
+
+// --- shelves + samples: instanced ---
+const load = new THREE.Group();
+{
+  const sGeo = new THREE.BoxGeometry(W - 2*WALL - 0.04, 0.014, D - WALL - 0.09);
+  const im = new THREE.InstancedMesh(sGeo, matWire, SHELVES.length);
+  im.castShadow = im.receiveShadow = true;
+  SHELVES.forEach((y,i)=>{ dummy.position.set(0, y, -0.03); dummy.rotation.set(0,0,0); dummy.updateMatrix();
+    im.setMatrixAt(i, dummy.matrix); });
+  im.instanceMatrix.needsUpdate = true;
+  root.add(im);
+
+  // sample boxes: 3 per shelf, per-instance colour
+  const palette = [0x2f6fb0, 0xc4442f, 0x3f8f5a, 0xe0e3e6, 0x7b4a2f, 0xe0a53a];
+  const bGeo = new THREE.BoxGeometry(0.16, 0.09, 0.16);
+  const bm = new THREE.InstancedMesh(bGeo, matLoad, SHELVES.length*3);
+  bm.castShadow = bm.receiveShadow = true;
+  const c = new THREE.Color(); let k = 0, seed = 20260808;
+  const rnd = ()=> (seed = (seed*1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  for(const y of SHELVES) for(let i=0;i<3;i++){
+    dummy.position.set(-0.18 + i*0.18, y + 0.052, -0.03 + (rnd() - 0.5)*0.12);
+    dummy.rotation.set(0, (rnd() - 0.5)*0.2, 0); dummy.updateMatrix();
+    bm.setMatrixAt(k, dummy.matrix);
+    bm.setColorAt(k, c.setHex(palette[Math.floor(rnd()*palette.length)]));
+    k++;
+  }
+  bm.instanceMatrix.needsUpdate = true; if(bm.instanceColor) bm.instanceColor.needsUpdate = true;
+  load.add(bm);
+}
+root.add(load);
+
+// --- door: THICK insulated leaf, hinged on the right, with a lever handle and a lock ---
+const doorPivot = new THREE.Group();
+// Hinged on the LEFT: the catalogue camera sits on the +X side, so a right-hinged leaf swings
+// straight into the view and hides the interior it is supposed to reveal.
+doorPivot.position.set(-(W/2 - 0.01), 0, D/2 + 0.004);
+const door = new THREE.Group();
+door.position.set(W/2 - 0.01, 0, 0);                          // leaf at local +X -> NEGATIVE rotation opens it
+const dcy = DOOR_Y0 + DOOR_H/2;
+box(door, W - 0.01, DOOR_H, DOOR_T, matDoor, 0, dcy, DOOR_T/2);
+box(door, W - 0.09, DOOR_H - 0.08, 0.012, matLiner, 0, dcy, -0.006);          // inner face
+const dg = 0.026;
+box(door, W - 0.09, dg, 0.012, matGask, 0, DOOR_Y0 + 0.05, 0.001);
+box(door, W - 0.09, dg, 0.012, matGask, 0, DOOR_Y0 + DOOR_H - 0.05, 0.001);
+for(const sx of [-1,1]) box(door, dg, DOOR_H - 0.14, 0.012, matGask, sx*(W/2 - 0.06), dcy, 0.001);
+// lever handle + cylinder lock on the free edge
+box(door, 0.045, 0.20, 0.055, matDoor, (W/2 - 0.10), dcy - 0.10, DOOR_T + 0.030);
+box(door, 0.030, 0.030, 0.022, matDark, (W/2 - 0.10), dcy + 0.06, DOOR_T + 0.012);
+doorPivot.add(door);
+root.add(doorPivot);
+
+// --- controller strip: display, keys, alarm lamp, chart/data port ---
+box(root, W - 0.06, 0.16, 0.03, matDark, 0, CTRL_Y - 0.06, D/2 + 0.012);
+box(root, 0.20, 0.07, 0.008, matScreen, -0.14, CTRL_Y - 0.05, D/2 + 0.030);
+for(let i=0;i<3;i++) box(root, 0.032, 0.024, 0.008, matSkin, 0.06 + i*0.045, CTRL_Y - 0.09, D/2 + 0.030);
+const alarmLamp = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.012, 14), matAlarm);
+alarmLamp.rotation.x = Math.PI/2; alarmLamp.position.set(0.12, CTRL_Y - 0.02, D/2 + 0.032);
+root.add(alarmLamp);
+box(root, 0.05, 0.03, 0.010, matDark, 0.22, CTRL_Y - 0.09, D/2 + 0.030);      // data port
+
+// --- toe grille over the condenser ---
+for(let i=0;i<5;i++) box(root, W - 0.10, 0.012, 0.010, matDark, 0, Y0 + 0.035 + i*0.024, D/2 + 0.004);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. render is GATED: every handler and the swing call requestRender().
+// ============================================================================
+const btnRot   = document.getElementById('btnRot');
+const btnDoor  = document.getElementById('btnDoor');
+const btnLoad  = document.getElementById('btnLoad');
+const btnAlarm = document.getElementById('btnAlarm');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+let doorTarget = 0, doorAngle = 0;
+btnDoor.onclick = ()=>{ doorTarget = doorTarget ? 0 : 1; btnDoor.classList.toggle('on', !!doorTarget); requestRender(); };
+btnLoad.onclick = ()=>{ load.visible = !load.visible; btnLoad.classList.toggle('on', load.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+btnAlarm.onclick = ()=>{ const on = matAlarm.emissiveIntensity > 0.1;
+  matAlarm.emissive.setHex(on ? 0x000000 : 0xff3b25);
+  matAlarm.emissiveIntensity = on ? 0.0 : 2.2;
+  btnAlarm.classList.toggle('on', !on); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  if(Math.abs(doorAngle - doorTarget) > 0.001){                 // per-frame branch -> keep rendering
+    doorAngle += (doorTarget - doorAngle) * 0.12;
+    doorPivot.rotation.y = -1.5 * doorAngle;                    // leaf at local +X -> NEGATIVE opens outward
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__refrigeradorLabApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__refrigerador-labApp'] = globalThis.__refrigeradorLabApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

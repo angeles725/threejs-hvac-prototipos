@@ -1,0 +1,183 @@
+# DesignSpec — front-loading floor-standing steam sterilizer (laboratory autoclave)
+# Catalog family `laboratorio` (worktree catalog-retail-lab).
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: autoclave
+family: laboratorio
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # the 8 mm gasket torus and the lug ring are material, not voxels
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 16 -> moderate/complex boundary.
+  scores: {silhouette: 2, components: 3, hierarchy: 2, repetition: 1,
+           material_layers: 2, detail: 3, occlusion: 3, action_readiness: 1}
+  tier: moderate
+  notes: >
+    occlusion 3 is the axis that actually cost the work here. The subject has an INTERIOR that only
+    exists when the door is open, and three separate things were sealing it shut: the cabinet's own
+    front face, a full-disc sealing ring and a full-disc gasket. None of them shows up in the
+    draw-call counts — all three were found by capturing the door-open state.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    opaque_lid_trap: "disenos/catalog/retail/refrigerador-vertical/ (full-size gasket panel blacked out the interior)"
+    hinge_sign: "disenos/catalog/seguridad/barandal/ + gabinete-extintor (swing direction is not cosmetic)"
+
+references:
+  - source: "front-loading laboratory sterilizer class (cylindrical chamber, radial-lug door)"
+    evidences: >
+      [INFER] No manufacturer datasheet is preserved in sources/ — treat every value as inference.
+      The layout modelled: a horizontal cylindrical pressure chamber inside a coated cabinet, a
+      dished door closed by a ring of radial lugs and a handwheel, a chamber sealing face with a
+      perimeter gasket, load baskets on rails, a control panel and pressure gauge on the front, and
+      steam/drain pipework plus a safety valve on the side.
+    suitability: partial
+
+dimensions_real:
+  width_m:       {value: 0.78, confidence: low}    # [INFER] cabinet
+  depth_m:       {value: 0.95, confidence: low}    # [INFER]
+  height_m:      {value: 1.62, confidence: low}    # [INFER]
+  chamber_d_m:   {value: 0.44, confidence: med}    # [INFER] bore diameter
+  chamber_l_m:   {value: 0.66, confidence: med}    # [INFER] usable depth
+  chamber_y_m:   {value: 1.02, confidence: med}    # [INFER] centreline = loading height
+  door_d_m:      {value: 0.54, confidence: low}    # [INFER] disc, larger than the bore
+  lugs:          {value: 8,    confidence: low}    # [INFER] radial locking ring
+  leg_h_m:       {value: 0.12, confidence: low}    # [INFER] levelling feet
+  gauge_d_m:     {value: 0.11, confidence: low}    # [INFER] pressure gauge
+
+hierarchy:
+  - name: root
+    children:
+      - name: cabinet         # SHELL of 5 panels + two front bands; never a solid box
+        pivot: [0, 0, 0]
+        animation: none
+      - name: front_panel     # stainless band built AROUND the bore (4 boxes + a corner ring)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: chamber         # double-sided bore tunnel + back wall + ring sealing face + gasket torus
+        pivot: [0, 0, 0]
+        animation: none
+      - name: load            # rails + instanced baskets, lit by a short-range chamber lamp (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: doorPivot       # hinge on the LEFT so the leaf clears the control panel and the bore
+        pivot: [-0.32, 1.02, 0.507]
+        animation: swing
+        attachment:
+          parent_socket: chamber_face
+          contact_type: hinge
+          gap_tolerance: 0.003
+      - name: panel           # display, keys, pressure gauge
+        pivot: [0, 0, 0]
+        animation: none
+      - name: services        # steam/drain pipework + safety valve (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: cabinet-coat
+    family: painted-metal
+    color: "#dcdfe2"
+    metalness: 0.0
+    roughness: 0.46
+    evidence: "HANDBOOK §3.1 painted/coated 0.0-0.05"
+    confidence: 0.85
+  - id: front-304
+    family: bare-metal
+    color: "#b4b9bd"
+    metalness: 0.93
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0"
+    confidence: 0.85
+  - id: door-304
+    family: bare-metal
+    color: "#d2d6d9"
+    metalness: 0.93
+    roughness: 0.26
+    evidence: "HANDBOOK §3.1 — the door is the most polished face of the machine"
+    confidence: 0.85
+  - id: chamber-bore
+    family: bare-metal
+    color: "#8e949a"
+    metalness: 0.85
+    roughness: 0.52
+    evidence: >
+      HANDBOOK §3.1, deliberately DULLER and darker than the outer 304 and rendered DoubleSide. Two
+      reasons, both certified in this asset's captures: an open-ended tunnel with front-face culling
+      is invisible from outside, and at outer-skin gloss the bore turns into one flat white hole that
+      swallows the load. A real chamber interior is duller than a polished outer panel.
+    confidence: 0.8
+  - id: gasket
+    family: rubber
+    color: "#15181b"
+    metalness: 0.0
+    roughness: 0.88
+    evidence: "HANDBOOK §3.1 dielectric — modelled as a TORUS, never a disc"
+    confidence: 0.85
+  - id: pipework
+    family: bare-metal
+    color: "#b6bbbf"
+    metalness: 0.92
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1"
+    confidence: 0.8
+
+critical_features:
+  - id: chamber-is-actually-open
+    desc: >
+      With the door swung clear, the bore is a real opening: the cabinet shell, the sealing face and
+      the gasket are all rings, and the tunnel renders its inner wall. The load is visible inside.
+    threshold: 0.80
+  - id: radial-lug-closure
+    desc: >
+      Eight lugs around the door rim plus a spoked handwheel — the closure that identifies a pressure
+      vessel rather than a laboratory oven.
+    threshold: 0.78
+  - id: front-instrumentation
+    desc: >
+      Display, keypad and a pressure gauge on the front face, at a height an operator reads while
+      loading, with the door hinged away from them.
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 60
+    tris: 20000
+  measured:             # SwiftShader headless capture, 1280x800 — COUNTS are valid, frame time is NOT
+    draws: 47
+    tris: 2746
+    geometries: 48
+    root_meshes: 46
+
+camera:
+  azimuth_deg: 66      # AZ toward pi/2 faces +Z; the door, panel and gauge are all on the front
+  elevation_deg: 10.3
+  fov: 38
+  target_y_m: 0.92
+  radius_m: 3.3
+
+lighting: house-rig + camera-side fill + short-range chamber lamp
+  # DOCUMENTED DEVIATION: environmentIntensity 1.9 for the bare 304 skin and a camera-side fill
+  # (1.05) for the vertical front. The chamber lamp is deliberately WEAK (0.45, 1.1 m range): at 1.6
+  # it sat 0.15 m from the baskets and blew the bore to a flat white disc.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ABRIR PUERTA"   # damped swing, hinged left, clears the bore
+  - "CARGA"          # baskets and rails
+  - "SERVICIOS"      # steam/drain pipework and safety valve
+
+colorTarget:
+  # MEASURED from the rendered cabinet skin (headless SwiftShader capture at 1280x800): flattest
+  # 26x26 patch found by scan, per-channel std 0.0.
+  srgb: [199, 201, 203]
+  deltaE00Max: 8
+  crop: "26x26+772+200"   # cabinet side skin at 1280x800

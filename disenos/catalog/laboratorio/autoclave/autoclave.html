@@ -1,0 +1,329 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — laboratorio/autoclave · front-loading floor-standing steam sterilizer.
+  Built from disenos/catalog/shell-template.html. Contract: __autoclaveApp.runtime + __qaRenderInfo +
+  data-app-ready, render-on-demand, shadows frozen (autoUpdate=false, 1024), DPR<=2.
+  Instancing (block54 §2.3): the radial door lugs and the load baskets repeat for real; the cabinet,
+  chamber and control panel are unique meshes.
+  Hinge rule already certified in this worktree: a leaf at local -X needs a POSITIVE Y rotation to
+  swing forward (+Z); mirrored here, the leaf sits at local +X and needs a NEGATIVE one.
+  Verified in review-abierta.png, not by the draw-call counts.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autoclave de laboratorio — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">AUTOCLAVE DE VAPOR — cámara 304 + gabinete pintado</div>
+  <div><span class="dim">0.78 × 0.95 × 1.62 m · cámara Ø 0.44 × 0.66 m · puerta radial de 8 pernos</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">ABRIR PUERTA</button>
+  <button id="btnLoad" class="on">CARGA</button>
+  <button id="btnServ" class="on">SERVICIOS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const W = 0.78, D = 0.95, H = 1.62;
+const LEG_H = 0.12;
+const CH_R = 0.22, CH_L = 0.66;        // chamber radius / usable length
+const CH_Y = 1.02;                     // chamber centreline — loading height for a standing operator
+const DOOR_R = 0.27;                   // door disc, larger than the chamber bore
+const LUGS = 8;                        // radial locking lugs
+const PANEL_W = 0.24;
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 6, 20);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 3.3, AZ = 1.15, EL = 0.18;   // more frontal than the house default (AZ toward pi/2 faces +Z):
+                                        // and the gauge are ALL on the front face
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.95 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.92, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.92, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;   // the chamber and door are BARE 304: the IBL carries the metal
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3, 5, 3.5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+sun.shadow.camera.left=-2; sun.shadow.camera.right=2; sun.shadow.camera.top=2.2; sun.shadow.camera.bottom=-2.2;
+scene.add(sun);
+// VERTICAL-SUBJECT FILL: the cabinet front and the door disc are vertical bare-metal planes.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.05);
+fill.position.set(-3.0, 2.0, 4.2);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(16,16),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: the chamber, door and baskets are BARE 304; the cabinet skin
+// is powder-coated (dielectric); the gauge face and the display are their own dielectrics.
+// ============================================================================
+const matCab   = new THREE.MeshStandardMaterial({ color:0xdcdfe2, metalness:0.0,  roughness:0.46 });
+const matSteel = new THREE.MeshStandardMaterial({ color:0xb4b9bd, metalness:0.93, roughness:0.34 });
+const matDoor  = new THREE.MeshStandardMaterial({ color:0xd2d6d9, metalness:0.93, roughness:0.26 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x22262b, metalness:0.0,  roughness:0.55 });
+const matSeal  = new THREE.MeshStandardMaterial({ color:0x15181b, metalness:0.0,  roughness:0.88 });
+const matScreen= new THREE.MeshStandardMaterial({ color:0x0b2a24, metalness:0.0,  roughness:0.32,
+                                                  emissive:0x0e6b52, emissiveIntensity:1.3 });
+const matGauge = new THREE.MeshStandardMaterial({ color:0xeceff1, metalness:0.0,  roughness:0.4 });
+const matPipe  = new THREE.MeshStandardMaterial({ color:0xb6bbbf, metalness:0.92, roughness:0.34 });
+const matValve = new THREE.MeshStandardMaterial({ color:0xb02a1e, metalness:0.0,  roughness:0.5 });
+const matBasket= new THREE.MeshStandardMaterial({ color:0xdde1e4, metalness:0.90, roughness:0.28 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const dummy = new THREE.Object3D();
+const box = (parent,w,h,d,mat,x,y,z)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); parent.add(m); return m; };
+const cyl = (parent, r0, r1, h, seg, mat, x,y,z, rx=0, rz=0, open=false)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, h, seg, 1, open), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz);
+  parent.add(m); return m;
+};
+
+// --- levelling feet + cabinet ---
+for(const sx of [-1,1]) for(const sz of [-1,1]){
+  cyl(root, 0.030, 0.036, LEG_H, 10, matSteel, sx*(W/2 - 0.09), LEG_H/2, sz*(D/2 - 0.10));
+}
+// SHELL, NOT A SOLID BOX. A solid cabinet keeps its own front face at z = D/2, which sat right
+// behind the bore and filled it with a white disc — the chamber looked sealed with the door open.
+{
+  const ch = H - LEG_H, cy0 = LEG_H;
+  box(root, W, ch, 0.02, matCab, 0, cy0 + ch/2, -(D/2 - 0.01));                 // back
+  for(const sx of [-1,1]) box(root, 0.02, ch, D, matCab, sx*(W/2 - 0.01), cy0 + ch/2, 0);
+  box(root, W, 0.02, D, matCab, 0, H - 0.01, 0);                                // top
+  box(root, W, 0.02, D, matCab, 0, cy0 + 0.01, 0);                              // bottom
+  const panelY0 = CH_Y - 0.02 - 0.43, panelY1 = CH_Y - 0.02 + 0.43;             // stainless panel band
+  box(root, W, panelY0 - cy0, 0.02, matCab, 0, (cy0 + panelY0)/2, D/2 - 0.01);  // front below it
+  box(root, W, H - panelY1, 0.02, matCab, 0, (panelY1 + H)/2, D/2 - 0.01);      // front above it
+}
+box(root, W + 0.02, 0.03, D + 0.02, matDark, 0, H - 0.015, 0);            // capping trim
+
+// --- the front face is a recessed stainless panel the door closes against ---
+const FRONT_Z = D/2 + 0.002;
+// The front panel is built AROUND a real opening: as one solid box the "bore" was just a dark
+// disc painted on a wall, and opening the door revealed nothing.
+{
+  const pw = W - 0.06, ph = 0.86, py = CH_Y - 0.02;
+  const side = (pw/2 - CH_R);
+  box(root, side, ph, 0.02, matSteel, -(CH_R + side/2), py, FRONT_Z);
+  box(root, side, ph, 0.02, matSteel,  (CH_R + side/2), py, FRONT_Z);
+  const topH = (py + ph/2) - (CH_Y + CH_R), botH = (CH_Y - CH_R) - (py - ph/2);
+  box(root, 2*CH_R, topH, 0.02, matSteel, 0, CH_Y + CH_R + topH/2, FRONT_Z);
+  box(root, 2*CH_R, botH, 0.02, matSteel, 0, CH_Y - CH_R - botH/2, FRONT_Z);
+  // a ring closes the four square corners into a circular bore
+  const ring = new THREE.Mesh(new THREE.RingGeometry(CH_R, CH_R*1.44, 40), matSteel);
+  ring.position.set(0, CH_Y, FRONT_Z + 0.011); ring.receiveShadow = true;
+  root.add(ring);
+}
+// chamber bore + its sealing face
+// Darker and rougher than the outer skin: bare 304 under env 1.9 turns the whole bore into one
+// flat white hole, and the load inside it disappears. This is contrast, not a material fudge:
+// a chamber interior really is duller than a polished outer panel.
+const matBore = new THREE.MeshStandardMaterial({ color:0x8e949a, metalness:0.85, roughness:0.52 });
+matBore.side = THREE.DoubleSide;   // seen from OUTSIDE, an
+// open-ended tunnel with front-face culling is invisible: the chamber would be a hole in the air
+cyl(root, CH_R, CH_R, CH_L, 28, matBore, 0, CH_Y, D/2 - CH_L/2 - 0.02, Math.PI/2, 0, true);
+// SEALING FACE + GASKET AS RINGS, NOT DISCS. A full cylinder here is an opaque lid over the bore —
+// the same failure already certified on retail/refrigerador-vertical, where a full-size gasket panel
+// blacked out the whole cabinet. Only an open state shows it.
+{
+  const face = new THREE.Mesh(new THREE.RingGeometry(CH_R, CH_R + 0.03, 40), matSteel);
+  face.position.set(0, CH_Y, FRONT_Z + 0.016); face.receiveShadow = true; root.add(face);
+  const gasket = new THREE.Mesh(new THREE.TorusGeometry(CH_R + 0.008, 0.008, 8, 40), matSeal);
+  gasket.position.set(0, CH_Y, FRONT_Z + 0.020); gasket.castShadow = true; root.add(gasket);
+}
+// chamber back wall so the bore is a closed vessel, not a tunnel through the cabinet
+cyl(root, CH_R, CH_R, 0.02, 28, matBore, 0, CH_Y, D/2 - CH_L - 0.02, Math.PI/2);
+
+// --- load: two instanced wire baskets on rails inside the chamber ---
+const load = new THREE.Group();
+{
+  const railGeo = new THREE.BoxGeometry(0.012, 0.012, CH_L - 0.06);
+  for(const sx of [-1,1]) box(load, 0.012, 0.012, CH_L - 0.06, matBasket,
+                              sx*(CH_R - 0.05), CH_Y - CH_R*0.55, D/2 - CH_L/2 - 0.02);
+  const bGeo = new THREE.BoxGeometry(CH_R*1.5, 0.14, CH_L*0.42);
+  const im = new THREE.InstancedMesh(bGeo, matBasket, 2);
+  im.castShadow = im.receiveShadow = true;
+  for(let i=0;i<2;i++){
+    dummy.position.set(0, CH_Y - CH_R*0.42, D/2 - 0.12 - CH_L*0.44*i - 0.06);
+    dummy.rotation.set(0,0,0); dummy.updateMatrix();
+    im.setMatrixAt(i, dummy.matrix);
+  }
+  im.instanceMatrix.needsUpdate = true;
+  load.add(im);
+}
+// A steel bore under the house rig is a black hole: with the door open the load was invisible.
+// One short-range lamp inside the chamber is what makes the baskets read.
+const chamberLamp = new THREE.PointLight(0xf2f6ff, 0.45, 1.1, 2);   // low: at 1.6 the lamp sat 0.15 m
+// from the baskets and blew the whole bore to a flat white disc
+chamberLamp.position.set(0, CH_Y + 0.06, D/2 - 0.26);
+root.add(chamberLamp);
+root.add(load);
+
+// --- door: dished disc on a radial-lug closure, hinged at the +X side ---
+const doorPivot = new THREE.Group();
+// Hinged on the LEFT so the leaf swings away from the control panel (right) and clears the bore.
+doorPivot.position.set(-(DOOR_R + 0.05), CH_Y, FRONT_Z + 0.03);
+const door = new THREE.Group();
+door.position.set(DOOR_R + 0.05, 0, 0);                       // leaf at local +X (see hinge rule)
+cyl(door, DOOR_R, DOOR_R, 0.05, 32, matDoor, 0, 0, 0, Math.PI/2);
+cyl(door, DOOR_R - 0.035, DOOR_R - 0.035, 0.03, 32, matDoor, 0, 0, -0.035, Math.PI/2);   // the plug that enters the bore
+{
+  const lugGeo = new THREE.BoxGeometry(0.05, 0.028, 0.045);
+  const im = new THREE.InstancedMesh(lugGeo, matDoor, LUGS);
+  im.castShadow = im.receiveShadow = true;
+  for(let i=0;i<LUGS;i++){
+    const a = (i/LUGS)*Math.PI*2;
+    dummy.position.set(Math.cos(a)*(DOOR_R - 0.012), Math.sin(a)*(DOOR_R - 0.012), 0.012);
+    dummy.rotation.set(0, 0, a); dummy.updateMatrix();
+    im.setMatrixAt(i, dummy.matrix);
+  }
+  im.instanceMatrix.needsUpdate = true;
+  door.add(im);
+}
+// handwheel + spoke, the closure the operator turns
+const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.014, 10, 24), matSteel);
+wheel.castShadow = true; wheel.position.set(0, 0, 0.06); door.add(wheel);
+for(let i=0;i<3;i++){
+  const sp = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.20, 0.012), matSteel);
+  sp.castShadow = true; sp.position.set(0, 0, 0.06); sp.rotation.z = i*Math.PI/3; door.add(sp);
+}
+cyl(door, 0.026, 0.026, 0.07, 14, matSteel, 0, 0, 0.055, Math.PI/2);
+doorPivot.add(door);
+root.add(doorPivot);
+
+// --- control panel: display, keys, and a pressure gauge on the front ---
+box(root, PANEL_W, 0.34, 0.03, matDark, W/2 - PANEL_W/2 - 0.04, CH_Y + 0.34, FRONT_Z + 0.012);
+box(root, PANEL_W - 0.06, 0.11, 0.008, matScreen, W/2 - PANEL_W/2 - 0.04, CH_Y + 0.44, FRONT_Z + 0.030);
+for(let i=0;i<4;i++){
+  box(root, 0.035, 0.022, 0.010, matCab,
+      W/2 - PANEL_W + 0.04 + (i%2)*0.06, CH_Y + 0.30 - Math.floor(i/2)*0.05, FRONT_Z + 0.030);
+}
+const gauge = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.022, 20), matGauge);
+gauge.castShadow = true; gauge.rotation.x = Math.PI/2;
+gauge.position.set(-(W/2 - 0.12), CH_Y + 0.42, FRONT_Z + 0.020);
+root.add(gauge);
+cyl(root, 0.060, 0.060, 0.016, 20, matSteel, -(W/2 - 0.12), CH_Y + 0.42, FRONT_Z + 0.010, Math.PI/2);
+
+// --- services: steam/drain pipework and a safety valve on the side ---
+const services = new THREE.Group();
+cyl(services, 0.020, 0.020, 0.55, 12, matPipe, -(W/2 + 0.03), 0.55, -0.18);
+cyl(services, 0.020, 0.020, 0.30, 12, matPipe, -(W/2 + 0.03), 0.82, -0.03, 0, Math.PI/2);
+const sv = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.034, 0.09, 14), matPipe);
+sv.castShadow = true; sv.position.set(-(W/2 + 0.03), 0.90, -0.18); services.add(sv);
+const lever = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.014, 0.020), matValve);
+lever.castShadow = true; lever.position.set(-(W/2 + 0.08), 0.95, -0.18); services.add(lever);
+cyl(services, 0.028, 0.028, 0.22, 12, matPipe, -(W/2 + 0.03), 0.20, -0.30);       // drain to floor
+root.add(services);
+
+// --- vent stack on the roof ---
+cyl(root, 0.045, 0.045, 0.16, 14, matPipe, -(W/2 - 0.16), H + 0.08, -(D/2 - 0.18));
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. render is GATED: every handler and the swing call requestRender().
+// ============================================================================
+const btnRot  = document.getElementById('btnRot');
+const btnDoor = document.getElementById('btnDoor');
+const btnLoad = document.getElementById('btnLoad');
+const btnServ = document.getElementById('btnServ');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+let doorTarget = 0, doorAngle = 0;
+btnDoor.onclick = ()=>{ doorTarget = doorTarget ? 0 : 1; btnDoor.classList.toggle('on', !!doorTarget); requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(btnLoad, load);
+toggle(btnServ, services);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  if(Math.abs(doorAngle - doorTarget) > 0.001){                 // per-frame branch -> keep rendering
+    doorAngle += (doorTarget - doorAngle) * 0.12;
+    doorPivot.rotation.y = -1.95 * doorAngle;                   // leaf at local +X -> NEGATIVE swings it out
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__autoclaveApp = { runtime:{ scene, renderer, camera, root } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
