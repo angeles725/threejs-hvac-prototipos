@@ -60,6 +60,18 @@ GOTCHAS ya detectados (evítalos):
   environmentIntensity. Documenta la desviación en el design-spec.
 - Racks/estructuras de carga: el bastidor debe cubrir la carga superior + margen (DGUV: +500 mm sobre el
   nivel más alto). No dejes carga volando por encima del puntal.
+- ACERO PINTADO no es metal desnudo: con env 1.9-2.2 + exposure 1.15 los paneles claros se queman. Para
+  superficies recubiertas usa env ~1.5 / exposure ~1.02 + fill lateral. El gotcha del metal vertical de
+  arriba aplica SOLO a inox/acero desnudo.
+- Una TIRA EMISIVA no ilumina nada: un gabinete/vitrina con vidrio necesita PointLights reales dentro o el
+  producto sale negro detrás del cristal.
+- VIDRIO a transmission 0.96 desaparece del render; usa ~0.72 con tinte leve para que el producto se lea y
+  la superficie curva se note.
+- MECANISMO EN UNA SOLA CARA (puerta seccional, cortina, cualquier equipo con corte): encuadra ESA cara. La
+  vista canónica de una seccional es desde DENTRO (rieles + eje de muelles); de fuera cerrada es un panel liso.
+- CONTEO ≠ CORRECTO: draw calls/tris verdes NO ven geometría rota (carga atravesando mallas, pernos flotando
+  al ocultar una brida, carcasa translúcida con depthWrite tapando el corte, boca sobre el azimut de cámara).
+  SIEMPRE abre el PNG del gate y revísalo.
 
 Trabaja en bucle por todos los assets pendientes de tu familia. Cuando tu familia quede en done, avisa y
 elige otra familia libre si queda, o detente.
