@@ -44,6 +44,13 @@ PASO 2 — QA OBLIGATORIA antes de cada commit (mismo gate que usa la integraci�
   ABRE el PNG que deja y REVÍSALO: geometría correcta (los conteos verdes NO ven bugs de geometría).
   Caveat: mide con SwiftShader → conteos reales, pero el TIEMPO DE FRAME no; no lo uses como criterio.
 
+PASO 2b — QA DE ESTADO (OBLIGATORIA si tu asset tiene toggles). El gate del 2a captura SOLO el estado por
+DEFECTO, así que cualquier cuerpo que viva detrás de un botón (revelado, corte, puerta, falla) NUNCA se mira
+— ya se colaron ~15 defectos reales así, todos con exit 0. Acciona CADA botón y revisa el PNG resultante:
+    SHOT_DIR=/tmp/shots BASE=http://127.0.0.1:8899 node disenos/catalog/tools/probe-state.mjs <familia>/<slug> btnA,btnB [sufijo]
+  (usa puerto CDP 9336, distinto del gate). Revisa: ¿el revelado muestra el cuerpo interno o una caja vacía?
+  ¿la puerta abre a un vano o a metal macizo? ¿el corte deja ver lo que debe? Si no, arréglalo antes de commitear.
+
 PASO 3 — COMMIT + STATUS:
 - Commit por asset en tu rama (git -C <worktree> add/commit). NO hagas push.
 - Marca status de TUS assets en catalog.yaml (pending→done). NO toques otras familias.
@@ -89,6 +96,17 @@ GOTCHAS ya detectados (evítalos):
 - CONTEO ≠ CORRECTO: draw calls/tris verdes NO ven geometría rota (carga atravesando mallas, pernos flotando
   al ocultar una brida, carcasa translúcida con depthWrite tapando el corte, boca sobre el azimut de cámara).
   SIEMPRE abre el PNG del gate y revísalo.
+- CylinderGeometry / BoxGeometry son SÓLIDAS: un "aro" o "marco" hecho con un cilindro OCLUYE lo de adentro
+  (tapó ventiladores en torre y VRF). Aro → TorusGeometry o 4 tiras; marco → 4 barras, no una caja.
+- Una PUERTA colgada sobre un muro MACIZO se ve bien cerrada y no revela nada al abrir → recorta el VANO en el
+  muro (Shape con hole), como en bodega-shell/puerta-cuarto-frio.
+- En metal, el `map` tiñe F0: un mapa OSCURO en cara vertical colapsa a negro y parece agujero → sube el VALOR
+  del mapa, no bajes metalness.
+- BLANCO sobre BLANCO es invisible aunque nada lo tape (aspa dentro de chimenea blanca). Diferencia el valor.
+- Metal desnudo mirando hacia ABAJO también falla (refleja el cuarto oscuro → bandas negras). Un perfil T de
+  falso techo es acero PINTADO = dieléctrico → valor correcto, no más luz.
+- DISPOSICIÓN físicamente imposible pasa sin que nada la detecte: succión axial dentro del motor vecino, 2
+  ventiladores Ø0.60 en 0.78 m de fondo, carga volando. Revisa cotas y holguras contra tu design-spec.
 
 Trabaja en bucle por todos los assets pendientes de tu familia. Cuando tu familia quede en done, avisa y
 elige otra familia libre si queda, o detente.
