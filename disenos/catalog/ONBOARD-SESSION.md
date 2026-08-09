@@ -37,17 +37,20 @@ PASO 1 — CONTRATO (cada asset, o no integra):
 
 PASO 2 — QA OBLIGATORIA antes de cada commit (mismo gate que usa la integración):
     python3 -m http.server 8899 --bind 127.0.0.1 &
-    SHOT_DIR=/tmp/shots node disenos/catalog/tools/verify-catalog-asset.mjs <familia>/<slug>
+    SHOT_DIR=/tmp/shots disenos/catalog/tools/qa-lock.sh node disenos/catalog/tools/verify-catalog-asset.mjs <familia>/<slug>
+  ENVUELVE SIEMPRE la sonda en qa-lock.sh (una invocación por vez): serializa con flock entre TODAS las
+  sesiones y mata la contención (~70 chrome en 16 núcleos = exit 13). No sirve si solo lo usa una sesión;
+  es un contrato compartido, úsalo aunque creas que estás sola. Transparente: stdout y exit code pasan tal cual.
   Exit 0 = pass (ready true, calls>0, 0 excepciones de consola, hook presente).
-  Exit 1 = FALLO real de un asset. Exit 2 = NO CONCLUYENTE (servidor caído: no se midió nada) →
-  arranca el servidor y REINTENTA; nunca trates exit 2 como rechazo.
+  Exit 1 = FALLO real de un asset. Exit 2 = NO CONCLUYENTE (servidor caído, o el lock no se adquirió: no se
+  midió nada) → arranca el servidor y REINTENTA; nunca trates exit 2 como rechazo.
   ABRE el PNG que deja y REVÍSALO: geometría correcta (los conteos verdes NO ven bugs de geometría).
   Caveat: mide con SwiftShader → conteos reales, pero el TIEMPO DE FRAME no; no lo uses como criterio.
 
 PASO 2b — QA DE ESTADO (OBLIGATORIA si tu asset tiene toggles). El gate del 2a captura SOLO el estado por
 DEFECTO, así que cualquier cuerpo que viva detrás de un botón (revelado, corte, puerta, falla) NUNCA se mira
 — ya se colaron ~15 defectos reales así, todos con exit 0. Acciona CADA botón y revisa el PNG resultante:
-    SHOT_DIR=/tmp/shots BASE=http://127.0.0.1:8899 node disenos/catalog/tools/probe-state.mjs <familia>/<slug> btnA,btnB [sufijo]
+    SHOT_DIR=/tmp/shots BASE=http://127.0.0.1:8899 disenos/catalog/tools/qa-lock.sh node disenos/catalog/tools/probe-state.mjs <familia>/<slug> btnA,btnB [sufijo]
   (usa puerto CDP 9336, distinto del gate). Revisa: ¿el revelado muestra el cuerpo interno o una caja vacía?
   ¿la puerta abre a un vano o a metal macizo? ¿el corte deja ver lo que debe? Si no, arréglalo antes de commitear.
 
