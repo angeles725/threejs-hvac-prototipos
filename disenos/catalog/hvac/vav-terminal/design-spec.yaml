@@ -1,0 +1,147 @@
+# DesignSpec — single-duct VAV terminal with hot-water reheat
+# Tenth and last asset of the catalog `hvac` family.
+# EVIDENCE: HANDBOOK §3.0 gives the size band for this family and explicitly warns against
+# oversizing it. No datasheet is preserved, so the internal breakdown is [INFER].
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: vav-terminal
+family: hvac
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  scores: {silhouette: 1, components: 3, hierarchy: 2, repetition: 0,
+           material_layers: 2, detail: 3, occlusion: 2, action_readiness: 2}
+  tier: moderate
+  notes: >
+    repetition 0 — and therefore NO instancing in this asset. Nothing here repeats enough to earn
+    an InstancedMesh, and block54 §2.3 says instancing only where the repetition is real.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+
+references:
+  - source: "research/HANDBOOK.md §3.0"
+    evidences: >
+      [CERT] 'Caja VAV | 0.6-1 m (¡pequeña! mostrar en cortes, no sobredimensionar)'. The asset is
+      0.62 m long and is hung off a slab fragment precisely so its scale cannot be misread.
+    suitability: pass
+  - source: "research/HANDBOOK.md §3.1"
+    evidences: "[CERT] Galvanised casing and collar are bare metal; acoustic lining, actuator and controller housings are dielectrics; copper corrected to #f0a67a."
+    suitability: pass
+
+dimensions_real:
+  casing_l_m:   {value: 0.62, confidence: med}   # [CERT] inside the 0.6-1 m band, §3.0
+  casing_d_m:   {value: 0.42, confidence: low}
+  casing_h_m:   {value: 0.32, confidence: low}
+  inlet_d_m:    {value: 0.25, confidence: low}   # [INFER] Ø250 collar
+  reheat_len_m: {value: 0.24, confidence: low}
+  hung_height_m:{value: 2.42, confidence: low}   # [INFER] above-ceiling install
+
+hierarchy:
+  - name: root
+    children:
+      - name: casing     # 5 fixed faces + acoustic lining
+      - name: lid        # REMOVABLE top panel -> the TAPA state
+      - name: inlet      # collar, multi-point flow cross, sensing taps, signal tubing
+      - name: damper     # blade on its shaft
+        pivot: [-0.25, 2.42, 0]
+        animation: rotate
+      - name: actuator   # damper actuator; its body follows the blade travel
+      - name: ctrlBox    # DDC controller
+      - name: reheat     # coil section, finned coil, copper headers, 2-way valve + actuator, discharge flange
+      - name: hangers    # straps to the slab fragment
+
+materials:
+  - id: galvanised-casing
+    family: bare-metal
+    color: "#bfc6ca"
+    metalness: 0.95
+    roughness: 0.40
+    evidence: "HANDBOOK §3.1 bare metal 0.9-1.0"
+    confidence: 0.85
+  - id: acoustic-lining
+    family: fibre
+    color: "#3a3f45"
+    metalness: 0.0
+    roughness: 0.95
+    evidence: "HANDBOOK §3.1 dielectric"
+    confidence: 0.8
+  - id: controller-housing
+    family: plastic
+    color: "#d9dcde"
+    metalness: 0.0
+    roughness: 0.52
+    evidence: "HANDBOOK §3.1 dielectric"
+    confidence: 0.8
+  - id: copper-header
+    family: bare-metal
+    color: "#f0a67a"
+    metalness: 1.0
+    roughness: 0.30
+    evidence: "HANDBOOK §3.1 `copper` correction"
+    confidence: 0.85
+  - id: valve-red
+    family: painted-metal
+    color: "#8f3b2a"
+    metalness: 0.0
+    roughness: 0.50
+    evidence: "HANDBOOK §3.1 + §3.4"
+    confidence: 0.75
+
+critical_features:
+  - id: flow-sensor-presence
+    desc: >
+      A multi-point flow cross with sensing taps in the inlet, plus signal tubing to the
+      controller. Without it the asset is a damper box, not a VAV terminal.
+    threshold: 0.80
+  - id: damper-and-actuator
+    desc: "A blade on a through shaft with an external actuator whose body reports blade travel; COMPUERTA drives both."
+    threshold: 0.78
+  - id: real-lid
+    desc: "The top panel is a separate removable part over a real interior, so TAPA exposes the blade, the cross and the lining."
+    threshold: 0.75
+  - id: reheat-section
+    desc: "Finned coil with copper headers, a 2-way control valve with actuator, and a discharge flange; RECALENTAMIENTO removes the whole section."
+    threshold: 0.75
+  - id: scale-discipline
+    desc: >
+      HANDBOOK §3.0 explicitly warns this family gets oversized. The unit is hung off a slab
+      fragment and the review camera is capped BELOW that slab, so the size is unambiguous and
+      the slab never occludes the subject (the first framing put the eye above it and lost the
+      asset entirely).
+    threshold: 0.80
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 60      # measured 47 at the review camera
+    tris: 6000     # measured ~1,000
+
+camera: {azimuth_deg: 49, elevation_deg: 5, fov: 38, target_y_m: 2.40, radius_m: 3.05}
+
+lighting: house-rig + fill + room uplight + discharge rim + interior lamp
+  # Four documented deviations, all lighting-only (HANDBOOK §3.1 values untouched):
+  # camera-side fill for the flanks; a room uplight for the underside; a rim on the discharge end,
+  # whose far flank had collapsed to a black block; and a shadowless interior lamp for TAPA.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "COMPUERTA"
+  - "TAPA"
+  - "RECALENTAMIENTO"
+
+instancing:
+  # NONE. repetition 0 — there is nothing in this asset that repeats enough to earn an
+  # InstancedMesh, and adding one to look thorough would be instancing theatre.
+
+colorTarget:
+  srgb: [159, 167, 174]
+  deltaE00Max: 8
+  crop: "90x60+560+340"      # galvanised casing flank, at 1280x800

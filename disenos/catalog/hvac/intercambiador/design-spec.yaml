@@ -1,0 +1,147 @@
+# DesignSpec — gasketed plate heat exchanger (frame + 44-plate pack)
+# Eighth asset of the catalog `hvac` family.
+# EVIDENCE: no preserved datasheet and no HANDBOOK row for heat exchangers, so every dimension is
+# [INFER] and marked `low`. Stated plainly rather than dressed up as measured.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: intercambiador
+family: hvac
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+variant_choice:
+  chosen: "gasketed plate heat exchanger"
+  rejected: "shell-and-tube (reads as a horizontal drum, i.e. as caldera or a tank, at thumbnail size)"
+  why: "The plate pack is the only heat-exchanger silhouette that cannot be mistaken for a vessel."
+
+complexity:
+  scores: {silhouette: 2, components: 2, hierarchy: 2, repetition: 3,
+           material_layers: 2, detail: 2, occlusion: 1, action_readiness: 2}
+  tier: moderate
+  notes: >
+    repetition 3 and action_readiness 2: the pack is 44 plates and 44 gaskets, and ABRIR PAQUETE
+    rebuilds their instance matrices live. That is the point of the toggle — an InstancedMesh is
+    a live transform buffer, not frozen geometry.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+
+references:
+  - source: "research/HANDBOOK.md §3.1"
+    evidences: >
+      [CERT] Plates are bare stainless -> 0.9-1.0; the frame covers are PAINTED carbon steel ->
+      dielectric; NBR gaskets are dielectric and must stay dark or the pack stops reading as
+      plate/gasket/plate.
+    suitability: pass
+  - source: "NEGATIVE — no dimensional source"
+    evidences: "HANDBOOK §3.0 has no heat-exchanger row and no datasheet is preserved in research/sources/."
+    suitability: fail
+
+dimensions_real:
+  plate_w_m:      {value: 0.50, confidence: low}    # [INFER]
+  plate_h_m:      {value: 1.02, confidence: low}    # [INFER]
+  plate_count:    {value: 44,   confidence: low}    # [INFER]
+  plate_pitch_m:  {value: 0.0075, confidence: low}  # [INFER] plate + gasket
+  cover_thickness_m: {value: 0.075, confidence: low}
+  overall_l_m:    {value: 1.34, confidence: low}
+  overall_w_m:    {value: 0.66, confidence: low}
+  overall_h_m:    {value: 1.46, confidence: low}
+  nozzle_d_m:     {value: 0.116, confidence: low}   # [INFER] 4 nozzles on the fixed cover
+  tie_rod_count:  {value: 6,    confidence: low}
+
+hierarchy:
+  - name: root
+    children:
+      - name: base       # frame rails + anti-vibration pads under both frame ends
+      - name: frame      # fixed cover, support column, carrying and guide bars, pedestals
+      - name: pack       # 44 instanced plates + 44 instanced gaskets + the pressure plate
+      - name: rods       # 6 tie rods with nuts, re-laid out whenever the pack length changes
+      - name: nozzles    # 4 nozzles with flanges + nameplate
+
+materials:
+  - id: plate-stainless
+    family: bare-metal
+    color: "#c9ced1"
+    metalness: 0.95
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1 bare metal 0.9-1.0"
+    confidence: 0.85
+  - id: gasket-nbr
+    family: rubber
+    color: "#1d1f22"
+    metalness: 0.0
+    roughness: 0.90
+    evidence: "HANDBOOK §3.1 dielectric; the same reasoning as the cold-room door gasket — if it inherits the plate material the pack becomes one grey block"
+    confidence: 0.85
+  - id: frame-paint
+    family: painted-metal
+    color: "#27506b"
+    metalness: 0.0
+    roughness: 0.46
+    evidence: "HANDBOOK §3.1 painted casting/plate -> 0.0-0.05"
+    confidence: 0.9
+  - id: bar-steel
+    family: bare-metal
+    color: "#b7bec2"
+    metalness: 0.95
+    roughness: 0.42
+    evidence: "HANDBOOK §3.1 bare metal"
+    confidence: 0.85
+
+critical_features:
+  - id: pack-reads-as-pack
+    desc: "The pack reads as alternating bright plate edges and dark gasket lines, not as one solid block."
+    threshold: 0.82
+  - id: live-pack-opening
+    desc: >
+      ABRIR PAQUETE respaces the instance matrices AND re-lays the tie rods and pressure plate to
+      the new length. A toggle that moved the plates but left the rods at the packed length would
+      be worse than no toggle.
+    threshold: 0.78
+  - id: frame-continuity
+    desc: >
+      Fixed cover and support column run down to the base frame. In the first build they stopped
+      0.15 m short and the machine read as floating.
+    threshold: 0.75
+  - id: four-nozzle-face
+    desc: "Four flanged nozzles on the fixed cover — the hot and cold pairs that identify a two-circuit exchanger."
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 70      # measured 50 at the review camera
+    tris: 10000    # measured ~2,400
+
+camera: {azimuth_deg: 50, elevation_deg: 14, fov: 38, target_y_m: 0.80, radius_m: 3.6}
+
+lighting: house-rig + vertical-subject fill
+  # Every plate edge and both covers are vertical surfaces; a camera-side fill keeps the stainless
+  # from collapsing to flat grey. PBR values unchanged (HANDBOOK §3.1).
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ABRIR PAQUETE"   # respaces the 44 plates and re-lays the rods and pressure plate
+  - "TIRANTES"        # hides the tie rods
+  - "BOQUILLAS"       # hides the four nozzles and the nameplate
+
+instancing:
+  - what: "plates"
+    count: 44
+    draws_saved: "44 meshes -> 1"
+  - what: "gaskets"
+    count: 44
+    draws_saved: "44 meshes -> 1"
+
+colorTarget:
+  srgb: [9, 62, 96]
+  deltaE00Max: 8
+  crop: "70x120+630+300"     # fixed-cover paint, at 1280x800
+  secondary_observed:
+    plate_pack: [46, 48, 51]  # 50x280+515+230 — the pack must stay clearly darker than the covers

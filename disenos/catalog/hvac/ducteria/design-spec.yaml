@@ -1,0 +1,145 @@
+# DesignSpec — rectangular duct run (straight, elbow, takeoff, drops, diffusers)
+# Ninth asset of the catalog `hvac` family.
+# EVIDENCE: no preserved datasheet; sizes are conventional [INFER] values, marked `low`.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: ducteria
+family: hvac
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+scope_note: >
+  This asset is a RUN, not a component. A single duct section carries no information; what a
+  catalog entry for ductwork has to show is the vocabulary — transverse flanged joints, a mitred
+  elbow with turning vanes, a round takeoff with a volume damper, flexible drops, diffusers, and
+  the trapeze hangers that carry all of it off the slab.
+
+complexity:
+  scores: {silhouette: 1, components: 3, hierarchy: 1, repetition: 3,
+           material_layers: 2, detail: 2, occlusion: 0, action_readiness: 1}
+  tier: moderate
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+
+references:
+  - source: "research/HANDBOOK.md §3.1"
+    evidences: >
+      [CERT] Galvanised sheet, flanges and threaded rod are bare metal 0.9-1.0; the insulation
+      jacket and the flexible drop are dielectrics. Diffuser faces are PAINTED — a bare-metal
+      diffuser face reflects the dark room and reads black, the trap already hit by the ceiling
+      T-bar in fan-coil.
+    suitability: pass
+  - source: "NEGATIVE — no dimensional source"
+    evidences: "No duct-sizing document is preserved in research/sources/; 600x350 mm is a conventional trunk size, not a measurement."
+    suitability: fail
+
+dimensions_real:
+  main_duct_m:     {value: [0.60, 0.35], confidence: low}   # [INFER] W x H
+  run_length_m:    {value: 3.00, confidence: low}
+  duct_centre_h_m: {value: 2.62, confidence: low}
+  joint_pitch_m:   {value: 0.90, confidence: low}           # [INFER] transverse flanged joints
+  takeoff_d_m:     {value: 0.25, confidence: low}
+  diffuser_face_m: {value: 0.46, confidence: low}
+  hanger_pitch_m:  {value: 1.40, confidence: low}
+
+hierarchy:
+  - name: root
+    children:
+      - name: duct         # straight run, mitred elbow, instanced turning vanes, instanced joint frames
+      - name: insulation   # jacket + banding straps over the straight run (togglable, OFF by default)
+      - name: branch       # spigot, takeoff neck, damper blade + shaft + quadrant handle, flexible drop
+      - name: diffuser[0..1]
+      - name: hangers      # trapeze angles + instanced threaded rods to the slab
+
+materials:
+  - id: galvanised-sheet
+    family: bare-metal
+    color: "#bcc3c7"
+    metalness: 0.95
+    roughness: 0.40
+    evidence: "HANDBOOK §3.1 `skid` family -> 0.9-1.0"
+    confidence: 0.85
+  - id: diffuser-paint
+    family: painted-metal
+    color: "#e7e9eb"
+    metalness: 0.0
+    roughness: 0.48
+    evidence: "HANDBOOK §3.1 painted -> 0.0-0.05; also the fan-coil T-bar lesson: downward-facing metal reads black"
+    confidence: 0.85
+  - id: insulation-jacket
+    family: fibre
+    color: "#d8dbde"
+    metalness: 0.0
+    roughness: 0.80
+    evidence: "HANDBOOK §3.1 dielectric"
+    confidence: 0.8
+  - id: flex-duct
+    family: plastic
+    color: "#8d949a"
+    metalness: 0.0
+    roughness: 0.78
+    evidence: "HANDBOOK §3.1 dielectric"
+    confidence: 0.8
+  - id: damper-handle
+    family: painted-metal
+    color: "#8f3b2a"
+    metalness: 0.0
+    roughness: 0.50
+    evidence: "HANDBOOK §3.4 — the handle is the operable item, so it carries the colour"
+    confidence: 0.75
+
+critical_features:
+  - id: joint-and-hanger-vocabulary
+    desc: "Transverse flanged joints along the run and trapeze hangers with threaded rods to the slab — what makes it installed ductwork rather than a grey prism."
+    threshold: 0.80
+  - id: elbow-with-vanes
+    desc: "A mitred elbow whose leg turns TOWARD the review camera, with turning vanes on the diagonal."
+    threshold: 0.75
+  - id: takeoff-train
+    desc: "Spigot collar, neck, damper blade with a quadrant handle that reports the blade angle, then a flexible drop."
+    threshold: 0.78
+  - id: diffuser-reads-from-below
+    desc: >
+      The diffuser cones step DOWNWARD into the room. Stepped upward (first build) the diffuser is
+      a blank plate from the only angle anyone sees it from, and the flexible drop hung BELOW the
+      finished face instead of above it.
+    threshold: 0.80
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 60      # measured 37 at the review camera
+    tris: 10000    # measured ~2,800
+
+camera: {azimuth_deg: 53, elevation_deg: -3, fov: 38, target_y_m: 2.42, radius_m: 5.2}
+
+lighting: house-rig + room uplight
+  # DEVIATION: the faces that matter point DOWN (duct underside, damper handle, both diffuser
+  # faces), so a room uplight supplies the bounce the house rig does not. PBR values unchanged.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "COMPUERTA"     # damper blade rotates; the quadrant handle follows it
+  - "AISLAMIENTO"   # adds the insulation jacket + banding over the straight run
+  - "SOPORTES"      # hides the trapeze hangers and their rods
+
+instancing:
+  - {what: "turning vanes", count: 3, draws_saved: "3 -> 1"}
+  - {what: "joint frame bars", count: "4 per joint x 3 joints", draws_saved: "12 -> 2"}
+  - {what: "flexible-duct corrugation rings", count: 9, draws_saved: "9 -> 1"}
+  - {what: "hanger rods", count: 6, draws_saved: "6 -> 1"}
+
+colorTarget:
+  srgb: [104, 112, 117]
+  deltaE00Max: 8
+  crop: "120x50+400+330"      # galvanised duct flank, at 1280x800
+  secondary_observed:
+    diffuser_face: [221, 223, 224]   # 60x20+470+470 — the painted face must stay far brighter
+                                     # than the galvanised duct, or it stops reading as a finish
