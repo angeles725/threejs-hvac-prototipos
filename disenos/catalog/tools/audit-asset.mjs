@@ -137,6 +137,18 @@ const shot = async name => {
 };
 
 const base = await evalInv();
+// FAIL CLOSED. If the inventory did not come back, every downstream field is empty and the JSON
+// reads `{"errors":[],"states":[]}` — indistinguishable from "audited, nothing wrong". That is the
+// same trap the gate's preflight exists to close: a probe that could not measure must never emit a
+// verdict. Seen for real on datacenter/crac-crah, which produced screenshots and an empty report.
+if(!base || !base.app || !Array.isArray(base.items)){
+  console.error(`INVENTORY FAILED for ${target}: the app hook was not readable.`);
+  console.error(base && base.error ? `probe said: ${base.error}` : 'probe returned nothing.');
+  console.error('NOT a verdict on the asset — nothing was measured. Re-run.');
+  await send('Target.closeTarget',{targetId});
+  ws.close(); proc.kill('SIGKILL');
+  process.exit(2);
+}
 await shot('default');
 const states = [];
 for(const b of (base.btns || [])){
