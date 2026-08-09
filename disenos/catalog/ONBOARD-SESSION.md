@@ -70,9 +70,11 @@ ESCALA: para assets pequeños/medianos usa la FIGURA humana de 1.8 m (HANDBOOK �
 vehículo — un coche de 4.3 m domina el encuadre y compite con el sujeto.
 
 GOTCHAS ya detectados (evítalos):
-- Sujetos VERTICALES de metal desnudo (puertas, cladding, tableros) reflejan el horizonte oscuro y se leen
-  gris plano. NO subas metalness (rompe HANDBOOK §3.1): añade un fill hacia la normal del panel y sube
-  environmentIntensity. Documenta la desviación en el design-spec.
+- Sujetos VERTICALES de metal desnudo (puertas, cladding, tableros) se leen gris plano. FÍSICA: una cara
+  vertical NO puede recibir un reflejo especular de una luz ELEVADA, a cualquier altura de cámara (la
+  geometría de reflexión lo impide) → el brillo lo da el IBL, no una luz de relleno. FORMULACIÓN CORRECTA
+  (session-B, torniquete): sube environmentIntensity (p.ej. 2.8) para el término especular; el fill lateral
+  solo ayuda al término DIFUSO. NUNCA bajes metalness (rompe HANDBOOK §3.1). Documenta la desviación en el spec.
 - Racks/estructuras de carga: el bastidor debe cubrir la carga superior + margen (DGUV: +500 mm sobre el
   nivel más alto). No dejes carga volando por encima del puntal.
 - ACERO PINTADO no es metal desnudo: con env 1.9-2.2 + exposure 1.15 los paneles claros se queman. Para
