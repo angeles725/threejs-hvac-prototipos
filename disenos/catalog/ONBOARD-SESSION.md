@@ -113,7 +113,66 @@ GOTCHAS ya detectados (evítalos):
   capa inferior tapa a la de arriba (rayado que desaparece bajo su propio fondo).
 - LOSA grande + shadow map 1024 = acné en franjas → se arregla con sun.shadow.normalBias (~0.05), NO subiendo
   el bias de profundidad.
+- OCLUSIÓN por puertas: con la cámara del catálogo en +X/+Z, cada puerta con bisagra a la izquierda tapa la
+  sección a SU izquierda al abrir. No muevas la cámara: pon la sección importante en el extremo CERCANO a
+  cámara, y pon la BISAGRA del lado LEJANO (una bisagra del lado de cámara cruza el vano y tapa el interior).
+- El fix de plano vertical (fill+env alto) NO es preset GLOBAL: un sujeto horizontal/curvo (generador, torre)
+  se APLANA si se lo aplicas. Úsalo solo en caras verticales; en el resto es "deliberate non-deviation".
+- Un ESTADO revelado puede ser físicamente IMPOSIBLE (placa de presión saliéndose del bastidor): hazle a cada
+  estado la misma pregunta que a la disposición, "¿esto puede existir?", y acota recorridos.
+- Cuando la oclusión revelada es FÍSICA REAL (una puerta tapa de verdad la bahía de atrás), decláralo como
+  `known_view_limit` en el spec en vez de forzar geometría imposible.
+- PRODUCTO DE TECHO (difusor, VAV): el detalle va hacia la SALA y la cámara de revisión debe estar DEBAJO;
+  conos escalonados hacia arriba se ven como placa lisa desde el único ángulo real (abajo).
+- FOOTGUN three.js: Object3D.position no tiene setter (Object.defineProperties) → `Object.assign(obj,{position:
+  new Vector3(...)})` LANZA en módulo strict y la página NUNCA marca data-app-ready (el gate lo ve como asset
+  roto). Usa siempre `.position.set(...)`. Igual con .rotation/.scale.
+- INFRA (no es fallo de asset): con varias sesiones corriendo QA a la vez, chrome-headless-shell se cae
+  intermitente ("unsettled top-level await", exit 13) → REINTENTA, da exit 0. Junto con exit 2 (servidor
+  caído) son los dos casos de "no concluyente"; nunca los trates como asset roto.
+- "TAPA INVISIBLE" (regla fuerte para cualquier asset con INTERIOR): tres cosas tapan la boca sin verse en
+  los conteos — (1) el gabinete como BOX macizo (su cara frontal queda tras el hueco) → constrúyelo como
+  cascarón de 5 paneles; (2) la cara de sellado con CylinderGeometry = disco lleno → RingGeometry; (3) el
+  empaque con cilindro = disco → TorusGeometry. Si tiene interior, todo lo que rodea la boca va anillo/toro
+  y el gabinete NUNCA es box macizo. Se detecta SOLO abriendo la puerta/tapa en la captura de estado.
+- GUILLOTINA (campana, cortina): la cenefa/caja debe ser al menos tan alta como el RECORRIDO de la hoja, o
+  al subir sale por el techo.
+- ILUMINACIÓN DE METAL — árbol de decisión (corrige y completa el gotcha del plano vertical):
+  · superficie PLANA de metal desnudo → fill direccional del lado de la cámara.
+  · cuerpo CURVO de metal (tanque, silo, tubo) → NUNCA el fill plano (lo aplana) y tampoco basta con nada
+    (sale negro): usa la VARIANTE ESTUDIO de HANDBOOK §3.3 — RectAreaLight key+fill grandes, con
+    RectAreaLightUniformsLib.init() UNA vez antes de renderizar. Resuelve el degradado vertical del casco.
+  · superficie INCLINADA hacia abajo (tolva 60°) → además una tarjeta de rebote baja apuntando hacia ARRIBA
+    (es un espejo inclinado que refleja el suelo → si no, negro aunque las normales estén bien).
+- METALNESS casi BINARIO (HANDBOOK §3.1): en superficie sólida SIN textura, un metalness intermedio
+  (0.2-0.55) es artefacto del shader, no autoría válida. Usa 0 (dieléctrico: pintado, plástico) o ~1 (metal
+  desnudo). No dejes 0.35/0.4/0.7 en paneles lisos.
+- ConeGeometry pone el ÁPICE en +Y → un cono de descarga (silo, tolva) se angosta hacia ABAJO y sale al
+  revés; voltearlo con rotation.x=PI voltea también las NORMALES (sale carbón). Constrúyelo como TRONCO
+  (CylinderGeometry con radio inferior), que además es lo real.
+- Rotación desde un orden de Euler ADIVINADO falla en silencio (aros de jaula de escalera a un costado sin
+  rodear nada) → compón desde rotaciones de EJE explícitas.
+- Un CORTE que solo quita el techo NO es corte: el muro cercano sigue tapando el interior. El toggle CORTE
+  quita techo + muro cercano + puerta JUNTOS.
+- MALLA/REJILLA que debe dejar ver: el parámetro crítico es la PROFUNDIDAD de las barras, no el paso. Una
+  puerta perforada con barras de 10 mm de fondo se apila visualmente en vista 3/4 y se vuelve OPACA (tapó 42U
+  de equipo con exit 0); una perforada real es chapa ~1.5 mm → baja el fondo a ~2.5 mm y transparenta.
+- OFFSETS encadenados que se salen de su base (alternador colgando fuera del patín, barras 90 mm fuera del
+  gabinete): pon `console.assert` sobre la extensión resultante en vez de confiar en la aritmética; atrapa el
+  error en el primer render, barato.
+- FALSO NEGATIVO del gate (no es asset roto): `ready:false` + `error:'no-renderer'` + lista de errores VACÍA
+  + cero globals `__` = infra (unpkg tosió). Un asset roto DE VERDAD deja rastro en `errors`. Reintenta.
 
 Trabaja en bucle por todos los assets pendientes de tu familia. Cuando tu familia quede en done, avisa y
 elige otra familia libre si queda, o detente.
 ```
+
+## Auditoría de defectos — anclas obligatorias (evita falsos positivos)
+- Identifica una InstancedMesh por `geometry.parameters` (width/height/depth), NUNCA por `count` ni por índice
+  de traversal: varias mallas comparten conteo por casualidad (24 aisladores vs 28 MCCB) y el orden de
+  traversal cambia con cualquier edición → agarras la malla de al lado y reportas un defecto que no existe.
+- Un pixel-diff que NO cambia solo prueba AUSENCIA si ANTES demuestras que el objeto era visible en ese estado.
+  Si vive tras una tapa/puerta CERRADA, "ocultarlo no cambia el hash" es tautológico. Orden correcto: abre la
+  tapa que lo cubre → confirma que aporta píxeles → recién entonces el diff prueba ausencia.
+- Todo hallazgo de auditoría se REFUTA (verificación adversarial de la sesión dueña) ANTES de aplicarse como
+  fix. Un reporte medido pero con la identidad de malla mal anclada parece sólido y no lo es.

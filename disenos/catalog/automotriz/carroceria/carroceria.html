@@ -1,0 +1,280 @@
+<!doctype html>
+<!--
+  carroceria — C-segment hatchback BODY IN WHITE, on a body-shop skid.
+  Dimensional evidence: research/threejs-block63.md §63.2 (Volkswagen Golf Mk8 envelope
+  4284 x 1789 x 1456 mm, wheelbase 2636 mm) and the BIW definition itself: welded sheet metal
+  BEFORE paint and BEFORE glass, trim and closures. The apertures are therefore HOLES.
+  Built from disenos/catalog/shell-template.html — QA contract and render-on-demand preserved.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carrocería BIW — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">CARROCERÍA — body in white (segmento C, 5 puertas)</div>
+  <div><span class="dim">4.284 × 1.789 × 1.456 m · batalla 2.636 m</span></div>
+  <div><span class="dim">sin cristales, sin cierres, sin pintura →</span> <span class="pass">aperturas = huecos</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnRoof" class="on">TECHO</button>
+  <button id="btnFloor" class="on">PISO</button>
+  <button id="btnSkid" class="on">SKID</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 11, 36);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 6.4;
+camera.position.set(R*Math.cos(0.88)*Math.cos(0.34), 0.9 + R*Math.sin(0.34), R*Math.sin(0.88)*Math.cos(0.34));
+camera.lookAt(0, 0.85, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.85, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.2;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4.5, 7, 3.5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;
+sun.shadow.camera.left=-4; sun.shadow.camera.right=4; sun.shadow.camera.top=4; sun.shadow.camera.bottom=-4;
+sun.shadow.camera.far = 22;
+scene.add(sun);
+// Block 63 §63.7 DEVIATION: the body sides and the rear panel are large VERTICAL bare-steel planes.
+// Two fills aimed along their normals — NOT raised metalness.
+const fillL = new THREE.DirectionalLight(0xbcd2ff, 1.05); fillL.position.set(0.5, 1.1, 7); scene.add(fillL);
+const fillR = new THREE.DirectionalLight(0xbcd2ff, 0.80); fillR.position.set(-0.5, 1.1, -7); scene.add(fillR);
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.16));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS (HANDBOOK §3.1; Block 63 §63.6)
+// ============================================================================
+// BARE zinc-coated body steel: unpainted, un-primed. Duller and greyer than brushed 304 — using the
+// stainless read (0.9 / 0.30) would make the BIW look like a chrome show car.
+const matBiw   = new THREE.MeshStandardMaterial({ color:0x9aa1a6, metalness:0.75, roughness:0.55 });
+const matBiw2  = new THREE.MeshStandardMaterial({ color:0x8e9599, metalness:0.75, roughness:0.60 }); // structure
+const matSkid  = new THREE.MeshStandardMaterial({ color:0xc27a2a, metalness:0.0,  roughness:0.62 }); // painted carrier
+const matPad   = new THREE.MeshStandardMaterial({ color:0x1d2124, metalness:0.0,  roughness:0.88 }); // locator pad
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+
+// --- certified envelope, Block 63 §63.2 [CERT-web] ---------------------------
+const LEN = 4.284, WID = 1.789, HGT = 1.456, WB = 2.636;
+const X_F = LEN/2, X_R = -LEN/2;               // ±2.142
+const AX_F =  1.272, AX_R = -1.362;            // [INFER] overhang split 53/47
+const Z_SIDE = WID/2 - 0.010;                  // body-side panel centre plane
+const Z_ROOF = 0.600;                          // [INFER] greenhouse is far narrower than the shoulder
+const Y_UNDER = 0.32, Y_FLOOR = 0.345, Y_BELT = 0.95, Y_ROOF = HGT;
+
+const solid = m => { m.castShadow = true; m.receiveShadow = true; return m; };
+const box = (w,h,d,x,y,z,mat=matBiw) => { const m = solid(new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat));
+  m.position.set(x,y,z); return m; };
+// a 3D strut between two points — this is what gives the pillars their real tumblehome
+const UP = new THREE.Vector3(0,1,0);
+function strut(p1, p2, w, t, mat=matBiw){
+  const a = new THREE.Vector3(...p1), b = new THREE.Vector3(...p2);
+  const d = new THREE.Vector3().subVectors(b,a);
+  const m = solid(new THREE.Mesh(new THREE.BoxGeometry(w, d.length(), t), mat));
+  m.position.copy(a).addScaledVector(d, 0.5);
+  m.quaternion.setFromUnitVectors(UP, d.clone().normalize());
+  return m;
+}
+// both sides, sharing ONE geometry (mirror symmetry is not repetition — no InstancedMesh here)
+const pair = f => { const g = new THREE.Group(); g.add(f(1), f(-1)); return g; };
+
+// --- body sides: rear quarter with a real wheel-arch cut (holed outline -> earcut) ---
+function quarterShape(){
+  const s = new THREE.Shape();
+  const AR = 0.415, ax = AX_R;                 // rear wheel arch
+  s.moveTo(X_R, Y_UNDER);
+  s.lineTo(X_R, Y_BELT);
+  s.lineTo(-1.30, Y_BELT);                     // rear door aperture, rear edge
+  s.lineTo(-1.30, 0.475);
+  s.lineTo(-0.90, 0.475);                      // continues forward at rocker height
+  s.lineTo(-0.90, Y_UNDER);
+  s.lineTo(ax + AR, Y_UNDER);
+  s.absarc(ax, Y_UNDER, AR, 0, Math.PI, false);// over the wheel arch
+  s.lineTo(X_R, Y_UNDER);
+  return s;
+}
+const quarterGeom = new THREE.ExtrudeGeometry(quarterShape(), {depth:0.020, bevelEnabled:false, curveSegments:14});
+quarterGeom.translate(0,0,-0.010);
+const quarters = pair(s => { const m = solid(new THREE.Mesh(quarterGeom, matBiw)); m.position.z = s*Z_SIDE; return m; });
+root.add(quarters);
+
+// --- rockers (closed box section) + front cowl side --------------------------
+root.add(pair(s => box(1.92, 0.155, 0.095, -0.34, 0.400, s*(Z_SIDE-0.030), matBiw2)));
+// HINGE PILLAR only. There is deliberately NO outer front fender here: on a 5-door C-segment car the
+// fender is a BOLT-ON panel, i.e. not part of the body in white (Block 63 §63.2). Forward of the
+// hinge pillar the BIW is open framework — rails, towers, wheel house — and that is what must read.
+root.add(pair(s => box(0.24, 0.63, 0.020, 0.68, 0.635, s*Z_SIDE)));
+
+// --- underbody: floor pan, tunnel, crossmembers, rear floor ------------------
+const floor = new THREE.Group();
+floor.add(box(2.10, 0.014, 1.52, -0.28, Y_FLOOR, 0));                 // main pan
+floor.add(box(2.30, 0.170, 0.250, -0.18, Y_FLOOR+0.085, 0, matBiw2)); // centre tunnel
+floor.add(box(0.11, 0.095, 1.50,  0.16, Y_FLOOR+0.055, 0, matBiw2));  // front seat crossmember
+floor.add(box(0.11, 0.095, 1.50, -0.62, Y_FLOOR+0.055, 0, matBiw2));  // rear seat crossmember
+floor.add(box(0.72, 0.014, 1.38, -1.72, Y_FLOOR+0.115, 0));           // rear load floor, stepped up
+floor.add(box(0.014, 0.175, 1.38, -1.36, Y_FLOOR+0.100, 0));          // rear seat pan riser
+root.add(floor);
+
+// --- front structure: rails, strut towers, apron rail, radiator support ------
+const front = new THREE.Group();
+front.add(pair(s => box(1.20, 0.135, 0.105, 1.36, 0.455, s*0.425, matBiw2)));   // longitudinal rails
+front.add(pair(s => box(0.34, 0.46, 0.28, AX_F, 0.72, s*0.585, matBiw2)));      // strut towers
+front.add(pair(s => box(0.014, 0.34, 0.30, AX_F-0.175, 0.72, s*0.585)));        // tower inner wall
+front.add(pair(s => strut([0.80,0.94,s*0.70], [AX_F,0.95,s*0.585], 0.075, 0.075, matBiw2))); // apron rail
+front.add(pair(s => strut([AX_F,0.95,s*0.585], [1.92,0.80,s*0.50], 0.070, 0.070, matBiw2)));
+// radiator support is a FRAME, not a plate
+front.add(pair(s => box(0.020, 0.60, 0.09, 1.94, 0.63, s*0.46, matBiw2)));
+front.add(box(0.020, 0.09, 0.98, 1.94, 0.90, 0, matBiw2));
+front.add(box(0.020, 0.09, 0.98, 1.94, 0.38, 0, matBiw2));
+front.add(box(0.11, 0.135, 1.40, 2.06, 0.62, 0, matBiw2));                      // front bumper beam
+front.add(box(0.020, 0.62, 1.46, 0.78, 0.63, 0));                               // dash / firewall
+front.add(box(0.10, 0.11, 1.44, 0.72, 0.955, 0, matBiw2));                      // cowl top
+root.add(front);
+
+// --- rear structure ----------------------------------------------------------
+const rear = new THREE.Group();
+rear.add(pair(s => box(0.86, 0.125, 0.100, -1.72, 0.475, s*0.480, matBiw2)));   // rear rails
+rear.add(box(0.020, 0.56, 1.44, -2.10, 0.68, 0));                               // rear panel
+rear.add(box(0.10, 0.125, 1.38, -2.13, 0.60, 0, matBiw2));                      // rear bumper beam
+rear.add(box(0.10, 0.10, 1.34, -1.30, Y_BELT+0.02, 0, matBiw2));                // parcel-shelf crossmember
+rear.add(box(0.62, 0.012, 1.30, -1.60, Y_BELT+0.01, 0));                        // parcel shelf
+root.add(rear);
+
+// --- wheel houses: half shells inside the arches ------------------------------
+// thetaStart PI/2 + rotateX(PI/2) puts the open half DOWNWARD: the shell arches over the wheel,
+// which is the only orientation that reads as a wheel house instead of a floating curved plate.
+const houseGeom = new THREE.CylinderGeometry(0.415, 0.415, 0.30, 20, 1, true, Math.PI/2, Math.PI);
+houseGeom.rotateX(Math.PI/2);                                  // arch axis along Z
+// own material: an open shell needs DoubleSide, and matBiw2 is shared by closed solids
+const matHouse = matBiw2.clone(); matHouse.side = THREE.DoubleSide;
+const houses = new THREE.Group();
+for(const ax of [AX_F, AX_R]) for(const s of [1,-1]){
+  const m = new THREE.Mesh(houseGeom, matHouse);
+  m.castShadow = m.receiveShadow = true;
+  m.position.set(ax, Y_UNDER, s*(Z_SIDE-0.165)); houses.add(m);
+}
+root.add(houses);
+
+// --- greenhouse: pillars with REAL tumblehome (base 0.88 -> roof 0.60) -------
+const glass = new THREE.Group();
+glass.add(pair(s => strut([0.66,0.98,s*0.700], [-0.12,1.415,s*Z_ROOF], 0.075, 0.075)));   // A-pillar
+glass.add(pair(s => strut([-0.44,0.470,s*(Z_SIDE-0.02)], [-0.50,1.425,s*(Z_ROOF+0.015)], 0.085, 0.075))); // B-pillar
+glass.add(pair(s => strut([-1.16,1.415,s*Z_ROOF], [-1.74,1.005,s*(Z_SIDE-0.05)], 0.085, 0.075)));         // D-pillar
+glass.add(pair(s => box(1.10, 0.060, 0.070, -0.64, 1.430, s*Z_ROOF, matBiw2)));            // roof rails
+glass.add(box(0.075, 0.070, 1.22, -0.12, 1.430, 0, matBiw2));                              // windscreen header
+glass.add(box(0.075, 0.070, 1.20, -1.16, 1.430, 0, matBiw2));                              // rear header
+const roofPanel = solid(new THREE.Mesh(new THREE.BoxGeometry(1.06, 0.012, 1.20), matBiw));
+roofPanel.position.set(-0.64, Y_ROOF-0.006, 0);
+root.add(glass, roofPanel);
+
+// --- body-shop skid (Block 63 §63.5: skid is a real body-shop carrier) -------
+const skid = new THREE.Group();
+skid.add(pair(s => box(3.90, 0.090, 0.080, -0.10, 0.200, s*0.820, matSkid)));
+for(const x of [1.35, -0.10, -1.55]) skid.add(box(0.080, 0.080, 1.72, x, 0.200, 0, matSkid));
+for(const x of [1.60, -1.80]) skid.add(pair(s => box(0.10, 0.155, 0.10, x, 0.078, s*0.820, matSkid)));
+for(const [x,z] of [[0.56,1],[0.56,-1],[-1.18,1],[-1.18,-1]]){
+  skid.add(box(0.10, 0.10, 0.10, x, 0.265, z*0.820, matSkid));
+  skid.add(box(0.14, 0.030, 0.14, x, 0.328, z*0.820, matPad));   // locator pad under the rocker
+}
+root.add(skid);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ============================================================================
+// ZONE 3 — UI (render is gated: every handler calls requestRender)
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(document.getElementById('btnRoof'),  roofPanel);
+toggle(document.getElementById('btnFloor'), floor);
+toggle(document.getElementById('btnSkid'),  skid);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  if(controls.autoRotate) needsRender = true;
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__carroceriaApp = { runtime:{ scene, renderer, camera, root } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

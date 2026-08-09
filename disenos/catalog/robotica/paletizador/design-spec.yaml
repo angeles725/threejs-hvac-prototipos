@@ -1,0 +1,192 @@
+# DesignSpec — 4-axis palletizing robot cell (250 kg / 3.15 m class)
+# Dimensional evidence: [Block 62] §62.6 (research/threejs-block62.md) — ABB IRB 660 Industrial
+# Robot, PR10284EN_D. The subject is the PARALLELOGRAM: a palletizer is not a 6-axis arm.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: paletizador
+family: robotica
+track: needs-research
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 18 -> complex.
+  scores: {silhouette: 2, components: 3, hierarchy: 3, repetition: 2,
+           material_layers: 2, detail: 2, occlusion: 1, action_readiness: 3}
+  tier: complex
+  notes: >
+    repetition 2 (unlike the other arms): the palletised stack and the conveyor rollers are real
+    repetition, so both are InstancedMesh. hierarchy/action_readiness 3: four axes plus a
+    CONSTRAINT — the wrist counter-rotates so the carried layer never tips.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/threejs-block62.md
+  reuse_pointers:
+    instancing: "disenos/catalog/almacenamiento/rack-pallet/ (instancing only where repetition is real)"
+    joint_chain: "disenos/catalog/robotica/brazo-robotico-6ejes/"
+
+references:
+  - source: "sources/datasheets/abb-irb660-palletizer (ABB IRB 660 Industrial Robot, PR10284EN_D)"
+    evidences: >
+      FOUR axes [CERT-doc]; reach 3.15 m [CERT-doc]; handling capacity 180/250 kg [CERT-doc];
+      IP 67, floor mounted [CERT-doc]; position repeatability 0.1 mm [CERT-doc];
+      axis 1 ±180° (option ±220°), axis 2 +85/−42°, axis 3 +120/−20°, axis 6 ±300° [CERT-doc];
+      working-range cotes 1211 mechanical stop / 1131 max working range / 1350 / 260 / 2000 / R400
+      [CERT-doc]; ≈2190 cycles/h at 60 kg [CERT-doc].
+    suitability: pass
+  - source: "research/threejs-block62.md §62.6, §62.8 rule 4"
+    evidences: >
+      The parallelogram + vertical-keeping tie rod, and the analytic constraint
+      wrist.rotation = a2 − a3 that is exact for a true parallelogram.
+    suitability: pass
+
+dimensions_real:
+  reach_m:        {value: 3.150, confidence: high}   # [CERT-doc]
+  swing_radius_m: {value: 0.400, confidence: high}   # [CERT-doc] cote "R400"
+  lower_arm_m:    {value: 1.350, confidence: med}    # [CERT-doc cote 1350] + [INFER] assignment
+  upper_arm_m:    {value: 1.450, confidence: low}    # [INFER] residual that closes the certified reach
+  axis2_x_m:      {value: 0.350, confidence: low}    # [INFER] not published
+  axis2_y_m:      {value: 1.100, confidence: low}    # [INFER] not published
+  mech_stop_m:    {value: 1.211, confidence: high}   # [CERT-doc] recorded, not used as geometry
+  max_range_m:    {value: 1.131, confidence: high}   # [CERT-doc] recorded, not used as geometry
+  pallet_l_m:     {value: 1.20,  confidence: med}    # [CERT-a] EUR-pallet family, see [Block 58]
+  pallet_w_m:     {value: 1.00,  confidence: med}    # [CERT-a]
+
+hierarchy:
+  - name: root
+    children:
+      - name: base
+      - name: j1                # axis 1 — rotation about Y; carries the R400 swing body
+        animation: rotate-y
+        children:
+          - name: swing_body
+          - name: counterweight
+          - name: j2            # axis 2 — lower arm (the driven bar of the parallelogram)
+            pivot: [0.350, 1.100, 0]
+            animation: rotate-z
+            children:
+              - name: lower_arm
+              - name: j3        # axis 3 — upper arm
+                pivot: [0, 1.350, 0]
+                animation: rotate-z
+                children:
+                  - name: upper_arm
+                  - name: wrist            # CONSTRAINED: rotation = a2 − a3, keeps the flange level
+                    pivot: [1.450, 0, 0]
+                    animation: constraint
+                    children:
+                      - name: j6           # axis 6 — turn about the vertical
+                        animation: rotate-y
+                        children:
+                          - name: tool_flange
+                          - name: layer_gripper   # frame, two clamp jaws, retractable plate
+                          - name: carried_layer   # 6 boxes
+      - name: tie_rods          # the two visible bars of the four-bar, re-aimed every frame
+      - name: cell              # infeed conveyor (12 instanced rollers) + pallet + 18-box stack
+
+materials:
+  - id: paint-orange-body
+    family: painted-metal
+    color: "#dd6a1e"
+    metalness: 0.0             # painted casting — DIELECTRIC (HANDBOOK §3.1)
+    roughness: 0.48
+    evidence: "HANDBOOK §3.1; [Block 62] §62.9 no RAL published — colorTarget is measured"
+    confidence: 0.7
+  - id: tie-rod-steel
+    family: bare-metal
+    color: "#a8aeb3"
+    metalness: 0.90            # the tie rods are bare machined bar — they must READ as steel
+    roughness: 0.38
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0"
+    confidence: 0.8
+  - id: flange-steel
+    family: bare-metal
+    color: "#c9ced1"
+    metalness: 0.92
+    roughness: 0.32
+    evidence: "HANDBOOK §3.1 bare-metal"
+    confidence: 0.85
+  - id: housing-grey
+    family: painted-metal
+    color: "#3b4148"
+    metalness: 0.0
+    roughness: 0.60
+    evidence: "gearbox/bearing housings [CERT-a]"
+    confidence: 0.6
+  - id: carton
+    family: paper
+    color: "#c8873f"
+    metalness: 0.0
+    roughness: 0.66
+    evidence: "corrugated case — dielectric, high roughness"
+    confidence: 0.7
+  - id: pallet-timber
+    family: wood
+    color: "#8a6a44"
+    metalness: 0.0
+    roughness: 0.85
+    evidence: "EUR-pallet softwood [CERT-a]; see [Block 58] for the pallet dimensional family"
+    confidence: 0.7
+
+critical_features:
+  - id: four-axes-not-six
+    desc: >
+      The machine has axes 1, 2, 3 and 6 only, and the flange stays HORIZONTAL at every arm pose
+      because the wrist counter-rotates by (a2 − a3). Two tie rods make that visible as a
+      mechanism rather than a trick — the TIRANTE toggle hides them to show what they do.
+    threshold: 0.85
+  - id: cycle-lands-on-real-surfaces
+    desc: >
+      The four cycle poses are SOLVED from the two-link geometry, so the carried layer rests on the
+      infeed rollers at pick and on top of the stack at place. Eyeballed angles put the layer 17 cm
+      inside the conveyor while the gate still reported a pass.
+    threshold: 0.85
+  - id: instancing-where-repetition-is-real
+    desc: >
+      18 stacked cases and 12 conveyor rollers are InstancedMesh; the unique castings are not.
+      Instancing a one-off part is cargo cult, not optimisation (block54 §2.3).
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 50
+    tris: 40000
+  measured:
+    draws: 38
+    tris: 1582
+    console_errors: 0
+
+camera:
+  azimuth_deg: 58.4
+  elevation_deg: 17.2
+  fov: 38
+  target: [1.05, 1.25, 0.20]    # the CELL, not the robot — otherwise the pallet leaves the frame
+  radius_m: 8.6
+
+lighting: house-rig + vertical-subject fill
+  # Same documented deviation: tie rods, flange and conveyor rollers are bare metal on vertical
+  # faces. Fill 1.0 opposite the key, environmentIntensity 2.0, materials unchanged.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "CICLO →"     # RECOGIDA / ELEVACIÓN / GIRO / DEPÓSITO — animated, holds needsRender while moving
+  - "CELDA"       # infeed conveyor + pallet + stack
+  - "TIRANTE"     # hide the tie rods to expose what the constraint is doing
+
+public_api:
+  - "__paletizadorApp.goToPose({a1,a2,a3,a6}, name?)"
+  - "__paletizadorApp.flangeWorldY()   # the constraint check, in metres"
+
+colorTarget:
+  # MEASURED from the rendered swing body (headless SwiftShader capture at 1280x800), frozen as the
+  # regression anchor.
+  srgb: [239, 148, 58]
+  deltaE00Max: 8
+  crop: "34x34+560+420"   # clean painted body, RECOGIDA pose, at 1280x800

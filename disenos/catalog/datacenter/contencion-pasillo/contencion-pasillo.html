@@ -1,0 +1,319 @@
+<!doctype html>
+<!--
+  contencion-pasillo — catalog asset, family `datacenter`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Spec: ./design-spec.yaml
+  NOTE: the subject is the CONTAINMENT, not the racks. Its whole job is to stop cold supply air
+  mixing with hot return air, so it is only real if it is SEALED on all six faces of the aisle:
+  roof panels, sliding doors at BOTH ends, racks closing the two long sides, and blanking in the
+  rack faces. One open end and the asset is depicting a hot-aisle bypass, not containment.
+  The racks are deliberately simplified and instanced — rack-servidores is the detailed one.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contención de pasillo frío — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.025 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Contención de pasillo frío — 2 filas de 6 racks, techo y puertas correderas</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· perfil de aluminio · policarbonato · losetas perforadas</span></div>
+  <div class="dim">3.60 × 3.20 × 2.30 m · pasillo 1.20 m (2 losetas) · sellado en las 6 caras</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnRoof" class="on">TECHO</button>
+  <button id="btnDoor">PUERTAS CORREDERAS</button>
+  <button id="btnFloor" class="on">PISO TÉCNICO</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const TILE   = 0.60;                       // access-floor grid
+const RK_W   = 0.60, RK_D = 1.00, RK_H = 2.00;
+const NRACK  = 6;
+const ROW_L  = NRACK * RK_W;               // 3.60
+const AISLE  = 2 * TILE;                   // 1.20 — the containment is a whole number of tiles wide
+const ROW_Z  = AISLE/2 + RK_D/2;           // rack row centre-line
+const PLEN_H = 0.45;
+const CONT_H = 2.30;                       // containment roof height above the deck
+const DECK_Y = PLEN_H;
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 16, 52);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 9.6, AZ = 0.86, EL = 0.30, TGT_Y = 1.30;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TGT_Y + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TGT_Y, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TGT_Y, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.4;        // dark vertical subject — see design-spec §lighting
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(6.0, 8.0, 5.0); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-5; sun.shadow.camera.right=5; sun.shadow.camera.top=5; sun.shadow.camera.bottom=-5;
+sun.shadow.camera.far = 26;
+scene.add(sun);
+const faceFill = new THREE.DirectionalLight(0xdce6f2, 1.35);    // panel-normal fill (the deviation)
+faceFill.position.set(1.0, 1.6, 6.0);
+scene.add(faceFill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.30));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   The containment frame is mill-finish extruded ALUMINIUM (bare metal); the roof and door
+//   glazing is POLYCARBONATE (dielectric, low roughness, transparent). Giving the panel any
+//   metalness is the classic glass error — a transparent dielectric has metalness 0, always.
+// ============================================================================
+const matAlu    = new THREE.MeshStandardMaterial({ color:0xc0c5c8, metalness:0.93, roughness:0.40 });
+const matAluD   = new THREE.MeshStandardMaterial({ color:0x9ba1a5, metalness:0.90, roughness:0.48 });
+const matPoly   = new THREE.MeshStandardMaterial({ color:0xcfe0e6, metalness:0.0,  roughness:0.08,
+                                                   transparent:true, opacity:0.26, side:THREE.DoubleSide });
+const matSeal   = new THREE.MeshStandardMaterial({ color:0x1a1d21, metalness:0.0,  roughness:0.80 });
+const matRack   = new THREE.MeshStandardMaterial({ color:0x2f343b, metalness:0.0,  roughness:0.52 });
+const matRackL  = new THREE.MeshStandardMaterial({ color:0x454b53, metalness:0.0,  roughness:0.55 });
+const matMesh   = new THREE.MeshStandardMaterial({ color:0x3a4048, metalness:0.0,  roughness:0.58 });
+const matChassis= new THREE.MeshStandardMaterial({ color:0x9aa1a6, metalness:0.88, roughness:0.46 });
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xb6babc, metalness:0.92, roughness:0.42 });
+const matTile   = new THREE.MeshStandardMaterial({ color:0x40454b, metalness:0.0,  roughness:0.74 });
+const matTileP  = new THREE.MeshStandardMaterial({ color:0x2c3138, metalness:0.0,  roughness:0.70 });
+const matHole   = new THREE.MeshStandardMaterial({ color:0x15181b, metalness:0.0,  roughness:0.60 });
+const matLabel  = new THREE.MeshStandardMaterial({ color:0xe8eae6, metalness:0.0,  roughness:0.70 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xforms, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = im.receiveShadow = true;
+  xforms.forEach((t,i)=>{
+    _p.set(t[0], t[1], t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0));
+    _s.set(t[6]??1, t[7]??1, t[8]??1);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s));
+  });
+  im.instanceMatrix.needsUpdate = true;
+  parent.add(im); return im;
+}
+function box(w,h,d,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+
+// --- raised floor. The PERFORATED tiles land exactly inside the contained aisle: outside it they
+//     would be dumping cold air into the room the containment exists to isolate. ---
+const floorGrp = new THREE.Group();
+const NX = 12, NZ = 9, FX0 = -NX*TILE/2, FZ0 = -NZ*TILE/2;
+const peds = [];
+for(let i=0;i<=NX;i++) for(let k=0;k<=NZ;k++) peds.push([FX0 + i*TILE, PLEN_H/2, FZ0 + k*TILE]);
+instanced(new THREE.CylinderGeometry(0.020, 0.028, PLEN_H, 8), matSteel, peds, floorGrp);
+const tiles = [], ptiles = [];
+for(let i=0;i<NX;i++) for(let k=0;k<NZ;k++){
+  const x = FX0 + (i + 0.5)*TILE, z = FZ0 + (k + 0.5)*TILE;
+  const inAisle = Math.abs(x) < ROW_L/2 + 0.01 && Math.abs(z) < AISLE/2 + 0.01;
+  (inAisle ? ptiles : tiles).push([x, DECK_Y - 0.012, z]);
+}
+instanced(new THREE.BoxGeometry(TILE - 0.006, 0.024, TILE - 0.006), matTile,  tiles,  floorGrp);
+instanced(new THREE.BoxGeometry(TILE - 0.006, 0.024, TILE - 0.006), matTileP, ptiles, floorGrp);
+const holes = [];
+for(const t of ptiles) for(let a=0;a<7;a++) for(let b=0;b<7;b++)
+  holes.push([t[0] - 0.225 + a*0.075, DECK_Y + 0.002, t[2] - 0.225 + b*0.075]);
+instanced(new THREE.BoxGeometry(0.044, 0.006, 0.044), matHole, holes, floorGrp);
+root.add(floorGrp);
+
+// --- two rack rows. Simplified and INSTANCED on purpose: 12 fully detailed racks would cost more
+//     than the containment itself and this asset is about the enclosure, not the cabinets. ---
+const rackX = i => -ROW_L/2 + (i + 0.5)*RK_W;
+const bodies = [], plinths = [], tops = [];
+const meshV = [], meshH = [], equip = [];
+for(const sz of [-1, 1]) for(let i=0;i<NRACK;i++){
+  const x = rackX(i), z = sz*ROW_Z;
+  bodies.push([x, DECK_Y + RK_H/2, z]);
+  plinths.push([x, DECK_Y + 0.05, z]);
+  tops.push([x, DECK_Y + RK_H + 0.02, z]);
+  // BOTH rack doors are perforated, not just the aisle-facing one. Cold air has to enter the front
+  // and leave the back; a solid rear door would dead-end the very path the containment creates.
+  for(const face of [-1, 1]){
+    const fz = z + face*sz*(RK_D/2 + 0.012);
+    for(let k=0;k<11;k++) meshV.push([x - 0.24 + k*0.048, DECK_Y + RK_H/2, fz]);
+    for(let k=0;k<26;k++) meshH.push([x, DECK_Y + 0.16 + k*0.068, fz]);
+  }
+  for(let k=0;k<7;k++) equip.push([x, DECK_Y + 0.30 + k*0.22, z - sz*(RK_D/2 - 0.12)]);
+}
+instanced(new THREE.BoxGeometry(RK_W - 0.01, RK_H, RK_D), matRack, bodies, root);
+instanced(new THREE.BoxGeometry(RK_W, 0.10, RK_D + 0.02), matRackL, plinths, root);
+instanced(new THREE.BoxGeometry(RK_W, 0.04, RK_D), matRackL, tops, root);
+instanced(new THREE.BoxGeometry(0.005, RK_H - 0.16, 0.003), matMesh, meshV, root);
+instanced(new THREE.BoxGeometry(RK_W - 0.10, 0.004, 0.003), matMesh, meshH, root);
+instanced(new THREE.BoxGeometry(RK_W - 0.14, 0.16, 0.10), matChassis, equip, root);
+
+// ---------- containment frame: posts, longitudinal beams, transverse purlins ----------
+const CONT_TOP = DECK_Y + CONT_H;
+const posts = [];
+for(const sz of [-1, 1]) for(let i=0;i<=NRACK;i+=2)
+  posts.push([-ROW_L/2 + i*RK_W, (DECK_Y + RK_H + CONT_TOP)/2, sz*(AISLE/2 + 0.03)]);
+instanced(new THREE.BoxGeometry(0.05, CONT_TOP - DECK_Y - RK_H, 0.05), matAlu, posts, root);
+for(const sz of [-1, 1]){
+  box(ROW_L + 0.10, 0.07, 0.06, matAlu, 0, CONT_TOP - 0.035, sz*(AISLE/2 + 0.03));   // eaves beam
+  box(ROW_L + 0.10, 0.05, 0.05, matAluD, 0, DECK_Y + RK_H + 0.03, sz*(AISLE/2 + 0.03));
+  // brush/foam seal onto the rack tops — the joint that actually stops the bypass
+  box(ROW_L, 0.05, 0.10, matSeal, 0, DECK_Y + RK_H + 0.06, sz*(AISLE/2 + 0.09));
+}
+const purlins = [];
+for(let i=0;i<=NRACK;i++) purlins.push([-ROW_L/2 + i*RK_W, CONT_TOP - 0.035, 0]);
+instanced(new THREE.BoxGeometry(0.05, 0.06, AISLE + 0.10), matAlu, purlins, root);
+
+// --- roof: polycarbonate panels between the purlins (togglable) ---
+const roof = new THREE.Group();
+for(let i=0;i<NRACK;i++)
+  box(RK_W - 0.07, 0.010, AISLE + 0.02, matPoly, rackX(i), CONT_TOP - 0.052, 0, roof);
+box(ROW_L + 0.10, 0.020, 0.05, matAluD, 0, CONT_TOP - 0.005, -AISLE/2 - 0.03, roof);
+box(ROW_L + 0.10, 0.020, 0.05, matAluD, 0, CONT_TOP - 0.005,  AISLE/2 + 0.03, roof);
+root.add(roof);
+
+// ---------- sliding end doors, BOTH ends ----------
+// One open end would make this a hot-aisle bypass rather than containment, so both ends get a
+// glazed sliding pair. They travel along X, parked over the rack fronts when open.
+const doorLeaves = [];
+for(const sx of [-1, 1]){
+  const ex = sx*(ROW_L/2 + 0.03);
+  // end frame
+  for(const sz of [-1, 1])
+    box(0.06, CONT_TOP - DECK_Y, 0.06, matAlu, ex, (DECK_Y + CONT_TOP)/2, sz*(AISLE/2 + 0.03));
+  box(0.06, 0.07, AISLE + 0.12, matAlu, ex, CONT_TOP - 0.035, 0);
+  box(0.06, 0.05, AISLE + 0.12, matAluD, ex, DECK_Y + 0.025, 0);
+  box(0.05, 0.05, AISLE + 0.12, matAluD, ex, CONT_TOP - 0.10, 0);                    // top track
+  for(const sz of [-1, 1]){
+    const g = new THREE.Group();
+    g.position.set(ex, 0, sz*(AISLE/4));
+    box(0.020, CONT_TOP - DECK_Y - 0.16, AISLE/2 - 0.02, matPoly, 0, (DECK_Y + CONT_TOP)/2 - 0.04, 0, g);
+    for(const sy of [-1, 1])
+      box(0.030, 0.05, AISLE/2 - 0.02, matAlu, 0, (DECK_Y + CONT_TOP)/2 - 0.04 + sy*((CONT_TOP - DECK_Y - 0.16)/2 - 0.025), 0, g);
+    box(0.030, CONT_TOP - DECK_Y - 0.16, 0.04, matAlu, 0, (DECK_Y + CONT_TOP)/2 - 0.04, -sz*(AISLE/4 - 0.03), g);
+    box(0.045, 0.30, 0.035, matAluD, sx*0.026, DECK_Y + 1.05, -sz*(AISLE/4 - 0.10), g);   // pull handle
+    root.add(g);
+    doorLeaves.push({ g, travel: sz*(AISLE/2 - 0.04) });
+  }
+  box(0.10, 0.05, 0.06, matLabel, ex, CONT_TOP - 0.18, 0);
+}
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnRoof = document.getElementById('btnRoof');
+btnRoof.onclick = ()=>{ roof.visible = !roof.visible;
+  btnRoof.classList.toggle('on', roof.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+let slideTarget = 0, slidePos = 0;
+const btnDoor = document.getElementById('btnDoor');
+btnDoor.onclick = ()=>{ slideTarget = slideTarget ? 0 : 1;
+  btnDoor.classList.toggle('on', !!slideTarget); requestRender(); };
+
+const btnFloor = document.getElementById('btnFloor');
+btnFloor.onclick = ()=>{ floorGrp.visible = !floorGrp.visible;
+  btnFloor.classList.toggle('on', floorGrp.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(Math.abs(slidePos - slideTarget) > 0.001){
+    slidePos += (slideTarget - slidePos) * 0.10;
+    if(Math.abs(slidePos - slideTarget) <= 0.001){
+      slidePos = slideTarget;
+      renderer.shadowMap.needsUpdate = true;   // re-bake once the travel settles, not every frame
+    }
+    // leaves SLIDE along Z, they do not swing: a swinging door in a 1.2 m aisle would foul the racks
+    doorLeaves.forEach(d=>{ d.g.position.z = d.travel * (1 + slidePos*0.94); });
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__contencionPasilloApp = __app;
+globalThis['__contencion-pasilloApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

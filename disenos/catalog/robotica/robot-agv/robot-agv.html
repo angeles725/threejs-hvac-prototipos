@@ -1,0 +1,267 @@
+<!doctype html>
+<!--
+  robot-agv — catalog asset, family `robotica`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block62.md §62.5 (MiR250 Specifications 2.99).
+  The identity is the 300 mm LOW FLAT DECK plus the two diagonal safety scanners that give the
+  published 360° coverage — an AMR is a platform, not a boxy cart.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robot móvil autónomo 250 kg — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+  #state{position:absolute;left:14px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text-muted);line-height:1.6}
+  #state b{color:#fff;font-weight:600}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Robot móvil autónomo (AMR) — 250 kg</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· MiR250 · 2.0 m/s · 83 kg</span></div>
+  <div class="dim">800 × 580 × 300 mm · 2 escáneres de seguridad · cobertura 360°</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnScan" class="on">CAMPOS LÁSER</button>
+  <button id="btnLoad" class="on">CARGA</button>
+  <button id="btnDrive">MARCHA</button>
+</div>
+<div id="state"></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 62] §62.5) ----------
+const L = 0.800, W = 0.580, H = 0.300;   // [CERT-doc] length × width × height
+const PAYLOAD_KG = 250, V_MAX = 2.0;     // [CERT-doc]
+const DECK_T = 0.028;                    // [INFER] top deck plate thickness
+const WHEEL_R = 0.0625, WHEEL_W = 0.050; // [INFER] drive wheel, sized to the 300 mm body
+const CASTOR_R = 0.038;                  // [INFER]
+const SCAN_R = 1.05;                     // [INFER] drawn protective-field radius (not a safety value)
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 5, 18);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.05, 100);
+const R = 3.05, AZ = 0.95, EL = 0.44, TY = 0.20;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TY + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TY, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TY, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.0;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.5, 4.0, 2.0); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-2; sun.shadow.camera.right=2; sun.shadow.camera.top=2; sun.shadow.camera.bottom=-2;
+scene.add(sun);
+// The AMR is mostly a HORIZONTAL subject, so it already catches the bright upper IBL — the fill is
+// weaker here than on the vertical assets, and exists only for the dark side skirt and the wheels.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 0.7);
+fill.position.set(-2.2, 1.6, 3.0);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(24,24),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+// ============================================================================
+const matShell = new THREE.MeshStandardMaterial({ color:0xdfe3e6, metalness:0.0,  roughness:0.44 });
+const matSkirt = new THREE.MeshStandardMaterial({ color:0x1e2226, metalness:0.0,  roughness:0.66 });
+const matDeck  = new THREE.MeshStandardMaterial({ color:0xa8aeb4, metalness:0.85, roughness:0.40 });
+const matTyre  = new THREE.MeshStandardMaterial({ color:0x14171a, metalness:0.0,  roughness:0.92 });
+const matHub   = new THREE.MeshStandardMaterial({ color:0xb6bbc0, metalness:0.90, roughness:0.34 });
+const matScan  = new THREE.MeshStandardMaterial({ color:0x2a2e33, metalness:0.0,  roughness:0.55 });
+const matLight = new THREE.MeshBasicMaterial({ color:0x00d4aa });
+const matBox   = new THREE.MeshStandardMaterial({ color:0xc8873f, metalness:0.0,  roughness:0.62 });
+// depthWrite:false + a height above the floor — drawn coplanar with the ground the field tore
+// itself apart in z-fighting stripes, which looked like a broken mesh rather than a scan field.
+const matField = new THREE.MeshBasicMaterial({ color:0x00d4aa, transparent:true, opacity:0.13,
+                                               side:THREE.DoubleSide, depthWrite:false });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const body = new THREE.Group(); root.add(body);   // everything that DRIVES lives under `body`
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const tube = (p,r,len,mat,x,y,z,axis='y',seg=18)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,len,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  if(axis==='x') m.rotation.z = Math.PI/2;
+  if(axis==='z') m.rotation.x = Math.PI/2;
+  p.add(m); return m; };
+
+// --- chassis: dark skirt below, light shell above, machined deck on top ---
+// The skirt is NARROWER and SHORTER than the shell so the wheels are actually visible in the
+// recess. Flush with the body they were geometrically present and completely invisible — 30 clean
+// draw calls of a machine with no wheels.
+put(body, L - 0.16, 0.085, W - 0.13, matSkirt, 0, 0.085/2 + 0.010, 0);
+put(body, L, H - 0.095 - DECK_T, W, matShell, 0, 0.095 + (H - 0.095 - DECK_T)/2, 0);
+put(body, L - 0.010, DECK_T, W - 0.010, matDeck, 0, H - DECK_T/2, 0);    // top deck: the payload surface
+// side status-light strip — an AMR announces its state to the people around it
+for(const sz of [-1,1]) put(body, L*0.86, 0.012, 0.006, matLight, 0, 0.212, sz*(W/2 + 0.002));
+// corner cut-outs where the diagonal scanners sit
+for(const [sx,sz] of [[1,1],[-1,-1]]){
+  const c = new THREE.Group();
+  c.position.set(sx*(L/2 - 0.045), 0.190, sz*(W/2 - 0.045));   // proud of the corner, like the real recess
+  c.rotation.y = sx > 0 ? -Math.PI/4 : Math.PI*3/4;
+  put(c, 0.150, 0.105, 0.085, matScan, 0, 0, 0);                          // scanner head
+  put(c, 0.130, 0.030, 0.012, matLight, 0, 0.010, 0.046);                 // the emission window
+  body.add(c);
+}
+// --- drive wheels: differential pair on the centre line ---
+for(const sz of [-1,1]){
+  tube(body, WHEEL_R, WHEEL_W, matTyre, 0, WHEEL_R, sz*(W/2 - 0.030), 'z', 20);
+  tube(body, WHEEL_R*0.45, WHEEL_W + 0.006, matHub, 0, WHEEL_R, sz*(W/2 - 0.030), 'z', 14);
+}
+// --- castors at the four corners ---
+for(const sx of [-1,1]) for(const sz of [-1,1]){
+  const cx = sx*(L/2 - 0.085), cz = sz*(W/2 - 0.045);
+  tube(body, CASTOR_R, 0.030, matTyre, cx, CASTOR_R, cz, 'z', 14);
+  put(body, 0.030, 0.045, 0.058, matHub, cx, CASTOR_R + 0.038, cz);
+}
+// --- payload: a tote on the deck, inside the published 250 kg envelope ---
+const load = new THREE.Group();
+put(load, 0.50, 0.17, 0.34, matBox, 0, H + 0.085, 0);
+put(load, 0.52, 0.018, 0.36, matSkirt, 0, H + 0.179, 0);
+body.add(load);
+
+// --- laser protective fields: two 270° sectors from the diagonal scanners = 360° coverage ---
+const fields = new THREE.Group();
+for(const [sx,sz] of [[1,1],[-1,-1]]){
+  const g = new THREE.RingGeometry(0.12, SCAN_R, 48, 1, 0, Math.PI*1.5);
+  const m = new THREE.Mesh(g, matField);
+  m.rotation.x = -Math.PI/2;
+  m.rotation.z = sx > 0 ? Math.PI*0.25 : Math.PI*1.25;
+  m.position.set(sx*(L/2 - 0.045), 0.055, sz*(W/2 - 0.045));   // at scanner height, off the floor plane
+  fields.add(m);
+}
+body.add(fields);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+//          MARCHA is a per-frame animation: it holds needsRender only while driving.
+// ============================================================================
+const stateEl = document.getElementById('state');
+let driving = false, travelled = 0, wheelSpin = 0;
+const SPEED = 0.45;                       // m/s of the DEMO (the machine's published max is 2.0)
+const RANGE = 1.6;                        // shuttle amplitude
+function report(){
+  stateEl.innerHTML = `<b>${driving ? 'EN MARCHA' : 'DETENIDO'}</b><br>` +
+    `${load.visible ? 'carga hasta ' + PAYLOAD_KG + ' kg' : 'plataforma vacía'}<br>` +
+    `demo ${SPEED.toFixed(2)} m/s · máx. ${V_MAX.toFixed(1)} m/s`;
+}
+report();
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnScan = document.getElementById('btnScan');
+btnScan.onclick = ()=>{ fields.visible = !fields.visible; btnScan.classList.toggle('on', fields.visible); requestRender(); };
+
+const btnLoad = document.getElementById('btnLoad');
+btnLoad.onclick = ()=>{ load.visible = !load.visible; btnLoad.classList.toggle('on', load.visible);
+  renderer.shadowMap.needsUpdate = true; report(); requestRender(); };
+
+const btnDrive = document.getElementById('btnDrive');
+btnDrive.onclick = ()=>{ driving = !driving; btnDrive.classList.toggle('on', driving); report(); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+let last = performance.now(), wasDriving = false;
+function animate(){
+  requestAnimationFrame(animate);
+  const now = performance.now(), dt = Math.min(0.05, (now - last)/1000); last = now;
+  if(driving){
+    travelled += SPEED * dt;
+    body.position.x = Math.sin(travelled/RANGE * Math.PI) * RANGE/2;
+    const dir = Math.cos(travelled/RANGE * Math.PI);
+    body.rotation.y = dir >= 0 ? 0 : Math.PI;          // the AMR turns around at the end of the run
+    wheelSpin += SPEED * dt / WHEEL_R;
+    needsRender = true;
+  }
+  if(wasDriving && !driving){ renderer.shadowMap.needsUpdate = true; needsRender = true; }
+  wasDriving = driving;
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root },
+                setDriving: v => { driving = !!v; btnDrive.classList.toggle('on', driving); report(); requestRender(); },
+                get driving(){ return driving; } };
+globalThis.__robotAgvApp = __app;
+globalThis['__robot-agvApp'] = __app;   // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

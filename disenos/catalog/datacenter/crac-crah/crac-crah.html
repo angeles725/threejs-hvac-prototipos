@@ -1,0 +1,366 @@
+<!doctype html>
+<!--
+  crac-crah — catalog asset, family `datacenter`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Spec: ./design-spec.yaml
+  NOTE: a DOWNFLOW unit, and the raised floor is part of the asset, not scenery. The machine's
+  entire logic is: warm air in at the TOP, through filters and coil, EC plug fans at the BOTTOM
+  discharging into the underfloor plenum, out through perforated tiles in the cold aisle. Model it
+  standing on a slab with no plenum and it becomes a cabinet that blows at the floor.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unidad CRAC/CRAH de precisión — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.025 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">CRAH de precisión — descarga inferior a plenum de piso técnico</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· chapa RAL 7035 · serpentín de aluminio/cobre</span></div>
+  <div class="dim">1.75 × 0.90 × 2.40 m · retorno superior → filtros → serpentín → 3 ventiladores EC</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">ABRIR PUERTAS</button>
+  <button id="btnFan">VENTILADORES EC</button>
+  <button id="btnFloor" class="on">PISO TÉCNICO</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const W = 1.75, D = 0.90, H = 2.40;          // overall, measured from the STRUCTURAL SLAB
+const PLEN_H = 0.45;                          // raised-floor plenum height
+const TILE   = 0.60;                          // 600 mm access floor grid
+const FRONT_Z = D/2;
+const DOOR_Y0 = PLEN_H + 0.06, DOOR_Y1 = H - 0.34;
+const COIL_Y0 = PLEN_H + 0.72, COIL_H = 0.78;
+const FAN_Y   = PLEN_H*0.52, FAN_R = 0.27;
+const NFAN = 3;
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 10, 34);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 6.4, AZ = 0.74, EL = 0.22, TGT_Y = 1.18;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TGT_Y + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TGT_Y, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TGT_Y, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.2;        // vertical-subject deviation — see design-spec §lighting
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.8, 5.6, 4.2); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-3.4; sun.shadow.camera.right=3.4; sun.shadow.camera.top=3.0; sun.shadow.camera.bottom=-3.0;
+sun.shadow.camera.far = 18;
+scene.add(sun);
+const faceFill = new THREE.DirectionalLight(0xdce6f2, 0.85);    // panel-normal fill (the deviation)
+faceFill.position.set(0.6, 1.4, 5.0);
+scene.add(faceFill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(26,26),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Coil fins are bare aluminium over copper tubes; the filter media is a dielectric mat; the
+//   cabinet is coated sheet. Letting the filter inherit the coil metal is the tempting slip —
+//   they sit 100 mm apart and look similar in a photo, and they are opposite surface families.
+// ============================================================================
+const matPaint  = new THREE.MeshStandardMaterial({ color:0xcfd2cc, metalness:0.0, roughness:0.55 });
+const matPaintD = new THREE.MeshStandardMaterial({ color:0xb9bdb8, metalness:0.0, roughness:0.58 });
+const matBase   = new THREE.MeshStandardMaterial({ color:0x3b4046, metalness:0.0, roughness:0.62 });
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xb6babc, metalness:0.92, roughness:0.42 });
+const matFin    = new THREE.MeshStandardMaterial({ color:0xa9b0b4, metalness:0.92, roughness:0.58 });
+const matCopper = new THREE.MeshStandardMaterial({ color:0xf0a67a, metalness:1.0,  roughness:0.34 });
+const matFilter = new THREE.MeshStandardMaterial({ color:0x5b5f52, metalness:0.0,  roughness:0.95 });
+const matFrameF = new THREE.MeshStandardMaterial({ color:0x8a6a3c, metalness:0.0,  roughness:0.80 });
+const matPlastic= new THREE.MeshStandardMaterial({ color:0x1a1d21, metalness:0.0,  roughness:0.52 });
+const matFan    = new THREE.MeshStandardMaterial({ color:0x2a2e33, metalness:0.0,  roughness:0.55 });
+const matPipe   = new THREE.MeshStandardMaterial({ color:0xb9bec1, metalness:0.90, roughness:0.44 });
+const matInsul  = new THREE.MeshStandardMaterial({ color:0x22262a, metalness:0.0,  roughness:0.85 });
+const matTile   = new THREE.MeshStandardMaterial({ color:0x6d7278, metalness:0.0,  roughness:0.72 });
+const matTileP  = new THREE.MeshStandardMaterial({ color:0x4e535a, metalness:0.0,  roughness:0.70 });
+const matLabel  = new THREE.MeshStandardMaterial({ color:0xf2f3ef, metalness:0.0,  roughness:0.70 });
+const matScreen = new THREE.MeshStandardMaterial({ color:0x0d1a16, metalness:0.0,  roughness:0.16,
+                                                   emissive:0x0a2a22, emissiveIntensity:0.9 });
+const matLampOff = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4 });
+const matLampRun = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                    emissive:0x0d3a2a, emissiveIntensity:1.0 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xforms, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = im.receiveShadow = true;
+  xforms.forEach((t,i)=>{
+    _p.set(t[0], t[1], t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0));
+    _s.set(t[6]??1, t[7]??1, t[8]??1);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s));
+  });
+  im.instanceMatrix.needsUpdate = true;
+  parent.add(im); return im;
+}
+function box(w,h,d,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+function cyl(rt,rb,h,seg,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+
+// --- raised floor: pedestals, stringers, solid tiles, and PERFORATED tiles in the cold aisle ---
+const floorGrp = new THREE.Group();
+const FX0 = -3.0, FZ0 = -1.5, NX = 10, NZ = 5;
+const peds = [], strX = [], strZ = [];
+for(let i=0;i<=NX;i++) for(let k=0;k<=NZ;k++){
+  const x = FX0 + i*TILE, z = FZ0 + k*TILE;
+  if(Math.abs(x) < W/2 + 0.05 && Math.abs(z) < D/2 + 0.05) continue;   // no pedestal under the unit
+  peds.push([x, PLEN_H/2, z]);
+}
+instanced(new THREE.CylinderGeometry(0.022, 0.030, PLEN_H, 10), matSteel, peds, floorGrp);
+const tiles = [], ptiles = [];
+for(let i=0;i<NX;i++) for(let k=0;k<NZ;k++){
+  const x = FX0 + (i + 0.5)*TILE, z = FZ0 + (k + 0.5)*TILE;
+  if(Math.abs(x) < W/2 + 0.02 && Math.abs(z) < D/2 + 0.02) continue;   // the unit occupies these
+  // perforated tiles form a COLD AISLE two tiles wide, offset in front of the unit
+  const perf = (z > D/2 + 0.4 && z < D/2 + 1.7);
+  (perf ? ptiles : tiles).push([x, PLEN_H - 0.012, z]);
+}
+instanced(new THREE.BoxGeometry(TILE - 0.006, 0.024, TILE - 0.006), matTile,  tiles,  floorGrp);
+instanced(new THREE.BoxGeometry(TILE - 0.006, 0.024, TILE - 0.006), matTileP, ptiles, floorGrp);
+// the perforation itself, so a perforated tile is not just a darker square
+const holes = [];
+for(const t of ptiles) for(let a=0;a<6;a++) for(let b=0;b<6;b++)
+  holes.push([t[0] - 0.21 + a*0.084, PLEN_H + 0.002, t[2] - 0.21 + b*0.084]);
+instanced(new THREE.BoxGeometry(0.050, 0.006, 0.050), matPlastic, holes, floorGrp);
+root.add(floorGrp);
+
+// --- unit carcass: sealed shell above the plenum, open discharge below the deck ---
+box(W, H - PLEN_H, 0.015, matPaintD, 0, PLEN_H + (H - PLEN_H)/2, -D/2 + 0.008);       // rear
+for(const sx of [-1, 1]) box(0.015, H - PLEN_H, D, matPaintD, sx*(W/2 - 0.008), PLEN_H + (H - PLEN_H)/2, 0);
+box(W, 0.015, D, matPaintD, 0, H - 0.008, 0);                                          // top plate
+box(W, DOOR_Y0 - PLEN_H, 0.030, matPaint, 0, (PLEN_H + DOOR_Y0)/2, FRONT_Z - 0.015);
+for(const sx of [-1, 0, 1])
+  box(0.038, DOOR_Y1 - DOOR_Y0, 0.030, matPaint, sx*(W/2 - 0.019), (DOOR_Y0 + DOOR_Y1)/2, FRONT_Z - 0.015);
+// the discharge section under the deck: a frame with open sides, NOT a closed box
+for(const sx of [-1, 1]) box(0.05, PLEN_H, 0.05, matBase, sx*(W/2 - 0.025), PLEN_H/2, D/2 - 0.025);
+for(const sx of [-1, 1]) box(0.05, PLEN_H, 0.05, matBase, sx*(W/2 - 0.025), PLEN_H/2, -D/2 + 0.025);
+box(W, 0.06, D, matBase, 0, 0.03, 0);                                                  // base rail on the slab
+box(W - 0.02, 0.04, D - 0.02, matPaint, 0, PLEN_H + 0.02, 0);                          // deck-level collar
+
+// --- TOP: return-air opening with a filter grille (warm air enters here) ---
+{
+  const gy = H - 0.17;
+  box(W - 0.10, 0.03, D - 0.12, matPaintD, 0, gy, 0);
+  const bars = [];
+  for(let k=0;k<14;k++) bars.push([0, gy + 0.020, -(D - 0.16)/2 + (k + 0.5)*((D - 0.16)/14), -0.36, 0, 0]);
+  instanced(new THREE.BoxGeometry(W - 0.16, 0.020, 0.030), matPaint, bars, root);
+  box(W - 0.14, 0.05, D - 0.16, matFilter, 0, gy - 0.045, 0);                          // return filter mat
+}
+
+// --- interior: filter bank over the coil, then the fan plenum below ---
+const guts = new THREE.Group();
+// filter bank: media in cardboard frames, a row of 4
+for(let k=0;k<4;k++){
+  const fx = -W/2 + 0.22 + k*((W - 0.44)/3);
+  box(0.38, 0.10, D - 0.22, matFilter, fx, COIL_Y0 + COIL_H + 0.14, 0, guts);
+  box(0.40, 0.12, D - 0.20, matFrameF, fx, COIL_Y0 + COIL_H + 0.14, 0, guts);
+  box(0.36, 0.02, 0.06, matLabel, fx, COIL_Y0 + COIL_H + 0.20, D/2 - 0.14, guts);
+}
+// chilled-water coil: a finned block, angled in an A shape so the face area beats the footprint
+for(const sx of [-1, 1]){
+  const cg = new THREE.Group();
+  cg.position.set(sx*0.40, COIL_Y0 + COIL_H/2, 0);
+  cg.rotation.z = sx * 0.24;
+  box(0.11, COIL_H, D - 0.22, matFin, 0, 0, 0, cg);
+  const fins = [];
+  for(let z = -(D - 0.28)/2; z <= (D - 0.28)/2; z += 0.030) fins.push([0.062, 0, z]);
+  instanced(new THREE.BoxGeometry(0.010, COIL_H - 0.04, 0.020), matFin, fins, cg);
+  for(const sy of [-1, 1]) box(0.14, 0.05, D - 0.20, matSteel, 0, sy*(COIL_H/2 - 0.02), 0, cg);
+  guts.add(cg);
+}
+// condensate drain pan under the coil block — every cooling coil has one
+box(W - 0.16, 0.05, D - 0.18, matSteel, 0, COIL_Y0 - 0.05, 0, guts);
+cyl(0.022, 0.022, 0.30, 10, matPipe, W/2 - 0.16, COIL_Y0 - 0.22, 0, guts);
+// EC plug fans in the discharge plenum, blowing DOWN into the underfloor
+const fans = [];
+for(let k=0;k<NFAN;k++){
+  const fx = -W/2 + 0.34 + k*((W - 0.68)/(NFAN - 1));
+  box(0.56, 0.05, D - 0.18, matPaintD, fx, PLEN_H + 0.06, 0, guts);                    // fan deck
+  cyl(FAN_R + 0.035, FAN_R + 0.035, 0.05, 22, matFan, fx, PLEN_H - 0.02, 0, guts);     // inlet ring
+  const hub = new THREE.Group(); hub.position.set(fx, FAN_Y, 0);
+  cyl(0.070, 0.070, 0.10, 14, matFan, 0, 0, 0, hub);
+  for(let b=0;b<9;b++){
+    const a = b*Math.PI*2/9;
+    const bl = box(0.20, 0.028, 0.085, matFan, 0, 0, 0, hub);
+    bl.position.set(Math.cos(a)*0.155, 0, Math.sin(a)*0.155);
+    bl.rotation.set(0, -a, 0.42);
+  }
+  root.add(hub); fans.push(hub);
+  box(0.20, 0.16, 0.14, matPlastic, fx, FAN_Y + 0.14, -D/2 + 0.14, guts);              // EC motor drive
+}
+// chilled-water pipework entering at the rear with a 2-way control valve
+for(const sy of [-1, 1]){
+  const py = COIL_Y0 + 0.20 + sy*0.22;
+  cyl(0.038, 0.038, 0.40, 14, matPipe, 0, py, -D/2 - 0.18, guts).rotation.x = Math.PI/2;
+  cyl(0.048, 0.048, 0.30, 14, matInsul, 0, py, -D/2 - 0.22, guts).rotation.x = Math.PI/2;
+}
+box(0.16, 0.26, 0.16, matPlastic, 0.30, COIL_Y0 + 0.42, -D/2 - 0.10, guts);            // valve actuator
+root.add(guts);
+
+// --- fixed HMI band above the doors ---
+const lamps = [];
+{
+  const by = (DOOR_Y1 + H)/2;
+  box(W, H - DOOR_Y1, 0.030, matPaint, 0, by, FRONT_Z - 0.015);
+  box(0.34, 0.22, 0.026, matPlastic, -0.34, by - 0.02, FRONT_Z + 0.010);
+  box(0.27, 0.135, 0.008, matScreen, -0.34, by, FRONT_Z + 0.024);
+  for(let k=0;k<3;k++){
+    const l = cyl(0.013, 0.013, 0.014, 12, k===0 ? matLampRun : matLampOff,
+      0.06 + k*0.07, by - 0.02, FRONT_Z + 0.012);
+    l.rotation.x = Math.PI/2; lamps.push(l);
+  }
+  box(0.40, 0.06, 0.006, matLabel, 0.44, by - 0.02, FRONT_Z + 0.004);
+}
+
+// ---------- doors: two access leaves ----------
+const doors = [];
+function makeDoor(cx, dw){
+  const REVEAL = 0.010;
+  const w = dw - 2*REVEAL, h = DOOR_Y1 - DOOR_Y0 - 2*REVEAL;
+  const cy = (DOOR_Y0 + DOOR_Y1)/2, x0 = cx - dw/2;
+  const g = new THREE.Group(); g.position.set(x0, 0, FRONT_Z + 0.006);
+  const lx = REVEAL + w/2;
+  box(w, h, 0.020, matPaint, lx, cy, 0, g);
+  for(const sy of [-1, 1]) box(w, 0.020, 0.045, matPaintD, lx, cy + sy*(h/2 - 0.010), -0.030, g);
+  for(const hy of [cy - h/2 + 0.12, cy, cy + h/2 - 0.12])
+    box(0.020, 0.070, 0.026, matSteel, 0.012, hy, -0.008, g);
+  box(0.045, 0.120, 0.012, matPlastic, lx + w/2 - 0.045, cy, 0.016, g);
+  box(0.016, 0.075, 0.030, matPlastic, lx + w/2 - 0.045, cy - 0.02, 0.032, g);
+  box(w*0.5, 0.024, 0.004, matLabel, lx, cy - h/2 + 0.07, 0.013, g);
+  root.add(g); doors.push(g);
+}
+makeDoor(-W/4 - 0.01, W/2 - 0.05);
+makeDoor( W/4 + 0.01, W/2 - 0.05);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const OPEN_ANGLE = -2.05;
+let doorTarget = 0, doorPos = 0;
+const btnDoor = document.getElementById('btnDoor');
+btnDoor.onclick = ()=>{ doorTarget = doorTarget ? 0 : 1;
+  btnDoor.classList.toggle('on', !!doorTarget); requestRender(); };
+
+let fanOn = false;
+const btnFan = document.getElementById('btnFan');
+btnFan.onclick = ()=>{ fanOn = !fanOn; btnFan.classList.toggle('on', fanOn); requestRender(); };
+
+const btnFloor = document.getElementById('btnFloor');
+btnFloor.onclick = ()=>{ floorGrp.visible = !floorGrp.visible;
+  btnFloor.classList.toggle('on', floorGrp.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(Math.abs(doorPos - doorTarget) > 0.001){
+    doorPos += (doorTarget - doorPos) * 0.10;
+    if(Math.abs(doorPos - doorTarget) <= 0.001){
+      doorPos = doorTarget;
+      renderer.shadowMap.needsUpdate = true;   // re-bake once the swing settles, not every frame
+    }
+    doors.forEach((d,i)=>{ d.rotation.y = OPEN_ANGLE * doorPos * (1 - i*0.06); });
+    needsRender = true;
+  }
+  if(fanOn){ fans.forEach((f,i)=>{ f.rotation.y += 0.20 + i*0.015; }); needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__cracCrahApp = __app;
+globalThis['__crac-crahApp'] = __app;              // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

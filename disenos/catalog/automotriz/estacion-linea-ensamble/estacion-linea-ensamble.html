@@ -1,0 +1,315 @@
+<!doctype html>
+<!--
+  estacion-linea-ensamble — General Assembly station on a SKILLET conveyor.
+  Dimensional evidence: research/threejs-block63.md §63.5
+    · carrier  [CERT-web] the skillet is a platform that carries the product AND the operator travels
+               with it; its height is adjustable; skillet / skid / pallet are the three GA families
+    · heights  [CERT-web] CCOHS: usable range 650-1200 mm; HEAVY work 910 mm; light work 1070 mm;
+               large upward forces 810 mm; repetitive reach within 450 mm
+  The station is the subject. The car body it carries is a proportioned MASSING (Golf Mk8 envelope,
+  Block 63 §63.2), not a modelled body — see `carroceria` for the modelled shell.
+  Built from disenos/catalog/shell-template.html — QA contract and render-on-demand preserved.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estación de línea de ensamble — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">ESTACIÓN DE LÍNEA DE ENSAMBLE — transportador tipo skillet</div>
+  <div><span class="dim">altura de trabajo</span> <span class="pass">910 mm</span>
+       <span class="dim">(trabajo pesado) sobre la plataforma</span></div>
+  <div><span class="dim">alcance repetitivo ≤ 450 mm · el operador viaja con el producto</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnBody" class="on">CARROCERÍA</button>
+  <button id="btnTool" class="on">HERRAMIENTA</button>
+  <button id="btnErgo">ALTURAS CCOHS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 16, 54);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 11.4;
+camera.position.set(R*Math.cos(0.98)*Math.cos(0.34), 1.2 + R*Math.sin(0.34), R*Math.sin(0.98)*Math.cos(0.34));
+camera.lookAt(0, 1.20, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.20, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.1;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(6, 10, 5.5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0005;
+sun.shadow.camera.left=-7; sun.shadow.camera.right=7; sun.shadow.camera.top=7; sun.shadow.camera.bottom=-7;
+sun.shadow.camera.far = 30;
+scene.add(sun);
+// Block 63 §63.7 DEVIATION: the body flank and the rack uprights are vertical planes.
+const fillA = new THREE.DirectionalLight(0xbcd2ff, 0.95); fillA.position.set(1, 1.2, 10); scene.add(fillA);
+const fillB = new THREE.DirectionalLight(0xbcd2ff, 0.70); fillB.position.set(-1, 1.2, -10); scene.add(fillB);
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.16));
+scene.add(new THREE.AmbientLight(0xffffff, 0.26));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(44,44),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS (HANDBOOK §3.1; Block 63 §63.6)
+// ============================================================================
+const matDeck   = new THREE.MeshStandardMaterial({ color:0x353b41, metalness:0.0,  roughness:0.72 });
+const matSkillet= new THREE.MeshStandardMaterial({ color:0x424952, metalness:0.0,  roughness:0.62 });
+const matYellow = new THREE.MeshStandardMaterial({ color:0xd9a527, metalness:0.0,  roughness:0.62 });
+const matSteel  = new THREE.MeshStandardMaterial({ color:0x9aa0a4, metalness:0.85, roughness:0.42 });
+const matFrame  = new THREE.MeshStandardMaterial({ color:0x2f4a63, metalness:0.0,  roughness:0.58 });
+const matPaint  = new THREE.MeshStandardMaterial({ color:0x1d4d8f, metalness:0.0,  roughness:0.18 }); // clearcoat
+const matGlass  = new THREE.MeshStandardMaterial({ color:0x18242f, metalness:0.0,  roughness:0.08 });
+const matBin    = new THREE.MeshStandardMaterial({ color:0x1f6b6a, metalness:0.0,  roughness:0.68 });
+const matTool   = new THREE.MeshStandardMaterial({ color:0x1e2226, metalness:0.0,  roughness:0.55 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const solid = m => { m.castShadow = true; m.receiveShadow = true; return m; };
+const box = (w,h,d,x,y,z,mat=matSteel) => { const m = solid(new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat));
+  m.position.set(x,y,z); return m; };
+
+// --- station constants -------------------------------------------------------
+const DECK_Y = 0.12;                       // [INFER] walkable decking level (the operator's floor)
+const H_HEAVY = 0.91, H_LIGHT = 1.07, H_UP = 0.81;   // [CERT-web] CCOHS task heights
+const WORK_Y = DECK_Y + H_HEAVY;           // 1.03 — the carried body's underbody sits here
+const SK_L = 5.20, SK_W = 2.40;            // [INFER] skillet plan: long enough to carry a C-segment car
+const LINE_L = 12.0;
+const REACH = 0.45;                        // [CERT-web] repetitive reach limit
+
+// --- fixed decking either side of the moving skillets ------------------------
+for(const s of [1,-1])
+  root.add(box(LINE_L, DECK_Y, 1.10, 0, DECK_Y/2, s*(SK_W/2 + 0.55), matDeck));
+root.add(box(LINE_L, 0.010, 0.070, 0, DECK_Y+0.006,  (SK_W/2 + 1.02), matYellow));  // walkway marking
+root.add(box(LINE_L, 0.010, 0.070, 0, DECK_Y+0.006, -(SK_W/2 + 1.02), matYellow));
+
+// --- skillets: this station's platform + the leading edge of the next --------
+const SKILLET_X = [0, 5.75];               // [INFER] pitch = platform + gap
+const skillets = new THREE.Group();
+SKILLET_X.forEach((sx, i)=>{
+  const p = new THREE.Group(); p.position.x = sx;
+  p.add(box(SK_L, DECK_Y, SK_W, 0, DECK_Y/2, 0, matSkillet));
+  for(const s of [1,-1]) p.add(box(SK_L, 0.012, 0.060, 0, DECK_Y+0.007, s*(SK_W/2-0.06), matYellow));
+  if(i===0){
+    // adjustable-height skillet [CERT-web]: a scissor lift under the platform raises the product
+    for(const s of [1,-1]) for(const d of [1,-1]){
+      const bar = solid(new THREE.Mesh(new THREE.BoxGeometry(1.26, 0.070, 0.055), matFrame));
+      bar.position.set(s*0.62, (DECK_Y+0.52)/2 + 0.06, d*0.46);
+      bar.rotation.z = s*d*0.62; p.add(bar);
+    }
+    p.add(box(2.90, 0.080, 1.20, 0, 0.560, 0, matFrame));            // lift table
+    p.add(box(0.30, 0.34, 0.30, -1.70, 0.29, 0.75, matFrame));       // lift drive column
+    // 4 cradle posts -> the underbody lands exactly at the 910 mm heavy-work height
+    for(const [cx,cz] of [[-1.55,0.62],[1.55,0.62],[-1.55,-0.62],[1.55,-0.62]]){
+      p.add(box(0.13, WORK_Y-0.60, 0.13, cx, (WORK_Y+0.60)/2 - 0.02, cz, matFrame));
+      p.add(box(0.26, 0.055, 0.26, cx, WORK_Y-0.028, cz, matSteel));
+    }
+  }
+  skillets.add(p);
+});
+root.add(skillets);
+
+// --- the carried product: a proportioned MASSING of a C-segment car ----------
+// Two extrusions, not one: the greenhouse is extruded 1.30 m wide against the 1.789 m body, because
+// a constant-width extrusion is exactly the error Block 63 §63.2 names.
+const LEN = 4.284, WID = 1.789, ROOF = 1.136;   // [CERT-web] envelope, roof measured from the underbody
+function lowerShape(){
+  const s = new THREE.Shape(), AR = 0.36, AF = 1.272, ARx = -1.362, Y0 = 0.10;
+  s.moveTo(LEN/2, Y0);
+  s.lineTo(AF+AR, Y0); s.absarc(AF, Y0, AR, 0, Math.PI, false);
+  s.lineTo(ARx+AR, Y0); s.absarc(ARx, Y0, AR, 0, Math.PI, false);
+  s.lineTo(-LEN/2, Y0);
+  s.lineTo(-LEN/2, 0.60); s.lineTo(-1.78, 0.66); s.lineTo(0.55, 0.66);   // beltline
+  s.lineTo(0.95, 0.60); s.lineTo(1.75, 0.56); s.lineTo(2.10, 0.50);      // bonnet, falling forward
+  s.lineTo(LEN/2, 0.34);                                                 // front fascia
+  const door = new THREE.Path();                 // doors are OFF at this station (door-line practice)
+  door.moveTo(-1.28, 0.20); door.lineTo(0.52, 0.20); door.lineTo(0.52, 0.60); door.lineTo(-1.28, 0.60);
+  s.holes.push(door);
+  return s;
+}
+function upperShape(){
+  const s = new THREE.Shape();
+  s.moveTo(0.55, 0.62); s.lineTo(-0.28, 1.10); s.lineTo(-0.28, ROOF);
+  s.lineTo(-1.25, ROOF); s.lineTo(-1.82, 0.70); s.lineTo(-1.82, 0.62);
+  return s;
+}
+const bodies = new THREE.Group();
+{
+  const lg = new THREE.ExtrudeGeometry(lowerShape(), {depth:WID, bevelEnabled:false, curveSegments:14});
+  lg.translate(0,0,-WID/2); lg.rotateY(0);
+  const ug = new THREE.ExtrudeGeometry(upperShape(), {depth:1.30, bevelEnabled:false, curveSegments:6});
+  ug.translate(0,0,-0.65);
+  const b = new THREE.Group();
+  b.add(solid(new THREE.Mesh(lg, matPaint)));
+  b.add(solid(new THREE.Mesh(ug, matGlass)));
+  b.add(box(3.60, 0.014, 1.42, -0.20, 0.16, 0, matSteel));      // interior floor, seen through the door hole
+  b.position.set(0, WORK_Y, 0);
+  bodies.add(b);
+}
+root.add(bodies);
+
+// --- parts flow rack, set so the bins sit inside the 450 mm repetitive reach --
+const rack = new THREE.Group();
+const RACK_Z = SK_W/2 + REACH*0.78;             // bin face ~350 mm from the platform edge
+for(const rx of [-1.65, -0.05, 1.55]){
+  rack.add(box(0.070, 1.60, 0.070, rx, DECK_Y+0.80, RACK_Z+0.42, matFrame));
+  rack.add(box(0.070, 1.10, 0.070, rx, DECK_Y+0.55, RACK_Z-0.16, matFrame));
+  rack.add(box(0.070, 0.070, 0.62, rx, DECK_Y+1.02, RACK_Z+0.13, matFrame));
+  rack.add(box(0.070, 0.070, 0.62, rx, DECK_Y+0.62, RACK_Z+0.13, matFrame));
+}
+const binGeom = new THREE.BoxGeometry(0.36, 0.20, 0.28);
+const BIN_AT = [];
+for(const bx of [-1.25, -0.45, 0.35, 1.15]) for(const by of [DECK_Y+1.155, DECK_Y+0.755]) BIN_AT.push([bx,by]);
+const bins = new THREE.InstancedMesh(binGeom, matBin, BIN_AT.length);
+bins.castShadow = bins.receiveShadow = true;
+{ const m = new THREE.Matrix4();
+  BIN_AT.forEach(([bx,by],i)=>{ m.makeTranslation(bx, by, RACK_Z); bins.setMatrixAt(i,m); });
+  bins.instanceMatrix.needsUpdate = true; }
+rack.add(bins);
+root.add(rack);
+
+// --- tooling: gantry + spring balancer + DC nutrunner + torque arm -----------
+const tooling = new THREE.Group();
+for(const gx of [-2.30, 2.30]){
+  tooling.add(box(0.13, 2.95, 0.13, gx, 1.475, RACK_Z+0.75, matFrame));
+  tooling.add(box(0.11, 0.11, RACK_Z+0.75, gx, 2.90, (RACK_Z+0.75)/2, matFrame));   // cross arm over the line
+}
+tooling.add(box(4.70, 0.13, 0.13, 0, 2.90, 0.10, matFrame));                        // runway beam
+const trolley = box(0.26, 0.16, 0.22, 0.55, 2.78, 0.10, matSteel); tooling.add(trolley);
+const bal = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,0.30,16), matTool));
+bal.position.set(0.55, 2.58, 0.10); tooling.add(bal);
+const wire = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.010,0.010,0.62,6), matSteel));
+wire.position.set(0.55, 2.12, 0.10); tooling.add(wire);
+// the DC nutrunner itself: pistol body + angle head, hanging at working height
+const nut = new THREE.Group(); nut.position.set(0.55, 1.72, 0.10);
+nut.add(box(0.34, 0.11, 0.11, 0.02, 0.06, 0, matTool));
+nut.add(box(0.10, 0.22, 0.10, -0.10, -0.08, 0, matTool));
+nut.add(box(0.09, 0.09, 0.09, 0.22, -0.02, 0, matSteel));
+const sock = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.030,0.030,0.13,10), matSteel));
+sock.position.set(0.22, -0.10, 0); nut.add(sock);
+tooling.add(nut);
+tooling.add(box(0.070, 0.070, 1.05, 2.05, DECK_Y+1.32, RACK_Z-0.30, matFrame));     // torque reaction arm
+root.add(tooling);
+
+// --- andon light column + operator terminal ---------------------------------
+const andon = new THREE.Group();
+andon.add(box(0.09, 2.20, 0.09, 3.05, DECK_Y+1.10, RACK_Z+0.30, matFrame));
+['#c0392b','#d9a527','#2ecc71'].forEach((c,i)=>{
+  const l = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.085,0.085,0.115,14),
+    new THREE.MeshStandardMaterial({ color:c, emissive:c, emissiveIntensity:i===2?0.55:0.05, roughness:0.5 })));
+  l.position.set(3.05, DECK_Y+2.26 + i*0.12, RACK_Z+0.30); andon.add(l);
+});
+andon.add(box(0.09, 1.35, 0.09, -2.95, DECK_Y+0.68, RACK_Z+0.30, matFrame));
+andon.add(box(0.46, 0.30, 0.05, -2.95, DECK_Y+1.42, RACK_Z+0.26, matTool));
+andon.add(box(0.41, 0.25, 0.01, -2.95, DECK_Y+1.42, RACK_Z+0.235,
+  new THREE.MeshStandardMaterial({ color:0x0d3a44, emissive:0x0d5a66, emissiveIntensity:0.5, roughness:0.4 })));
+root.add(andon);
+
+// --- CCOHS task-height reference planes (off by default) --------------------
+const ergo = new THREE.Group();
+[[H_UP,0x4a7ec8],[H_HEAVY,0x00d4aa],[H_LIGHT,0xd9a527]].forEach(([h,c])=>{
+  const pl = new THREE.Mesh(new THREE.PlaneGeometry(SK_L, SK_W),
+    new THREE.MeshBasicMaterial({ color:c, transparent:true, opacity:0.16, side:THREE.DoubleSide, depthWrite:false }));
+  pl.rotation.x = -Math.PI/2; pl.position.y = DECK_Y + h; ergo.add(pl);
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(SK_L, 0.008, 0.012),
+    new THREE.MeshBasicMaterial({ color:c }));
+  edge.position.set(0, DECK_Y + h, SK_W/2); ergo.add(edge);
+});
+ergo.visible = false; root.add(ergo);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ============================================================================
+// ZONE 3 — UI (render is gated: every handler calls requestRender)
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(document.getElementById('btnBody'), bodies);
+toggle(document.getElementById('btnTool'), tooling);
+toggle(document.getElementById('btnErgo'), ergo);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  if(controls.autoRotate) needsRender = true;
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__estacionLineaEnsambleApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__estacion-linea-ensambleApp'] = globalThis.__estacionLineaEnsambleApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

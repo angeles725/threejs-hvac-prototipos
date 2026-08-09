@@ -1,0 +1,138 @@
+# DesignSpec — vertical storage tank on a skirt
+# Third asset of my run in the catalog `estructuras` family.
+# EVIDENCE: no tank standard or datasheet is preserved; every dimension is [INFER]. What IS
+# certified here is the LIGHTING method (HANDBOOK §3.3 studio variant), which this asset needed.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: tanque-almacenamiento
+family: estructuras
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  scores: {silhouette: 2, components: 2, hierarchy: 1, repetition: 3,
+           material_layers: 1, detail: 2, occlusion: 0, action_readiness: 0}
+  tier: moderate
+  notes: >
+    material_layers 1: this asset is essentially ONE material over a large curved area, which is
+    exactly why it is the hardest lighting case in the family and the easiest to get wrong.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+
+references:
+  - source: "research/HANDBOOK.md §3.3 (rig key/fill/rim + variante estudio)"
+    evidences: >
+      [CERT] "el metal metálico-binario necesita fuentes grandes y suaves para revelar curvatura,
+      no un highlight puntual y plano"; RectAreaLight key ~5-8, fill 1/3-1/4 of key, and
+      RectAreaLightUniformsLib.init() must run once before rendering. This asset is the first in
+      the catalog to actually need it, and the first capture proved the point: with only the
+      house rig the shell rendered near-black.
+    suitability: pass
+  - source: "research/HANDBOOK.md §3.1"
+    evidences: "[CERT] bare stainless 0.9-1.0; concrete plinth and painted gauge board are dielectrics."
+    suitability: pass
+  - source: "NEGATIVE — no tank source"
+    evidences: "No API/EN tank standard or vendor datasheet is preserved in research/sources/."
+    suitability: fail
+
+dimensions_real:
+  diameter_m:      {value: 3.00, confidence: low}
+  shell_height_m:  {value: 5.20, confidence: low}    # 3 courses
+  skirt_height_m:  {value: 0.90, confidence: low}
+  roof_rise_m:     {value: 0.55, confidence: low}    # conical roof
+  overall_height_m: {value: 6.85, confidence: low}
+  course_count:    {value: 3,    confidence: low}
+  manway_d_m:      {value: 0.56, confidence: low}
+  outlet_d_m:      {value: 0.17, confidence: low}
+  handrail_h_m:    {value: 1.10, confidence: low}
+  cage_start_h_m:  {value: 2.20, confidence: low}    # [INFER] cages conventionally start ~2-3 m up
+
+hierarchy:
+  - name: root
+    children:
+      - name: base      # concrete ring plinth, OPEN-ENDED skirt ring, base ring, skirt vents, anchor chairs
+      - name: shell     # 3 courses + circumferential weld seams + shell manway with bolt ring
+      - name: roof      # conical roof, curb angle, roof manway, free vent
+      - name: rails     # instanced roof handrail posts + two torus rails
+      - name: ladder    # stringers, instanced rungs, instanced cage hoops, cage straps, top landing
+      - name: nozzles   # bottom outlet + valve, top inlet with downcomer, level gauge board
+
+materials:
+  - id: stainless-shell
+    family: bare-metal
+    color: "#c4cacd"
+    metalness: 0.95
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1 bare metal 0.9-1.0"
+    confidence: 0.9
+  - id: weld-seam
+    family: bare-metal
+    color: "#9aa1a6"
+    metalness: 0.95
+    roughness: 0.58
+    evidence: "HANDBOOK §3.1; rougher than the plate, which is what makes a seam read"
+    confidence: 0.8
+  - id: concrete-plinth
+    family: concrete
+    color: "#8e8d88"
+    metalness: 0.0
+    roughness: 0.95
+    evidence: "HANDBOOK §3.1 dielectric"
+    confidence: 0.85
+
+critical_features:
+  - id: shell-reads-as-metal
+    desc: >
+      The shell shows a vertical reflection gradient, not a flat tone and not black. This is the
+      pass/fail that took the studio rig: environmentIntensity alone did not achieve it.
+    threshold: 0.85
+  - id: hollow-skirt
+    desc: "The skirt is an OPEN-ENDED ring with vents and anchor chairs, not a solid cylinder."
+    threshold: 0.75
+  - id: correct-cage
+    desc: >
+      Cage hoops are HORIZONTAL rings around the climber with the missing sector facing the shell.
+      The first build composed the rotation from a guessed Euler order and the hoops stood off to
+      one side, encircling nothing.
+    threshold: 0.80
+  - id: course-and-nozzle-grammar
+    desc: "Three courses with circumferential seams, a shell manway with a bolt ring, top inlet, bottom outlet with valve, level gauge."
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 70     # measured 49 at the review camera
+    tris: 12000   # measured ~5,240
+
+camera: {azimuth_deg: 49, elevation_deg: 14, fov: 38, target_y_m: 3.10, radius_m: 12.5}
+
+lighting: house-rig + HANDBOOK §3.3 STUDIO VARIANT (RectAreaLight key + fill)
+  # THE DISTINCTION THAT MATTERS FOR THIS FAMILY: a FLAT panel wall (camara-frigorifica,
+  # puerta-cuarto-frio) is fixed with a camera-side DirectionalLight fill. A CURVED bare-metal
+  # body is not — a hard fill flattens the gradient that makes it read as a cylinder. The curved
+  # case takes large soft area sources instead. Both are lighting-only; §3.1 values are untouched.
+  # RectAreaLight casts no shadow, so the sun stays as the contact-shadow source.
+
+ui_controls: ["AUTO-ROTATE", "ESCALERA", "BARANDA", "BOQUILLAS"]
+
+instancing:
+  - {what: "roof handrail posts", count: 14, draws_saved: "14 -> 1"}
+  - {what: "ladder rungs", count: 19, draws_saved: "19 -> 1"}
+  - {what: "cage hoops", count: 8, draws_saved: "8 -> 1"}
+
+colorTarget:
+  srgb: [152, 159, 164]
+  deltaE00Max: 8
+  crop: "80x140+600+300"     # mid-shell, between weld seams, at 1280x800
+  secondary_observed:
+    concrete_plinth: [178, 181, 181]   # 60x25+520+690 — the dielectric reference. If the shell
+                                       # ever drifts down toward black again, this stays put and
+                                       # the delta between the two is the tell.

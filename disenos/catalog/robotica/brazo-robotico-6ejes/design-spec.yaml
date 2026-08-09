@@ -1,0 +1,209 @@
+# DesignSpec — 6-axis industrial robot arm (235 kg / 2.65 m class)
+# First asset of the catalog `robotica` family. Dimensional evidence is [Block 62]
+# (research/threejs-block62.md §62.2), which transcribes the preserved ABB product specification
+# for the IRB 6700-235/2.65. Joint-hierarchy contract: [Block 62] §62.8.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: brazo-robotico-6ejes
+family: robotica
+track: needs-research        # articulation research done in [Block 62] before modelling
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 17 -> complex.
+  scores: {silhouette: 2, components: 3, hierarchy: 3, repetition: 1,
+           material_layers: 2, detail: 2, occlusion: 1, action_readiness: 3}
+  tier: complex
+  notes: >
+    hierarchy 3 and action_readiness 3 are the whole point: this asset is a POSE, not a shape.
+    Six nested joint Groups, each with its origin ON the real axis of rotation, and every angle
+    clamped to the published working range. repetition 1: only the anchor bolts repeat, so
+    instancing applies there and nowhere else.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/threejs-block62.md
+  reuse_pointers:
+    joint_pivot_pattern: "disenos/catalog/puertas/puerta-cuarto-frio/ (pivot on the hinge line, not the centroid)"
+    render_gate: "research/threejs-block56.md (render-on-demand)"
+
+references:
+  - source: "sources/datasheets/abb-irb6700-product-spec (ABB 3HAC080365-001 Rev. D) §1.1.3, §1.8.1"
+    evidences: >
+      Variant IRB 6700-235/2.65: 235 kg handling capacity, 2.65 m reach [CERT-doc];
+      base plate 1009 x 745 mm [CERT-doc]; axis-2 height 780 mm [CERT-doc];
+      axis-1 radius front 532 / back 633 mm [CERT-doc]; wrist (axis 5 -> tool flange) 200 mm
+      [CERT-doc]; working-range envelope 2650 horizontal / 3114 max height / 320 below base
+      [CERT-doc]; axis ranges A1 +/-170, A2 -65/+85, A3 -180/+70, A4 +/-300, A5 +/-130, A6 +/-360
+      [CERT-doc]; DressPack cable loom is a documented option on the upper arm [CERT-doc].
+    suitability: pass
+  - source: "research/threejs-block62.md §62.2, §62.8"
+    evidences: >
+      The two-cote closure that certifies L_upper + L_fore + L_wrist = 2330 mm, the confidence
+      discipline on the upper-arm/forearm split, and the six-rule joint-hierarchy contract.
+    suitability: pass
+
+dimensions_real:
+  # CONFIDENCE DISCIPLINE ([Block 62] §62.2): the drawing certifies the ENVELOPE and the axis
+  # locations, not the individual link lengths. Only the sum of the links is certified.
+  base_plate_l_m:  {value: 1.009, confidence: high}   # [CERT-doc]
+  base_plate_w_m:  {value: 0.745, confidence: high}   # [CERT-doc]
+  base_plate_h_m:  {value: 0.190, confidence: low}    # [INFER] pedestal height, not published
+  axis2_x_m:       {value: 0.320, confidence: high}   # [CERT-doc] working-range diagram
+  axis2_y_m:       {value: 0.780, confidence: high}   # [CERT-doc] main-dimensions drawing
+  radius_ax1_front_m: {value: 0.532, confidence: high}  # [CERT-doc] Pos. B, this variant
+  radius_ax1_back_m:  {value: 0.633, confidence: high}  # [CERT-doc] Pos. C, this variant
+  reach_m:         {value: 2.650, confidence: high}   # [CERT-doc]
+  max_height_m:    {value: 3.114, confidence: high}   # [CERT-doc]
+  link_sum_m:      {value: 2.330, confidence: high}   # [CERT-doc] closed by two independent cotes
+  upper_arm_m:     {value: 1.135, confidence: med}    # [INFER] cote E read as the upper arm
+  forearm_m:       {value: 0.995, confidence: low}    # [INFER] RESIDUAL — carries the whole split error
+  wrist_m:         {value: 0.200, confidence: high}   # [CERT-doc] Pos. A, standard variants
+  arm_section_m:   {value: 0.31,  confidence: low}    # [INFER] casting section, never published
+
+hierarchy:
+  # Rule 1 of [Block 62] §62.8: one Group per joint, origin ON the axis, link geometry as a CHILD.
+  - name: root
+    children:
+      - name: base            # plate + pedestal + 8 anchor bolts (InstancedMesh)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: j1              # axis 1 — rotation about Y at the top of the base
+        pivot: [0, 0.190, 0]
+        animation: rotate-y
+        children:
+          - name: swing_body  # +532 front / -633 back of the axis, plus the rear counterweight
+          - name: j2          # axis 2 — the CERTIFIED shoulder location
+            pivot: [0.320, 0.780, 0]
+            animation: rotate-z
+            children:
+              - name: upper_arm     # single tapered casting, axis 2 -> axis 3
+              - name: j3            # axis 3 — elbow
+                pivot: [0, 1.135, 0]
+                animation: rotate-z
+                children:
+                  - name: j4        # axis 4 — roll about the forearm's own axis
+                    animation: rotate-x
+                    children:
+                      - name: forearm      # tube + housing + DressPack loom
+                      - name: j5           # axis 5 — bend, at the wrist centre
+                        pivot: [0.995, 0, 0]
+                        animation: rotate-z
+                        children:
+                          - name: j6       # axis 6 — turn
+                            animation: rotate-x
+                            children:
+                              - name: tool_flange   # lands exactly on the certified 200 mm cote
+                              - name: tool          # vacuum end-effector (togglable)
+
+materials:
+  - id: paint-orange-body
+    family: painted-metal
+    color: "#dd6a1e"
+    metalness: 0.0             # painted casting — DIELECTRIC (HANDBOOK §3.1 near-binary)
+    roughness: 0.48
+    evidence: "HANDBOOK §3.1 painted metal 0.0-0.05; [Block 62] §62.9 no RAL is published"
+    confidence: 0.7
+  - id: paint-orange-shade
+    family: painted-metal
+    color: "#c85c19"
+    metalness: 0.0
+    roughness: 0.52
+    evidence: "second paint value so adjacent castings read as separate parts, not one extrusion"
+    confidence: 0.6
+  - id: housing-grey
+    family: painted-metal
+    color: "#3b4148"
+    metalness: 0.0
+    roughness: 0.60
+    evidence: "gearbox/bearing housings are a darker machine grey on every ABB large robot [CERT-a]"
+    confidence: 0.6
+  - id: flange-steel
+    family: bare-metal
+    color: "#c9ced1"
+    metalness: 0.92            # the tool flange IS machined bare steel
+    roughness: 0.32
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0"
+    confidence: 0.85
+  - id: bolt-steel
+    family: bare-metal
+    color: "#a8aeb3"
+    metalness: 0.90
+    roughness: 0.42
+    evidence: "HANDBOOK §3.1 bare-metal"
+    confidence: 0.8
+  - id: cable-loom
+    family: rubber
+    color: "#14181c"
+    metalness: 0.0
+    roughness: 0.85
+    evidence: "[CERT-doc] §2 DressPack; dielectric per HANDBOOK §3.1"
+    confidence: 0.7
+
+critical_features:
+  - id: joint-pivots-on-axis
+    desc: >
+      Every joint rotates about its REAL axis: axis 2 at (0.320, 0.780) and axis 5 at the wrist
+      centre. Through the whole pose set the castings stay connected — no separation at the elbow,
+      no interpenetration at the shoulder. This is the feature the counts cannot see, so it is
+      verified from captured pose screenshots, not from draw calls.
+    threshold: 0.85
+  - id: big-robot-silhouette
+    desc: >
+      The rear counterweight behind axis 1, the stepped swing body, the tapered upper-arm casting
+      and the slim wrist read as a 235 kg floor-mounted machine — not a scaled-up desktop arm.
+    threshold: 0.78
+  - id: envelope-truth
+    desc: >
+      Tool flange at full extension lands on the certified 2.65 m reach, and the ENVELOPE overlay
+      traces an arc of radius 2.330 m about axis 2 — the drawn envelope and the built arm agree.
+    threshold: 0.80
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 45
+    tris: 40000
+  measured:
+    draws: 37
+    tris: 1998
+    console_errors: 0
+
+camera:
+  azimuth_deg: 51.6
+  elevation_deg: 15
+  fov: 38
+  target_y_m: 1.35
+  radius_m: 5.2
+
+lighting: house-rig + vertical-subject fill
+  # Same documented deviation as puerta-cuarto-frio, for the same reason and at lower intensity:
+  # the wrist, flange and bolts are bare metal on a mostly VERTICAL machine, so they reflect the
+  # dark horizon and read flat grey. One fill opposite the key (1.0) and environmentIntensity 2.0.
+  # Metalness/roughness are UNCHANGED (HANDBOOK §3.1) — the fix is lighting, never a fudged material.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "POSE →"        # cycles HOME / PICK / TRANSFER / OVERHEAD; animated, holds needsRender while moving
+  - "ENVELOPE"      # certified working-range arc + floor reach circle
+  - "TOOL"          # vacuum end-effector on/off
+
+public_api:
+  # goToPose is the entry point for any external driver. setPose is LOW-LEVEL: the animation loop
+  # rewrites it every frame, so calling it from outside snaps back and looks like a broken asset.
+  - "__brazoRobotico6ejesApp.goToPose({a1,a2,a3,a4,a5,a6}, name?)"
+  - "__brazoRobotico6ejesApp.limits  # the published working ranges, for clamping"
+
+colorTarget:
+  # MEASURED from the rendered upper-arm casting (headless SwiftShader capture at 1280x800), then
+  # frozen as the regression anchor. Not a guessed value, and not an RAL lookup — [Block 62] §62.9
+  # records that no RAL is published for this machine.
+  srgb: [235, 143, 61]
+  deltaE00Max: 8
+  crop: "60x60+660+400"   # clean painted flank of the upper arm, HOME pose, at 1280x800

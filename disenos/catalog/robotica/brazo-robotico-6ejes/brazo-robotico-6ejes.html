@@ -1,0 +1,371 @@
+<!doctype html>
+<!--
+  brazo-robotico-6ejes — catalog asset, family `robotica`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block62.md §62.2 (ABB Product specification IRB 6700,
+  3HAC080365-001 Rev. D — variant IRB 6700-235/2.65).
+  Joint-hierarchy contract: [Block 62] §62.8 — one Group per joint, origin ON the axis.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brazo robótico 6 ejes 2.65 m — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+  #joints{position:absolute;left:14px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text-muted);line-height:1.6}
+  #joints b{color:#fff;font-weight:600}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Brazo robótico 6 ejes — 235 kg · alcance 2.65 m</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· IRB 6700-235/2.65 · IP67</span></div>
+  <div class="dim">base 1.009 × 0.745 m · eje 2 a 0.780 m · altura máx. 3.114 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnPose">POSE →</button>
+  <button id="btnEnv">ENVELOPE</button>
+  <button id="btnTool" class="on">TOOL</button>
+</div>
+<div id="joints"></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 62] §62.2) ----------
+const BASE_L = 1.009, BASE_W = 0.745, BASE_H = 0.190;   // [CERT-doc] base plate footprint
+const AX2_X  = 0.320, AX2_Y = 0.780;                    // [CERT-doc] axis-2 offset / shoulder height
+const R_FRONT = 0.532, R_BACK = 0.633;                  // [CERT-doc] radius axis 1 front / back
+const L_UPPER = 1.135;                                  // [INFER] cote E — upper arm, confidence med
+const L_FORE  = 0.995;                                  // [INFER] residual of the certified sum
+const L_WRIST = 0.200;                                  // [CERT-doc] axis 5 -> tool flange
+const REACH   = 2.650, H_MAX = 3.114;                   // [CERT-doc] working-range envelope
+// L_UPPER + L_FORE + L_WRIST = 2.330 = REACH - AX2_X   <- the certified two-cote closure
+
+// axis working ranges, degrees [CERT-doc] §1.8.1 "Type of motion"
+const LIMITS = { a1:[-170,170], a2:[-65,85], a3:[-180,70], a4:[-300,300], a5:[-130,130], a6:[-360,360] };
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 14, 42);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 5.2, AZ = 0.90, EL = 0.26, TY = 1.35;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TY + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TY, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TY, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.0;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(5, 8, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-4.5; sun.shadow.camera.right=4.5; sun.shadow.camera.top=4.5; sun.shadow.camera.bottom=-4.5;
+scene.add(sun);
+// VERTICAL-SUBJECT FILL (gotcha from [Block 57]): the wrist and the tool flange are BARE machined
+// steel on a mostly vertical machine — without a light to reflect they read as flat grey. The fill
+// sits opposite the key, aimed into the front faces. Metalness/roughness stay per HANDBOOK §3.1.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.0);
+fill.position.set(-4.0, 3.0, 6.5);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   The castings are PAINTED (dielectric, metalness 0). Only the machined flange, the shafts and
+//   the fasteners are bare metal. [Block 62] §62.9: no RAL is published for this machine, so the
+//   orange is a brand observation and the design-spec colorTarget is MEASURED from the render.
+// ============================================================================
+const matPaint = new THREE.MeshStandardMaterial({ color:0xdd6a1e, metalness:0.0, roughness:0.48 });
+const matPaint2= new THREE.MeshStandardMaterial({ color:0xc85c19, metalness:0.0, roughness:0.52 });
+const matGrey  = new THREE.MeshStandardMaterial({ color:0x3b4148, metalness:0.0, roughness:0.60 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x1d2126, metalness:0.0, roughness:0.70 });
+const matSteel = new THREE.MeshStandardMaterial({ color:0xc9ced1, metalness:0.92, roughness:0.32 });
+const matBolt  = new THREE.MeshStandardMaterial({ color:0xa8aeb3, metalness:0.90, roughness:0.42 });
+const matCable = new THREE.MeshStandardMaterial({ color:0x14181c, metalness:0.0, roughness:0.85 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Joint chain per [Block 62] §62.8:
+//   base → j1(Y) → j2(Z) → j3(Z) → j4(X) → j5(Z) → j6(X) → flange → tool
+//   Every joint Group sits ON its axis of rotation; link geometry is a CHILD offset from it.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,rt,rb,h,mat,x,y,z,rx,rz,seg=20)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  if(rx) m.rotation.x = rx; if(rz) m.rotation.z = rz; p.add(m); return m; };
+
+// --- base plate + anchor bolts (real repetition -> InstancedMesh, block54 §2.3) ---
+const base = new THREE.Group();
+put(base, BASE_L, BASE_H*0.30, BASE_W, matGrey, 0, BASE_H*0.15, 0);                 // steel base plate
+put(base, BASE_L*0.74, BASE_H*0.70, BASE_W*0.74, matPaint2, 0, BASE_H*0.30 + BASE_H*0.35, 0);
+const boltGeo = new THREE.CylinderGeometry(0.020, 0.020, 0.040, 10);
+const bolts = new THREE.InstancedMesh(boltGeo, matBolt, 8);                          // anchor bolts
+bolts.castShadow = true;
+{ const m = new THREE.Matrix4(); let i = 0;
+  for(const sx of [-1,1]) for(const sz of [-1,1]) for(const dz of [0.42,0.20]){
+    m.makeTranslation(sx*BASE_L*0.44, BASE_H*0.30 + 0.020, sz*dz*BASE_W);
+    bolts.setMatrixAt(i++, m);
+  } }
+bolts.instanceMatrix.needsUpdate = true;
+base.add(bolts);
+root.add(base);
+
+// --- j1 : axis 1, vertical rotation. Origin on the axis, at the top of the base. ---
+const j1 = new THREE.Group();
+j1.position.set(0, BASE_H, 0);
+root.add(j1);
+// the swing body: extends R_BACK behind and R_FRONT in front of the axis [CERT-doc]
+const swingL = R_FRONT + R_BACK, swingCx = (R_FRONT - R_BACK)/2;
+put(j1, swingL, 0.26, BASE_W*0.88, matPaint, swingCx, 0.13, 0);
+// shoulder yoke rising to the axis-2 bearing at (AX2_X, AX2_Y) — narrower than the swing body so
+// the two castings read as ONE stepped body instead of two boxes that happen to touch
+const yokeH = AX2_Y - BASE_H - 0.26;
+put(j1, 0.40, yokeH, 0.56, matPaint, AX2_X - 0.02, 0.26 + yokeH/2, 0);
+put(j1, 0.30, yokeH*0.55, 0.62, matPaint2, AX2_X - 0.02, 0.26 + yokeH*0.30, 0);   // shoulder fillet
+// rear counterweight — the mass that makes a big ABB arm read as a big ABB arm
+cyl(j1, 0.21, 0.21, 0.48, matPaint2, -R_BACK + 0.23, 0.34, 0, 0, Math.PI/2, 16);
+put(j1, 0.30, 0.22, 0.44, matPaint2, -R_BACK + 0.30, 0.24, 0);
+// axis-1 bearing collar
+cyl(j1, 0.30, 0.33, 0.10, matGrey, 0, 0.05, 0);
+
+// --- j2 : axis 2 (shoulder). Origin exactly on the certified axis location. ---
+const j2 = new THREE.Group();
+j2.position.set(AX2_X, AX2_Y - BASE_H, 0);
+j1.add(j2);
+// bearing housings on both sides of the yoke
+cyl(j2, 0.20, 0.20, 0.68, matGrey, 0, 0, 0, 0, Math.PI/2, 24);
+// upper arm: ONE continuous tapered casting from the axis-2 bearing up to the axis-3 bearing.
+// (An earlier version stacked 5 boxes to fake the taper — it read as a staircase, so the taper is
+// now a single 8-sided cone, which is what a cast arm actually looks like in silhouette.)
+const upper = new THREE.Group(); j2.add(upper);
+cyl(upper, 0.155, 0.215, L_UPPER, matPaint, 0, L_UPPER/2, 0, 0, 0, 8);
+// the flat flanks that make it a CASTING rather than a pipe
+for(const sz of [-1,1]) put(upper, 0.30, L_UPPER*0.88, 0.045, matPaint2, 0, L_UPPER*0.46, sz*0.155);
+// stiffening rib along the back
+put(upper, 0.055, L_UPPER*0.72, 0.09, matPaint2, -0.17, L_UPPER*0.42, 0);
+
+// --- j3 : axis 3 (elbow). Origin at the top of the upper arm. ---
+const j3 = new THREE.Group();
+j3.position.set(0, L_UPPER, 0);
+j2.add(j3);
+cyl(j3, 0.185, 0.185, 0.56, matGrey, 0, 0, 0, 0, Math.PI/2, 22);
+put(j3, 0.30, 0.30, 0.62, matPaint, 0.02, 0, 0);
+// elbow drive motor, hung off the back of the joint (the classic ABB silhouette)
+cyl(j3, 0.115, 0.115, 0.26, matDark, -0.16, 0.05, -0.34, Math.PI/2, 0, 16);
+
+// --- j4 : axis 4, roll about the forearm's own axis (origin at the elbow, pointing +X) ---
+const j4 = new THREE.Group();
+j3.add(j4);
+// forearm: tube + housing, from the elbow out to the axis-5 bearing
+const fore = new THREE.Group(); j4.add(fore);
+put(fore, L_FORE*0.42, 0.30, 0.36, matPaint, L_FORE*0.21, 0, 0);
+cyl(fore, 0.115, 0.135, L_FORE*0.62, matPaint2, L_FORE*0.69, 0, 0, 0, Math.PI/2, 20);
+put(fore, 0.14, 0.16, 0.30, matPaint2, L_FORE*0.30, 0.16, 0);
+// upper-arm DressPack: the cable loom runs along the forearm flank [CERT-doc §2 DressPack exists]
+{ const pts = [ new THREE.Vector3(0.02, 0.16, 0.19), new THREE.Vector3(L_FORE*0.30, 0.24, 0.21),
+                new THREE.Vector3(L_FORE*0.66, 0.16, 0.19), new THREE.Vector3(L_FORE*0.94, 0.06, 0.14) ];
+  const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 18, 0.032, 8, false), matCable);
+  tube.castShadow = true; fore.add(tube); }
+
+// --- j5 : axis 5 (bend). Origin at the wrist centre = end of the forearm. ---
+const j5 = new THREE.Group();
+j5.position.set(L_FORE, 0, 0);
+j4.add(j5);
+cyl(j5, 0.125, 0.125, 0.30, matGrey, 0, 0, 0, 0, Math.PI/2, 20);
+
+// --- j6 : axis 6 (turn) + tool flange. L_WRIST is CERTIFIED, so the flange lands on the cote. ---
+const j6 = new THREE.Group();
+j5.add(j6);
+cyl(j6, 0.105, 0.115, L_WRIST - 0.03, matGrey, (L_WRIST - 0.03)/2, 0, 0, 0, Math.PI/2, 20);
+const flange = new THREE.Group(); flange.position.set(L_WRIST, 0, 0); j6.add(flange);
+cyl(flange, 0.100, 0.100, 0.030, matSteel, -0.015, 0, 0, 0, Math.PI/2, 24);
+cyl(flange, 0.042, 0.042, 0.016, matSteel, 0.006, 0, 0, 0, Math.PI/2, 16);
+
+// --- tool: a vacuum end-effector — adapter plate, cross beam and four suction cups hanging DOWN
+//     from it, so the payload reads as something the flange actually carries.
+const tool = new THREE.Group(); flange.add(tool);
+put(tool, 0.045, 0.22, 0.22, matDark, 0.025, 0, 0);                     // adapter block
+put(tool, 0.09, 0.06, 0.40, matGrey, 0.09, 0, 0);                       // cross beam (across the flange)
+put(tool, 0.30, 0.06, 0.09, matGrey, 0.20, 0, 0);                       // longitudinal beam
+for(const [x,z] of [[0.09,0.16],[0.09,-0.16],[0.31,0.0],[0.09,0.0]]){
+  cyl(tool, 0.018, 0.018, 0.06, matGrey, x, -0.06, z, 0, 0, 10);        // stem
+  cyl(tool, 0.052, 0.030, 0.05, matCable, x, -0.11, z, 0, 0, 14);       // suction cup (bell down)
+}
+
+// --- reach envelope: the certified working range, drawn as a wireframe hint (togglable) ---
+const envelope = new THREE.Group();
+{ const g = new THREE.BufferGeometry();
+  const pts = [];
+  // vertical section of the envelope through the arm plane: an arc of radius 2.330 about axis 2
+  const r = L_UPPER + L_FORE + L_WRIST;
+  for(let i=0;i<=48;i++){
+    const a = -Math.PI*0.28 + (i/48)*Math.PI*1.05;
+    pts.push(new THREE.Vector3(AX2_X + r*Math.cos(a), AX2_Y + r*Math.sin(a), 0));
+  }
+  g.setFromPoints(pts);
+  const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color:0x00d4aa, transparent:true, opacity:0.5 }));
+  envelope.add(line);
+  // reach circle on the floor
+  const c = new THREE.Mesh(new THREE.RingGeometry(REACH-0.012, REACH+0.012, 96),
+    new THREE.MeshBasicMaterial({ color:0x00d4aa, transparent:true, opacity:0.28, side:THREE.DoubleSide }));
+  c.rotation.x = -Math.PI/2; c.position.y = 0.004; envelope.add(c);
+}
+envelope.visible = false;
+root.add(envelope);
+
+scene.add(root);
+
+// ---------- forward kinematics: six angles in, whole arm follows (scene-graph FK) ----------
+const rad = d => d*Math.PI/180;
+const clamp = (v,[lo,hi]) => Math.min(hi, Math.max(lo, v));
+const jointsEl = document.getElementById('joints');
+let cur = { a1:0, a2:0, a3:0, a4:0, a5:0, a6:0 };
+function setPose(p){
+  // clamp to the PUBLISHED ranges — an out-of-range pose is a bug no visual check would catch
+  cur = { a1:clamp(p.a1,LIMITS.a1), a2:clamp(p.a2,LIMITS.a2), a3:clamp(p.a3,LIMITS.a3),
+          a4:clamp(p.a4,LIMITS.a4), a5:clamp(p.a5,LIMITS.a5), a6:clamp(p.a6,LIMITS.a6) };
+  j1.rotation.y = -rad(cur.a1);
+  j2.rotation.z = -rad(cur.a2);   // +a2 swings the upper arm FORWARD (+X)
+  j3.rotation.z =  rad(cur.a3);   // ABB datum: a3 = 0 -> forearm PERPENDICULAR to the upper arm
+                                  // (with a2 = 0 that is horizontal). The joint angle is relative
+                                  // to the parent link, which is exactly what the scene graph does.
+  j4.rotation.x =  rad(cur.a4);
+  j5.rotation.z = -rad(cur.a5);
+  j6.rotation.x =  rad(cur.a6);
+  jointsEl.innerHTML = `<b>POSE</b> ${poseName}<br>` +
+    `A1 ${cur.a1.toFixed(0)}° · A2 ${cur.a2.toFixed(0)}° · A3 ${cur.a3.toFixed(0)}°<br>` +
+    `A4 ${cur.a4.toFixed(0)}° · A5 ${cur.a5.toFixed(0)}° · A6 ${cur.a6.toFixed(0)}°`;
+}
+
+// authored joint-angle presets — no IK ([Block 62] §62.8 rule 6)
+const POSES = [
+  { name:'HOME',    a1:0,   a2:0,   a3:0,   a4:0, a5:0,   a6:0 },
+  { name:'PICK',    a1:-35, a2:52,  a3:-38, a4:0, a5:-45, a6:0 },
+  { name:'TRANSFER',a1:20,  a2:20,  a3:5,   a4:0, a5:-30, a6:30 },
+  { name:'OVERHEAD',a1:0,   a2:-30, a3:55,  a4:0, a5:20,  a6:0 },
+];
+let poseIdx = 0;
+let poseName = POSES[0].name;
+setPose(POSES[0]);
+
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+//          The pose transition is a per-frame animation — it holds needsRender while moving.
+// ============================================================================
+let target = { ...POSES[0] };
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnPose = document.getElementById('btnPose');
+btnPose.onclick = ()=>{ poseIdx = (poseIdx + 1) % POSES.length; target = { ...POSES[poseIdx] };
+  poseName = POSES[poseIdx].name; requestRender(); };
+
+const btnEnv = document.getElementById('btnEnv');
+btnEnv.onclick = ()=>{ envelope.visible = !envelope.visible; btnEnv.classList.toggle('on', envelope.visible); requestRender(); };
+
+const btnTool = document.getElementById('btnTool');
+btnTool.onclick = ()=>{ tool.visible = !tool.visible; btnTool.classList.toggle('on', tool.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+let wasMoving = false;
+function animate(){
+  requestAnimationFrame(animate);
+  let moving = false, next = {};
+  for(const k of ['a1','a2','a3','a4','a5','a6']){
+    const d = target[k] - cur[k];
+    if(Math.abs(d) > 0.05){ next[k] = cur[k] + d*0.10; moving = true; } else next[k] = target[k];
+  }
+  if(moving){ setPose(next); needsRender = true; }
+  // Shadows are FROZEN (block54 §5-d) — cheap, but a frozen map keeps the OLD pose's shadow on
+  // the floor after the arm moves. Re-bake exactly once, when the motion settles: one extra
+  // shadow pass per pose change, not one per frame.
+  if(wasMoving && !moving){ renderer.shadowMap.needsUpdate = true; needsRender = true; }
+  wasMoving = moving;
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+// goToPose is the PUBLIC entry point: it moves the animation TARGET. Calling the low-level
+// setPose from outside would be overwritten by the very next animation frame, so an external
+// driver (headless capture, dashboard) that used it would silently see the arm snap back.
+const goToPose = (p, name='CUSTOM') => { target = { ...cur, ...p }; poseName = name; requestRender(); };
+const __app = { runtime:{ scene, renderer, camera, root },
+                goToPose, setPose, poses:POSES, limits:LIMITS };
+globalThis.__brazoRobotico6ejesApp = __app;
+globalThis['__brazo-robotico-6ejesApp'] = __app;   // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

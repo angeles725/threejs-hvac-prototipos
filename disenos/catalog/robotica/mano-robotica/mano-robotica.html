@@ -1,0 +1,312 @@
+<!doctype html>
+<!--
+  mano-robotica — catalog asset, family `robotica`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block62.md §62.4 (Robotiq 2F-85 instruction manual §6).
+  The subject is the ADAPTIVE LINKAGE, not the span: two phalanges per finger, parallel grasp on a
+  flat part, encompassing grasp when the proximal phalanx stalls on a round one.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mano robótica adaptativa 85 mm — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+  #state{position:absolute;left:14px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text-muted);line-height:1.6}
+  #state b{color:#fff;font-weight:600}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Mano robótica adaptativa — 2 dedos, carrera 85 mm</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· Robotiq 2F-85 · 5 kg · 20-235 N</span></div>
+  <div class="dim">alto 162.8 mm · ancho 148.6 mm · 925 g · acople Ø50 PCD</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnGrip">ABRIR / CERRAR</button>
+  <button id="btnMode">MODO: PARALELO</button>
+  <button id="btnPart" class="on">PIEZA</button>
+</div>
+<div id="state"></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 62] §62.4) ----------
+const H_MAX   = 0.1628;   // [CERT-doc] maximum height, coupling face to fingertip
+const W_MAX   = 0.1486;   // [CERT-doc] maximum width, fingers open
+const STROKE  = 0.085;    // [CERT-doc] gripper opening
+const CPL_PCD = 0.050;    // [CERT-doc] coupling pitch-circle diameter, M6
+const CPL_H   = 0.014;    // [INFER] coupling plate thickness
+const BODY_H  = 0.058;    // [INFER] split of H_MAX across body/proximal/distal
+const PROX_L  = 0.050;    // [INFER] proximal phalanx
+const DIST_L  = 0.043;    // [INFER] distal phalanx   -> 0.014+0.058+0.050+0.043 = 0.165 ≈ H_MAX
+const BODY_W  = 0.078, BODY_D = 0.060;   // [INFER] body envelope inside W_MAX
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 1.2, 4.5);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.01, 50);
+const R = 0.62, AZ = 0.95, EL = 0.22, TY = 0.125;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TY + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TY, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TY, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.1;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(0.5, 1.0, 0.6); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0002;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-0.4; sun.shadow.camera.right=0.4; sun.shadow.camera.top=0.4; sun.shadow.camera.bottom=-0.4;
+scene.add(sun);
+// The anodised body and the machined fingers are near-vertical bare/coated metal at close range —
+// [Block 57] gotcha. One fill opposite the key so the flanks are not flat grey. Materials unchanged.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.05);
+fill.position.set(-0.55, 0.42, 0.75);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(4,4),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Anodised body = coated -> DIELECTRIC. Machined links and coupling = bare metal. Pads = rubber.
+// ============================================================================
+const matBody = new THREE.MeshStandardMaterial({ color:0x23262a, metalness:0.0,  roughness:0.55 });
+const matAlu  = new THREE.MeshStandardMaterial({ color:0xb6bbc0, metalness:0.90, roughness:0.34 });
+const matLink = new THREE.MeshStandardMaterial({ color:0x8e949a, metalness:0.90, roughness:0.42 });
+const matPad  = new THREE.MeshStandardMaterial({ color:0x14171a, metalness:0.0,  roughness:0.92 });
+const matBlue = new THREE.MeshStandardMaterial({ color:0x1d5fa8, metalness:0.0,  roughness:0.48 });
+const matPart = new THREE.MeshStandardMaterial({ color:0xc8873f, metalness:0.0,  roughness:0.62 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Chain per finger: knuckle(Z) → proximal → distalPivot(Z) → distal → pad
+//   Both knuckle pivots sit on the REAL hinge lines on the body flanks, mirrored about X.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const tube = (p,r,len,mat,x,y,z,axis='y',seg=16)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,len,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  if(axis==='x') m.rotation.z = Math.PI/2;
+  if(axis==='z') m.rotation.x = Math.PI/2;
+  p.add(m); return m; };
+
+// --- robot wrist stub + coupling (context: this hangs off a tool flange) ---
+const wrist = new THREE.Group();
+wrist.position.set(0, H_MAX - CPL_H, 0);   // the coupling face IS the top of the gripper
+tube(wrist, 0.036, 0.075, matAlu, 0, 0.038, 0, 'y', 20);
+tube(wrist, CPL_PCD/2 + 0.008, CPL_H, matAlu, 0, 0.007, 0, 'y', 24);   // Ø50 PCD coupling [CERT-doc]
+for(let i=0;i<4;i++){                                                   // M6 bolt circle
+  const a = i*Math.PI/2 + Math.PI/4;
+  tube(wrist, 0.0035, CPL_H + 0.004, matLink, Math.cos(a)*CPL_PCD/2, 0.007, Math.sin(a)*CPL_PCD/2, 'y', 8);
+}
+root.add(wrist);
+
+// --- body: anodised housing with the drive visible through the flank window ---
+const body = new THREE.Group();
+body.position.set(0, H_MAX - BODY_H/2 - CPL_H, 0);
+put(body, BODY_W, BODY_H, BODY_D, matBody, 0, 0, 0);
+put(body, BODY_W + 0.006, 0.012, BODY_D*0.55, matBlue, 0, BODY_H/2 - 0.012, 0);   // brand band
+put(body, BODY_W*0.42, BODY_H*0.44, BODY_D + 0.004, matLink, 0, -0.004, 0);       // drive housing
+tube(body, 0.010, BODY_W + 0.008, matAlu, 0, -BODY_H/2 + 0.012, 0, 'x', 14);      // drive shaft
+root.add(body);
+
+// --- fingers: TWO phalanges each, on real hinge pivots ([Block 62] §62.4) ---
+const KNUCK_Y = body.position.y - BODY_H/2 + 0.006;
+const KNUCK_X = BODY_W/2 - 0.004;
+const fingers = [];
+for(const s of [1,-1]){
+  const knuckle = new THREE.Group();
+  knuckle.position.set(s*KNUCK_X, KNUCK_Y, 0);
+  root.add(knuckle);
+  tube(knuckle, 0.008, BODY_D*0.62, matAlu, 0, 0, 0, 'z', 12);          // hinge pin
+  // proximal phalanx — built DOWNWARD from its own hinge, so the pivot is the hinge, not the centre
+  const prox = new THREE.Group(); knuckle.add(prox);
+  put(prox, 0.020, PROX_L, 0.036, matBody, s*0.004, -PROX_L/2, 0);
+  put(prox, 0.012, PROX_L*0.72, 0.044, matLink, s*0.012, -PROX_L*0.44, 0);
+  // the COUPLER LINK that makes the grasp adaptive — the visible second bar of the four-bar
+  put(prox, 0.007, PROX_L*0.86, 0.010, matLink, -s*0.007, -PROX_L*0.47, 0.021);
+  // distal phalanx pivots at the end of the proximal
+  const distalPivot = new THREE.Group();
+  distalPivot.position.set(0, -PROX_L, 0);
+  prox.add(distalPivot);
+  tube(distalPivot, 0.006, 0.040, matAlu, 0, 0, 0, 'z', 10);
+  const dist = new THREE.Group(); distalPivot.add(dist);
+  put(dist, 0.018, DIST_L, 0.034, matBody, -s*0.004, -DIST_L/2, 0);
+  put(dist, 0.007, DIST_L*0.86, 0.030, matPad, -s*0.014, -DIST_L*0.5, 0);   // rubber gripping pad
+  put(dist, 0.014, 0.008, 0.030, matLink, -s*0.004, -DIST_L, 0);            // fingertip
+  fingers.push({ s, knuckle, prox, distalPivot });
+}
+
+// --- the part being grasped: a flat block (parallel grasp) or a cylinder (encompassing grasp) ---
+const partBox = box(0.052, 0.075, 0.052, matPart);
+const partCyl = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.080, 22), matPart);
+partCyl.castShadow = partCyl.receiveShadow = true;
+const partY = KNUCK_Y - PROX_L - DIST_L*0.55;
+partBox.position.set(0, partY, 0); partCyl.position.set(0, partY, 0);
+partCyl.visible = false;
+root.add(partBox); root.add(partCyl);
+
+scene.add(root);
+
+// ---------- the adaptive linkage ----------
+// PARALLEL grasp: the distal phalanx counter-rotates so its pad stays vertical — flat faces are
+// clamped by two parallel pads. ENCOMPASSING grasp: the proximal STALLS on the round part and the
+// distal keeps closing around it. One flag, two behaviours — that is the whole 2F-85 identity.
+const rad = d => d*Math.PI/180;
+const PROX_OPEN = 22, PROX_CLOSED = -6;      // [INFER] knuckle sweep that produces the 85 mm stroke
+const stateEl = document.getElementById('state');
+let closure = 0;            // 0 = fully open, 1 = fully closed
+let partShown = true;
+let encompassing = false;
+// The fingers STOP on the part. Closing to 1 mm with a 52 mm block still between the pads is
+// physically impossible, and it is exactly the kind of defect a draw-call count reports as green.
+const PART_HALF = { box: 0.026, cyl: 0.036 };   // half-widths of the two demo parts
+function closureLimit(){
+  if(!partShown) return 1;
+  const half = encompassing ? PART_HALF.cyl : PART_HALF.box;
+  return Math.max(0, 1 - (2*half)/STROKE);
+}
+function applyLinkage(){
+  const lim  = closureLimit();
+  const cProx = Math.min(closure, lim);          // proximal phalanx stalls at contact
+  const pa = PROX_OPEN + (PROX_CLOSED - PROX_OPEN) * cProx;
+  // ENCOMPASSING: past contact the distal phalanx keeps wrapping around the round part.
+  // PARALLEL: no wrap — the distal only counter-rotates, so the pads stay flat on the faces.
+  const wrap = encompassing ? Math.max(0, closure - lim)/Math.max(0.001, 1 - lim) * 34 : 0;
+  for(const f of fingers){
+    // sign: +s opens OUTWARD. With -s the fingers swung INWARD on 'open' and speared the part —
+    // a defect the draw-call count is completely blind to.
+    f.prox.rotation.z =  f.s * rad(pa);
+    // The distal angle is LOCAL, so it composes with the proximal. Parallel grasp wants world
+    // angle 0 -> local = -prox. Encompassing wants the tip to swing INWARD -> local = -(prox + wrap),
+    // which gives world = -wrap. Writing -(prox - wrap) instead swings it OUTWARD: the fingers
+    // splay open around the cylinder while the HUD happily reports 33° of wrap.
+    f.distalPivot.rotation.z = -f.s * rad(pa + wrap);
+  }
+  const span = STROKE * (1 - cProx);
+  stateEl.innerHTML = `<b>${encompassing ? 'AGARRE ENVOLVENTE' : 'AGARRE PARALELO'}</b><br>` +
+    `apertura ${(span*1000).toFixed(0)} mm / 85 mm<br>` +
+    (partShown ? `contacto a ${(lim*100).toFixed(0)} % · envoltura ${wrap.toFixed(0)}°`
+               : `carrera ${(closure*100).toFixed(0)} % (sin pieza)`);
+}
+applyLinkage();
+
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let targetClosure = 0;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnGrip = document.getElementById('btnGrip');
+btnGrip.onclick = ()=>{ targetClosure = targetClosure > 0.05 ? 0 : (encompassing ? 1 : closureLimit());
+  btnGrip.classList.toggle('on', targetClosure > 0.05); requestRender(); };
+
+const btnMode = document.getElementById('btnMode');
+btnMode.onclick = ()=>{ encompassing = !encompassing;
+  btnMode.textContent = encompassing ? 'MODO: ENVOLVENTE' : 'MODO: PARALELO';
+  btnMode.classList.toggle('on', encompassing);
+  // the part follows the mode: a flat block is clamped, a round one is encompassed
+  partBox.visible = !encompassing && partShown; partCyl.visible = encompassing && partShown;
+  applyLinkage(); renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnPart = document.getElementById('btnPart');
+btnPart.onclick = ()=>{ partShown = !partShown;
+  partBox.visible = partShown && !encompassing; partCyl.visible = partShown && encompassing;
+  btnPart.classList.toggle('on', partShown); renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+let wasMoving = false;
+function animate(){
+  requestAnimationFrame(animate);
+  const d = targetClosure - closure;
+  const moving = Math.abs(d) > 0.002;
+  if(moving){ closure += d * 0.12; applyLinkage(); needsRender = true; }
+  else if(closure !== targetClosure){ closure = targetClosure; applyLinkage(); needsRender = true; }
+  if(wasMoving && !moving){ renderer.shadowMap.needsUpdate = true; needsRender = true; }
+  wasMoving = moving;
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const setGrasp = (c, enc) => { targetClosure = Math.min(1, Math.max(0, c));
+  if(enc !== undefined && enc !== encompassing) btnMode.onclick();
+  requestRender(); };
+const __app = { runtime:{ scene, renderer, camera, root }, setGrasp,
+                get closure(){ return closure; }, get encompassing(){ return encompassing; } };
+globalThis.__manoRoboticaApp = __app;
+globalThis['__mano-roboticaApp'] = __app;   // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

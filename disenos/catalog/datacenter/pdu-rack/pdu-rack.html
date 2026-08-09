@@ -1,0 +1,326 @@
+<!doctype html>
+<!--
+  pdu-rack — catalog asset, family `datacenter`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Spec: ./design-spec.yaml
+  NOTE ON SCOPE: this is the 0U VERTICAL STRIP that mounts in a rack upright. It is NOT
+  electricos/pdu, which is a floor-standing cabinet with an isolation transformer inside. Three
+  shared letters, two machines three orders of magnitude apart in size.
+  The rack upright context is modelled on purpose: a 55 mm x 1.7 m strip floating alone in frame
+  has no scale cue at all, and the whole point of "0U" is WHERE it mounts.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDU de rack 0U (barra vertical) — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.025 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">PDU de rack 0U — barra vertical medida, 24 C13 + 6 C19</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· extrusión de aluminio · tomas de PC/ABS</span></div>
+  <div class="dim">0.055 × 0.055 × 1.70 m · montaje 0U en el poste trasero · 3 bancos con breaker</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnFrame" class="on">POSTE DEL RACK</button>
+  <button id="btnCord">CORDONES</button>
+  <button id="btnAlm">SOBRECARGA (ISA-101)</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const U      = 0.04445;                   // [CERT] EIA rack unit — same source as rack-servidores
+const BAR_W  = 0.055, BAR_D = 0.055;      // extruded body section
+const BAR_H  = 1.70;                      // strip length
+const BAR_Y0 = 0.16;                      // bottom of the strip above the rack base
+const NC13   = 24, NC19 = 6;
+const BANKS  = 3;                         // metered/switched banks, each with its own breaker
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 4, 18);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 100);
+const R = 4.0, AZ = 0.80, EL = 0.16, TGT_Y = 1.02;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TGT_Y + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TGT_Y, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TGT_Y, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.4;        // dark vertical subject — see design-spec §lighting
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.0, 3.4, 2.6); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-1.4; sun.shadow.camera.right=1.4; sun.shadow.camera.top=1.6; sun.shadow.camera.bottom=-1.6;
+sun.shadow.camera.far = 9;
+scene.add(sun);
+const faceFill = new THREE.DirectionalLight(0xdce6f2, 1.30);    // panel-normal fill (the deviation)
+faceFill.position.set(0.4, 0.9, 3.0);
+scene.add(faceFill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.30));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(14,14),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   The body is a bare aluminium extrusion; the outlets are moulded PC/ABS. Those two live 2 mm
+//   apart on the same part and are opposite surface families — the single most likely error here.
+// ============================================================================
+const matAlu    = new THREE.MeshStandardMaterial({ color:0x8f959b, metalness:0.93, roughness:0.42 });
+const matAluD   = new THREE.MeshStandardMaterial({ color:0x6f757b, metalness:0.90, roughness:0.50 });
+const matOutlet = new THREE.MeshStandardMaterial({ color:0x1c1f24, metalness:0.0,  roughness:0.48 });
+const matOutBlu = new THREE.MeshStandardMaterial({ color:0x1f3f7a, metalness:0.0,  roughness:0.48 });
+const matOutRed = new THREE.MeshStandardMaterial({ color:0x6d2029, metalness:0.0,  roughness:0.48 });
+const matPin    = new THREE.MeshStandardMaterial({ color:0xb9bec1, metalness:0.92, roughness:0.40 });
+const matBrk    = new THREE.MeshStandardMaterial({ color:0x2b3037, metalness:0.0,  roughness:0.52 });
+const matBrkTog = new THREE.MeshStandardMaterial({ color:0xb03a2a, metalness:0.0,  roughness:0.50 });
+const matCord   = new THREE.MeshStandardMaterial({ color:0x14171a, metalness:0.0,  roughness:0.78 });
+const matCordB  = new THREE.MeshStandardMaterial({ color:0x2f6ad0, metalness:0.0,  roughness:0.72 });
+const matRack   = new THREE.MeshStandardMaterial({ color:0x2f343b, metalness:0.0,  roughness:0.52 });
+const matLabel  = new THREE.MeshStandardMaterial({ color:0xe8eae6, metalness:0.0,  roughness:0.70 });
+const matScreen = new THREE.MeshStandardMaterial({ color:0x0d1a16, metalness:0.0,  roughness:0.16,
+                                                   emissive:0x0a2a22, emissiveIntensity:1.0 });
+// ISA-101 §3.4
+const matLedOff = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4 });
+const matLedRun = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                   emissive:0x0d3a2a, emissiveIntensity:1.1 });
+const matLedAlm = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                   emissive:0xd8760f, emissiveIntensity:1.6 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xforms, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = im.receiveShadow = true;
+  xforms.forEach((t,i)=>{
+    _p.set(t[0], t[1], t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0));
+    _s.set(t[6]??1, t[7]??1, t[8]??1);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s));
+  });
+  im.instanceMatrix.needsUpdate = true;
+  parent.add(im); return im;
+}
+function box(w,h,d,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+function cyl(rt,rb,h,seg,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+
+// --- rack upright context: the strip mounts to it, and it is the only scale cue in frame ---
+const frameGrp = new THREE.Group();
+{
+  const PX = -0.16, PZ = -0.10;
+  box(0.045, 2.00, 0.045, matRack, PX, 1.00, PZ, frameGrp);                 // rear corner post
+  box(0.045, 2.00, 0.045, matRack, PX, 1.00, PZ + 0.62, frameGrp);
+  for(const y of [0.10, 1.02, 1.94])
+    box(0.040, 0.040, 0.62, matRack, PX, y, PZ + 0.31, frameGrp);           // cross members
+  box(0.030, 1.86, 0.030, matAluD, PX + 0.028, 1.02, PZ + 0.05, frameGrp);  // 0U mounting channel
+  const buttons = [];                                                        // tool-less mount buttons
+  for(let k=0;k<9;k++) buttons.push([PX + 0.048, 0.22 + k*0.20, PZ + 0.05, 0, 0, Math.PI/2]);
+  instanced(new THREE.CylinderGeometry(0.010, 0.010, 0.020, 10), matAlu, buttons, frameGrp);
+}
+root.add(frameGrp);
+
+// --- the strip body: extrusion with an end cap each end, mounted onto the channel ---
+box(BAR_W, BAR_H, BAR_D, matAlu, 0, BAR_Y0 + BAR_H/2, 0);
+for(const sy of [0, 1]) box(BAR_W + 0.006, 0.020, BAR_D + 0.006, matAluD, 0, BAR_Y0 + sy*BAR_H, 0);
+// rear mounting brackets reaching to the rack channel
+for(const y of [BAR_Y0 + 0.10, BAR_Y0 + BAR_H/2, BAR_Y0 + BAR_H - 0.10])
+  box(0.14, 0.045, 0.030, matAluD, -0.085, y, -0.012);
+
+// --- head end: metering display, network + sensor ports, status LEDs ---
+const leds = [];
+{
+  const hy = BAR_Y0 + BAR_H - 0.10;
+  box(BAR_W + 0.012, 0.20, BAR_D + 0.012, matBrk, 0, hy, 0);
+  box(0.042, 0.026, 0.006, matScreen, 0, hy + 0.055, BAR_D/2 + 0.010);
+  for(let k=0;k<2;k++){
+    const l = cyl(0.005, 0.005, 0.006, 8, matLedOff, -0.012 + k*0.024, hy + 0.020, BAR_D/2 + 0.010);
+    l.rotation.x = Math.PI/2; l.userData.role = k===0 ? 'run' : 'alarm'; leds.push(l);
+  }
+  for(let k=0;k<2;k++)                                                        // RJ45 network ports
+    box(0.014, 0.013, 0.010, matOutlet, -0.013 + k*0.026, hy - 0.030, BAR_D/2 + 0.008);
+  box(0.030, 0.010, 0.008, matLabel, 0, hy - 0.062, BAR_D/2 + 0.008);
+}
+
+// --- three banks: a breaker at the head of each, then its outlets ---
+const OUT_Z = BAR_D/2 + 0.006;
+const c13Body = [], c13Slot = [], c19Body = [], c19Slot = [], bankLabels = [];
+const stackTop = BAR_Y0 + BAR_H - 0.24, stackBot = BAR_Y0 + 0.13;
+const perBank13 = NC13 / BANKS, perBank19 = NC19 / BANKS;
+const bankH = (stackTop - stackBot) / BANKS;
+for(let b=0; b<BANKS; b++){
+  const y0 = stackBot + b*bankH;
+  // bank breaker: a 2-pole hydraulic-magnetic with a red toggle, one per bank
+  box(BAR_W + 0.010, 0.048, BAR_D*0.7, matBrk, 0, y0 + bankH - 0.026, BAR_D/2 - 0.006);
+  box(0.016, 0.026, 0.014, matBrkTog, 0, y0 + bankH - 0.026, OUT_Z + 0.008);
+  bankLabels.push([0, y0 + bankH - 0.058, OUT_Z + 0.002]);
+  // C19 outlets sit at the bottom of each bank (high-current loads live low in a rack)
+  for(let k=0; k<perBank19; k++){
+    const y = y0 + 0.030 + k*0.058;
+    c19Body.push([0, y, OUT_Z]);
+    c19Slot.push([0, y, OUT_Z + 0.007]);
+  }
+  // C13 outlets fill the rest of the bank
+  const c13y0 = y0 + 0.030 + perBank19*0.058 + 0.020;
+  for(let k=0; k<perBank13; k++){
+    const y = c13y0 + k*0.042;
+    c13Body.push([0, y, OUT_Z]);
+    c13Slot.push([0, y, OUT_Z + 0.006]);
+  }
+}
+// Outlet BODY is moulded PC/ABS (dielectric); the contacts inside are plated metal. They are 2 mm
+// apart and belong to opposite surface families — collapsing them is the giveaway error here.
+instanced(new THREE.BoxGeometry(0.040, 0.030, 0.014), matOutlet, c13Body, root);
+instanced(new THREE.BoxGeometry(0.026, 0.016, 0.004), matPin,    c13Slot, root);
+instanced(new THREE.BoxGeometry(0.048, 0.040, 0.016), matOutBlu, c19Body, root);
+instanced(new THREE.BoxGeometry(0.032, 0.022, 0.004), matPin,    c19Slot, root);
+instanced(new THREE.BoxGeometry(0.046, 0.012, 0.003), matLabel,  bankLabels, root);
+
+// --- input cord leaving the bottom, with strain relief and a plug ---
+{
+  const cy = BAR_Y0 - 0.02;
+  box(BAR_W, 0.05, BAR_D, matBrk, 0, cy, 0);
+  cyl(0.012, 0.012, 0.10, 10, matCord, 0, cy - 0.07, 0);
+  cyl(0.011, 0.011, 0.34, 10, matCord, 0.06, cy - 0.13, 0.02).rotation.z = 1.1;
+  box(0.05, 0.07, 0.04, matCord, 0.20, cy - 0.16, 0.04);
+}
+
+// --- patch cords plugged into the outlets (togglable) ---
+const cords = new THREE.Group();
+{
+  const plugs = [], tails = [];
+  for(let i=0; i<c13Body.length; i += 2){
+    const [x, y, z] = c13Body[i];
+    plugs.push([x, y, z + 0.022]);
+    tails.push([x + 0.010, y - 0.014, z + 0.062, 0, 0, 0.55]);
+  }
+  instanced(new THREE.BoxGeometry(0.038, 0.028, 0.030), matCord,  plugs, cords);
+  instanced(new THREE.CylinderGeometry(0.006, 0.006, 0.10, 8), matCordB, tails, cords);
+  for(let i=0; i<c19Body.length; i += 2){
+    const [x, y, z] = c19Body[i];
+    box(0.046, 0.038, 0.034, matCord, x, y, z + 0.024, cords);
+    cyl(0.009, 0.009, 0.12, 8, matCordB, x + 0.014, y - 0.016, z + 0.070, cords).rotation.z = 0.5;
+  }
+}
+cords.visible = false;
+root.add(cords);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnFrame = document.getElementById('btnFrame');
+btnFrame.onclick = ()=>{ frameGrp.visible = !frameGrp.visible;
+  btnFrame.classList.toggle('on', frameGrp.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnCord = document.getElementById('btnCord');
+btnCord.onclick = ()=>{ cords.visible = !cords.visible;
+  btnCord.classList.toggle('on', cords.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnAlm = document.getElementById('btnAlm');
+let alarm = false;
+btnAlm.onclick = ()=>{
+  alarm = !alarm; btnAlm.classList.toggle('on', alarm);
+  // ISA-101 §3.4: amber for an overloaded bank — abnormal and actionable, but not a trip.
+  leds.forEach(l=>{ const r = l.userData.role;
+    l.material = alarm ? (r === 'alarm' ? matLedAlm : matLedOff)
+                       : (r === 'run'   ? matLedRun : matLedOff); });
+  requestRender();
+};
+leds.forEach(l=>{ if(l.userData.role === 'run') l.material = matLedRun; });
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__pduRackApp = __app;
+globalThis['__pdu-rackApp'] = __app;               // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

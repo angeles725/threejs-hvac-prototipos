@@ -1,0 +1,293 @@
+<!doctype html>
+<!--
+  vav-terminal — catalog asset, family `hvac`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Single-duct VAV box with hot-water reheat. HANDBOOK §3.0 warns this family is SMALL (0.6-1 m)
+  and must not be oversized; it is shown hung off a slab so the scale is unambiguous.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caja VAV con recalentamiento — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Caja VAV — un ducto, con serpentín de recalentamiento</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· sensor de flujo · actuador · controlador</span></div>
+  <div class="dim">0.62 × 0.42 × 0.32 m · collarín Ø250 mm</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDamp">COMPUERTA</button>
+  <button id="btnLid">TAPA</button>
+  <button id="btnHeat">RECALENTAMIENTO</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const BW = 0.62, BD = 0.42, BH = 0.32;     // casing: length (X) x depth (Z) x height (Y)
+const CY = 2.42;                           // box centre line, hung under a slab
+const SLAB_Y = 3.02;
+const INLET_R = 0.125;                     // Ø250 mm inlet collar
+const COIL_L = 0.24;                       // reheat coil section on the discharge
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 6, 20);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+// Pulled back and lifted from the first framing: at 2.15 m and near-level the box filled the
+// frame, the reheat section read as a wall and the hanger straps ran off the top of the image.
+// EL is capped so the eye stays BELOW the slab: at 0.26 the camera rose above it and the slab
+// occluded the whole asset. A hung unit has to be reviewed from under its own soffit.
+// EL is the largest angle that still keeps the eye BELOW the slab (2.47 + 3.05*sin EL < 3.02).
+// It has to look DOWN into the casing or TAPA reveals nothing; at 0.26 the eye rose above the
+// slab and lost the asset entirely, at 0.09 it could not see over the casing wall.
+const R = 3.05, AZ = 0.86, EL = 0.16;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), CY + 0.05 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0.05, CY - 0.02, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0.05, CY - 0.02, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.1;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.35);
+sun.position.set(2.5, 4.5, 2.5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-1.5; sun.shadow.camera.right=1.5; sun.shadow.camera.top=3.5; sun.shadow.camera.bottom=0.5;
+scene.add(sun);
+// Vertical/underside fill (design-spec.yaml `lighting`): the casing is bare galvanised sheet and
+// the review angle is near level, so both the flanks and the underside reflect the dark room.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.0);
+fill.position.set(-2.0, 1.2, 3.2);
+scene.add(fill);
+const uplight = new THREE.DirectionalLight(0xdfe8f2, 0.7);
+uplight.position.set(1.6, -1.6, 2.0);
+scene.add(uplight);
+// Discharge-end rim: the reheat casing presents its far flank to the camera and, being bare
+// galvanised sheet, it collapsed to a black block against the dark room.
+const rimEnd = new THREE.DirectionalLight(0xeaf1f8, 0.75);
+rimEnd.position.set(-2.6, 1.4, -1.6);
+scene.add(rimEnd);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.30));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+// Interior lamp (shadowless): with TAPA off the damper and the flow cross sit inside a closed box.
+const innerLamp = new THREE.PointLight(0xe6eef8, 2.0, 1.2, 2);
+innerLamp.position.set(-0.10, CY + 0.06, 0.06);
+scene.add(innerLamp);
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(16,16),
+  new THREE.MeshStandardMaterial({ color:0x0d1219, roughness:0.9, metalness:0 }));
+floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Galvanised casing, collar and hanger straps are bare metal. Acoustic lining, actuator and
+//   controller housings are dielectric. Copper reheat headers use the corrected F0 (#f0a67a).
+// ============================================================================
+function finTexture(){
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#aab4b9'; g.fillRect(0,0,256,64);
+  for(let x=0; x<256; x+=4){ g.fillStyle = (x % 8 === 0) ? '#d6dde0' : '#8b959a'; g.fillRect(x,0,2,64); }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(10, 1);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const matGalv  = new THREE.MeshStandardMaterial({ color:0xbfc6ca, metalness:0.95, roughness:0.40 });
+const matGalvD = new THREE.MeshStandardMaterial({ color:0x99a1a6, metalness:0.95, roughness:0.48 });
+const matLining= new THREE.MeshStandardMaterial({ color:0x3a3f45, metalness:0.0,  roughness:0.95 });
+const matAct   = new THREE.MeshStandardMaterial({ color:0x23282d, metalness:0.0,  roughness:0.55 });
+const matCtrl  = new THREE.MeshStandardMaterial({ color:0xd9dcde, metalness:0.0,  roughness:0.52 });
+const matFin   = new THREE.MeshStandardMaterial({ color:0xd2dade, metalness:1.0,  roughness:0.42, map:finTexture() });
+const matCopper= new THREE.MeshStandardMaterial({ color:0xf0a67a, metalness:1.0,  roughness:0.30 });
+const matValve = new THREE.MeshStandardMaterial({ color:0x8f3b2a, metalness:0.0,  roughness:0.50 });
+const matTube  = new THREE.MeshStandardMaterial({ color:0x2a2f34, metalness:0.0,  roughness:0.80 });
+const matSlab  = new THREE.MeshStandardMaterial({ color:0x1b2027, metalness:0.0,  roughness:0.95 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=18)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+
+put(root, 1.70, 0.09, 1.20, matSlab, 0, SLAB_Y + 0.045, 0);      // slab fragment (context + scale reference)
+
+// --- casing: 5 fixed faces + a REMOVABLE top panel (so TAPA reveals a real interior) ---
+const casing = new THREE.Group();
+put(casing, BW, 0.014, BD, matGalv, 0, CY - BH/2, 0);                       // floor
+for(const sz of [-1,1]) put(casing, BW, BH, 0.014, matGalv, 0, CY, sz*(BD/2));
+put(casing, 0.014, BH, BD, matGalv, -(BW/2), CY, 0);                        // inlet end wall
+put(casing, 0.014, BH, BD, matGalv,  (BW/2), CY, 0);                        // discharge end wall
+put(casing, BW - 0.05, 0.012, BD - 0.05, matLining, 0, CY - BH/2 + 0.014, 0);   // acoustic lining
+root.add(casing);
+const lid = new THREE.Group();
+put(lid, BW + 0.02, 0.016, BD + 0.02, matGalv, 0, CY + BH/2, 0);
+for(const sx of [-0.22, 0.0, 0.22]) put(lid, 0.05, 0.02, BD + 0.03, matGalvD, sx, CY + BH/2 + 0.012, 0);
+root.add(lid);
+
+// --- inlet: collar, flow cross, damper blade on its shaft, external actuator ---
+const inlet = new THREE.Group();
+{ const collar = new THREE.Mesh(new THREE.CylinderGeometry(INLET_R, INLET_R, 0.16, 22, 1, true),
+    new THREE.MeshStandardMaterial({ color:0xbfc6ca, metalness:0.95, roughness:0.40, side:THREE.DoubleSide }));
+  collar.position.set(-(BW/2 + 0.08), CY, 0); collar.rotation.z = Math.PI/2;
+  collar.castShadow = collar.receiveShadow = true; inlet.add(collar); }
+cyl(inlet, INLET_R + 0.012, 0.02, matGalvD, -(BW/2 + 0.16), CY, 0, 0, Math.PI/2, 22);   // collar bead
+// multi-point flow cross (the averaging sensor that makes it a VAV and not a plain damper box)
+cyl(inlet, 0.010, 2*INLET_R - 0.01, matGalvD, -(BW/2 + 0.04), CY, 0, 0, 0, 8);
+cyl(inlet, 0.010, 2*INLET_R - 0.01, matGalvD, -(BW/2 + 0.04), CY, 0, Math.PI/2, 0, 8);
+for(const t of [-0.6, -0.2, 0.2, 0.6])                                                  // sensing taps
+  cyl(inlet, 0.006, 0.03, matGalvD, -(BW/2 + 0.02), CY + t*INLET_R, 0, 0, Math.PI/2, 6);
+cyl(inlet, 0.005, 0.30, matTube, -(BW/2 + 0.02), CY + 0.02, BD/2 + 0.06, 0, Math.PI/2, 6);  // signal tubing
+root.add(inlet);
+
+const damper = new THREE.Group();
+damper.position.set(-(BW/2 - 0.06), CY, 0);
+{ const blade = new THREE.Mesh(new THREE.CylinderGeometry(INLET_R - 0.008, INLET_R - 0.008, 0.010, 22), matGalvD);
+  blade.rotation.z = Math.PI/2; blade.castShadow = true; damper.add(blade); }
+root.add(damper);
+cyl(root, 0.009, BD + 0.16, matGalvD, -(BW/2 - 0.06), CY, 0, Math.PI/2, 0, 8);          // damper shaft
+
+const actuator = new THREE.Group();
+put(actuator, 0.13, 0.13, 0.09, matAct, -(BW/2 - 0.06), CY, BD/2 + 0.06);
+put(actuator, 0.03, 0.05, 0.03, matAct, -(BW/2 - 0.06), CY + 0.08, BD/2 + 0.06);
+root.add(actuator);
+const ctrlBox = new THREE.Group();
+put(ctrlBox, 0.20, 0.15, 0.06, matCtrl, -0.10, CY - 0.02, BD/2 + 0.05);                 // DDC controller
+put(ctrlBox, 0.05, 0.03, 0.02, matAct, -0.02, CY + 0.04, BD/2 + 0.085);
+root.add(ctrlBox);
+
+// --- discharge: reheat coil section with finned tubes, copper headers and a control valve ---
+const reheat = new THREE.Group();
+for(const sz of [-1,1]) put(reheat, COIL_L, BH, 0.014, matGalv, BW/2 + COIL_L/2, CY, sz*(BD/2));
+put(reheat, COIL_L, 0.014, BD, matGalv, BW/2 + COIL_L/2, CY - BH/2, 0);
+put(reheat, COIL_L, 0.014, BD, matGalv, BW/2 + COIL_L/2, CY + BH/2, 0);
+put(reheat, 0.09, BH - 0.06, BD - 0.06, matFin, BW/2 + COIL_L/2, CY, 0);                // 2-row finned coil
+for(const sy of [-1,1])                                                                  // copper headers
+  cyl(reheat, 0.022, BD - 0.10, matCopper, BW/2 + COIL_L/2, CY + sy*(BH/2 - 0.07), 0, Math.PI/2, 10);
+cyl(reheat, 0.018, 0.13, matCopper, BW/2 + COIL_L/2, CY - BH/2 + 0.07, BD/2 + 0.07, Math.PI/2, 0, 10);
+cyl(reheat, 0.018, 0.13, matCopper, BW/2 + COIL_L/2, CY + BH/2 - 0.07, BD/2 + 0.07, Math.PI/2, 0, 10);
+put(reheat, 0.06, 0.08, 0.06, matValve, BW/2 + COIL_L/2, CY - BH/2 + 0.07, BD/2 + 0.15);// 2-way control valve
+put(reheat, 0.045, 0.06, 0.045, matAct, BW/2 + COIL_L/2, CY - BH/2 + 0.14, BD/2 + 0.15); // valve actuator
+put(reheat, 0.03, BH + 0.04, BD + 0.04, matGalvD, BW/2 + COIL_L, CY, 0);                // discharge flange
+root.add(reheat);
+
+// --- hanger straps to the slab ---
+const hangers = new THREE.Group();
+for(const hx of [-0.20, 0.20]) for(const sz of [-1,1]){
+  put(hangers, 0.035, SLAB_Y - (CY + BH/2), 0.012, matGalvD, hx, (SLAB_Y + CY + BH/2)/2, sz*(BD/2 + 0.02));
+  put(hangers, 0.06, 0.012, 0.05, matGalvD, hx, CY + BH/2 + 0.01, sz*(BD/2 + 0.02));
+}
+root.add(hangers);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const DAMP_SHUT = 1.40;
+let dampTarget = 0;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnDamp = document.getElementById('btnDamp');
+btnDamp.onclick = ()=>{ dampTarget = dampTarget === 0 ? DAMP_SHUT : 0;
+  btnDamp.classList.toggle('on', dampTarget !== 0); requestRender(); };
+
+const btnLid = document.getElementById('btnLid');
+btnLid.onclick = ()=>{ lid.visible = !lid.visible; btnLid.classList.toggle('on', !lid.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnHeat = document.getElementById('btnHeat');
+btnHeat.onclick = ()=>{ reheat.visible = !reheat.visible; btnHeat.classList.toggle('on', !reheat.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const d = dampTarget - damper.rotation.z;
+  if(Math.abs(d) > 0.0008){
+    damper.rotation.z += d * 0.12;
+    actuator.rotation.x = damper.rotation.z * 0.5;   // the actuator body reports blade travel
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__vavTerminalApp = __app;
+globalThis['__vav-terminalApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

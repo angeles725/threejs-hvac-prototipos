@@ -1,0 +1,206 @@
+# DesignSpec — commercial-vehicle rolling ladder chassis
+# Dimensional evidence: research/threejs-block63.md §63.3, which transcribes the Volvo Trucks North
+# America Body Builder Instructions (Section 7 — Frame). This is the ONE asset of the `automotriz`
+# family whose primary cross-section is fully certified by a manufacturer document.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: chasis
+family: automotriz
+track: needs-research        # research closed by [Block 63]; build is procedural
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # the 8 mm rail plate is material thickness, not a voxel
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 13 -> moderate.
+  scores: {silhouette: 2, components: 2, hierarchy: 2, repetition: 2,
+           material_layers: 2, detail: 1, occlusion: 1, action_readiness: 1}
+  tier: moderate
+  notes: >
+    A ladder frame is read by PROPORTION, not by part count: two narrow C-channel rails held far
+    inboard of the wheels, rungs between them, everything else hanging off. repetition 2: the
+    crossmembers (5) and the wheels (6) are genuine repeats and are instanced. occlusion 1: the
+    suspension and axles sit under the rails and are half-hidden by them, which is correct.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/threejs-block63.md
+  reuse_pointers:
+    render_on_demand: "block56 — render gated behind needsRender; autoRotate sets it per frame"
+    instancing_rule: "block54 §2.3 — instancing only where repetition is real (5 crossmembers, 6 wheels)"
+
+references:
+  - source: "sources/B63-automotriz-dims/volvo-bodybuilder-s7-frame.pdf (extracted/volvo-bodybuilder-s7-frame.txt:79-83,143-145,1517)"
+    evidences: >
+      Frame rail thickness 7 / 8 / 9.5 / 11.1 mm [CERT-doc]; frame rail FLANGE 90 mm (105 mm on the
+      heaviest section) [CERT-doc]; OVERALL FRAME WIDTH 850 mm @7 mm, 852 mm @8 mm, 855 mm @9.5 mm
+      [CERT-doc]; rail WEB HEIGHT 266 mm (VN) and 300 mm (VN/VHD) [CERT-doc]; crossmember count is a
+      function of wheelbase — "longer wheelbase vehicles may have one or two additional intermediate
+      crossmembers installed" [CERT-doc].
+    suitability: pass
+  - source: "sources/web-snapshots/en.wikipedia.org_wiki_Vehicle_frame.md:684,893-898"
+    evidences: >
+      The ladder-frame archetype: two longitudinal channels connected by several crossmembers; the
+      rail is an open-ended section, "either C-shaped or hat-shaped (U-shaped)".
+    suitability: pass
+  - source: "research/threejs-block63.md §63.3"
+    evidences: >
+      The trap this asset must avoid: 852 mm frame width against a ~2030 mm track means the rails sit
+      far INBOARD of the wheels and the axles overhang the frame on both sides. Rails drawn near the
+      tyre plane read instantly wrong.
+    suitability: pass
+
+dimensions_real:
+  # CONFIDENCE DISCIPLINE (Block 63 §63.3): only the rail section and the frame width are published.
+  # Wheelbase, ride height, tyre size and track are chosen inside a plausible envelope and stay amendable.
+  rail_web_h_m:     {value: 0.300, confidence: high}   # [CERT-doc] 300 mm VN/VHD
+  rail_flange_m:    {value: 0.090, confidence: high}   # [CERT-doc] 90 mm
+  rail_thickness_m: {value: 0.008, confidence: high}   # [CERT-doc] 8 mm plate
+  frame_width_m:    {value: 0.852, confidence: high}   # [CERT-doc] overall, outside-to-outside @8 mm
+  frame_length_m:   {value: 7.40,  confidence: low}    # [INFER] not published as a nominal
+  wheelbase_m:      {value: 4.50,  confidence: med}    # [INFER] mid VN value
+  frame_top_y_m:    {value: 1.10,  confidence: low}    # [INFER] leaves ~200 mm for the spring pack
+  crossmember_count: {value: 5,    confidence: med}    # [CERT-doc] count follows wheelbase; 5 is consistent
+  xmember_h_m:      {value: 0.180, confidence: low}    # [INFER] hat section, not published
+  tyre_od_m:        {value: 1.050, confidence: low}    # [INFER] 315/80R22.5 class
+  tyre_width_m:     {value: 0.300, confidence: low}    # [INFER]
+  track_m:          {value: 2.03,  confidence: low}    # [INFER]
+  dual_spacing_m:   {value: 0.330, confidence: low}    # [INFER] rear dual centre-to-centre
+  fuel_tank_r_m:    {value: 0.280, confidence: low}    # [INFER]
+
+hierarchy:
+  - name: root
+    children:
+      - name: rails           # 2 x C-channel, ONE shared ExtrudeGeometry, the -Z one mirrored by rotation
+        pivot: [0, 0.95, 0]
+        animation: none
+      - name: crossmembers    # InstancedMesh x5, hat section opening DOWN
+        pivot: [0, 0.95, 0]
+        animation: none
+        attachment: {parent_socket: rail_web_inner, contact_type: welded, gap_tolerance: 0.002}
+      - name: gussets         # InstancedMesh x10 — one per crossmember/rail joint
+        pivot: [0, 0.95, 0]
+        animation: none
+      - name: axles           # front I-beam steer axle + rear banjo drive axle, diff, pinion, driveshaft
+        pivot: [0, 0.525, 0]
+        animation: none
+      - name: springs         # 4 leaf-spring packs + seats + hangers up to the rail bottom flange
+        pivot: [0, 0.64, 0]
+        animation: none
+        attachment: {parent_socket: rail_bottom_flange, contact_type: bolted, gap_tolerance: 0.002}
+      - name: wheels          # InstancedMesh x6 tyres + x6 rims + x6 hubs (2 front singles, 4 rear duals)
+        pivot: [0, 0.525, 0]
+        animation: none
+      - name: tank            # side fuel tank on two L-brackets bolted to the rail web
+        pivot: [0.55, 0.50, 0.746]
+        animation: none
+
+materials:
+  - id: frame-ecoat
+    family: painted-metal
+    color: "#343b42"
+    metalness: 0.0             # E-coat / chassis paint is a COATING -> dielectric (HANDBOOK §3.1)
+    roughness: 0.58
+    evidence: "Block 63 §63.6; HANDBOOK §3.1 painted/coated 0.0-0.05"
+    confidence: 0.8
+  - id: axle-steel
+    family: bare-metal
+    color: "#8d9296"
+    metalness: 0.85
+    roughness: 0.45
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0, dulled for a cast/forged axle housing"
+    confidence: 0.8
+  - id: spring-steel
+    family: bare-metal
+    color: "#4a5055"
+    metalness: 0.70
+    roughness: 0.62
+    evidence: "[INFER] shot-peened leaf pack — darker and rougher than the machined housing"
+    confidence: 0.6
+  - id: tyre-rubber
+    family: rubber
+    color: "#141618"
+    metalness: 0.0             # dielectric — must NOT inherit the steel material
+    roughness: 0.92
+    evidence: "HANDBOOK §3.1 dielectric metalness 0"
+    confidence: 0.85
+  - id: rim-paint
+    family: painted-metal
+    color: "#b6bbc0"
+    metalness: 0.0
+    roughness: 0.46
+    evidence: "[INFER] painted steel disc wheel"
+    confidence: 0.7
+  - id: tank-aluminium
+    family: bare-metal
+    color: "#c9ced2"
+    metalness: 0.92
+    roughness: 0.22
+    evidence: "[INFER] polished aluminium fuel tank; HANDBOOK §3.1 bare-metal 0.9-1.0"
+    confidence: 0.7
+
+critical_features:
+  - id: frame-width-vs-track
+    desc: >
+      The rails read as a NARROW spine (852 mm) inside a ~2030 mm track: the axles visibly overhang the
+      frame on both sides and the wheels are nowhere near the rail plane. This is the single proportion
+      that separates a real ladder frame from a box drawn between the wheels.
+    threshold: 0.80
+  - id: c-section-read
+    desc: >
+      Each rail reads as an OPEN C-channel — a 300 mm web with 90 mm flanges top and bottom in thin
+      plate — not as a solid slab. The section is visible at the rail ends and under the flange line.
+    threshold: 0.75
+  - id: rolling-chassis-vocabulary
+    desc: >
+      Axles under the rails, leaf packs between axle and frame, six wheels with visible rims (2 front
+      singles + 4 rear duals), a side fuel tank on brackets that stay BELOW the frame top. A bracket
+      poking above the rail reads as a floating tank.
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 60
+    tris: 12000
+
+camera:
+  azimuth_deg: 45
+  elevation_deg: 24          # low: a chassis is read from near its own height, not from above
+  fov: 38
+  target_y_m: 0.78
+  radius_m: 9.2
+
+lighting: house-rig + vertical-subject fill
+  # DOCUMENTED DEVIATION (Block 63 §63.7, inherited from Block 57): the rail WEB is a large vertical
+  # plane facing ±Z and reflects the dark horizon, so it reads flat grey under the stock rig. Two
+  # DirectionalLights are aimed along the web normals (+Z 1.15, -Z 0.85) and environmentIntensity goes
+  # 1.9 -> 2.2. Metalness/roughness are UNCHANGED — the fix is lighting, not a fudged material.
+
+known_view_limit:
+  # State audit against the ONBOARD gotcha list. Two of the three toggles produce INSPECTION states,
+  # not physical ones; they are declared here rather than "fixed" with geometry no chassis would have.
+  - "RUEDAS off leaves the frame unsupported in mid-air. A real chassis without wheels rests on stands
+     or a build trolley; this state exists to expose the rails, crossmembers and suspension, and must not
+     be graded as a physical configuration."
+  - "TANQUE off removes the tank AND its two brackets together, so no bracket is left floating — but the
+     rail web it bolts to keeps its (unmodelled) bolt holes hidden. Fastener detail is out of scope."
+  - "From the catalog azimuth the near rail web occludes the far rail and most of the far spring pack.
+     That is what a 300 mm web does at 24 deg elevation; orbit, do not thin the rail."
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "RUEDAS"        # hide the wheels to expose the frame + suspension
+  - "TANQUE"        # side fuel tank and its brackets
+  - "TRAVESAÑOS"    # the 5 instanced crossmembers — shows the rails alone
+
+colorTarget:
+  # MEASURED from the rendered rail WEB (headless SwiftShader capture at 1280x800), then frozen as
+  # the regression anchor. Not a guessed value.
+  srgb: [68, 81, 98]
+  deltaE00Max: 8
+  crop: "34x10+600+400"   # clean rail WEB face, clear of crossmembers and brackets, at 1280x800

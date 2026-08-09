@@ -1,0 +1,304 @@
+<!doctype html>
+<!--
+  ducteria — catalog asset, family `hvac`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  A RUN, not a part: main rectangular duct with flanged transverse joints, a mitred elbow with
+  turning vanes, a round takeoff with a volume damper, flexible drops and two 4-cone diffusers,
+  all carried on trapeze hangers off the slab. The asset only means anything as an assembly.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ductería rectangular — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Ductería rectangular — tramo, codo con álabes, derivación y difusores</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· juntas embridadas · compuerta de volumen · soportes trapecio</span></div>
+  <div class="dim">tramo 600 × 350 mm · corrida 3.60 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDamp">COMPUERTA</button>
+  <button id="btnIns">AISLAMIENTO</button>
+  <button id="btnHang">SOPORTES</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const DW = 0.60, DH = 0.35;                // main duct: width (Z) x height (Y)
+const DUCT_Y = 2.62;                       // duct centre line
+const X0 = -1.90, X1 = 1.10;               // straight run along X
+const SLAB_Y = 3.20;                       // structural slab the hangers reach
+const JOINTS = [-1.30, -0.40, 0.50];       // flanged transverse joints along the run
+const BR_X = -0.85, BR_R = 0.125;          // round takeoff: position and radius
+const DIF = 0.46;                          // square diffuser face
+const DIF_Y = 1.95;                        // diffuser face height
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 8, 26);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+// The run lives overhead, so the review camera sits in the room and looks slightly UP.
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 5.2, AZ = 0.92, EL = -0.05;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 2.30 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 2.42, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 2.42, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.1;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.35);
+sun.position.set(4, 7, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-3.5; sun.shadow.camera.right=3.5; sun.shadow.camera.top=4; sun.shadow.camera.bottom=-1;
+scene.add(sun);
+// DEVIATION (design-spec.yaml `lighting`): the faces that matter here point DOWN — the duct
+// underside, the damper handle and both diffuser faces. A room uplight supplies the bounce a real
+// room gives; the galvanised PBR values are unchanged (HANDBOOK §3.1).
+const uplight = new THREE.DirectionalLight(0xdfe8f2, 1.10);
+uplight.position.set(2.5, -2.0, 3.0);
+scene.add(uplight);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.32));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(24,24),
+  new THREE.MeshStandardMaterial({ color:0x0d1219, roughness:0.9, metalness:0 }));
+floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Galvanised sheet, flanges and threaded rod are bare metal. The insulation jacket and the
+//   flexible drop are dielectric. Diffuser faces are PAINTED (dielectric) — a bare-metal diffuser
+//   face would reflect the dark room and read black, the same trap as the ceiling T-bar.
+// ============================================================================
+const matGalv  = new THREE.MeshStandardMaterial({ color:0xbcc3c7, metalness:0.95, roughness:0.40 });
+const matGalvD = new THREE.MeshStandardMaterial({ color:0x9aa2a7, metalness:0.95, roughness:0.48 });
+const matFlange= new THREE.MeshStandardMaterial({ color:0xa6aeb3, metalness:0.95, roughness:0.46 });
+const matIns   = new THREE.MeshStandardMaterial({ color:0xd8dbde, metalness:0.0,  roughness:0.80 });
+const matFlex  = new THREE.MeshStandardMaterial({ color:0x8d949a, metalness:0.0,  roughness:0.78 });
+const matDiff  = new THREE.MeshStandardMaterial({ color:0xe7e9eb, metalness:0.0,  roughness:0.48 });
+const matRod   = new THREE.MeshStandardMaterial({ color:0xa2a9ae, metalness:0.95, roughness:0.50 });
+const matHandle= new THREE.MeshStandardMaterial({ color:0x8f3b2a, metalness:0.0,  roughness:0.50 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x15181b, metalness:0.0,  roughness:0.72 });
+const matSlab  = new THREE.MeshStandardMaterial({ color:0x1b2027, metalness:0.0,  roughness:0.95 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=18)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+
+put(root, 6.0, 0.10, 4.0, matSlab, 0, SLAB_Y + 0.05, 0);        // structural slab (context)
+
+// --- main run + mitred elbow turning to -Z at the +X end ---
+const duct = new THREE.Group();
+put(duct, X1 - X0, DH, DW, matGalv, (X0 + X1)/2, DUCT_Y, 0);
+// mitred 90 deg elbow: two half-mitres meeting on the diagonal, plus 3 turning vanes
+const EL_X = X1 + DW/2;
+put(duct, DW, DH, DW, matGalv, EL_X - 0.0, DUCT_Y, -0.0);
+put(duct, DW, DH, 0.70, matGalv, EL_X, DUCT_Y, (DW/2 + 0.35));   // leg turns TOWARD the camera
+{ const vanes = new THREE.InstancedMesh(new THREE.BoxGeometry(0.012, DH - 0.03, 0.22), matGalvD, 3);
+  for(let i=0;i<3;i++){
+    const t = (i + 1) / 4;
+    _q.setFromEuler(new THREE.Euler(0, -Math.PI/4, 0));
+    _p.set(EL_X - DW/2 + t*DW, DUCT_Y, (t*DW - DW/2));
+    vanes.setMatrixAt(i, _m.compose(_p, _q, _s)); }
+  vanes.instanceMatrix.needsUpdate = true; vanes.castShadow = true; duct.add(vanes); }
+// flanged transverse joints (instanced frame ring per joint: 4 bars each)
+{ const barH = new THREE.BoxGeometry(0.03, 0.05, DW + 0.10);
+  const barV = new THREE.BoxGeometry(0.03, DH + 0.10, 0.05);
+  const hs = new THREE.InstancedMesh(barH, matFlange, JOINTS.length * 2);
+  const vs = new THREE.InstancedMesh(barV, matFlange, JOINTS.length * 2);
+  let hi = 0, vi = 0;
+  for(const jx of JOINTS){
+    for(const sy of [-1, 1]){ _q.setFromEuler(new THREE.Euler(0,0,0));
+      _p.set(jx, DUCT_Y + sy*(DH/2 + 0.025), 0); hs.setMatrixAt(hi++, _m.compose(_p, _q, _s)); }
+    for(const sz of [-1, 1]){ _q.setFromEuler(new THREE.Euler(0,0,0));
+      _p.set(jx, DUCT_Y, sz*(DW/2 + 0.025)); vs.setMatrixAt(vi++, _m.compose(_p, _q, _s)); }
+  }
+  hs.instanceMatrix.needsUpdate = true; vs.instanceMatrix.needsUpdate = true;
+  hs.castShadow = vs.castShadow = true; duct.add(hs); duct.add(vs); }
+root.add(duct);
+
+// --- insulation jacket over the straight run (togglable) ---
+const insulation = new THREE.Group();
+put(insulation, X1 - X0 - 0.04, DH + 0.09, DW + 0.09, matIns, (X0 + X1)/2, DUCT_Y, 0);
+for(const bx of [-1.55, -0.05, 0.85])                                       // banding straps
+  put(insulation, 0.02, DH + 0.11, DW + 0.11, matGalvD, bx, DUCT_Y, 0);
+insulation.visible = false;
+root.add(insulation);
+
+// --- round takeoff with a volume damper, flexible drop and a 4-cone diffuser ---
+const branch = new THREE.Group();
+cyl(branch, BR_R + 0.02, 0.05, matFlange, BR_X, DUCT_Y - DH/2 - 0.02, 0, 0, 0, 18);   // spigot collar
+cyl(branch, BR_R, 0.26, matGalv, BR_X, DUCT_Y - DH/2 - 0.15, 0, 0, 0, 18);            // takeoff neck
+const damperBlade = new THREE.Mesh(new THREE.CylinderGeometry(BR_R - 0.012, BR_R - 0.012, 0.008, 18), matGalvD);
+damperBlade.position.set(BR_X, DUCT_Y - DH/2 - 0.15, 0); damperBlade.castShadow = true;
+branch.add(damperBlade);
+cyl(branch, 0.010, 0.20, matRod, BR_X, DUCT_Y - DH/2 - 0.15, BR_R + 0.06, Math.PI/2, 0, 8);  // damper shaft
+const damperHandle = new THREE.Group();
+damperHandle.position.set(BR_X, DUCT_Y - DH/2 - 0.15, BR_R + 0.10);
+put(damperHandle, 0.10, 0.016, 0.016, matHandle, 0.05, 0, 0);
+put(damperHandle, 0.05, 0.05, 0.012, matHandle, 0, 0, 0);
+branch.add(damperHandle);
+// flexible drop: instanced corrugation rings around a core tube (real repetition)
+cyl(branch, BR_R - 0.01, 0.30, matDark, BR_X, 2.26, 0, 0, 0, 16);
+{ const ringGeo = new THREE.TorusGeometry(BR_R, 0.018, 6, 16);
+  const rings = new THREE.InstancedMesh(ringGeo, matFlex, 9);
+  for(let i=0;i<9;i++){ _q.setFromEuler(new THREE.Euler(-Math.PI/2, 0, 0));
+    _p.set(BR_X, 2.13 + i*0.035, 0);
+    rings.setMatrixAt(i, _m.compose(_p, _q, _s)); }
+  rings.instanceMatrix.needsUpdate = true; rings.castShadow = true; branch.add(rings); }
+root.add(branch);
+
+// --- diffusers: 4-cone square faces, one on the branch and one on a short direct drop ---
+function diffuser(dx){
+  const g = new THREE.Group();
+  put(g, DIF, 0.03, DIF, matDiff, dx, DIF_Y, 0);                              // outer frame face
+  // The cones step DOWNWARD, toward the room. Stepped upward (as first built) the diffuser reads
+  // as a blank plate from below, which is the only angle anyone ever sees it from.
+  for(const [i, s] of [[1, 0.78], [2, 0.56], [3, 0.34]]){
+    put(g, DIF*s, 0.022, DIF*s, matDiff, dx, DIF_Y - i*0.028, 0);
+  }
+  put(g, DIF*0.22, 0.02, DIF*0.22, matDark, dx, DIF_Y - 0.11, 0);             // centre core
+  put(g, DIF - 0.10, 0.14, DIF - 0.10, matDiff, dx, DIF_Y + 0.10, 0);         // plenum box above
+  root.add(g);
+  return g;
+}
+diffuser(BR_X);
+diffuser(0.55);
+cyl(root, BR_R, 0.30, matGalv, 0.55, DIF_Y + 0.30, 0, 0, 0, 16);              // direct drop to the 2nd diffuser
+cyl(root, BR_R + 0.02, 0.05, matFlange, 0.55, DUCT_Y - DH/2 - 0.02, 0, 0, 0, 18);
+
+// --- trapeze hangers: angle iron + 2 threaded rods to the slab (instanced rods) ---
+const hangers = new THREE.Group();
+const HANG_X = [-1.60, -0.20, 0.90];
+for(const hx of HANG_X){
+  put(hangers, 0.05, 0.05, DW + 0.26, matGalvD, hx, DUCT_Y - DH/2 - 0.03, 0);
+  put(hangers, 0.04, 0.05, 0.05, matGalvD, hx, DUCT_Y - DH/2 - 0.03, 0);
+}
+{ const rodGeo = new THREE.CylinderGeometry(0.008, 0.008, 1, 8);
+  const rods = new THREE.InstancedMesh(rodGeo, matRod, HANG_X.length * 2);
+  let i = 0;
+  const len = SLAB_Y - (DUCT_Y - DH/2 - 0.03);
+  for(const hx of HANG_X) for(const sz of [-1, 1]){
+    _q.setFromEuler(new THREE.Euler(0,0,0));
+    _p.set(hx, DUCT_Y - DH/2 - 0.03 + len/2, sz*(DW/2 + 0.11));
+    _s.set(1, len, 1);
+    rods.setMatrixAt(i++, _m.compose(_p, _q, _s));
+  }
+  _s.set(1,1,1);
+  rods.instanceMatrix.needsUpdate = true; rods.castShadow = true; hangers.add(rods); }
+root.add(hangers);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const DAMP_SHUT = 1.35;                   // ~77 deg from open
+let dampTarget = 0;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnDamp = document.getElementById('btnDamp');
+btnDamp.onclick = ()=>{ dampTarget = dampTarget === 0 ? DAMP_SHUT : 0;
+  btnDamp.classList.toggle('on', dampTarget !== 0); requestRender(); };
+
+const btnIns = document.getElementById('btnIns');
+btnIns.onclick = ()=>{ insulation.visible = !insulation.visible; btnIns.classList.toggle('on', insulation.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnHang = document.getElementById('btnHang');
+btnHang.onclick = ()=>{ hangers.visible = !hangers.visible; btnHang.classList.toggle('on', !hangers.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const d = dampTarget - damperBlade.rotation.x;
+  if(Math.abs(d) > 0.0008){
+    damperBlade.rotation.x += d * 0.12;
+    damperHandle.rotation.x = damperBlade.rotation.x;   // the handle reports the blade angle
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__ducteriaApp = __app;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

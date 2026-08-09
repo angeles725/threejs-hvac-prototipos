@@ -1,0 +1,176 @@
+# DesignSpec — adaptive 2-finger robotic hand (85 mm stroke, 5 kg)
+# Dimensional evidence: [Block 62] §62.4 (research/threejs-block62.md) — Robotiq 2F-85 instruction
+# manual §6 Specifications. The subject of this asset is the ADAPTIVE LINKAGE, not the span.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: mano-robotica
+family: robotica
+track: needs-research
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # at 163 mm tall the whole gripper is ~3 voxels — this is a
+                                     # DETAIL asset; its features live below the voxel grid
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 15 -> complex.
+  scores: {silhouette: 2, components: 2, hierarchy: 2, repetition: 1,
+           material_layers: 3, detail: 3, occlusion: 1, action_readiness: 3}
+  tier: complex
+  notes: >
+    Small object, high detail density: at 163 mm the pads, links and coupling bolts are the whole
+    read. action_readiness 3 because the linkage has TWO behaviours (parallel and encompassing) and
+    both must be visible. repetition 1 — four coupling bolts, not enough for instancing to matter.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/threejs-block62.md
+  reuse_pointers:
+    hinge_pivot_rule: "disenos/catalog/puertas/puerta-cuarto-frio/ (pivot on the hinge, not the centroid)"
+
+references:
+  - source: "sources/web-snapshots/assets.robotiq.com_…_2F-85_2F-140.md (Robotiq 2F-85/2F-140 manual §6)"
+    evidences: >
+      Gripper opening 85 mm; maximum height 162.8 mm; maximum width 148.6 mm; weight 925 g;
+      grasp force 20-235 N; finger speed 20-150 mm/s; position repeatability 0.05 mm;
+      payload 5 kg (friction grasp); coupling 50 mm pitch-circle diameter, M6 [CERT-web].
+    suitability: pass
+  - source: "research/threejs-block62.md §62.4"
+    evidences: >
+      The identity claim: the 2F-85 is ADAPTIVE — a two-phalanx linkage that grasps flat parts in
+      parallel and round parts by encompassing. Two rigid parallel jaws would throw that away.
+    suitability: pass
+
+dimensions_real:
+  max_height_m:   {value: 0.1628, confidence: high}   # [CERT-web]
+  max_width_m:    {value: 0.1486, confidence: high}   # [CERT-web]
+  stroke_m:       {value: 0.085,  confidence: high}   # [CERT-web]
+  coupling_pcd_m: {value: 0.050,  confidence: high}   # [CERT-web]
+  coupling_h_m:   {value: 0.014,  confidence: low}    # [INFER] plate thickness not published
+  body_h_m:       {value: 0.058,  confidence: low}    # [INFER] split of the certified total height
+  proximal_l_m:   {value: 0.050,  confidence: low}    # [INFER] 0.014+0.058+0.050+0.043 = 0.165 ≈ 0.1628
+  distal_l_m:     {value: 0.043,  confidence: low}    # [INFER] residual of that split
+  body_w_m:       {value: 0.078,  confidence: low}    # [INFER] inside the certified max width
+  body_d_m:       {value: 0.060,  confidence: low}    # [INFER]
+  knuckle_sweep_deg: {value: 28,  confidence: low}    # [INFER] sweep that produces the 85 mm stroke
+
+hierarchy:
+  - name: root
+    children:
+      - name: wrist            # context tool-flange stub + Ø50 PCD coupling with 4 M6 bolts
+        pivot: [0, 0.1488, 0]
+        animation: none
+      - name: body             # anodised housing, drive housing, brand band
+        animation: none
+      - name: finger_left      # mirrored about X
+        pivot: "knuckle hinge on the body flank"
+        animation: rotate-z
+        children:
+          - name: proximal_phalanx
+          - name: coupler_link       # the visible second bar of the four-bar
+          - name: distal_pivot
+            animation: rotate-z
+            children:
+              - name: distal_phalanx
+              - name: rubber_pad
+      - name: finger_right     # same chain, s = -1
+      - name: part             # demo part: flat block (parallel) or cylinder (encompassing)
+
+materials:
+  - id: body-anodised
+    family: painted-metal
+    color: "#23262a"
+    metalness: 0.0             # anodised/coated aluminium — DIELECTRIC (HANDBOOK §3.1)
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1 coated metal 0.0-0.05"
+    confidence: 0.7
+  - id: coupling-aluminium
+    family: bare-metal
+    color: "#b6bbc0"
+    metalness: 0.90            # machined coupling face and hinge pins are bare
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0"
+    confidence: 0.8
+  - id: link-steel
+    family: bare-metal
+    color: "#8e949a"
+    metalness: 0.90
+    roughness: 0.42
+    evidence: "HANDBOOK §3.1 bare-metal; the four-bar links are machined, not coated"
+    confidence: 0.75
+  - id: pad-rubber
+    family: rubber
+    color: "#14171a"
+    metalness: 0.0             # the gripping pad MUST stay dielectric or the grip line vanishes
+    roughness: 0.92
+    evidence: "HANDBOOK §3.1 dielectric metalness 0; same rule as the door gasket [Block 57] §57.7"
+    confidence: 0.8
+
+critical_features:
+  - id: two-phalanx-linkage
+    desc: >
+      Each finger visibly has TWO phalanges plus the coupler bar. In parallel mode the pads stay
+      vertical and clamp a flat block; in encompassing mode the proximal stalls on the cylinder and
+      the distal wraps INWARD around it. Both behaviours must be captured, not just the idle pose.
+    threshold: 0.85
+  - id: fingers-stop-on-the-part
+    desc: >
+      Closing stops at contact: with the 52 mm block the readout is 52 mm of 85, with the 72 mm
+      cylinder it is 72 mm. Closing to 1 mm through a solid part is the exact class of defect the
+      QA counts report as green.
+    threshold: 0.85
+  - id: detail-density-at-163mm
+    desc: >
+      Coupling bolt circle, hinge pins, drive shaft and rubber pads read at catalog camera distance
+      — the gripper looks like a machined product, not a blocked-out claw.
+    threshold: 0.75
+
+state_reachability:
+  # Every revealed state was asked "can this physically exist?", not just "does it render?".
+  # - with a part shown, closing stops at contact (52 mm block, 72 mm cylinder) — verified by capture
+  # - with the part HIDDEN the full stroke is available: at 96 % closure the pads sit 3 mm apart and
+  #   do NOT interpenetrate, so the extreme of the travel is a reachable state, not an impossible one
+  verified_states: ["open", "closed-on-block", "encompassing-on-cylinder", "closed-no-part"]
+  travel_bound: "PROX_CLOSED = -6 deg leaves 3 mm between the pads at full closure"
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 40
+    tris: 30000
+  measured:
+    draws: 28
+    tris: 730
+    console_errors: 0
+
+camera:
+  azimuth_deg: 54.4
+  elevation_deg: 12.6
+  fov: 38
+  target_y_m: 0.125
+  radius_m: 0.62
+
+lighting: house-rig + vertical-subject fill
+  # Same documented deviation as the rest of the family, at close range: the coupling, hinge pins
+  # and links are bare metal on near-vertical faces. Fill 1.05 opposite the key,
+  # environmentIntensity 2.1. Metalness/roughness unchanged (HANDBOOK §3.1).
+
+ui_controls:
+  - "ABRIR / CERRAR"     # animated; closes only to the contact limit of the shown part
+  - "MODO: PARALELO / ENVOLVENTE"   # swaps behaviour AND the demo part (block <-> cylinder)
+  - "PIEZA"              # hide the part -> full 85 mm stroke becomes available
+  - "AUTO-ROTATE"
+
+public_api:
+  - "__manoRoboticaApp.setGrasp(closure0to1, encompassing?)"
+  - "__manoRoboticaApp.closure / .encompassing   # read-only state"
+
+colorTarget:
+  # MEASURED from the rendered anodised body (headless SwiftShader capture at 1280x800), frozen as
+  # the regression anchor.
+  srgb: [54, 58, 64]
+  deltaE00Max: 8
+  crop: "34x34+556+370"   # clean body flank, open pose, at 1280x800

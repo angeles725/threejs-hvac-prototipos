@@ -1,0 +1,163 @@
+# DesignSpec — autonomous mobile robot / AGV (250 kg payload class)
+# Dimensional evidence: [Block 62] §62.5 (research/threejs-block62.md) — MiR250 Specifications 2.99.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: robot-agv
+family: robotica
+track: needs-research
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 12 -> moderate.
+  scores: {silhouette: 2, components: 2, hierarchy: 1, repetition: 1,
+           material_layers: 2, detail: 1, occlusion: 1, action_readiness: 2}
+  tier: moderate
+  notes: >
+    A simple envelope with two things that must be right: the 300 mm deck height (the whole
+    identity — an AMR drives UNDER things) and the diagonal scanner pair that produces the
+    published 360° coverage. action_readiness 2: it drives, and it turns around at the end of a run.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/threejs-block62.md
+
+references:
+  - source: "sources/datasheets/mir250-specifications (Mobile Industrial Robots, MiR250 Specifications 2.99)"
+    evidences: >
+      800 × 580 × 300 mm envelope [CERT-doc]; payload 250 kg [CERT-doc]; weight without load 83 kg
+      [CERT-doc]; max speed 2.0 m/s [CERT-doc]; two safety laser scanners with 360° coverage
+      [CERT-doc].
+    suitability: pass
+  - source: "research/threejs-block62.md §62.5"
+    evidences: >
+      The identity claim (low flat platform, not a boxy cart) and the [INFER] that the two scanners
+      sit at diagonally opposite corners — the only arrangement in which two <=270° units cover 360°.
+    suitability: pass
+
+dimensions_real:
+  length_m:   {value: 0.800, confidence: high}   # [CERT-doc]
+  width_m:    {value: 0.580, confidence: high}   # [CERT-doc]
+  height_m:   {value: 0.300, confidence: high}   # [CERT-doc]
+  payload_kg: {value: 250,   confidence: high}   # [CERT-doc]
+  v_max_ms:   {value: 2.0,   confidence: high}   # [CERT-doc]
+  deck_t_m:   {value: 0.028, confidence: low}    # [INFER] top plate thickness
+  wheel_r_m:  {value: 0.0625,confidence: low}    # [INFER] sized to the 300 mm body
+  castor_r_m: {value: 0.038, confidence: low}    # [INFER]
+  field_r_m:  {value: 1.05,  confidence: low}    # [INFER] DRAWN field radius — a visual cue, NOT a
+                                                 # safety distance; the real field is speed-dependent
+
+hierarchy:
+  - name: root
+    children:
+      - name: body               # everything that DRIVES sits under one group, so one transform moves it
+        animation: translate-x + turn-around
+        children:
+          - name: skirt          # dark lower band, inset so the wheels are visible in the recess
+          - name: shell          # light upper body + side status-light strips
+          - name: deck           # machined top plate — the payload surface
+          - name: scanner_a      # corner scanner, 45° to the body
+          - name: scanner_b      # diagonally opposite — together = the published 360°
+          - name: drive_wheels   # differential pair on the centre line
+          - name: castors        # four corners
+          - name: load           # tote on the deck (togglable)
+          - name: laser_fields   # two 270° sectors (togglable)
+
+materials:
+  - id: shell-white
+    family: painted-metal
+    color: "#dfe3e6"
+    metalness: 0.0             # painted/moulded body — DIELECTRIC (HANDBOOK §3.1)
+    roughness: 0.44
+    evidence: "HANDBOOK §3.1 painted 0.0-0.05"
+    confidence: 0.7
+  - id: skirt-dark
+    family: painted-metal
+    color: "#1e2226"
+    metalness: 0.0
+    roughness: 0.66
+    evidence: "the dark lower band is what makes the platform read as LOW"
+    confidence: 0.6
+  - id: deck-plate
+    family: bare-metal
+    color: "#a8aeb4"
+    metalness: 0.85            # the payload surface is bare machined plate
+    roughness: 0.40
+    evidence: "HANDBOOK §3.1 bare-metal"
+    confidence: 0.7
+  - id: tyre
+    family: rubber
+    color: "#14171a"
+    metalness: 0.0
+    roughness: 0.92
+    evidence: "HANDBOOK §3.1 dielectric metalness 0"
+    confidence: 0.8
+  - id: hub-aluminium
+    family: bare-metal
+    color: "#b6bbc0"
+    metalness: 0.90
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1 bare-metal"
+    confidence: 0.75
+
+critical_features:
+  - id: low-deck-identity
+    desc: >
+      The 300 mm deck reads as a platform a person could step over and a cart could straddle —
+      not as a box on wheels. Wheels and castors are VISIBLE in the skirt recess.
+    threshold: 0.80
+  - id: diagonal-scanner-pair
+    desc: >
+      Two scanner heads at diagonally opposite corners, each with a visible emission window, and
+      two 270° drawn fields that together close a full circle around the machine.
+    threshold: 0.78
+  - id: drive-holds-the-gate
+    desc: >
+      MARCHA animates a real translation and the turn-around, holding needsRender only while
+      driving and re-baking the frozen shadow once on stop — the render gate is respected by the
+      one feature that could quietly defeat it.
+    threshold: 0.80
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 40
+    tris: 30000
+  measured:
+    draws: 28
+    tris: 1062
+    console_errors: 0
+
+camera:
+  azimuth_deg: 54.4
+  elevation_deg: 25.2
+  fov: 38
+  target_y_m: 0.20
+  radius_m: 3.05
+
+lighting: house-rig, reduced fill
+  # DOCUMENTED DEVIATION IN THE OTHER DIRECTION: this subject is mostly HORIZONTAL, so it already
+  # catches the bright upper IBL and does not need the vertical-subject fill at full strength.
+  # Fill drops to 0.7 (vs 1.0-1.25 on the vertical assets) and exists only for the dark skirt.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "CAMPOS LÁSER"   # the two 270° protective-field sectors
+  - "CARGA"          # tote on the deck
+  - "MARCHA"         # animated shuttle run with a turn-around
+
+public_api:
+  - "__robotAgvApp.setDriving(true|false)"
+  - "__robotAgvApp.driving   # read-only state"
+
+colorTarget:
+  # MEASURED from the rendered shell (headless SwiftShader capture at 1280x800), frozen as the
+  # regression anchor.
+  srgb: [225, 232, 232]
+  deltaE00Max: 8
+  crop: "34x34+500+420"   # clean shell flank, stopped with load, at 1280x800

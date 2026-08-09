@@ -74,6 +74,7 @@ async function getWsUrl(){
   throw new Error('no ws url');
 }
 const ws = new WebSocket(await getWsUrl());
+if(ws.setMaxListeners) ws.setMaxListeners(0);   // >10 targets: evita MaxListenersExceededWarning que corrompe el JSON de stdout
 await new Promise((res,rej)=>{ ws.onopen=res; ws.onerror=rej; });
 let msgId = 0; const pending = new Map();
 ws.onmessage = ev => { const m = JSON.parse(ev.data);

@@ -1,0 +1,184 @@
+# DesignSpec — floor-standing power distribution unit (PDU) with isolation transformer
+# Ninth and final asset of the catalog `electricos` family.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+#
+# EVIDENCE DISCIPLINE: no manufacturer datasheet was preserved. Every dimension is [INFER] from
+# distribution practice at confidence <= 0.7. Nothing here is presented as [CERT-doc].
+#
+# SCOPE BOUNDARY vs datacenter/pdu-rack — three shared letters, two different machines. THIS is the
+# floor-standing cabinet: K-rated isolation transformer, main breaker, branch panelboards, cable
+# exit into a raised floor. The datacenter asset is a 0U vertical outlet strip inside a rack. They
+# must stay visibly different or the catalog has a duplicate entry under two names.
+
+design: pdu
+family: electricos
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+
+complexity:
+  scores: {silhouette: 1, components: 3, hierarchy: 3, repetition: 3,
+           material_layers: 2, detail: 2, occlusion: 3, action_readiness: 1}
+  tier: complex
+  notes: >
+    hierarchy 3 because access is LAYERED and the layers are semantically distinct: outer door,
+    then hinged deadfront covers, then live parts. Collapsing door and deadfront into one toggle
+    would misrepresent the access sequence — opening the door exposes the deadfront, not the bus.
+    repetition 3: 42 branch poles across two panelboards, instanced.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    isa101_states: "research/HANDBOOK.md §3.4"
+    scope_boundary: "disenos/catalog/datacenter/pdu-rack/ (the 0U strip — a different machine)"
+
+references:
+  - source: "research/HANDBOOK.md §3.1 (PBR palette) + §3.4 (ISA-101)"
+    evidences: >
+      [CERT] near-binary metalness; laminated core is bare metal, cabinet sheet and breaker
+      housings are dielectrics; corrected warm copper; neutral grey as the normal state.
+    suitability: pass
+  - source: "computer-room distribution practice (no document preserved in sources/)"
+    evidences: >
+      [INFER] a K-rated isolation transformer in the base of the cabinet feeding two branch
+      panelboards through a main breaker; metering display and lamps on a fixed band above the
+      door; cable exit downward into a raised floor rather than overhead.
+    suitability: partial
+
+dimensions_real:
+  cabinet_w_m:  {value: 1.00, confidence: low}
+  cabinet_d_m:  {value: 0.90, confidence: low}   # driven by the transformer, not the panelboards
+  body_h_m:     {value: 1.95, confidence: low}
+  plinth_h_m:   {value: 0.10, confidence: low}
+  overall_h_m:  {value: 2.05, confidence: low}
+  transformer_h_m: {value: 0.62, confidence: low}
+  branch_poles_per_panel: {value: 21, confidence: low}
+  panelboards:  {value: 2,    confidence: low}
+
+hierarchy:
+  - name: root
+    children:
+      - name: carcass         # plinth with floor cable void, walls, roof, front frame
+        pivot: [0, 0, 0]
+        animation: none
+      - name: hmi_band        # FIXED band above the door: metering display, lamps, main breaker
+        pivot: [0, 0, 0]      # rotary operator. Fixed, because it must stay readable with the
+        animation: none       # door open — it is the operator's interface, not door furniture.
+      - name: guts            # isolation transformer (3 limbs, yokes, coils, channel base,
+                              # secondary bar) + 2 panelboards with 42 branch poles and panel bus
+        pivot: [0, 0, 0]
+        animation: none
+      - name: panelboards     # hinged DEADFRONT covers — the second barrier (togglable separately)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: door            # outer leaf with recessed vent bank
+        pivot: left stile
+        animation: swing
+
+materials:
+  - id: paint-ral7035
+    family: painted-metal
+    color: "#cfd2cc"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1 'panelBox -> 0.0-0.05'"
+    confidence: 0.9
+  - id: transformer-core
+    family: bare-metal
+    color: "#b4babe"
+    metalness: 0.95
+    roughness: 0.36
+    evidence: "HANDBOOK §3.1 'coil -> 0.9-1.0'"
+    confidence: 0.85
+  - id: transformer-coil
+    family: plastic
+    color: "#6f6b64"
+    metalness: 0.0             # cast/encapsulated winding — dielectric, same trap as
+    roughness: 0.44            # transformador-seco
+    evidence: "HANDBOOK §3.1 dielectric metalness 0"
+    confidence: 0.75
+  - id: copper-bus
+    family: bare-metal
+    color: "#f0a67a"
+    metalness: 1.0
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1 copper correction"
+    confidence: 0.9
+  - id: deadfront-plate
+    family: painted-metal
+    color: "#a8ada8"
+    metalness: 0.0
+    roughness: 0.60
+    evidence: "coated barrier plate — dielectric per HANDBOOK §3.1"
+    confidence: 0.8
+  - id: lamp-isa101
+    family: emissive
+    color: "#5a6878"
+    metalness: 0.0
+    roughness: 0.40
+    evidence: "HANDBOOK §3.4 — amber for overload, which is abnormal but not yet a trip"
+    confidence: 0.9
+
+critical_features:
+  - id: transformer-in-the-base
+    desc: >
+      A K-rated isolation transformer occupying the bottom of the cabinet, with the panelboards
+      stacked above it. This is what forces a 0.90 m depth where a plain panelboard would need
+      0.20 m — the depth IS the tell that this is a PDU and not a distribution board.
+    threshold: 0.82
+  - id: layered-access
+    desc: >
+      Door, then hinged deadfront covers, then live parts — three distinct layers on separate
+      toggles. Opening the door must expose the deadfront, never the bus.
+    threshold: 0.80
+  - id: not-the-rack-strip
+    desc: >
+      Floor-standing cabinet with a transformer and branch panelboards, cable exit downward into a
+      raised floor. Must remain unmistakable for datacenter/pdu-rack, the 0U outlet strip.
+    threshold: 0.85
+  - id: interface-stays-readable
+    desc: >
+      The metering display, lamp row and main breaker operator sit on a FIXED band above the door,
+      so they remain visible and operable with the door open.
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 90           # measured 60
+    tris: 8000          # measured 2,210
+
+camera:
+  azimuth_deg: 42
+  elevation_deg: 11
+  fov: 38
+  target_y_m: 1.04
+  radius_m: 4.6
+
+lighting: house-rig + vertical-subject fill
+  # DOCUMENTED DEVIATION: the cabinet front is a VERTICAL coated plane; the house rig was calibrated
+  # on horizontal equipment tops. Fix is LIGHT: DirectionalLight(0xdce6f2, 0.85) along the panel
+  # normal (+Z), environmentIntensity 2.2. metalness/roughness unchanged per HANDBOOK §3.1.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ABRIR PUERTA"
+  - "TAPAS DE TABLERO"       # the deadfront layer, deliberately NOT bundled with the door
+  - "SOBRECARGA (ISA-101)"
+
+colorTarget:
+  srgb: [231, 232, 231]
+  deltaE00Max: 8
+  crop: "22x18+500+300"   # clean cabinet door face at 1280x800, per-channel std 0.00
+
+verification:
+  gate: "node disenos/catalog/tools/verify-catalog-asset.mjs electricos/pdu"
+  state_probe: "node disenos/catalog/tools/probe-state.mjs electricos/pdu btnDoor,btnPanel open"
+  measured: {ready: true, calls: 60, triangles: 2210, console_errors: 0, shadowAuto: false}
+  known_flake: >
+    The gate fetches three.js from unpkg. A CDN hiccup surfaces as ready:false / error:'no-renderer'
+    with an EMPTY console-error list and zero __ globals. Re-run before believing it.

@@ -1,0 +1,304 @@
+<!doctype html>
+<!--
+  chasis — commercial-vehicle rolling ladder frame.
+  Dimensional evidence: research/threejs-block63.md §63.3 (Volvo Trucks Body Builder Instructions,
+  Section 7 — Frame): C-channel rail 300 x 90 mm in 8 mm plate, overall frame width 852 mm.
+  Built from disenos/catalog/shell-template.html — QA contract and render-on-demand preserved.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chasis — bastidor de escalera — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">CHASIS — bastidor de escalera / rolling frame</div>
+  <div><span class="dim">7.40 × 2.03 × 1.10 m · batalla 4.50 m</span></div>
+  <div><span class="dim">larguero C 300 × 90 × 8 mm · ancho de bastidor</span> <span class="pass">852 mm</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnWheels" class="on">RUEDAS</button>
+  <button id="btnTank" class="on">TANQUE</button>
+  <button id="btnXm" class="on">TRAVESAÑOS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 16, 52);          // widened: the subject is 7.4 m long
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 9.2;
+camera.position.set(R*Math.cos(0.78)*Math.cos(0.42), 0.9 + R*Math.sin(0.42), R*Math.sin(0.78)*Math.cos(0.42));
+camera.lookAt(0, 0.78, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.78, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.2;    // Block 63 §63.7: vertical webs reflect the dark horizon
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(6, 9, 5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;
+sun.shadow.camera.left=-6; sun.shadow.camera.right=6; sun.shadow.camera.top=6; sun.shadow.camera.bottom=-6;
+sun.shadow.camera.far = 30;
+scene.add(sun);
+// Block 63 §63.7 DEVIATION: the rail WEB is a vertical plane facing ±Z. Two fills aimed along the
+// web normals — NOT raised metalness (HANDBOOK §3.1 stays intact).
+const fillL = new THREE.DirectionalLight(0xbcd2ff, 1.15); fillL.position.set(1, 1.2, 9); scene.add(fillL);
+const fillR = new THREE.DirectionalLight(0xbcd2ff, 0.85); fillR.position.set(-1, 1.2, -9); scene.add(fillR);
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.18));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(42,42),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS (HANDBOOK §3.1; Block 63 §63.6)
+// ============================================================================
+// E-coat / chassis paint: a COATED surface, therefore dielectric (metalness 0), not "black metal".
+const matFrame  = new THREE.MeshStandardMaterial({ color:0x343b42, metalness:0.0,  roughness:0.58 });
+const matSteel  = new THREE.MeshStandardMaterial({ color:0x8d9296, metalness:0.85, roughness:0.45 });
+const matSpring = new THREE.MeshStandardMaterial({ color:0x4a5055, metalness:0.7,  roughness:0.62 });
+const matRubber = new THREE.MeshStandardMaterial({ color:0x141618, metalness:0.0,  roughness:0.92 });
+const matRim    = new THREE.MeshStandardMaterial({ color:0xb6bbc0, metalness:0.0,  roughness:0.46 });
+const matAlu    = new THREE.MeshStandardMaterial({ color:0xc9ced2, metalness:0.92, roughness:0.22 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+
+// --- certified dimensions, Block 63 §63.3 -----------------------------------
+const RAIL_H = 0.300;   // [CERT-doc] web height, VN/VHD 300 mm
+const RAIL_F = 0.090;   // [CERT-doc] flange 90 mm
+const RAIL_T = 0.008;   // [CERT-doc] 8 mm plate
+const FRAME_W = 0.852;  // [CERT-doc] overall frame width at 8 mm rail
+const RAIL_L = 7.40;    // [INFER]
+const WB     = 4.50;    // [INFER] wheelbase
+const FRAME_TOP_Y = 1.10;                    // [INFER] leaves ~200 mm of spring pack under the rail
+const railCy = FRAME_TOP_Y - RAIL_H/2;       // rail section centre height
+const X_FRONT = 2.30, X_REAR = X_FRONT - WB; // axle stations
+const zWebOuter = FRAME_W/2;                 // 0.426
+
+const solid = m => { m.castShadow = true; m.receiveShadow = true; return m; };
+
+// --- the C-channel rail: one real extruded section, shared by both sides -----
+function channelGeom(h, f, t, len){
+  const s = new THREE.Shape();
+  s.moveTo(0, -h/2); s.lineTo(f, -h/2); s.lineTo(f, -h/2+t); s.lineTo(t, -h/2+t);
+  s.lineTo(t,  h/2-t); s.lineTo(f,  h/2-t); s.lineTo(f,  h/2); s.lineTo(0,  h/2);
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: len, bevelEnabled:false, curveSegments:1 });
+  g.translate(0, 0, -len/2);
+  g.rotateY(Math.PI/2);   // extrusion axis Z -> world X; the C then opens toward -Z
+  g.computeVertexNormals();
+  return g;
+}
+const railGeom = channelGeom(RAIL_H, RAIL_F, RAIL_T, RAIL_L);
+const railL = solid(new THREE.Mesh(railGeom, matFrame));   // +Z rail, opens inward (-Z)
+railL.position.set(0, railCy, zWebOuter);
+const railR = solid(new THREE.Mesh(railGeom, matFrame));   // -Z rail, mirrored by a Y flip
+railR.position.set(0, railCy, -zWebOuter); railR.rotation.y = Math.PI;
+root.add(railL, railR);
+
+// --- crossmembers: REAL repetition -> InstancedMesh (block54 §2.3) ----------
+// Block 63 §63.3 [CERT-doc]: count follows wheelbase ("longer wheelbase vehicles may have one or two
+// additional intermediate crossmembers"), so 5 is a wheelbase-consistent choice, not an arbitrary one.
+const XM_X = [3.30, 1.55, -0.15, -1.70, -3.45];
+const xmSpan = FRAME_W - 2*RAIL_T;                      // sits between the two web inner faces
+const xmGeom = channelGeom(0.180, 0.060, 0.006, xmSpan);
+xmGeom.rotateY(-Math.PI/2);                             // back to extruding along Z
+xmGeom.rotateZ(-Math.PI/2);                             // channel opens DOWN: flat top plate, as built
+const xmesh = new THREE.InstancedMesh(xmGeom, matFrame, XM_X.length);
+xmesh.castShadow = xmesh.receiveShadow = true;
+{ const m = new THREE.Matrix4();
+  XM_X.forEach((x,i)=>{ m.makeTranslation(x, railCy, 0); xmesh.setMatrixAt(i, m); });
+  xmesh.instanceMatrix.needsUpdate = true; }
+root.add(xmesh);
+
+// --- gussets where each crossmember meets a rail web -------------------------
+const gussetGeom = new THREE.BoxGeometry(0.16, 0.16, 0.012);
+const gussets = new THREE.InstancedMesh(gussetGeom, matFrame, XM_X.length*2);
+gussets.castShadow = gussets.receiveShadow = true;
+{ const m = new THREE.Matrix4(); let i = 0;
+  for(const x of XM_X) for(const s of [1,-1]){
+    m.makeTranslation(x, railCy, s*(zWebOuter - RAIL_T - 0.008)); gussets.setMatrixAt(i++, m); }
+  gussets.instanceMatrix.needsUpdate = true; }
+root.add(gussets);
+
+// --- axles -------------------------------------------------------------------
+const TIRE_R = 0.525;                       // [INFER] 315/80R22.5 class, OD 1.05 m
+const TRACK  = 2.03;                        // [INFER]
+const axles = new THREE.Group();
+
+// front: I-beam steer axle
+const fBeam = solid(new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.13, TRACK-0.34), matSteel));
+fBeam.position.set(X_FRONT, TIRE_R, 0); axles.add(fBeam);
+for(const s of [1,-1]){                     // steering knuckles
+  const k = solid(new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.30, 0.12), matSteel));
+  k.position.set(X_FRONT, TIRE_R, s*(TRACK/2-0.16)); axles.add(k);
+}
+const tieRod = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.028,TRACK-0.40,12), matSteel));
+tieRod.rotation.x = Math.PI/2; tieRod.position.set(X_FRONT-0.24, TIRE_R-0.05, 0); axles.add(tieRod);
+
+// rear: banjo drive axle — tube + differential bowl
+const rTube = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.075,TRACK-0.30,16), matSteel));
+rTube.rotation.x = Math.PI/2; rTube.position.set(X_REAR, TIRE_R, 0); axles.add(rTube);
+const diff = solid(new THREE.Mesh(new THREE.SphereGeometry(0.215, 20, 14), matSteel));
+diff.position.set(X_REAR, TIRE_R, 0); diff.scale.set(1.0, 1.05, 0.85); axles.add(diff);
+const pinion = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.055,0.26,14), matSteel));
+pinion.rotation.z = Math.PI/2; pinion.position.set(X_REAR+0.32, TIRE_R+0.04, 0); axles.add(pinion);
+const shaft = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,1.9,12), matSteel));
+shaft.rotation.z = Math.PI/2; shaft.position.set(X_REAR+1.30, TIRE_R+0.10, 0); axles.add(shaft);
+root.add(axles);
+
+// --- leaf-spring packs: axle -> rail, one per corner -------------------------
+const springs = new THREE.Group();
+for(const [ax, len] of [[X_FRONT, 1.35], [X_REAR, 1.55]]){
+  for(const s of [1,-1]){
+    const zc = s*(zWebOuter - RAIL_F/2);
+    for(let l=0; l<3; l++){                       // three visible leaves
+      const leaf = solid(new THREE.Mesh(new THREE.BoxGeometry(len - l*0.16, 0.016, 0.085), matSpring));
+      leaf.position.set(ax, TIRE_R + 0.115 - l*0.020, zc); springs.add(leaf);
+    }
+    const seat = solid(new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.10, 0.13), matFrame));
+    seat.position.set(ax, TIRE_R + 0.055, zc); springs.add(seat);
+    for(const e of [-1, 1]){                      // hangers up to the rail bottom flange
+      const h = solid(new THREE.Mesh(new THREE.BoxGeometry(0.055, railCy - RAIL_H/2 - TIRE_R - 0.10, 0.10), matFrame));
+      h.position.set(ax + e*(len/2 - 0.05), (TIRE_R + 0.13 + railCy - RAIL_H/2)/2, zc); springs.add(h);
+    }
+  }
+}
+root.add(springs);
+
+// --- wheels: 2 front singles + 4 rear duals -> REAL repetition, instanced ----
+const WHEELS = [];
+for(const s of [1,-1]) WHEELS.push([X_FRONT, s*(TRACK/2)]);
+for(const s of [1,-1]){ WHEELS.push([X_REAR, s*0.855]); WHEELS.push([X_REAR, s*1.185]); }
+// The rim must be LONGER than the tyre is wide, or it hides inside the tread and the wheel reads as a
+// featureless black cylinder. Tyre cap (r 0.34..0.525) then reads as the sidewall, which is correct.
+const tireGeom = new THREE.CylinderGeometry(TIRE_R, TIRE_R, 0.30, 34, 1);
+tireGeom.rotateX(Math.PI/2);
+const rimGeom = new THREE.CylinderGeometry(0.335, 0.335, 0.335, 24, 1);
+rimGeom.rotateX(Math.PI/2);
+const hubGeom = new THREE.CylinderGeometry(0.115, 0.115, 0.38, 16, 1);
+hubGeom.rotateX(Math.PI/2);
+const tires = new THREE.InstancedMesh(tireGeom, matRubber, WHEELS.length);
+const rims  = new THREE.InstancedMesh(rimGeom,  matRim,    WHEELS.length);
+const hubs  = new THREE.InstancedMesh(hubGeom,  matSteel,  WHEELS.length);
+for(const im of [tires, rims, hubs]){ im.castShadow = true; im.receiveShadow = true; }
+{ const m = new THREE.Matrix4();
+  WHEELS.forEach(([x,z],i)=>{ m.makeTranslation(x, TIRE_R, z);
+    tires.setMatrixAt(i,m); rims.setMatrixAt(i,m); hubs.setMatrixAt(i,m); });
+  for(const im of [tires, rims, hubs]) im.instanceMatrix.needsUpdate = true; }
+const wheels = new THREE.Group(); wheels.add(tires, rims, hubs); root.add(wheels);
+
+// --- side-mounted fuel tank on straps ---------------------------------------
+const tank = new THREE.Group();
+const TANK_R = 0.28, TANK_X = 0.55, TANK_Y = 0.50, TANK_Z = zWebOuter + 0.32;   // hangs BELOW the rail
+const drum = solid(new THREE.Mesh(new THREE.CylinderGeometry(TANK_R, TANK_R, 1.25, 26, 1), matAlu));
+drum.rotation.z = Math.PI/2; drum.position.set(TANK_X, TANK_Y, TANK_Z); tank.add(drum);
+for(const dx of [-0.38, 0.38]){
+  const strap = solid(new THREE.Mesh(new THREE.TorusGeometry(TANK_R+0.015, 0.018, 8, 22), matFrame));
+  strap.rotation.y = Math.PI/2; strap.position.set(TANK_X+dx, TANK_Y, TANK_Z); tank.add(strap);
+  // bracket: an L bolted to the rail web, reaching outboard UNDER the bottom flange. It must stay
+  // below FRAME_TOP_Y — a bracket poking above the rail is the tell-tale of a floating tank.
+  const armY = TANK_Y + TANK_R + 0.035;                       // 0.815 — just under the bottom flange
+  const armLen = (TANK_Z + TANK_R) - zWebOuter;
+  const arm = solid(new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.05, armLen), matFrame));
+  arm.position.set(TANK_X+dx, armY, zWebOuter + armLen/2); tank.add(arm);
+  const web = solid(new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.16, 0.05), matFrame));
+  web.position.set(TANK_X+dx, armY - 0.08, zWebOuter + 0.05); tank.add(web);
+}
+root.add(tank);
+
+// --- rear bumper / towing crossmember ---------------------------------------
+const bumper = solid(new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.20, FRAME_W + 0.28), matFrame));
+bumper.position.set(-RAIL_L/2 + 0.05, railCy - 0.06, 0); root.add(bumper);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ============================================================================
+// ZONE 3 — UI (render is gated: every handler calls requestRender)
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(document.getElementById('btnWheels'), wheels);
+toggle(document.getElementById('btnTank'),   tank);
+toggle(document.getElementById('btnXm'),     xmesh);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  if(controls.autoRotate) needsRender = true;
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__chasisApp = { runtime:{ scene, renderer, camera, root } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

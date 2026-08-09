@@ -1,0 +1,196 @@
+# DesignSpec — powered roller conveyor section (24 V motor-driven roller, MDR)
+# First asset of the catalog `transporte` family. Dimensional evidence is [Block 60] §60.2
+# (research/threejs-block60.md), from the preserved Hytrol E24 manual. Motion technique and the
+# frozen-shadow rules are [Block 59].
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: banda-rodillos
+family: transporte
+track: needs-research        # research done first: B59 (technique) + B60 (dimensions)
+gate_passes: [materials, motion]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  scores: {silhouette: 1, components: 2, hierarchy: 1, repetition: 3,
+           material_layers: 1, detail: 2, occlusion: 1, action_readiness: 2}
+  tier: moderate
+  notes: >
+    repetition 3 (36 identical tread rollers ⇒ a genuine InstancedMesh case under the [Block 54]
+    low-repetition caveat) and action_readiness 2 (the first catalog asset that MOVES: rollers spin
+    and cartons translate, two motion classes with DIFFERENT shadow consequences — see
+    lighting.deviation below).
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/threejs-block60.md
+    motion_evidence: research/threejs-block59.md
+  reuse_pointers:
+    palette: "research/HANDBOOK.md §3.1 — galvanized roller = bare metal 0.9-1.0; PAINTED frame = dielectric 0.0"
+    sibling_spec: "disenos/catalog/almacenamiento/rack-pallet/design-spec.yaml (same painted-vs-bare discipline)"
+    texture: "[Block 9] CanvasTexture + RepeatWrapping — the roller seam stripe reuses it"
+
+references:
+  - source: "sources/datasheets/E24.pdf :p.1 (Hytrol 190-E24, 24 V motor-driven roller)"
+    evidences: >
+      Tread rollers 1.9" diameter x 16 ga on 3" centres; maximum 37 lbs per foot and 75 lbs per E24
+      motor; tapered curve rollers 2.5" to 1 11/16".
+    suitability: pass
+  - source: "sources/datasheets/E24.pdf :p.2"
+    evidences: >
+      EZLogic accumulation zones of 18", 24", 30" or 36"; standard conveying speed 25-174 FPM;
+      30/45-degree curves have 1 zone, 60/90-degree curves have 2 zones; alternative 4" or 6" centres
+      on the 199-CRE24EZ.
+    suitability: pass
+  - source: "research/threejs-block59.md §59.4 (three.js r160 WebGLShadowMap.js:257-260)"
+    evidences: >
+      The depth material samples `map` only when alphaTest > 0, and a body rotating about its own axis
+      of revolution keeps its silhouette — so spinning rollers do NOT invalidate a frozen shadow, while
+      translating cartons DO.
+    suitability: pass
+
+dimensions_real:
+  roller_dia_m:     {value: 0.0483, confidence: high}   # [CERT-doc] 1.9"
+  roller_pitch_m:   {value: 0.0762, confidence: high}   # [CERT-doc] 3" centres
+  zone_len_m:       {value: 0.762,  confidence: high}   # [CERT-doc] 30" zone (of the 18/24/30/36 series)
+  zones:            {value: 4,      confidence: med}    # [INFER] a section length that shows the pattern
+  length_m:         {value: 3.048,  confidence: high}   # [CERT-doc] derived: 4 x 762 mm
+  rollers:          {value: 40,     confidence: high}   # [CERT-doc] derived: 3048 / 76.2
+  drive_rollers:    {value: 4,      confidence: high}   # [CERT-doc] one driven roller per zone
+  between_frame_m:  {value: 0.600,  confidence: low}    # [INFER] BF not fixed by the preserved set (B60 §60.5)
+  tor_m:            {value: 0.850,  confidence: low}    # [INFER] top-of-roller height — see B60 §60.5
+  frame_h_m:        {value: 0.140,  confidence: low}    # [INFER] channel depth not published
+  leg_pitch_m:      {value: 1.500,  confidence: low}    # [INFER] ~1.5 m support centres
+  speed_ms:         {value: 0.45,   confidence: high}   # [CERT-doc] inside the 25-174 FPM (0.13-0.88 m/s) band
+  carton_m:         {value: [0.40, 0.30, 0.34], confidence: low}   # [INFER] generic unit load, scale cue only
+
+hierarchy:
+  - name: root
+    children:
+      - name: frames          # two painted C-channels (web + 2 flanges)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: rollers         # 36 idle tread rollers, InstancedMesh
+        pivot: [0, 0.826, 0]
+        animation: spin-about-own-axis   # Z rotation baked into the geometry; silhouette invariant
+      - name: driveRollers    # 4 (one per zone), dark polyurethane + hanging 24 V lead
+        pivot: [0, 0.826, 0]
+        animation: spin-about-own-axis
+      - name: shafts          # shaft ends through the frame web
+        pivot: [0, 0, 0]
+        animation: none
+      - name: legs            # 3 pairs + feet + cross braces
+        pivot: [0, 0, 0]
+        animation: none
+      - name: zoneGroup       # zone boundary markers (toggle)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: cartons         # unit load
+        pivot: [0, 1.0, 0]
+        animation: translate-x            # CHANGES the silhouette ⇒ shadow re-bake while running
+
+materials:
+  - id: roller-galvanized
+    family: bare-metal
+    color: "#cfd4d6"
+    metalness: 0.9
+    roughness: 0.42
+    evidence: "HANDBOOK §3.1 bare metal 0.9-1.0; galvanized tube, duller than polished stainless"
+    confidence: 0.85
+  - id: drive-roller-pu
+    family: plastic
+    color: "#1a1d20"
+    metalness: 0.0
+    roughness: 0.68
+    evidence: "[CERT-doc] E24 = motor INSIDE the tube; the sleeve is a dielectric, not bare metal"
+    confidence: 0.75
+  - id: frame-painted
+    family: painted-metal
+    color: "#39474f"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1 painted 0.0-0.05 — same painted-vs-bare separation as rack-pallet's beams"
+    confidence: 0.85
+  - id: shaft-steel
+    family: bare-metal
+    color: "#a8adb0"
+    metalness: 0.92
+    roughness: 0.35
+    evidence: "bare shaft end; HANDBOOK §3.1"
+    confidence: 0.8
+  - id: carton
+    family: paper
+    color: "#b8a184"
+    metalness: 0.0
+    roughness: 0.9
+    evidence: "generic unit load — a scale cue, not a certified dimension"
+    confidence: 0.6
+
+critical_features:
+  - id: roller-pitch-vs-diameter
+    desc: >
+      The 76,2 mm pitch over a 48,3 mm roller gives a pitch/Ø ratio of 1,58 — the rollers are visibly
+      SEPARATED, with the frame web and its shaft holes readable between them. Rollers packed edge to
+      edge read as a table, not a conveyor. This is the single ratio that identifies the asset.
+    threshold: 0.80
+  - id: drive-rollers-are-a-minority
+    desc: >
+      One driven roller per zone (4 of 40), dark-sleeved with a 24 V lead hanging outside the rear
+      frame, against 36 bare galvanized tread rollers. A conveyor where every roller looks driven
+      misrepresents how an MDR line works.
+    threshold: 0.75
+  - id: painted-frame-vs-bare-roller
+    desc: >
+      The channel reads as PAINTED (dielectric, no metal glint) against bare metal rollers. A uniform
+      metal conveyor fails this the same way a uniform grey rack failed [Block 58].
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 45          # measured 38 (instancing carries the 36 tread rollers + 40 shafts)
+    tris: 20000        # measured 4 902
+
+camera:
+  azimuth_deg: 35.5
+  elevation_deg: 17.2
+  fov: 38
+  target_y_m: 0.58
+  radius_m: 3.6
+
+lighting: house-rig
+  # No material deviation needed: the rollers are horizontal cylinders, so the key light sweeps their
+  # curvature and they never present the flat vertical metal plane that forced the fill deviation on
+  # the `puertas` family.
+  deviation:
+    id: shadow-rebake-while-running
+    what: >
+      `shadowMap.autoUpdate` stays false (the [Block 54] §5-d rule), but the animation loop sets
+      `renderer.shadowMap.needsUpdate = true` on every frame in which the cartons translate.
+    why: >
+      [Block 59] §59.4 separates two motion classes. A roller spinning about its own axis of
+      revolution has an invariant silhouette, so the baked shadow stays correct and NO re-bake is
+      done for it. A carton translating along the conveyor does change the silhouette, so leaving the
+      shadow frozen would leave a shadow stranded under a moved box. The re-bake is therefore scoped
+      to the carton branch only, and only while RUN is on — an idle inspection costs exactly what a
+      static asset costs.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "RUN"        # rollers spin + cartons advance (the only branch that re-bakes the shadow)
+  - "CARGA"      # unit load in / bare conveyor
+  - "ZONAS"      # the 4 accumulation-zone boundaries
+
+colorTarget:
+  # MEASURED from the rendered galvanized tread roller (headless SwiftShader capture at 1280x800),
+  # frozen as the regression anchor. The ROLLER is the target, not the frame: bare-metal-vs-painted is
+  # the material claim most likely to regress, and the roller is the asset's defining surface.
+  srgb: [158, 165, 169]
+  deltaE00Max: 8
+  crop: "24x6+980+430"   # lit face of a tread roller at 1280x800
+  secondary:
+    - {id: frame-painted, srgb: [59, 76, 87], crop: "20x8+760+448"}

@@ -214,3 +214,10 @@ This index guides through the **40 blocks** of this research. Each block is an i
 - [x] G64 — Curves & surfaces: Bézier/Catmull-Rom/NURBS (three.js Curve API, NURBS addons) → [Block 51]
 - [x] G65 — Numerical robustness of geometric predicates (orientation/incircle, epsilon/snapping) → [Block 48]
 - [x] G66 — Procedural placement: poisson-disk/blue-noise + WFC / L-systems → [Block 52] (LAST read-only gap; RUN 9 read-only set EXHAUSTED = STOP)
+
+### RUN 10 — catalog family evidence (robotica worktree, 2026-08-08)
+
+- [x] G74 — ROBOTICS dimensional + joint-hierarchy reference (ABB IRB 6700-235/2.65 envelope & axis
+  ranges; UR10e certified DH chain; Robotiq 2F-85 adaptive linkage; MiR250 AMR envelope; ABB IRB 660
+  4-axis palletizer + parallelogram constraint; ISO 13857 fence heights + SICK C4000 light-curtain
+  proportions; the six-rule joint-hierarchy contract for three.js) → [Block 62]

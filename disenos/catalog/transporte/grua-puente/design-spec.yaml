@@ -1,0 +1,180 @@
+# DesignSpec — single-girder overhead travelling (EOT) crane
+# Evidence is [Block 61] §61.4 (research/threejs-block61.md). This is the LEAST-certified asset of the
+# family and the spec says so plainly: only capacity and span are published; the girder proportion is
+# a supplier rule of thumb; the end-carriage, hook approach and runway section are an honest negative.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: grua-puente
+family: transporte
+track: needs-research
+gate_passes: [materials, motion]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  scores: {silhouette: 2, components: 3, hierarchy: 3, repetition: 2,
+           material_layers: 1, detail: 2, occlusion: 0, action_readiness: 3}
+  tier: complex
+  notes: >
+    hierarchy 3 is the highest in the family: three nested travelling frames (bridge along the runway
+    → trolley along the girder → hoist rope/hook down), which is the crane's whole identity. Every one
+    of the three motions changes the silhouette, so all three re-bake the shadow while in flight.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/threejs-block61.md
+    motion_evidence: research/threejs-block59.md
+  reuse_pointers:
+    palette: "research/HANDBOOK.md §3.1 — painted crane yellow = dielectric 0.0; rail head = bare metal"
+
+references:
+  - source: "sources/web-snapshots/www.abuscranes.com_cranes_overhead-travelling-cranes_single-girder-overhead-trav.md"
+    evidences: >
+      "SWL up to 16 t", "Spans up to 38,5 m (SWL dependent)", "Optimised headroom via main girder
+      connection variants", and that safety clearances below ceilings are normally not required for
+      single-girder cranes in this load range.
+    suitability: pass
+  - source: "sources/web-snapshots/www.craneyt.com_comprehensive-guide-to-double-girder-bridge-crane-design.html.md"
+    evidences: >
+      "The main girder height-to-span ratio is typically controlled between 1/14 and 1/18. The web
+      thickness … generally no less than 6mm"; large stiffeners "spacing is generally no greater than
+      the beam height"; mid-span deflection "no greater than 1/700 to 1/1000" of span.
+    suitability: partial     # supplier engineering guide, not a standard — recorded as [CERT-a]
+  - source: "research/threejs-block61.md §61.4"
+    evidences: >
+      HONEST NEGATIVE: end-carriage wheelbase, runway rail height/section, hook approach, trolley
+      envelope, wheel diameters and the standard span series are NOT fixed by any reachable source —
+      EN 15011 and CMAA 70 are paywalled and the free ANSI/BSI preview shows structure only.
+    suitability: pass
+
+dimensions_real:
+  swl_max_t:        {value: 16,    confidence: high}   # [CERT-web] single-girder class ceiling
+  span_max_m:       {value: 38.5,  confidence: high}   # [CERT-web] published maximum
+  span_m:           {value: 16.00, confidence: low}    # [INFER] the span MODELLED, inside that envelope
+  girder_depth_m:   {value: 1.00,  confidence: med}    # [CERT-a] span/16, inside the 1/14..1/18 band
+  girder_width_m:   {value: 0.42,  confidence: low}    # [INFER] box width not published
+  stiffener_pitch_m: {value: 1.00,  confidence: med}    # [CERT-a] "no greater than the beam height"
+  web_min_m:        {value: 0.006, confidence: med}    # [CERT-a] web >= 6 mm (not visible at this LOD)
+  deflection_limit: {value: "span/700..span/1000", confidence: med}   # [CERT-a] static stiffness rule
+  runway_height_m:  {value: 7.00,  confidence: low}    # [INFER] HONEST NEGATIVE — not published
+  end_carriage_wb_m: {value: 2.60,  confidence: low}    # [INFER] HONEST NEGATIVE — not published
+  runway_length_m:  {value: 22.0,  confidence: low}    # [INFER] scene extent, not a machine dimension
+  hook_travel_m:    {value: [1.2, 3.8], confidence: low}  # [INFER] hoisting range shown
+
+hierarchy:
+  - name: root
+    children:
+      - name: runway          # 2 beams + bare rail heads + columns and brackets
+        pivot: [0, 0, 0]
+        animation: none
+      - name: bridge          # travels ALONG the runway (x)
+        pivot: [0, 7.0, 0]
+        animation: translate-x
+        children:
+          - name: girder      # box girder + stiffeners + lower flange (the single-girder signature)
+            animation: inherited
+          - name: endCarriages # 2, wheels on the rail, with travel drives
+            animation: inherited
+          - name: trolley     # travels ALONG the girder (z)
+            animation: translate-z
+            children:
+              - name: hoist   # drum, rope, hook block, hook
+                animation: translate-y
+                children:
+                  - name: load
+                    animation: inherited
+
+materials:
+  - id: girder-painted
+    family: painted-metal
+    color: "#d8a413"
+    metalness: 0.0
+    roughness: 0.52
+    evidence: "crane yellow is PAINTED — dielectric; HANDBOOK §3.1 painted 0.0-0.05"
+    confidence: 0.8
+  - id: structure-painted
+    family: painted-metal
+    color: "#4a545c"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "runway beams and columns, painted; dielectric"
+    confidence: 0.8
+  - id: rail-steel
+    family: bare-metal
+    color: "#a7acb0"
+    metalness: 0.92
+    roughness: 0.34
+    evidence: "the rail head is the one BARE metal surface up there — wheels keep it polished"
+    confidence: 0.8
+  - id: hook-steel
+    family: bare-metal
+    color: "#b9bec1"
+    metalness: 0.93
+    roughness: 0.32
+    evidence: "forged hook and block; HANDBOOK §3.1"
+    confidence: 0.8
+
+critical_features:
+  - id: three-nested-travels
+    desc: >
+      Bridge along the runway, trolley along the girder, hook down — three orthogonal motions in a
+      nested hierarchy. A crane modelled with a fixed trolley or a rope that does not pay out is a
+      static prop, not this machine.
+    threshold: 0.80
+  - id: single-girder-signature
+    desc: >
+      One main girder with a lower flange the trolley hangs FROM (not two girders with a trolley
+      riding on top). That is what makes it the ABUS single-girder class the evidence covers.
+    threshold: 0.75
+  - id: girder-proportion
+    desc: >
+      Girder depth is span/16, inside the 1/14..1/18 band, with stiffeners at roughly one beam depth.
+      A girder drawn too slender for its span is the first thing a crane engineer notices.
+    threshold: 0.70
+
+quality_contract:
+  global_min: 0.70          # deliberately lower than the family's 0.75: the evidence supports less
+  perf_budget:
+    draws: 60          # measured 54
+    tris: 20000        # measured 1 198
+
+camera:
+  azimuth_deg: 40.1
+  elevation_deg: 24.1
+  fov: 38
+  target_y_m: 3.6
+  radius_m: 33
+
+lighting: house-rig
+  # Shadow camera widened to ±16 m and far = 60: the default ±3 m frustum of the shell template
+  # covers a machine, not a 22 m runway, and would have clipped every shadow in the scene.
+  deviation:
+    id: shadow-rebake-while-travelling
+    what: "`autoUpdate` stays false; `needsUpdate` re-fires per frame while any of the three travels is in flight."
+    why: "[Block 59] §59.4 — all three motions move geometry through space, the class that invalidates a frozen shadow."
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "PUENTE"    # bridge travel along the runway
+  - "CARRO"     # trolley travel along the girder
+  - "GANCHO"    # hoist
+
+honest_negatives:
+  # Recorded on the asset, not only in the block, so a reader of this spec alone is not misled.
+  - "End-carriage wheelbase, runway rail section and height, hook approach and wheel diameters are [INFER]."
+  - "The standard span series is not published free; 16 m is a chosen value inside the 38,5 m ceiling."
+  - "No capacity-specific geometry: the same shape serves the whole 1-16 t class in this model."
+
+colorTarget:
+  # MEASURED from the rendered painted girder (headless SwiftShader capture at 1280x800).
+  # The GIRDER is the target: crane yellow as a DIELECTRIC is the material claim most likely to
+  # regress into a metallic gold.
+  srgb: [204, 167, 40]
+  deltaE00Max: 8
+  crop: "18x6+600+270"
+  secondary:
+    - {id: structure-painted, srgb: [94, 109, 121], crop: "16x5+900+270"}

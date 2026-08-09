@@ -1,0 +1,326 @@
+<!doctype html>
+<!--
+  transportador-cadena — slat (apron) conveyor, catalog/transporte.
+  Dimensional evidence: [Block 60] §60.4 from sources/datasheets/sedis-conveyor-chains-catalogue.pdf:
+  conveyor chain is ISO 1977 (NOT ISO 606), pitch series 40/53/63/80/100/125/160/200/250/315/400/500 mm.
+  §60.4 is also why this asset does NOT use the [Block 59] texture scroll: at a 100 mm pitch the links
+  read at inspection distance, so the slats are real geometry that translates.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transportador de cadena / tablillas — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Transportador de tablillas (cadena ISO 1977)</div>
+  <div><span class="dim">3,00 × 0,74 × 0,80 m · tablilla 600 mm</span></div>
+  <div><span class="dim">paso de cadena 100 mm · tablilla cada 2 pasos · piñón z=8</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnRun">RUN</button>
+  <button id="btnLoad">CARGA</button>
+  <button id="btnChain">CADENA</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 34);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // [Block 54] §5-d
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 3.7;
+camera.position.set(R*Math.cos(0.72)*Math.cos(0.28), 0.62 + R*Math.sin(0.28), R*Math.sin(0.72)*Math.cos(0.28));
+camera.lookAt(0, 0.62, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.62, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.4, 5.4, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left=-2.8; sun.shadow.camera.right=2.8;
+sun.shadow.camera.top=2.8; sun.shadow.camera.bottom=-2.8;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(24,24),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS
+// ============================================================================
+const matSlat   = new THREE.MeshStandardMaterial({ color:0xc2c7ca, metalness:0.9, roughness:0.42 });  // bare steel slat
+const matChain  = new THREE.MeshStandardMaterial({ color:0x8d9296, metalness:0.95, roughness:0.34 }); // oiled chain plates
+const matPin    = new THREE.MeshStandardMaterial({ color:0x6f7478, metalness:0.95, roughness:0.30 });
+const matFrame  = new THREE.MeshStandardMaterial({ color:0x3b4750, metalness:0.0, roughness:0.55 });  // PAINTED
+const matSprock = new THREE.MeshStandardMaterial({ color:0x9aa0a4, metalness:0.9, roughness:0.38 });
+const matDrive  = new THREE.MeshStandardMaterial({ color:0x1d5f7f, metalness:0.0, roughness:0.5 });
+const matPart   = new THREE.MeshStandardMaterial({ color:0x7d5c3a, metalness:0.0, roughness:0.78 });
+const matMark   = new THREE.MeshStandardMaterial({ color:0x00d4aa, metalness:0.0, roughness:0.5,
+                                                   emissive:0x00d4aa, emissiveIntensity:0.35 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.  Dimensions: [Block 60] §60.4 unless marked [INFER].
+// ============================================================================
+const PITCH   = 0.100;                 // [CERT-doc] ISO 1977 preferred series member
+const SLAT_EV = 2;                     // [INFER] a slat attachment every 2 pitches
+const SLAT_W  = 0.600;                 // [INFER] slat width — B60 §60.5: no standard series exists
+const SLAT_T  = 0.006;                 // [INFER] formed steel slat thickness
+const SLAT_D  = PITCH*SLAT_EV - 0.012; // slat depth leaves a visible gap between slats
+const TEETH   = 8;                     // [INFER] within the 8-15 range Renold cites for large-pitch chain
+const PITCH_D = PITCH/Math.sin(Math.PI/TEETH);   // pitch diameter = p / sin(180/z) — exact, not guessed
+const LEN     = 3.00;                  // [INFER] section length
+const TOP_Y   = 0.720;                 // [INFER] carrying-run height
+const BOT_Y   = TOP_Y - PITCH_D*0.92;  // return run, just under the sprocket circle
+const CHAIN_Z = SLAT_W/2 - 0.055;      // the two chain strands run inboard of the slat edge
+
+const root = new THREE.Group();
+const N_SLAT_TOP = Math.floor(LEN/(PITCH*SLAT_EV));
+const RUN = N_SLAT_TOP*PITCH*SLAT_EV;                     // exact wrap length (no drift)
+
+// --- slats: real repetition (top + return) ⇒ InstancedMesh [Block 54] §2.3
+const slatGeo = new THREE.BoxGeometry(SLAT_D, SLAT_T, SLAT_W);
+const slats = new THREE.InstancedMesh(slatGeo, matSlat, N_SLAT_TOP*2);
+slats.castShadow = true; slats.receiveShadow = true;
+slats.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+// --- chain: side plates + pins, one link per PITCH on both strands and both runs
+const plateGeo = new THREE.BoxGeometry(PITCH*0.92, 0.030, 0.008);
+const pinGeo   = new THREE.CylinderGeometry(0.006, 0.006, 0.030, 6);
+pinGeo.rotateX(Math.PI/2);
+const N_LINK = Math.round(RUN/PITCH);
+const links = new THREE.InstancedMesh(plateGeo, matChain, N_LINK*4);   // 2 strands x 2 runs
+links.castShadow = true; links.receiveShadow = true;
+links.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+const pins = new THREE.InstancedMesh(pinGeo, matPin, N_LINK*4);
+pins.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(1,1,1);
+const _p = new THREE.Vector3();
+const wrap = x => { let v = (x + RUN/2) % RUN; if(v < 0) v += RUN; return v - RUN/2; };
+
+function layout(shift){
+  let i = 0;
+  for(let k=0;k<N_SLAT_TOP;k++){
+    const x0 = -RUN/2 + k*PITCH*SLAT_EV + PITCH*SLAT_EV/2;
+    _p.set(wrap(x0 + shift), TOP_Y, 0);
+    slats.setMatrixAt(i++, _m.compose(_p,_q,_s));
+    _p.set(wrap(-x0 - shift), BOT_Y, 0);                 // return run travels the other way
+    slats.setMatrixAt(i++, _m.compose(_p,_q,_s));
+  }
+  slats.instanceMatrix.needsUpdate = true;
+
+  let j = 0;
+  for(let k=0;k<N_LINK;k++){
+    const x0 = -RUN/2 + k*PITCH + PITCH/2;
+    for(const sz of [1,-1]){
+      _p.set(wrap(x0 + shift), TOP_Y - 0.022, sz*CHAIN_Z);
+      links.setMatrixAt(j, _m.compose(_p,_q,_s));
+      pins.setMatrixAt(j, _m.compose(_p,_q,_s));
+      j++;
+      _p.set(wrap(-x0 - shift), BOT_Y - 0.022, sz*CHAIN_Z);
+      links.setMatrixAt(j, _m.compose(_p,_q,_s));
+      pins.setMatrixAt(j, _m.compose(_p,_q,_s));
+      j++;
+    }
+  }
+  links.instanceMatrix.needsUpdate = true;
+  pins.instanceMatrix.needsUpdate = true;
+}
+layout(0);
+root.add(slats, links, pins);
+
+// --- sprockets: real tooth count, so the pitch diameter is a consequence, not a choice
+function sprocket(){
+  const g = new THREE.Group();
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(PITCH_D/2 - 0.028, PITCH_D/2 - 0.028, 0.026, 24), matSprock);
+  hub.rotation.x = Math.PI/2; g.add(hub);
+  const toothGeo = new THREE.BoxGeometry(0.030, 0.048, 0.024);
+  const teeth = new THREE.InstancedMesh(toothGeo, matSprock, TEETH);
+  const e = new THREE.Euler();
+  for(let t=0;t<TEETH;t++){
+    const a = t*2*Math.PI/TEETH;
+    e.set(0,0,a); _q.setFromEuler(e);
+    _p.set(Math.cos(a)*(PITCH_D/2 - 0.012), Math.sin(a)*(PITCH_D/2 - 0.012), 0);
+    teeth.setMatrixAt(t, _m.compose(_p,_q,_s));
+  }
+  g.add(teeth);
+  g.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+const sprockets = [];
+for(const sx of [1,-1]){
+  for(const sz of [1,-1]){
+    const sp = sprocket();
+    sp.position.set(sx*(RUN/2 + 0.02), (TOP_Y + BOT_Y)/2, sz*CHAIN_Z);
+    root.add(sp); sprockets.push(sp);
+  }
+}
+
+// --- drive shaft + gearmotor at the head
+const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.022,0.022, SLAT_W + 0.02, 12), matPin);
+shaft.rotation.x = Math.PI/2;
+shaft.position.set(RUN/2 + 0.02, (TOP_Y + BOT_Y)/2, 0);
+shaft.castShadow = true; root.add(shaft);
+const gm = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.17, 0.15), matDrive);
+gm.position.set(RUN/2 + 0.02, (TOP_Y + BOT_Y)/2 - 0.02, -(SLAT_W/2 + 0.14));
+gm.castShadow = true; gm.receiveShadow = true; root.add(gm);
+
+// --- frame + legs
+for(const sz of [1,-1]){
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(RUN + 0.10, 0.075, 0.05), matFrame);
+  rail.position.set(0, TOP_Y - 0.075, sz*(SLAT_W/2 + 0.06));
+  rail.castShadow = true; rail.receiveShadow = true; root.add(rail);
+  const lower = new THREE.Mesh(new THREE.BoxGeometry(RUN + 0.10, 0.05, 0.04), matFrame);
+  lower.position.set(0, BOT_Y - 0.06, sz*(SLAT_W/2 + 0.06));
+  lower.castShadow = true; root.add(lower);
+}
+for(let x = -RUN/2 + 0.30; x <= RUN/2 - 0.25; x += 1.35){
+  for(const sz of [1,-1]){
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.055, BOT_Y - 0.10, 0.055), matFrame);
+    leg.position.set(x, (BOT_Y - 0.10)/2, sz*(SLAT_W/2 + 0.06));
+    leg.castShadow = true; leg.receiveShadow = true; root.add(leg);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.013, 0.13), matFrame);
+    foot.position.set(x, 0.0065, sz*(SLAT_W/2 + 0.06));
+    foot.castShadow = true; foot.receiveShadow = true; root.add(foot);
+  }
+}
+
+// --- pitch markers: the ISO 1977 pitch, made measurable
+const markGroup = new THREE.Group();
+for(let k=0;k<=6;k++){
+  const mk = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.04, 0.025), matMark);
+  mk.position.set(-RUN/2 + k*PITCH, TOP_Y + 0.03, SLAT_W/2 + 0.10);
+  markGroup.add(mk);
+}
+markGroup.visible = false;
+root.add(markGroup);
+
+// --- load: heavy parts riding the slats (what a slat conveyor is FOR)
+const parts = new THREE.Group();
+for(let i=0;i<3;i++){
+  const p = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.20, 0.40), matPart);
+  p.position.set(-RUN/2 + 0.55 + i*0.80, TOP_Y + 0.10 + SLAT_T/2, 0);
+  p.castShadow = true; p.receiveShadow = true;
+  parts.add(p);
+}
+root.add(parts);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ============================================================================
+// ZONE 3 — UI
+// ============================================================================
+let running = false;
+const SPEED = 0.30;                      // [INFER] m/s — a slat conveyor is a slow, heavy-duty machine
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnRun = document.getElementById('btnRun');
+btnRun.onclick = ()=>{ running = !running; btnRun.classList.toggle('on', running); requestRender(); };
+
+const btnLoad = document.getElementById('btnLoad');
+btnLoad.onclick = ()=>{ parts.visible = !parts.visible; btnLoad.classList.toggle('on', parts.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+btnLoad.classList.add('on');
+
+const btnChain = document.getElementById('btnChain');
+btnChain.onclick = ()=>{ markGroup.visible = !markGroup.visible; btnChain.classList.toggle('on', markGroup.visible); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand ([Block 56]); loads STOPPED ([Block 59] §59.5) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+let shift = 0;
+const _clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(_clock.getDelta(), 0.05);
+  if(running){
+    shift = (shift + SPEED*dt) % RUN;
+    layout(shift);
+    for(const sp of sprockets) sp.rotation.z -= (SPEED/(PITCH_D/2))*dt;   // silhouette invariant
+    if(parts.visible){
+      for(const p of parts.children){
+        p.position.x += SPEED*dt;
+        if(p.position.x > RUN/2 + 0.3) p.position.x = -RUN/2 - 0.3;
+      }
+    }
+    // Slats and load TRANSLATE: this is the [Block 59] §59.4 motion class that DOES invalidate a
+    // frozen shadow — unlike the belt, which only scrolls its UVs. Re-bake while running.
+    renderer.shadowMap.needsUpdate = true;
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract ----------
+globalThis.__transportadorCadenaApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__transportador-cadenaApp'] = globalThis.__transportadorCadenaApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

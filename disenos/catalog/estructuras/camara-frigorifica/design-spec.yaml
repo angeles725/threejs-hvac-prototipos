@@ -1,0 +1,182 @@
+# DesignSpec — cold room (insulated sandwich-panel building)
+# First asset of my run in the catalog `estructuras` family.
+# EVIDENCE: this asset inherits a real certified anchor from the puertas family — Block 57
+# transcribes DAN-doors datasheets for the 100 mm PIR panel and the door set. The building
+# dimensions themselves are [INFER].
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: camara-frigorifica
+family: estructuras
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # the 100 mm panel is exactly two voxels
+
+complexity:
+  scores: {silhouette: 1, components: 3, hierarchy: 2, repetition: 2,
+           material_layers: 2, detail: 2, occlusion: 3, action_readiness: 1}
+  tier: moderate
+  notes: >
+    silhouette 1 / occlusion 3: the outside is a white box by definition. Everything that makes
+    it a COLD ROOM is either surface grammar (panel joint grid, door set) or inside it (unit
+    cooler, strip curtain, load), so the cutaway state is part of the deliverable, not an extra.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    door_set: "disenos/catalog/puertas/puerta-cuarto-frio (leaf, frame, gasket, kick plate, Fermod latch, 3 hinges)"
+    panel_evidence: "research/threejs-block57.md"
+
+references:
+  - source: "research/threejs-block57.md + sources/B57-catalog-dims/dan-doors-MH1001K.pdf"
+    evidences: >
+      [CERT-doc] 100 mm PIR leaf; 1.5 mm AISI 304 frame, always insulated; TPE gasket mounted in
+      the FRAME, not the leaf; kick plate = door width x 300 mm; max leaf 1400 x 2500 mm. The
+      door set here is the 1.20 x 2.10 m opening chosen inside that envelope.
+    suitability: pass
+  - source: "research/HANDBOOK.md §3.1"
+    evidences: >
+      [CERT] Pre-painted sandwich panel is COATED -> dielectric 0.0-0.05. Recorded because the
+      three estructuras assets already in the catalog use intermediate metalness (0.35-0.7),
+      which §3.1 calls a shader artefact rather than a valid authoring choice; this asset does
+      not copy that.
+    suitability: pass
+  - source: "NEGATIVE — no building-size source"
+    evidences: "No cold-room layout document is preserved; the room size is a plausible small-plant chamber, not a measurement."
+    suitability: fail
+
+dimensions_real:
+  panel_thickness_m: {value: 0.10, confidence: high}   # [CERT-doc] 100 mm PIR
+  internal_w_m:      {value: 4.20, confidence: low}
+  internal_d_m:      {value: 3.20, confidence: low}
+  internal_h_m:      {value: 2.70, confidence: low}
+  external_w_m:      {value: 4.40, confidence: low}
+  external_d_m:      {value: 3.40, confidence: low}
+  floor_build_up_m:  {value: 0.12, confidence: low}
+  panel_module_m:    {value: 1.10, confidence: low}    # [INFER] drives the visible joint grid
+  door_opening_m:    {value: [1.20, 2.10], confidence: med}   # [CERT-doc envelope] / [INFER] choice
+  leaf_m:            {value: [1.30, 2.15, 0.10], confidence: med}
+  kick_plate_h_m:    {value: 0.30, confidence: high}   # [CERT-doc] door width x 300 mm
+
+hierarchy:
+  - name: root
+    children:
+      - name: floor      # plinth, insulated floor panel, wearing surface
+      - name: walls      # 3 solid walls + nearWall (built around the door opening) + instanced joint grid + corner trims
+      - name: roof       # ceiling panel, internal face, instanced roof joints
+      - name: cond       # roof-mounted condensing unit (fan spins)
+      - name: pipes      # lagged refrigerant pair down the flank with a cleat
+      - name: guts       # unit cooler + drip tray + 2 fans + drain, instanced PVC strip curtain, loaded pallet
+      - name: frame      # door frame with frame-mounted gaskets
+      - name: doorPivot  # hinged leaf with kick plate, latch and 3 hinges
+        pivot: [-0.65, 0, 1.72]      # HINGE LINE
+        animation: swing
+
+materials:
+  - id: coated-sandwich-panel
+    family: painted-metal
+    color: "#e4e7e9"
+    metalness: 0.0
+    roughness: 0.58
+    evidence: "HANDBOOK §3.1 painted/coated panel -> 0.0-0.05"
+    confidence: 0.9
+  - id: panel-joint
+    family: painted-metal
+    color: "#c3c8cb"
+    metalness: 0.0
+    roughness: 0.66
+    evidence: "HANDBOOK §3.1; darker than the panel so the module grid reads"
+    confidence: 0.8
+  - id: stainless-hardware
+    family: bare-metal
+    color: "#c6cacc"
+    metalness: 0.95
+    roughness: 0.36
+    evidence: "[CERT-doc] 1 mm / 1.5 mm AISI 304; HANDBOOK §3.1 bare metal 0.9-1.0"
+    confidence: 0.9
+  - id: gasket-tpe
+    family: rubber
+    color: "#15181b"
+    metalness: 0.0
+    roughness: 0.88
+    evidence: "[CERT-doc] TPE/silicone, mounted in the FRAME; HANDBOOK §3.1 dielectric"
+    confidence: 0.9
+  - id: pvc-strip-curtain
+    family: plastic
+    color: "#d8d2c4"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1 dielectric; translucent, so the load behind it stays legible"
+    confidence: 0.75
+  - id: copper-line
+    family: bare-metal
+    color: "#f0a67a"
+    metalness: 1.0
+    roughness: 0.30
+    evidence: "HANDBOOK §3.1 `copper` correction"
+    confidence: 0.85
+
+critical_features:
+  - id: panel-grammar
+    desc: >
+      A visible panel module grid on every elevation plus corner trims. Without it the asset is a
+      rendered white box and nothing says sandwich panel.
+    threshold: 0.80
+  - id: real-cutaway
+    desc: >
+      CORTE removes roof AND the near wall AND the door set together. Removing only the roof
+      leaves the near wall standing between the camera and the interior — the first capture
+      showed the top 40 cm of the room and nothing else.
+    threshold: 0.85
+  - id: cold-room-interior
+    desc: "Unit cooler with drip tray and fans high on the back wall, condensate drain, strip curtain in the doorway, a loaded pallet for scale."
+    threshold: 0.78
+  - id: door-set-fidelity
+    desc: "Frame-mounted gaskets, kick plate across the bottom 300 mm, Fermod-style vertical latch, three hinges — the puertas-family vocabulary, not a generic door."
+    threshold: 0.78
+  - id: refrigeration-path
+    desc: "Roof condensing unit connected by a lagged line pair down the flank to the unit cooler, so the two halves of the system are one machine."
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 90     # measured 61 at the review camera (SwiftShader headless, DPR 1)
+    tris: 8000    # measured ~1,550
+
+camera: {azimuth_deg: 46, elevation_deg: 24, fov: 38, target_y_m: 1.50, radius_m: 9.4}
+  # The elevation is set high enough to see INTO the room in the CORTE state. A cold room shot
+  # from equipment height is a white box.
+
+lighting: house-rig + flat-panel fill + cold-room lamp
+  # DEVIATION 1: camera-side fill mirrored about the door-wall normal. This is the FLAT-PANEL
+  # case (same as puerta-cuarto-frio) and it is explicitly NOT to be carried to the curved
+  # subjects in this family — tanque-almacenamiento and silo get a gradient from the environment
+  # instead, and adding a flat fill to them would flatten the very curvature that reads.
+  # DEVIATION 2: a shadowless cool PointLight inside the room for the CORTE state.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "PUERTA"       # leaf swings on the hinge line
+  - "CORTE"        # roof + near wall + door set removed together
+  - "EVAPORADOR"   # unit-cooler fans and the roof condenser fan spin
+
+instancing:
+  - {what: "panel joints, long walls", count: 6, draws_saved: "6 -> 1"}
+  - {what: "panel joints, gable walls", count: 4, draws_saved: "4 -> 1"}
+  - {what: "roof panel joints", count: 2, draws_saved: "2 -> 1"}
+  - {what: "PVC curtain strips", count: 9, draws_saved: "9 -> 1"}
+  - {what: "evaporator fan blades", count: "4 per fan x 2", draws_saved: "8 -> 2"}
+
+colorTarget:
+  srgb: [236, 237, 237]
+  deltaE00Max: 8
+  crop: "60x120+600+420"      # clean panel field between joints, at 1280x800
+  secondary_observed:
+    door_reveal_line: [98, 102, 104]   # the frame/leaf shadow gap. If this converges on the panel
+                                       # value the door has stopped reading as a separate element,
+                                       # which on an all-white asset is the failure mode to watch.

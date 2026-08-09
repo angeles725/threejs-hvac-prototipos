@@ -1,0 +1,333 @@
+<!doctype html>
+<!--
+  banda-rodillos — powered (motor-driven-roller) conveyor section, catalog/transporte.
+  Dimensional evidence: [Block 60] §60.2 from sources/datasheets/E24.pdf (Hytrol 190-E24, 24 V MDR):
+  1.9" (48,3 mm) rollers on 3" (76,2 mm) centres, accumulation zones 18/24/30/36", 37 lb/ft, 25-174 FPM.
+  Motion technique + frozen-shadow rules: [Block 59].
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transportador de rodillos motorizados — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Transportador de rodillos motorizados (MDR 24 V)</div>
+  <div><span class="dim">3,05 × 0,70 × 0,85 m · 4 zonas de 762 mm</span></div>
+  <div><span class="dim">rodillo Ø48,3 mm · paso 76,2 mm · TOR 850 mm</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnRun">RUN</button>
+  <button id="btnLoad">CARGA</button>
+  <button id="btnZones">ZONAS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 10, 30);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // [Block 54] §5-d
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 3.6;
+camera.position.set(R*Math.cos(0.62)*Math.cos(0.30), 0.58 + R*Math.sin(0.30), R*Math.sin(0.62)*Math.cos(0.30));
+camera.lookAt(0, 0.58, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.58, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.2, 5.2, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left=-2.6; sun.shadow.camera.right=2.6;
+sun.shadow.camera.top=2.6; sun.shadow.camera.bottom=-2.6;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS (HANDBOOK §3.1: bare metal 0.9-1.0 · painted/plastic 0.0)
+// ============================================================================
+// A plain cylinder gives no visual cue that it is spinning. [Block 9]'s CanvasTexture
+// technique supplies one: a seam stripe around the tube, tiled along the roller axis.
+function rollerTexture(){
+  const c = document.createElement('canvas'); c.width = 64; c.height = 32;
+  const g = c.getContext('2d');
+  g.fillStyle = '#cfd4d6'; g.fillRect(0,0,64,32);
+  g.fillStyle = '#9aa2a6'; g.fillRect(0,0,3,32);        // the seam that makes rotation legible
+  g.fillStyle = '#b9c0c3'; g.fillRect(30,0,2,32);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;             // [Block 59] §59.2
+  t.repeat.set(1, 4);
+  t.anisotropy = 8;
+  return t;
+}
+const matRoller = new THREE.MeshStandardMaterial({ map: rollerTexture(), color:0xffffff, metalness:0.9, roughness:0.42 });
+const matDrive  = new THREE.MeshStandardMaterial({ color:0x1a1d20, metalness:0.0, roughness:0.68 });   // polyurethane-sleeved drive roller
+const matCable  = new THREE.MeshStandardMaterial({ color:0x14161a, metalness:0.0, roughness:0.8 });
+const matFrame  = new THREE.MeshStandardMaterial({ color:0x39474f, metalness:0.0, roughness:0.55 });   // PAINTED channel — dielectric
+const matLeg    = new THREE.MeshStandardMaterial({ color:0x2f3a41, metalness:0.0, roughness:0.6 });
+const matShaft  = new THREE.MeshStandardMaterial({ color:0xa8adb0, metalness:0.92, roughness:0.35 });
+const matZone   = new THREE.MeshStandardMaterial({ color:0x00d4aa, metalness:0.0, roughness:0.5,
+                                                   emissive:0x00d4aa, emissiveIntensity:0.35 });
+const matBox    = new THREE.MeshStandardMaterial({ color:0xb8a184, metalness:0.0, roughness:0.9 });
+const matTape   = new THREE.MeshStandardMaterial({ color:0xd8d3c6, metalness:0.0, roughness:0.85 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.  Dimensions: [Block 60] §60.2 unless marked [INFER].
+// ============================================================================
+const ROLL_D   = 0.0483;      // [CERT-doc] 1.9"
+const ROLL_R   = ROLL_D/2;
+const PITCH    = 0.0762;      // [CERT-doc] 3" centres
+const BF       = 0.600;       // [INFER] between-frame width (not fixed by the preserved set)
+const ZONE_L   = 0.762;       // [CERT-doc] 30" accumulation zone
+const ZONES    = 4;
+const LEN      = ZONE_L*ZONES;                 // 3.048 m
+const N_ROLL   = Math.round(LEN/PITCH);        // 40
+const TOR      = 0.85;        // [INFER] top-of-roller working height
+const FRAME_H  = 0.14;        // [INFER] channel depth
+const FRAME_T  = 0.006;
+const AXIS_Y   = TOR - ROLL_R;
+
+const root = new THREE.Group();
+
+// --- side frames: C-channel built from three plates, so the section reads as a channel
+function sideFrame(sign){
+  const g = new THREE.Group();
+  const zOut = sign*(BF/2 + FRAME_T/2);
+  const web = new THREE.Mesh(new THREE.BoxGeometry(LEN, FRAME_H, FRAME_T), matFrame);
+  web.position.set(0, AXIS_Y - 0.012, zOut);
+  g.add(web);
+  for(const fy of [FRAME_H/2 - 0.012, -FRAME_H/2 - 0.012]){
+    const flange = new THREE.Mesh(new THREE.BoxGeometry(LEN, FRAME_T, 0.038), matFrame);
+    flange.position.set(0, AXIS_Y + fy, zOut - sign*0.019);
+    g.add(flange);
+  }
+  g.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+root.add(sideFrame(1), sideFrame(-1));
+
+// --- rollers.  Real repetition (36 idle tread rollers) ⇒ InstancedMesh [Block 54] §2.3.
+//     The 4 drive rollers (one per zone, per E24) stay separate meshes: different material.
+const driveIndex = new Set();
+for(let z=0; z<ZONES; z++) driveIndex.add(Math.floor((z+0.5)*N_ROLL/ZONES));
+
+// The roller axis is BAKED into the geometry (Y → Z) so an animated rotation about Z spins the
+// roller about its own axis of revolution. Composing a static rotation.x with an animated
+// rotation.z would instead swing the axis itself.
+const rollerGeo = new THREE.CylinderGeometry(ROLL_R, ROLL_R, BF-0.004, 20, 1, false);
+rollerGeo.rotateX(Math.PI/2);
+const idleCount = N_ROLL - driveIndex.size;
+const rollers = new THREE.InstancedMesh(rollerGeo, matRoller, idleCount);
+rollers.castShadow = true; rollers.receiveShadow = true;
+rollers.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+const rollerX = [];
+{
+  const m = new THREE.Matrix4(); let i = 0;
+  for(let k=0; k<N_ROLL; k++){
+    const x = -LEN/2 + PITCH*(k+0.5);
+    rollerX.push(x);
+    if(driveIndex.has(k)) continue;
+    m.makeRotationX(0); m.setPosition(x, AXIS_Y, 0);
+    rollers.setMatrixAt(i++, m);
+  }
+}
+root.add(rollers);
+
+const driveRollers = [];
+for(const k of driveIndex){
+  const d = new THREE.Mesh(rollerGeo, matDrive);     // same baked-axis geometry, different material
+  d.position.set(rollerX[k], AXIS_Y, 0);
+  d.castShadow = true; d.receiveShadow = true;
+  root.add(d); driveRollers.push(d);
+  // In an E24 the 24 V motor lives INSIDE the tube; what is visible outside is the lead
+  // leaving the shaft end. It is also what tells a drive roller from a tread roller at a glance.
+  const lead = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.12, 6), matCable);
+  lead.position.set(rollerX[k], AXIS_Y - 0.09, -(BF/2 + 0.048));   // hangs outside the rear frame
+  lead.castShadow = true;
+  root.add(lead);
+}
+// shaft ends poking through the frame — what makes a roller read as mounted, not floating
+const shaftGeo = new THREE.CylinderGeometry(0.006, 0.006, BF + 0.03, 8);
+shaftGeo.rotateX(Math.PI/2);
+const shafts = new THREE.InstancedMesh(shaftGeo, matShaft, N_ROLL);
+{
+  const m = new THREE.Matrix4();
+  rollerX.forEach((x,i)=>{ m.makeRotationX(0); m.setPosition(x, AXIS_Y, 0); shafts.setMatrixAt(i, m); });
+}
+root.add(shafts);
+
+// --- legs: support centres ≈ 1.5 m [INFER]; 3 pairs over 3.05 m
+const legGroup = new THREE.Group();
+for(const lx of [-LEN/2 + 0.22, 0, LEN/2 - 0.22]){
+  for(const sz of [1,-1]){
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, AXIS_Y - FRAME_H/2 - 0.012, 0.05), matLeg);
+    leg.position.set(lx, (AXIS_Y - FRAME_H/2 - 0.012)/2, sz*(BF/2 + 0.01));
+    leg.castShadow = true; leg.receiveShadow = true;
+    legGroup.add(leg);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.012, 0.11), matLeg);
+    foot.position.set(lx, 0.006, sz*(BF/2 + 0.01));
+    foot.castShadow = true; foot.receiveShadow = true;
+    legGroup.add(foot);
+  }
+  const brace = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, BF + 0.02), matLeg);
+  brace.position.set(lx, 0.18, 0);
+  brace.castShadow = true; legGroup.add(brace);
+}
+root.add(legGroup);
+
+// --- zone markers (the accumulation zones the E24 control divides the section into)
+const zoneGroup = new THREE.Group();
+for(let z=0; z<=ZONES; z++){
+  const mk = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.03, 0.03), matZone);
+  mk.position.set(-LEN/2 + z*ZONE_L, AXIS_Y - FRAME_H/2 + 0.02, BF/2 + FRAME_T + 0.02);
+  zoneGroup.add(mk);
+}
+zoneGroup.visible = false;
+root.add(zoneGroup);
+
+// --- load: cartons riding on the rollers
+const BOX = [0.40, 0.30, 0.34];
+const cartons = new THREE.Group();
+for(let i=0;i<3;i++){
+  const b = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(BOX[0], BOX[1], BOX[2]), matBox);
+  body.castShadow = true; body.receiveShadow = true; b.add(body);
+  const tape = new THREE.Mesh(new THREE.BoxGeometry(BOX[0]+0.002, 0.001, 0.05), matTape);
+  tape.position.y = BOX[1]/2; b.add(tape);
+  b.position.set(-LEN/2 + 0.36 + i*0.52, TOR + BOX[1]/2, 0);   // grouped upstream so the drive rollers stay visible
+  cartons.add(b);
+}
+root.add(cartons);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;      // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let running = false;
+const SPEED = 0.45;                          // m/s — inside the 0,13-0,88 m/s band [Block 60] §60.2
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnRun = document.getElementById('btnRun');
+btnRun.onclick = ()=>{ running = !running; btnRun.classList.toggle('on', running); requestRender(); };
+
+const btnLoad = document.getElementById('btnLoad');
+btnLoad.onclick = ()=>{ cartons.visible = !cartons.visible; btnLoad.classList.toggle('on', cartons.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+btnLoad.classList.add('on');
+
+const btnZones = document.getElementById('btnZones');
+btnZones.onclick = ()=>{ zoneGroup.visible = !zoneGroup.visible; btnZones.classList.toggle('on', zoneGroup.visible); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand ([Block 56]); the animation owns needsRender ([Block 59] §59.5) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+let spin = 0;
+const _m = new THREE.Matrix4();
+const _clock = new THREE.Clock();
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(_clock.getDelta(), 0.05);
+  if(running){
+    spin += (SPEED/ROLL_R)*dt;
+    // rollers spin about their own axis of revolution ⇒ silhouette invariant ⇒ the frozen
+    // shadow stays valid for them ([Block 59] §59.4). No shadow re-bake for this branch.
+    let i = 0;
+    for(let k=0;k<N_ROLL;k++){
+      if(driveIndex.has(k)) continue;
+      _m.makeRotationZ(spin); _m.setPosition(rollerX[k], AXIS_Y, 0);
+      rollers.setMatrixAt(i++, _m);
+    }
+    rollers.instanceMatrix.needsUpdate = true;
+    for(const d of driveRollers) d.rotation.z = spin;
+
+    if(cartons.visible){
+      // cartons TRANSLATE ⇒ silhouette changes ⇒ this is the motion class that DOES
+      // invalidate a frozen shadow ([Block 59] §59.4). Re-bake only while they move.
+      for(const b of cartons.children){
+        b.position.x += SPEED*dt;
+        if(b.position.x > LEN/2 + BOX[0]) b.position.x = -LEN/2 - BOX[0];
+      }
+      renderer.shadowMap.needsUpdate = true;
+    }
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract ----------
+globalThis.__bandaRodillosApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__banda-rodillosApp'] = globalThis.__bandaRodillosApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
