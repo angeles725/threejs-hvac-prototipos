@@ -1,0 +1,319 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — fluidos/bomba-vertical-pozo · bomba de turbina vertical de eje lineal (pozo profundo).
+  Construido desde disenos/catalog/shell-template.html. Contrato: __bombaVerticalPozoApp.runtime +
+  __qaRenderInfo + data-app-ready, render-on-demand, sombras congeladas (autoUpdate=false, 1024), DPR<=2.
+  Instancing (block54 §2.3): los álabes de los 3 impulsores y los pernos de brida.
+
+  SALVAGUARDA ESTRUCTURAL CONTRA EL DEFECTO DE CORTE (aprendido en utilities/suavizador-agua y
+  fluidos/medidor-flujo): cada pieza de envolvente se crea con shellPair(), que fabrica de una vez la
+  versión ENTERA y su MEDIA correspondiente y las registra en las dos listas. Así "lo que se oculta" y
+  "lo que se repone" no pueden divergir: no son dos listas escritas a mano, son la misma llamada.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bomba de turbina vertical de pozo — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <!-- Líneas CORTAS a propósito: el sujeto ocupa la columna central del cuadro y el texto no debe
+       cruzarla. La alternativa (bajar el sujeto para esquivar el HUD) recortaba el motor. -->
+  <div class="name">BOMBA DE TURBINA VERTICAL — 3 etapas</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· fundición pintada</span></div>
+  <div><span class="dim">alto 4.89 m · tazones Ø 0.26 m · columna DN150</span></div>
+  <div><span class="dim">SIN FICHA — ninguna cota certificada</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnCut">CORTE HIDRÁULICO</button>
+  <button id="btnWell" class="on">POZO</button>
+  <button id="btnMotor" class="on">MOTOR</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensiones (design-spec.yaml) — TODAS [INFER], asset sin ficha ----------
+const BELL_Y0 = 0.05, BELL_Y1 = 0.30;      // campana de succión + colador
+const BOWL_R = 0.130;                      // radio del cuerpo de tazones
+const STAGES = 3, STAGE_H = 0.28;
+const BOWL_Y0 = BELL_Y1, BOWL_Y1 = BOWL_Y0 + STAGES*STAGE_H;   // 0.30 -> 1.14
+const COL_R = 0.084;                       // columna DN150 (OD 0.168)
+const COL_Y1 = 3.30;                       // tope de columna / base del cabezal
+const HEAD_Y1 = 3.95;                      // tope del cabezal de descarga
+const MOT_R = 0.21, MOT_H = 0.72;          // motor vertical de eje hueco
+const SHAFT_R = 0.019;                     // eje lineal
+const DISCH_Y = 3.60;                      // eje de la boca de descarga
+const WELL_R = 0.24;                       // casing del pozo (contexto)
+const WATER_Y = 2.05;                      // nivel dinámico en el pozo (contexto)
+
+// ---------- escena / renderer / cámara ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 34);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: tope de DPR
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.10;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: sombra estática congelada
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+// El sujeto es esbelto y mide 4.89 m: el encuadre lo fija la ALTURA, no el ancho. Un encuadre anterior
+// (R 7.4, objetivo 2.05) bajaba la máquina para esquivar el HUD y dejaba el MOTOR FUERA DEL CUADRO
+// (medido: ndcY del grupo motor = 1.172 > 1). El sujeto no se recorta para hacerle sitio al texto: se
+// encuadra entero (objetivo = centro real del sujeto) y es el HUD el que se acorta.
+const R = 8.0, AZ = 0.86, EL = 0.09, TGT_Y = 2.44;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TGT_Y + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TGT_Y, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TGT_Y, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.4;   // eje y camisas son metal DESNUDO en cilindros verticales:
+                                    // el especular lo da el IBL, no una luz de relleno (ONBOARD)
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4, 8, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03;
+sun.shadow.camera.left=-3; sun.shadow.camera.right=3; sun.shadow.camera.top=5; sun.shadow.camera.bottom=-5;
+scene.add(sun);
+// El fill lateral solo aporta al término DIFUSO de la fundición pintada.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 0.9);
+fill.position.set(-4, 3.5, 6);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONA 1 — MATERIALES. HANDBOOK §3.1: fundición PINTADA (dieléctrica) para tazones, columna y
+// cabezal; eje, camisas e impulsores en bronce/acero DESNUDO; agua transmisiva.
+// ============================================================================
+const matCast  = new THREE.MeshStandardMaterial({ color:0x35566b, metalness:0.0,  roughness:0.50 });
+const matHead  = new THREE.MeshStandardMaterial({ color:0x2c4a5c, metalness:0.0,  roughness:0.48 });
+const matShaft = new THREE.MeshStandardMaterial({ color:0xc8ccd0, metalness:0.93, roughness:0.26 });
+const matImp   = new THREE.MeshStandardMaterial({ color:0xb08b3e, metalness:0.90, roughness:0.34 });
+const matMotor = new THREE.MeshStandardMaterial({ color:0x445a6b, metalness:0.0,  roughness:0.52 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x22262b, metalness:0.0,  roughness:0.55 });
+const matFlg   = new THREE.MeshStandardMaterial({ color:0xa9aeb3, metalness:0.92, roughness:0.44 });
+const matBolt  = new THREE.MeshStandardMaterial({ color:0x9aa0a5, metalness:0.92, roughness:0.40 });
+const matWell  = new THREE.MeshStandardMaterial({ color:0x6b6f74, metalness:0.0,  roughness:0.85,
+                                                  side:THREE.DoubleSide });
+const matWater = new THREE.MeshPhysicalMaterial({ color:0xbfe6f5, metalness:0.0, roughness:0.10,
+                                                  transmission:0.80, thickness:0.20, ior:1.33,
+                                                  transparent:true, opacity:0.35, side:THREE.DoubleSide });
+const matTag   = new THREE.MeshStandardMaterial({ color:0xe6e9eb, metalness:0.0,  roughness:0.5 });
+
+// ============================================================================
+// ZONA 2 — GEOMETRÍA
+// ============================================================================
+const root = new THREE.Group();
+const dummy = new THREE.Object3D();
+const cut = new THREE.Group();          // mitades: se muestran en CORTE
+const solidParts = [];                  // enteras: se ocultan en CORTE
+const box = (parent,w,h,d,mat,x,y,z)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); parent.add(m); return m; };
+const cyl = (parent, r0, r1, h, seg, mat, x,y,z, rx=0, rz=0, open=false)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, h, seg, 1, open), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz);
+  parent.add(m); return m;
+};
+
+// shellPair — LA salvaguarda. Una sola llamada produce la pieza entera y su media exacta, y las
+// registra en las dos listas. Si alguien añade una envolvente nueva usando esto, es imposible que
+// el corte retire más de lo que repone: son la misma llamada, no dos listas paralelas.
+function shellPair(r0, r1, h, y, seg = 26){
+  const whole = cyl(root, r0, r1, h, seg, matCast, 0, y, 0);
+  solidParts.push(whole);
+  const halfMat = matCast.clone(); halfMat.side = THREE.DoubleSide;
+  const half = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, h, seg, 1, true, Math.PI*0.5, Math.PI), halfMat);
+  half.castShadow = true; half.position.set(0, y, 0);
+  cut.add(half);
+  return { whole, half };
+}
+
+// --- campana de succión + colador ---
+shellPair(BOWL_R*0.92, BOWL_R*1.15, BELL_Y1 - BELL_Y0, (BELL_Y0 + BELL_Y1)/2);
+{
+  const strainer = new THREE.Mesh(new THREE.CylinderGeometry(BOWL_R*1.18, BOWL_R*1.18, 0.10, 22, 1, true),
+                                  new THREE.MeshStandardMaterial({ color:0x8d949a, metalness:0.9,
+                                                                   roughness:0.45, side:THREE.DoubleSide }));
+  strainer.castShadow = true; strainer.position.set(0, BELL_Y0 - 0.02, 0); root.add(strainer);
+}
+
+// --- 3 etapas de tazones ---
+for(let i=0;i<STAGES;i++){
+  const y0 = BOWL_Y0 + i*STAGE_H;
+  shellPair(BOWL_R, BOWL_R, STAGE_H, y0 + STAGE_H/2);
+  // costura entre etapas, siempre visible (no forma parte de la envolvente que se corta)
+  cyl(root, BOWL_R + 0.010, BOWL_R + 0.010, 0.016, 26, matCast, 0, y0, 0);
+}
+
+// --- columna, con junta bridada intermedia ---
+shellPair(COL_R, COL_R, COL_Y1 - BOWL_Y1, (BOWL_Y1 + COL_Y1)/2, 22);
+const JOINT_Y = (BOWL_Y1 + COL_Y1)/2;
+for(const dy of [-0.012, 0.012]) cyl(root, COL_R + 0.045, COL_R + 0.045, 0.022, 22, matFlg, 0, JOINT_Y + dy, 0);
+
+// --- eje lineal + impulsores + arañas de cojinete: SIEMPRE presentes, se ven en el corte ---
+const hydraulics = new THREE.Group();
+cyl(hydraulics, SHAFT_R, SHAFT_R, COL_Y1 - BELL_Y1 + 0.30, 14, matShaft, 0, (BELL_Y1 + COL_Y1 + 0.30)/2, 0);
+{
+  const bladeGeo = new THREE.BoxGeometry(0.008, 0.055, BOWL_R*0.74);
+  const im = new THREE.InstancedMesh(bladeGeo, matImp, STAGES*6);
+  im.castShadow = im.receiveShadow = true;
+  let k = 0;
+  for(let i=0;i<STAGES;i++){
+    const cyy = BOWL_Y0 + i*STAGE_H + STAGE_H*0.45;
+    cyl(hydraulics, BOWL_R*0.34, BOWL_R*0.34, 0.030, 16, matImp, 0, cyy, 0);   // cubo del impulsor
+    for(let b=0;b<6;b++){
+      const a = (b/6)*Math.PI*2;
+      dummy.position.set(Math.cos(a)*BOWL_R*0.40, cyy, Math.sin(a)*BOWL_R*0.40);
+      dummy.rotation.set(0, -a, 0.22); dummy.updateMatrix();
+      im.setMatrixAt(k++, dummy.matrix);
+    }
+  }
+  im.instanceMatrix.needsUpdate = true;
+  hydraulics.add(im);
+}
+for(let y = BOWL_Y1 + 0.60; y < COL_Y1 - 0.20; y += 0.90){
+  cyl(hydraulics, COL_R*0.55, COL_R*0.55, 0.05, 14, matShaft, 0, y, 0);        // araña / cojinete
+}
+root.add(hydraulics);
+
+// --- cabezal de descarga: codo fundido, boca lateral bridada, brida de montaje ---
+cyl(root, COL_R + 0.055, COL_R + 0.075, HEAD_Y1 - COL_Y1, 24, matHead, 0, (COL_Y1 + HEAD_Y1)/2, 0);
+cyl(root, COL_R + 0.11, COL_R + 0.11, 0.030, 24, matFlg, 0, COL_Y1 + 0.015, 0);       // brida de montaje
+cyl(root, 0.084, 0.084, 0.36, 20, matHead, 0.22, DISCH_Y, 0, 0, Math.PI/2);            // boca de descarga
+cyl(root, 0.110, 0.110, 0.020, 22, matFlg, 0.40, DISCH_Y, 0, 0, Math.PI/2);            // brida de descarga
+{
+  const geo = new THREE.CylinderGeometry(0.008, 0.008, 0.05, 6);
+  const im = new THREE.InstancedMesh(geo, matBolt, 8);
+  im.castShadow = true;
+  for(let i=0;i<8;i++){
+    const a = (i/8)*Math.PI*2 + Math.PI/8;
+    dummy.position.set(0.40, DISCH_Y + Math.sin(a)*0.090, Math.cos(a)*0.090);
+    dummy.rotation.set(0, 0, Math.PI/2); dummy.updateMatrix();
+    im.setMatrixAt(i, dummy.matrix);
+  }
+  im.instanceMatrix.needsUpdate = true;
+  root.add(im);
+}
+box(root, 0.10, 0.05, 0.006, matTag, 0, DISCH_Y - 0.22, COL_R + 0.078);
+
+// --- motor vertical de eje hueco ---
+const motor = new THREE.Group();
+cyl(motor, MOT_R*0.85, MOT_R*0.85, 0.08, 20, matDark, 0, HEAD_Y1 + 0.04, 0);           // pedestal
+cyl(motor, MOT_R, MOT_R, MOT_H, 24, matMotor, 0, HEAD_Y1 + 0.08 + MOT_H/2, 0);
+for(let i=0;i<10;i++){                                                                  // aletas
+  const a = (i/10)*Math.PI*2;
+  box(motor, 0.014, MOT_H*0.86, 0.05, matMotor,
+      Math.cos(a)*(MOT_R + 0.024), HEAD_Y1 + 0.08 + MOT_H/2, Math.sin(a)*(MOT_R + 0.024));
+}
+cyl(motor, MOT_R*0.55, MOT_R*0.40, 0.14, 20, matMotor, 0, HEAD_Y1 + 0.08 + MOT_H + 0.07, 0);
+box(motor, 0.14, 0.16, 0.12, matDark, MOT_R + 0.02, HEAD_Y1 + 0.30, 0);                 // caja de bornes
+root.add(motor);
+
+// --- pozo (contexto): casing seccionado + nivel de agua ---
+const well = new THREE.Group();
+{
+  const casing = new THREE.Mesh(new THREE.CylinderGeometry(WELL_R, WELL_R, COL_Y1 - 0.30, 30, 1, true,
+                                                           Math.PI*0.5, Math.PI), matWell);
+  casing.position.set(0, (COL_Y1 - 0.30)/2, 0); casing.receiveShadow = true; well.add(casing);
+  const water = new THREE.Mesh(new THREE.CylinderGeometry(WELL_R - 0.004, WELL_R - 0.004, WATER_Y, 30, 1, true,
+                                                          Math.PI*0.5, Math.PI), matWater);
+  water.position.set(0, WATER_Y/2, 0); well.add(water);
+  const disc = new THREE.Mesh(new THREE.RingGeometry(COL_R, WELL_R - 0.004, 30, 1, Math.PI*0.5, Math.PI), matWater);
+  disc.rotation.x = -Math.PI/2; disc.position.set(0, WATER_Y, 0); well.add(disc);
+}
+root.add(well);
+
+cut.visible = false;
+root.add(cut);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // hornea la sombra congelada una vez
+
+// ============================================================================
+// ZONA 3 — UI. El render está GATEADO: cada handler llama requestRender().
+// ============================================================================
+const btnRot   = document.getElementById('btnRot');
+const btnCut   = document.getElementById('btnCut');
+const btnWell  = document.getElementById('btnWell');
+const btnMotor = document.getElementById('btnMotor');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+btnCut.onclick = ()=>{ const on = !cut.visible;
+  cut.visible = on;
+  solidParts.forEach(m=>{ m.visible = !on; });     // 1:1 con las mitades, por construcción
+  btnCut.classList.toggle('on', on);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(btnWell, well);
+toggle(btnMotor, motor);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- contrato de QA (no quitar) ----------
+globalThis.__bombaVerticalPozoApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__bomba-vertical-pozoApp'] = globalThis.__bombaVerticalPozoApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
