@@ -1,0 +1,201 @@
+<!doctype html>
+<!-- Storeroom shell — masonry bodega. Catalog/estructuras. Built from shell-template.html.
+     QA: globalThis.__bodegaApp.runtime + __qaRenderInfo + data-app-ready. Render-on-demand (block56). -->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bodega — storeroom shell</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Bodega — masonry storeroom</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· painted block · roll-up shutter</span></div>
+  <div class="dim">8.0 × 6.0 m · muro 3.0–3.7 m (mono-pendiente)</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnRoof" class="on">ROOF ON-OFF</button>
+  <button id="btnDoor">SHUTTER OPEN-CLOSE</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---- envelope ----
+const L=8, W=6, HL=L/2, HW=W/2, T=0.2;
+const HF=3.0, HB=3.7;                       // front (z=+HW) / back (z=-HW) top heights → mono-slope
+const roofY = z => (HF+HB)/2 - z*((HB-HF)/W);   // roof surface height at a given z
+const SLOPE = Math.atan2(HB-HF, W);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 22, 70);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(44, innerWidth/innerHeight, 0.1, 200);
+camera.position.set(9, 5.6, 10.5);
+camera.lookAt(0, 1.6, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.6, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.7;
+controls.maxPolarAngle = Math.PI*0.5 - 0.02;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.55;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(9, 14, 8); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;
+sun.shadow.camera.left=-9; sun.shadow.camera.right=9; sun.shadow.camera.top=9; sun.shadow.camera.bottom=-9;
+sun.shadow.camera.near=1; sun.shadow.camera.far=45;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.35));
+scene.add(new THREE.AmbientLight(0xffffff, 0.30));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(60,60),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ---- materials (design-spec) ----
+const matBlock  = new THREE.MeshStandardMaterial({ color:0xc9c4b7, metalness:0.0, roughness:0.9, side:THREE.DoubleSide });
+const matRoof   = new THREE.MeshStandardMaterial({ color:0xb0b4b8, metalness:0.35, roughness:0.55, side:THREE.DoubleSide });
+const matShut   = new THREE.MeshStandardMaterial({ color:0xb8bcbf, metalness:0.4, roughness:0.5 });
+const matShelf  = new THREE.MeshStandardMaterial({ color:0x9aa1a6, metalness:0.7, roughness:0.45 });
+const matFloor  = new THREE.MeshStandardMaterial({ color:0x9a9a95, metalness:0.0, roughness:0.95 });
+const matTrim   = new THREE.MeshStandardMaterial({ color:0x2a2e33, metalness:0.4, roughness:0.6 });
+const matBox    = new THREE.MeshStandardMaterial({ color:0xb8925a, metalness:0.0, roughness:0.85 });
+const matPallet = new THREE.MeshStandardMaterial({ color:0x8a6a3f, metalness:0.0, roughness:0.9 });
+
+const root = new THREE.Group();
+const box=(w,h,d,mat,x,y,z,g)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+  m.position.set(x,y,z); m.castShadow=m.receiveShadow=true; (g||root).add(m); return m; };
+
+// concrete slab
+box(L+0.6, 0.15, W+0.6, matFloor, 0, 0.075, 0);
+
+// back wall (solid, z=-HW), height HB
+box(L+T, HB, T, matBlock, 0, HB/2, -HW);
+
+// front wall (z=+HW) with a shutter opening (width DW, height DH)
+const DW=2.4, DH=2.5, jw=(L-DW)/2;
+box(jw+T, HF, T, matBlock, -(DW/2+jw/2), HF/2, HW);   // left jamb
+box(jw+T, HF, T, matBlock,  (DW/2+jw/2), HF/2, HW);   // right jamb
+box(DW+0.1, HF-DH, T, matBlock, 0, (HF+DH)/2, HW);    // lintel above opening
+
+// side walls (x=±HL) — mono-slope trapezoid via Shape (local X→world Z, local Y→world Y)
+function sideShape(){ const s=new THREE.Shape();
+  s.moveTo(HW,0); s.lineTo(HW,HF); s.lineTo(-HW,HB); s.lineTo(-HW,0); s.lineTo(HW,0); return new THREE.ShapeGeometry(s); }
+for(const sx of [-1,1]){ const m=new THREE.Mesh(sideShape(), matBlock);
+  m.position.set(sx*HL,0,0); m.rotation.y = -Math.PI/2; m.castShadow=m.receiveShadow=true; root.add(m); }  // same rot for both → height profile (front HF / back HB) stays consistent
+
+// ---- roof (mono-slope slab) + fascia, in a group so it toggles off ----
+const roofGroup=new THREE.Group();
+const slopeLen=Math.hypot(W, HB-HF);
+{ const r=box(L+0.5, 0.12, slopeLen+0.4, matRoof, 0, roofY(0), 0, roofGroup);
+  r.rotation.x = SLOPE; }
+box(L+0.5, 0.12, 0.06, matTrim, 0, HF, HW+0.05, roofGroup);   // front fascia
+root.add(roofGroup);
+
+// ---- roll-up shutter (front opening) ----
+const shutterGroup=new THREE.Group();
+const curtain=box(DW, DH, 0.05, matShut, 0, DH/2, HW+0.06, shutterGroup);
+for(const sx of [-1,1]) box(0.1, DH+0.1, 0.14, matTrim, sx*(DW/2+0.05), DH/2, HW+0.06, shutterGroup); // guides
+box(DW+0.4, 0.34, 0.34, matTrim, 0, DH+0.15, HW+0.08, shutterGroup);   // drum box
+root.add(shutterGroup);
+
+// ---- interior shelving (always visible; reveals when roof toggles off) ----
+function shelving(cx, cz){ const g=new THREE.Group();
+  const uw=2.0, ud=0.5, uh=2.0, post=0.05;
+  for(const px of [-uw/2,uw/2]) for(const pz of [-ud/2,ud/2]) box(post, uh, post, matShelf, cx+px, uh/2, cz+pz, g);
+  for(let i=0;i<5;i++) box(uw, 0.04, ud, matShelf, cx, 0.15+i*(uh-0.15)/4, cz, g);
+  root.add(g); return g;
+}
+shelving(-1.9, -2.1); shelving(1.0, -2.1);
+// a few stored boxes + a floor pallet
+box(0.6,0.5,0.45, matBox, -2.2, 0.55, -2.1);
+box(0.55,0.45,0.4, matBox, -1.6, 1.25, -2.1);
+box(0.6,0.5,0.45, matBox, 1.0, 1.65, -2.1);
+box(1.1,0.12,0.9, matPallet, 2.4, 0.11, 1.6);
+box(0.9,0.7,0.7, matBox, 2.4, 0.52, 1.6);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ---- UI ----
+const btnRot=document.getElementById('btnRot');
+btnRot.onclick=()=>{ controls.autoRotate=!controls.autoRotate; btnRot.classList.toggle('on',controls.autoRotate); requestRender(); };
+const btnRoof=document.getElementById('btnRoof');
+btnRoof.onclick=()=>{ roofGroup.visible=!roofGroup.visible; btnRoof.classList.toggle('on',roofGroup.visible);
+  renderer.shadowMap.needsUpdate=true; requestRender(); };
+const btnDoor=document.getElementById('btnDoor');
+let doorOpen=false, doorT=0;
+btnDoor.onclick=()=>{ doorOpen=!doorOpen; btnDoor.classList.toggle('on',doorOpen); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---- render-on-demand (block56) ----
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  const target = doorOpen ? DH-0.05 : 0;        // curtain rolls up out of the opening
+  doorT += (target-doorT)*0.14;
+  curtain.position.y = DH/2 + doorT;
+  curtain.scale.y = Math.max(0.02, 1 - doorT/DH);
+  if(Math.abs(target-doorT)>0.001){ renderer.shadowMap.needsUpdate = true; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---- QA contract ----
+globalThis.__bodegaApp = { runtime:{ scene, renderer, camera, root } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
