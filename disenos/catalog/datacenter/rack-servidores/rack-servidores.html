@@ -1,0 +1,372 @@
+<!doctype html>
+<!--
+  rack-servidores — catalog asset, family `datacenter`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: disenos/datacenter-hotspot/rack-detail.html :L494 declares the real EIA
+  rack unit, `U = 0.04445` (1.75 in), with a 42U stack — the one hard [CERT] number in this asset.
+  Spec: ./design-spec.yaml
+  NOTE: the doors are PERFORATED, and that is not cosmetic. A rack with solid doors cannot pull
+  front-to-back air, so the mesh is modelled as an actual screen of bars you see the equipment
+  through, not as a flat panel with a texture standing in for holes.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rack de servidores 42U — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.025 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Rack de servidores 42U — puertas perforadas, flujo frente-fondo</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· bastidor negro texturado · chasis de acero</span></div>
+  <div class="dim">0.60 × 1.00 × 2.02 m · U = 44.45 mm · 42U útiles + PDU 0U verticales</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">ABRIR PUERTAS</button>
+  <button id="btnSide" class="on">PANELES LATERALES</button>
+  <button id="btnAlm">ALARMA TÉRMICA (ISA-101)</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const U      = 0.04445;                   // [CERT] EIA rack unit, 1.75 in — from the repo's rack study
+const NU     = 42;
+const W      = 0.60;                      // 600 mm frame
+const D      = 1.00;                      // 1000 mm — deeper than the repo study's 850, see spec
+const BASE_H = 0.10;                      // levelling base / castor plinth
+const U0     = BASE_H + 0.03;             // bottom of U1
+const STACK_H= NU * U;                    // 1.867
+const TOP_Y  = U0 + STACK_H + 0.05;       // ~2.02
+const RAIL_X = 0.2325;                    // 19 in mounting flange centres (482.6 mm apart)
+const EQ_W   = 0.448, EQ_D = 0.68;        // equipment body
+const FRONT_Z= D/2;
+
+// Equipment fill, bottom to top, as [height in U, kind]. Deliberately NOT a uniform stack: a real
+// rack is a mixture of depths and gaps, and blanking panels exist because open Us short-circuit
+// the cold aisle straight into the hot one.
+const FILL = [
+  [2,'blank'], [1,'srv'], [1,'srv'], [1,'srv'], [1,'srv'], [1,'blank'],
+  [2,'srv2'],  [2,'srv2'], [1,'patch'], [1,'sw'], [1,'blank'],
+  [1,'srv'], [1,'srv'], [1,'srv'], [2,'srv2'], [1,'blank'],
+  [1,'sw'], [1,'patch'], [1,'srv'], [1,'srv'], [2,'srv2'], [3,'blank'],
+  [1,'srv'], [1,'srv'], [1,'srv'], [1,'srv'], [4,'blank'],
+];
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 7, 28);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 4.3, AZ = 0.76, EL = 0.19, TGT_Y = 1.02;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TGT_Y + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TGT_Y, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TGT_Y, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// A rack is a large VERTICAL subject AND it is painted near-black, so it suffers the flat-plane
+// problem worse than the light cabinets: a dark vertical face reflecting a dark hemisphere has
+// almost nothing to show. Same fix, same rule — light, never a metalness fudge.
+scene.environmentIntensity = 2.6;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.0, 5.0, 3.6); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-2.0; sun.shadow.camera.right=2.0; sun.shadow.camera.top=2.4; sun.shadow.camera.bottom=-2.4;
+sun.shadow.camera.far = 14;
+scene.add(sun);
+const faceFill = new THREE.DirectionalLight(0xdce6f2, 1.70);    // panel-normal fill (the deviation)
+faceFill.position.set(0.5, 1.2, 4.2);
+scene.add(faceFill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.34));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Rack frame and doors are POWDER-COATED black -> dielectric. Server chassis are bare/plated
+//   steel. Making the black frame metallic is the obvious slip and it kills the read completely:
+//   a black metal facing a dark hemisphere returns nothing.
+// ============================================================================
+const matFrame  = new THREE.MeshStandardMaterial({ color:0x2f343b, metalness:0.0,  roughness:0.52 });
+const matFrameL = new THREE.MeshStandardMaterial({ color:0x454b53, metalness:0.0,  roughness:0.55 });
+const matMesh   = new THREE.MeshStandardMaterial({ color:0x3a4048, metalness:0.0,  roughness:0.58 });
+const matRail   = new THREE.MeshStandardMaterial({ color:0xb0b5b8, metalness:0.92, roughness:0.44 });
+const matChassis= new THREE.MeshStandardMaterial({ color:0xa5abb0, metalness:0.88, roughness:0.46 });
+const matBezel  = new THREE.MeshStandardMaterial({ color:0x646c76, metalness:0.0,  roughness:0.50 });
+const matBlank  = new THREE.MeshStandardMaterial({ color:0x2a2e34, metalness:0.0,  roughness:0.62 });
+const matPatch  = new THREE.MeshStandardMaterial({ color:0x1f2329, metalness:0.0,  roughness:0.60 });
+const matPlastic= new THREE.MeshStandardMaterial({ color:0x15181b, metalness:0.0,  roughness:0.52 });
+const matPdu    = new THREE.MeshStandardMaterial({ color:0x1c1f24, metalness:0.0,  roughness:0.55 });
+const matCable  = new THREE.MeshStandardMaterial({ color:0x2f6ad0, metalness:0.0,  roughness:0.70 });
+const matLabel  = new THREE.MeshStandardMaterial({ color:0xe8eae6, metalness:0.0,  roughness:0.70 });
+// ISA-101 §3.4 — a running server shows a neutral status LED, not a green light show.
+const matLedOff = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4 });
+const matLedRun = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                   emissive:0x0d3a2a, emissiveIntensity:1.0 });
+const matLedAlm = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                   emissive:0xff2233, emissiveIntensity:1.6 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xforms, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = im.receiveShadow = true;
+  xforms.forEach((t,i)=>{
+    _p.set(t[0], t[1], t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0));
+    _s.set(t[6]??1, t[7]??1, t[8]??1);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s));
+  });
+  im.instanceMatrix.needsUpdate = true;
+  parent.add(im); return im;
+}
+function box(w,h,d,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+function cyl(rt,rb,h,seg,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+
+// --- base, corner posts, top frame, castors, levelling feet ---
+box(W - 0.03, BASE_H, D - 0.03, matFrame, 0, BASE_H/2, 0);
+for(const sx of [-1, 1]) for(const sz of [-1, 1])
+  box(0.045, TOP_Y - BASE_H, 0.045, matFrame, sx*(W/2 - 0.024), (BASE_H + TOP_Y)/2, sz*(D/2 - 0.024));
+for(const sz of [-1, 1]) box(W, 0.045, 0.045, matFrame, 0, TOP_Y - 0.024, sz*(D/2 - 0.024));
+for(const sx of [-1, 1]) box(0.045, 0.045, D, matFrame, sx*(W/2 - 0.024), TOP_Y - 0.024, 0);
+box(W - 0.10, 0.012, D - 0.14, matFrame, 0, TOP_Y - 0.050, 0);                   // roof plate
+box(W - 0.22, 0.020, 0.10, matPlastic, 0, TOP_Y - 0.056, -D/2 + 0.16);           // brush cable entry
+const feet = [];
+for(const sx of [-1, 1]) for(const sz of [-1, 1]) feet.push([sx*(W/2 - 0.06), 0.018, sz*(D/2 - 0.09)]);
+instanced(new THREE.CylinderGeometry(0.026, 0.030, 0.036, 10), matRail, feet, root);
+
+// --- 19" mounting rails, front and rear, punched at the U pitch ---
+const punches = [];
+for(const sx of [-1, 1]) for(const sz of [-1, 1]){
+  box(0.030, STACK_H + 0.03, 0.050, matRail, sx*RAIL_X, U0 + STACK_H/2, sz*(D/2 - 0.11));
+  for(let u=0; u<NU; u++) for(let h=0; h<3; h++)
+    punches.push([sx*RAIL_X + (sz>0 ? 0.016 : -0.016) * 0, U0 + (u + 0.5)*U + (h-1)*0.0155,
+                  sz*(D/2 - 0.11) + sz*0.026]);
+}
+instanced(new THREE.BoxGeometry(0.010, 0.009, 0.004), matPlastic, punches, root);
+// U numbering strip on the front-left rail
+const marks = [];
+for(let u=0; u<NU; u+=2) marks.push([-RAIL_X - 0.022, U0 + (u + 0.5)*U, D/2 - 0.084]);
+instanced(new THREE.BoxGeometry(0.012, 0.012, 0.004), matLabel, marks, root);
+
+// --- equipment stack ---
+const equip = new THREE.Group();
+const leds = [];
+let uPos = 0;
+for(const [uh, kind] of FILL){
+  if(uPos + uh > NU) break;
+  const y = U0 + (uPos + uh/2)*U, h = uh*U - 0.004;
+  if(kind === 'blank'){
+    // Blanking panels are functional: an open U short-circuits cold air into the hot aisle.
+    box(EQ_W + 0.06, h, 0.014, matBlank, 0, y, D/2 - 0.115);
+    for(const sx of [-1, 1]) box(0.020, h*0.5, 0.020, matFrameL, sx*(EQ_W/2 + 0.012), y, D/2 - 0.106);
+  } else if(kind === 'patch'){
+    box(EQ_W + 0.06, h, 0.05, matPatch, 0, y, D/2 - 0.135);
+    const ports = [];
+    for(let k=0;k<24;k++) ports.push([-EQ_W/2 + 0.012 + k*(EQ_W - 0.02)/23, y, D/2 - 0.110]);
+    instanced(new THREE.BoxGeometry(0.012, 0.016, 0.010), matPlastic, ports, equip);
+    for(let k=0;k<10;k++)                                                        // patch leads
+      box(0.006, 0.006, 0.10, matCable, -0.18 + k*0.04, y, D/2 - 0.06, equip);
+  } else {
+    const dep = kind === 'sw' ? 0.42 : EQ_D;
+    box(EQ_W, h, dep, matChassis, 0, y, D/2 - 0.115 - dep/2);                    // chassis body
+    box(EQ_W + 0.06, h, 0.016, matBezel, 0, y, D/2 - 0.112);                     // front bezel + ears
+    if(kind === 'sw'){
+      const ports = [];
+      for(let k=0;k<24;k++) ports.push([-EQ_W/2 + 0.030 + (k%12)*0.032, y + (k<12 ? 0.008 : -0.010), D/2 - 0.101]);
+      instanced(new THREE.BoxGeometry(0.020, 0.012, 0.008), matPlastic, ports, equip);
+    } else {
+      // drive bays across the face — the tell that separates a server from a blank slab
+      const bays = kind === 'srv2' ? 16 : 8;
+      const bw = (EQ_W - 0.08)/bays;
+      for(let k=0;k<bays;k++)
+        box(bw*0.82, h*0.62, 0.008, matBezel, -EQ_W/2 + 0.04 + (k + 0.5)*bw, y, D/2 - 0.103, equip);
+      for(const sx of [-1, 1])                                                    // rack ears
+        box(0.028, h*0.86, 0.010, matFrameL, sx*(EQ_W/2 + 0.024), y, D/2 - 0.106, equip);
+    }
+    const l = cyl(0.0055, 0.0055, 0.008, 8, matLedOff, EQ_W/2 - 0.022, y + h*0.24, D/2 - 0.100, equip);
+    l.rotation.x = Math.PI/2; l.userData.u = uPos; leds.push(l);
+  }
+  uPos += uh;
+}
+root.add(equip);
+
+// --- 2 vertical 0U PDU strips at the rear corners + rear cable bundles ---
+for(const sx of [-1, 1]){
+  box(0.052, STACK_H*0.92, 0.048, matPdu, sx*(W/2 - 0.055), U0 + STACK_H/2, -D/2 + 0.075);
+  const outlets = [];
+  for(let k=0;k<20;k++) outlets.push([sx*(W/2 - 0.055), U0 + 0.10 + k*0.082, -D/2 + 0.100]);
+  instanced(new THREE.BoxGeometry(0.034, 0.030, 0.008), matPlastic, outlets, root);
+  box(0.030, 0.30, 0.030, matCable, sx*(W/2 - 0.10), U0 + STACK_H*0.55, -D/2 + 0.14);
+}
+
+// ---------- doors: front and rear PERFORATED leaves, and the side panels ----------
+const doors = [];
+function meshDoor(sz){
+  const g = new THREE.Group();
+  const hingeX = sz > 0 ? -(W/2 - 0.02) : (W/2 - 0.02);
+  g.position.set(hingeX, 0, sz*(D/2 + 0.012));
+  const dw = W - 0.06, dh = TOP_Y - BASE_H - 0.04, cy = (BASE_H + TOP_Y)/2;
+  const lx = (sz > 0 ? 1 : -1) * (0.02 + dw/2);
+  // perimeter frame
+  for(const sy of [-1, 1]) box(dw, 0.030, 0.022, matFrame, lx, cy + sy*(dh/2 - 0.015), 0, g);
+  for(const dx of [-1, 1]) box(0.030, dh, 0.022, matFrame, lx + dx*(dw/2 - 0.015), cy, 0, g);
+  // THE SCREEN: real bars you see equipment through, not a flat panel pretending to be perforated
+  // The web must be SHALLOW. A perforated door is ~1.5 mm sheet, so at an oblique angle you still
+  // see through it. Modelled with 10 mm deep bars the grid self-occludes off-axis and the door
+  // goes solid exactly at the 3/4 view the catalog camera uses — the equipment behind it vanishes
+  // while the draw-call count says everything is present.
+  const vb = [], hb = [];
+  const iw = dw - 0.06, ih = dh - 0.04;
+  for(let k=0;k<16;k++) vb.push([lx - iw/2 + (k + 0.5)*(iw/16), cy, 0]);
+  for(let k=0;k<34;k++) hb.push([lx, cy - ih/2 + (k + 0.5)*(ih/34), 0]);
+  instanced(new THREE.BoxGeometry(0.005, ih, 0.0025), matMesh, vb, g);
+  instanced(new THREE.BoxGeometry(iw, 0.004, 0.0025), matMesh, hb, g);
+  // handle + hinges + a label window
+  box(0.030, 0.13, 0.030, matFrameL, lx + (sz>0 ? 1 : -1)*(dw/2 - 0.045), cy, sz*0.022, g);
+  for(const hy of [cy - dh/2 + 0.12, cy, cy + dh/2 - 0.12])
+    box(0.022, 0.070, 0.024, matFrameL, lx - (sz>0 ? 1 : -1)*(dw/2 - 0.008), hy, -sz*0.010, g);
+  if(sz > 0) box(0.16, 0.05, 0.006, matLabel, lx, cy + dh/2 - 0.10, sz*0.016, g);
+  root.add(g); doors.push({g, sz});
+  return g;
+}
+meshDoor(1);        // front
+meshDoor(-1);       // rear
+
+const sides = new THREE.Group();
+for(const sx of [-1, 1]){
+  box(0.012, TOP_Y - BASE_H - 0.06, D - 0.06, matFrame, sx*(W/2 - 0.004), (BASE_H + TOP_Y)/2, 0, sides);
+  for(const sz of [-1, 1])
+    box(0.018, 0.10, 0.024, matFrameL, sx*(W/2 + 0.002), (BASE_H + TOP_Y)/2, sz*(D/2 - 0.12), sides);
+}
+root.add(sides);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const OPEN_ANGLE = 2.10;
+let doorTarget = 0, doorPos = 0;
+const btnDoor = document.getElementById('btnDoor');
+btnDoor.onclick = ()=>{ doorTarget = doorTarget ? 0 : 1;
+  btnDoor.classList.toggle('on', !!doorTarget); requestRender(); };
+
+const btnSide = document.getElementById('btnSide');
+btnSide.onclick = ()=>{ sides.visible = !sides.visible;
+  btnSide.classList.toggle('on', sides.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnAlm = document.getElementById('btnAlm');
+let alarm = false;
+btnAlm.onclick = ()=>{
+  alarm = !alarm; btnAlm.classList.toggle('on', alarm);
+  // ISA-101 §3.4: normal is a neutral status LED on every populated unit. A thermal alarm marks
+  // the TOP of the stack, where the hot air actually collects — not the whole rack.
+  leds.forEach(l=>{ l.material = alarm ? (l.userData.u > NU*0.7 ? matLedAlm : matLedRun) : matLedRun; });
+  requestRender();
+};
+leds.forEach(l=>{ l.material = matLedRun; });    // populated units idle in the running state
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(Math.abs(doorPos - doorTarget) > 0.001){
+    doorPos += (doorTarget - doorPos) * 0.10;
+    if(Math.abs(doorPos - doorTarget) <= 0.001){
+      doorPos = doorTarget;
+      renderer.shadowMap.needsUpdate = true;   // re-bake once the swing settles, not every frame
+    }
+    // front and rear leaves are hinged on OPPOSITE sides and swing outward from their own face
+    doors.forEach(d=>{ d.g.rotation.y = (d.sz > 0 ? -1 : 1) * OPEN_ANGLE * doorPos; });
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__rackServidoresApp = __app;
+globalThis['__rack-servidoresApp'] = __app;        // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
