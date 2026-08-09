@@ -130,6 +130,13 @@ GOTCHAS ya detectados (evítalos):
 - INFRA (no es fallo de asset): con varias sesiones corriendo QA a la vez, chrome-headless-shell se cae
   intermitente ("unsettled top-level await", exit 13) → REINTENTA, da exit 0. Junto con exit 2 (servidor
   caído) son los dos casos de "no concluyente"; nunca los trates como asset roto.
+- "TAPA INVISIBLE" (regla fuerte para cualquier asset con INTERIOR): tres cosas tapan la boca sin verse en
+  los conteos — (1) el gabinete como BOX macizo (su cara frontal queda tras el hueco) → constrúyelo como
+  cascarón de 5 paneles; (2) la cara de sellado con CylinderGeometry = disco lleno → RingGeometry; (3) el
+  empaque con cilindro = disco → TorusGeometry. Si tiene interior, todo lo que rodea la boca va anillo/toro
+  y el gabinete NUNCA es box macizo. Se detecta SOLO abriendo la puerta/tapa en la captura de estado.
+- GUILLOTINA (campana, cortina): la cenefa/caja debe ser al menos tan alta como el RECORRIDO de la hoja, o
+  al subir sale por el techo.
 
 Trabaja en bucle por todos los assets pendientes de tu familia. Cuando tu familia quede en done, avisa y
 elige otra familia libre si queda, o detente.
