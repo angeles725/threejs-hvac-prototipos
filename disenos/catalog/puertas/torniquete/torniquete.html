@@ -1,0 +1,248 @@
+<!doctype html>
+<!--
+  torniquete — catalog asset, family `puertas`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block60.md (Shancharm XC-AT103 datasheet)
+  Spec: ./design-spec.yaml
+  Best-sourced asset of the family: housing, channel, arm length, weight and material are all
+  [CERT-doc]. Only the arm tube diameter and the hub tilt are [INFER].
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Torniquete trípode — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Torniquete trípode — inox 304</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· 450 × 420 × 980 mm · brazo 510 mm</span></div>
+  <div class="dim">canal 520 mm · 25 kg · brazos caen al fallar la energía</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnPass">PASSAGE</button>
+  <button id="btnFail">POWER FAIL</button>
+  <button id="btnScale" class="on">SCALE 1.8 m</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 60]) ----------
+const H_W = 0.450, H_D = 0.420, H_H = 0.980;   // [CERT-doc] 450*420*980 mm
+const CHANNEL = 0.520;                          // [CERT-doc] published 500-550 mm band
+const ARM_L = 0.510;                            // [CERT-doc] ≈ channel width
+const ARM_R = 0.016;                            // [INFER] tube diameter not published
+const TILT = 30 * Math.PI/180;                  // [INFER] inclined hub axis
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 7, 22);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 100);
+const R = 3.6, AZ = 0.733, EL = 0.28;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.70 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.70, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.70, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.8;   // vertical bare 304: a vertical face cannot catch a specular
+                                    // highlight from an elevated key, so the IBL does the work
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3, 5, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d
+sun.shadow.camera.left=-3; sun.shadow.camera.right=3; sun.shadow.camera.top=3; sun.shadow.camera.bottom=-3;
+scene.add(sun);
+// VERTICAL-SUBJECT DEVIATION (documented in the spec): bare 304 on vertical housing faces reflects
+// the dark horizon and reads flat. Fill toward the face normal; metalness untouched (HANDBOOK §3.1).
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.15);
+fill.position.set(-3, 2.6, 4.5); scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x3a424a, 1.0));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. [CERT-doc] 304 stainless, brushed → bare metal (HANDBOOK §3.1).
+// ============================================================================
+const matSteel = new THREE.MeshStandardMaterial({ color:0xc4c8ca, metalness:0.95, roughness:0.36 });
+const matArm   = new THREE.MeshStandardMaterial({ color:0xbcc0c2, metalness:0.95, roughness:0.33 });
+const matCap   = new THREE.MeshStandardMaterial({ color:0x26292c, metalness:0.0,  roughness:0.70 });
+const matLed   = new THREE.MeshStandardMaterial({ color:0x28d07a, emissive:0x0f7a44,
+                                                  emissiveIntensity:0.9, metalness:0.0, roughness:0.4 });
+const matSkin  = new THREE.MeshStandardMaterial({ color:0x6f7c86, metalness:0.0, roughness:0.85 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+
+// --- pedestal: 450 x 420 x 980 [CERT-doc] — waist height, not a cage ---
+const pedestal = new THREE.Group();
+const PX = -(CHANNEL/2 + H_W/2);                                 // housing sits beside the lane
+put(pedestal, H_W, H_H - 0.10, H_D, matSteel, PX, (H_H - 0.10)/2, 0);
+put(pedestal, H_W + 0.02, 0.02, H_D + 0.02, matCap, PX, 0.012, 0);          // floor flange
+// sloped top cap carrying the reader + the hub
+const cap = new THREE.Mesh(new THREE.BoxGeometry(H_W, 0.12, H_D), matCap);
+cap.position.set(PX, H_H - 0.05, 0); cap.rotation.x = -0.16;
+cap.castShadow = cap.receiveShadow = true; pedestal.add(cap);
+const led = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.012, 0.10), matLed);  // [CERT-doc] front LED
+led.position.set(PX, H_H - 0.005, 0.10); led.rotation.x = -0.16; pedestal.add(led);
+put(pedestal, 0.12, 0.02, 0.08, matCap, PX, H_H - 0.02, -0.09);              // card reader bezel
+root.add(pedestal);
+
+// --- head: inclined hub with 3 arms at 120° [CERT-doc arm 510 mm] ---
+const headPivot = new THREE.Group();                              // drop pivot (power-fail)
+headPivot.position.set(PX + H_W/2 - 0.02, H_H - 0.06, 0);
+const hubTilt = new THREE.Group();
+hubTilt.rotation.z = -TILT;                                       // axis inclined from horizontal
+const hub = new THREE.Group();                                    // spins about its own local Y
+const hubBody = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.12, 16), matSteel);
+hubBody.castShadow = true; hub.add(hubBody);
+for(let i=0;i<3;i++){
+  const a = i * 2*Math.PI/3;
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(ARM_R, ARM_R, ARM_L, 12), matArm);
+  arm.castShadow = arm.receiveShadow = true;
+  arm.rotation.z = Math.PI/2;                                     // lie along local X
+  arm.position.set(ARM_L/2, 0, 0);
+  const spoke = new THREE.Group();
+  spoke.rotation.y = a; spoke.add(arm);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(ARM_R*1.15, 10, 8), matArm);
+  tip.position.set(ARM_L, 0, 0); spoke.add(tip);
+  hub.add(spoke);
+}
+hubTilt.add(hub);
+headPivot.add(hubTilt);
+root.add(headPivot);
+
+// --- railing: the other side of the lane, so the 520 mm channel is legible ---
+const railing = new THREE.Group();
+const RX = CHANNEL/2;
+for(const z of [-0.34, 0.34]){
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.030, H_H - 0.12, 14), matSteel);
+  post.position.set(RX, (H_H - 0.12)/2, z); post.castShadow = true; railing.add(post);
+}
+const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.74, 14), matSteel);
+rail.rotation.x = Math.PI/2; rail.position.set(RX, H_H - 0.14, 0);
+rail.castShadow = true; railing.add(rail);
+root.add(railing);
+
+// --- 1.8 m scale figure: the pedestal must read WAIST-HIGH beside it (HANDBOOK §3.0) ---
+const scaleFig = new THREE.Group();
+const sx = -1.35, sz = 0.55;
+const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.52, 6, 12), matSkin);
+torso.position.set(sx, 1.16, sz); torso.castShadow = true; scaleFig.add(torso);
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.115, 14, 12), matSkin);
+head.position.set(sx, 1.62, sz); head.castShadow = true; scaleFig.add(head);
+for(const s of [-1,1]){
+  const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.62, 6, 10), matSkin);
+  leg.position.set(sx + s*0.10, 0.46, sz); leg.castShadow = true; scaleFig.add(leg);
+}
+root.add(scaleFig);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED; both animations hold needsRender while moving.
+// ============================================================================
+const STEP = 2*Math.PI/3;                    // one passage = 120°
+let spinTarget = 0, spinNow = 0;
+let dropTarget = 0, dropNow = 0;             // [CERT-doc] arms drop on power loss
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnPass = document.getElementById('btnPass');
+btnPass.onclick = ()=>{ if(dropTarget === 0){ spinTarget += STEP; requestRender(); } };
+
+const btnFail = document.getElementById('btnFail');
+btnFail.onclick = ()=>{ dropTarget = dropTarget === 0 ? -1.15 : 0;
+  btnFail.classList.toggle('on', dropTarget !== 0);
+  matLed.color.set(dropTarget !== 0 ? 0xd04a3a : 0x28d07a);     // [CERT-doc] red = lane unavailable
+  matLed.emissive.set(dropTarget !== 0 ? 0x7a1f14 : 0x0f7a44);
+  requestRender(); };
+
+const btnScale = document.getElementById('btnScale');
+btnScale.onclick = ()=>{ scaleFig.visible = !scaleFig.visible; btnScale.classList.toggle('on', scaleFig.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const ds = spinTarget - spinNow;
+  if(Math.abs(ds) > 0.001){ spinNow += ds * 0.12; hub.rotation.y = spinNow; needsRender = true; }
+  const dd = dropTarget - dropNow;
+  if(Math.abs(dd) > 0.001){ dropNow += dd * 0.10; headPivot.rotation.z = dropNow; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__torniqueteApp = __app;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
