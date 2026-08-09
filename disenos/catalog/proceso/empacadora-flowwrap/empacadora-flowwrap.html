@@ -1,0 +1,493 @@
+<!doctype html>
+<!--
+  empacadora-flowwrap — horizontal flow wrapper (HFFS / flow-pack)
+  Spec:     disenos/catalog/proceso/empacadora-flowwrap/design-spec.yaml
+  Evidence: research/sources/B100-proceso-pack/flow-wrapper-hffs.md  [B100]
+
+  The identity of this machine is the SEQUENCE along +X, not the part count:
+    infeed flights -> former (flat web becomes a tube) -> fin sealer (longitudinal seal, 3 roller
+    pairs, fin hangs BELOW) -> rotary jaws (seal both ends AND cut in one motion) -> discharge.
+
+  CORTE is a MATERIAL swap, never a geometry substitution: a hide-list and a restore-list are two
+  different lists and they diverge silently. Swapping opacity removes no geometry, so that whole
+  defect class cannot occur here.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Empacadora flow-wrap — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Empacadora flow-wrap — HFFS horizontal</div>
+  <div><span class="dim">4.10 × 1.00 × 2.15 m · bobina Ø0.40 m</span></div>
+  <div class="pass">Pase MATERIALS</div>
+  <div><span class="dim">infeed → former → fin seal → mordazas → salida</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnRun">MARCHA</button>
+  <button id="btnCut">CORTE</button>
+  <button id="btnDim">COTAS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 34);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+// Spec camera: az 46 deg, el 14 deg, fov 38, target_y 1.05, R 4.90 (measured: at R 6.80 the subject filled only ~48% of frame).
+const AZ = 46*Math.PI/180, EL = 14*Math.PI/180, R = 4.90, TY = 1.05;
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TY + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TY, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TY, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;   // OFF: a rotating scene never settles
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.5;      // spec deviation: specular term for large bare-metal planes
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4, 6, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.05;
+sun.shadow.camera.left=-4; sun.shadow.camera.right=4; sun.shadow.camera.top=4; sun.shadow.camera.bottom=-4;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+// Camera-side fill: the diffuse term on vertical bare-metal faces (HANDBOOK deviation, metalness untouched).
+const fill = new THREE.DirectionalLight(0xffffff, 0.85);
+fill.position.set(5.0, 2.2, 5.0);
+scene.add(fill);
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS (HANDBOOK §3; metalness near-binary)
+// ============================================================================
+const matSteel   = new THREE.MeshStandardMaterial({ color:0xd2d6d8, metalness:0.90, roughness:0.30 });
+const matJaw     = new THREE.MeshStandardMaterial({ color:0xb9c0c4, metalness:0.92, roughness:0.38 });
+const matFrame   = new THREE.MeshStandardMaterial({ color:0x333a40, metalness:0.0,  roughness:0.60 });
+const matProduct = new THREE.MeshStandardMaterial({ color:0xc08a4e, metalness:0.0,  roughness:0.85 });
+// Film + guards: MeshStandardMaterial with opacity, NOT MeshPhysicalMaterial.transmission
+// (transmission stalls the SwiftShader shader compile in this headless gate).
+const matFilm    = new THREE.MeshStandardMaterial({ color:0xcfe6e2, metalness:0.0, roughness:0.18,
+                                                    transparent:true, opacity:0.42, side:THREE.DoubleSide });
+const matGuard   = new THREE.MeshStandardMaterial({ color:0x7fb8c8, metalness:0.0, roughness:0.12,
+                                                    transparent:true, opacity:0.12, side:THREE.DoubleSide });
+
+// CORTE = material swap. Registry of {material, opaqueOpacity, cutOpacity} — no geometry is ever
+// hidden, so a hide-list can never diverge from a restore-list.
+const CUTTABLE = [
+  { m: matGuard, on: 0.12, cut: 0.03 },
+  { m: matSteel, on: 1.00, cut: 0.30 },
+  { m: matFilm,  on: 0.42, cut: 0.30 },
+];
+matSteel.transparent = true;   // declared up front so the swap never needs a material rebuild
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+
+const box  = (w,h,d,m)=>{ const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), m);
+                          o.castShadow=true; o.receiveShadow=true; return o; };
+const cyl  = (r,h,m,seg=24)=>{ const o=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), m);
+                               o.castShadow=true; o.receiveShadow=true; return o; };
+const put  = (o,x,y,z)=>{ o.position.set(x,y,z); return o; };   // Object3D.position has NO setter
+
+const LEN = 4.10, WID = 1.00, WORK = 0.90;
+const X0 = -LEN/2;                       // -2.05
+
+// ---- STATION LAYOUT along +X, declared in ONE place ----
+// Every downstream x is derived from the station before it, so the sequence cannot drift apart; and
+// because they are all visible here, a station that would overrun the machine is arithmetic anyone
+// can check. (First build did overrun: discharge packs sat at x 2.24 / 2.66 on a belt ending at 1.95,
+// and they rendered as three packs floating in mid-air with the gate green at exit 0.)
+const PITCH   = 0.40;                    // [CERT-web] = max stated bag length, one flight per pack
+const TUBE_R  = 0.075;
+const TUBE_Y  = WORK + 0.155;
+const IN_X0   = X0 + 0.10,  IN_X1 = X0 + 1.30, IN_LEN = IN_X1 - IN_X0;
+const REEL_X  = X0 + 1.50,  REEL_Y = 1.72, REEL_R = 0.20, REEL_W = 0.60;
+const FORM_LEN = 0.36,      FORM_X = 0.10;
+const TUBE_X0 = FORM_X + FORM_LEN/2,  TUBE_X1 = 0.95;
+const JAW_X   = TUBE_X1 + 0.10,       JAW_R = 0.10;
+const DIS_X0  = JAW_X + 0.22,         DIS_X1 = 2.00;
+const NPK = 2, PACK_X0 = 1.45, PACK_STEP = 0.35;
+const PRODL = 0.24, PRODW = 0.09, PRODH = 0.05;   // [CERT-web] inside 130-400 x 30-140 x 35-70 mm
+
+// Repeated parts go through ONE InstancedMesh each: 8 legs, roller stacks, paired rails. Draw calls
+// are a declared budget in the spec (70), not a leftover — the first build measured 82.
+const inst = (geo, mat, xforms)=>{
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = true; im.receiveShadow = true;
+  const m = new THREE.Matrix4();
+  xforms.forEach((t,i)=>{ m.makeTranslation(t[0],t[1],t[2]); im.setMatrixAt(i,m); });
+  im.instanceMatrix.needsUpdate = true;
+  return im;
+};
+
+// ---- frame: legs + base rails + side panels + control column ----
+const frame = new THREE.Group();
+const legXf = [];
+for (const sx of [X0+0.30, X0+1.60, X0+2.90, X0+3.80])
+  for (const sz of [-WID/2+0.08, WID/2-0.08]) legXf.push([sx, WORK/2, sz]);
+frame.add(inst(new THREE.BoxGeometry(0.08,WORK,0.08), matFrame, legXf));
+// base rails along X — give the legs something to stand on
+frame.add(inst(new THREE.BoxGeometry(LEN-0.30,0.09,0.10), matFrame,
+  [[0,0.05,-WID/2+0.08],[0,0.05,WID/2-0.08]]));
+// machine bed: the stainless deck the stations sit on
+frame.add(put(box(LEN-0.20, 0.07, WID-0.06, matSteel), 0, WORK+0.035, 0));
+// side skirt panels (stainless, the large vertical planes the fill light exists for)
+frame.add(inst(new THREE.BoxGeometry(LEN-0.60, 0.30, 0.02), matSteel,
+  [[0.10,WORK-0.19,-WID/2+0.02],[0.10,WORK-0.19,WID/2-0.02]]));
+// Control column with an HMI face, at the discharge end and on the FAR side in Z: the catalog camera
+// sits at +X/+Z, so a column on the near side would stand in front of the discharge it annotates.
+const col = new THREE.Group();
+col.add(put(box(0.26,1.05,0.22,matFrame), 0, 0.52, 0));
+const hmi = box(0.20,0.15,0.02, new THREE.MeshStandardMaterial({ color:0x0d2a33, metalness:0.0,
+             roughness:0.35, emissive:0x0a5f6b, emissiveIntensity:0.7 }));
+col.add(put(hmi, 0, 0.86, 0.115));
+col.position.set(X0+3.95, WORK, -(WID/2-0.16));
+frame.add(col);
+root.add(frame);
+
+// ---- infeed: flighted chain conveyor (flights are the phasing element) ----
+const infeed = new THREE.Group();
+infeed.add(put(box(IN_LEN,0.05,0.44,matSteel), (IN_X0+IN_X1)/2, WORK+0.10, 0));
+infeed.add(inst(new THREE.BoxGeometry(IN_LEN,0.10,0.02), matSteel,
+  [[(IN_X0+IN_X1)/2, WORK+0.16, -0.25],[(IN_X0+IN_X1)/2, WORK+0.16, 0.25]]));
+// flights: upstanding pushers at one pitch, one product per flight (InstancedMesh, 1 draw)
+const NFL = Math.ceil(IN_LEN/PITCH)+1;
+const flights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.025,0.075,0.40), matJaw, NFL);
+flights.castShadow = true; flights.receiveShadow = true;
+infeed.add(flights);
+// product on the infeed: one box per flight (InstancedMesh, 1 draw)
+const prods = new THREE.InstancedMesh(new THREE.BoxGeometry(PRODL,PRODH,PRODW), matProduct, NFL);
+prods.castShadow = true; prods.receiveShadow = true;
+infeed.add(prods);
+const _m = new THREE.Matrix4();
+function layoutInfeed(phase){
+  for (let i=0;i<NFL;i++){
+    let x = IN_X0 + ((i*PITCH + phase) % (IN_LEN+PITCH));
+    _m.makeTranslation(x, WORK+0.16, 0);            flights.setMatrixAt(i,_m);
+    _m.makeTranslation(x+PITCH*0.5, WORK+0.155, 0); prods.setMatrixAt(i,_m);
+  }
+  flights.instanceMatrix.needsUpdate = true;
+  prods.instanceMatrix.needsUpdate = true;
+}
+layoutInfeed(0);
+root.add(infeed);
+
+// ---- reel mast + film reel + idlers + web path ----
+const mast = new THREE.Group();
+mast.add(put(box(0.10,2.15-WORK,0.10,matFrame), REEL_X-0.18, (2.15-WORK)/2, -WID/2+0.10));
+mast.add(put(box(0.10,2.15-WORK,0.10,matFrame), REEL_X-0.18, (2.15-WORK)/2,  WID/2-0.10));
+mast.add(put(box(0.12,0.10,WID-0.10,matFrame), REEL_X-0.18, 2.15-WORK-0.05, 0));
+mast.position.set(0, WORK, 0);
+root.add(mast);
+
+// the reel: a Ø0.40 m roll, axis along Z (rotates about Z)
+const reelGrp = new THREE.Group();
+const reel = cyl(REEL_R, REEL_W, matFilm, 32);
+reel.rotation.x = Math.PI/2;                 // cylinder axis Y -> Z
+reelGrp.add(reel);
+// core tube, so the roll reads as film on a core and not as a solid drum
+const core = cyl(0.045, REEL_W+0.06, matJaw, 16);
+core.rotation.x = Math.PI/2;
+reelGrp.add(core);
+// flange rings: TorusGeometry, never a cylinder (a cylinder ring occludes what it should frame)
+for (const sz of [-REEL_W/2-0.01, REEL_W/2+0.01]) {
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(REEL_R*0.55, 0.012, 8, 28), matJaw);
+  ring.castShadow = true; put(ring, 0, 0, sz);
+  reelGrp.add(ring);
+}
+reelGrp.position.set(REEL_X, REEL_Y, 0);
+root.add(reelGrp);
+
+// idler rollers guiding the web down to the former
+const IDL = [[REEL_X+0.30, 1.62],[REEL_X+0.46, 1.30],[REEL_X+0.30, 1.02]];
+const idlerGeo = new THREE.CylinderGeometry(0.035, 0.035, REEL_W, 16);
+idlerGeo.rotateX(Math.PI/2);                       // bake the axis flip into the geometry
+const idlers = inst(idlerGeo, matJaw, IDL.map(([ix,iy])=>[ix,iy,0]));
+root.add(idlers);
+
+// the web itself: flat ribbon from the reel, over the idlers, into the former
+const webPts = [
+  new THREE.Vector3(REEL_X+0.20, REEL_Y+0.00, 0),
+  new THREE.Vector3(REEL_X+0.30, 1.62, 0),
+  new THREE.Vector3(REEL_X+0.46, 1.30, 0),
+  new THREE.Vector3(REEL_X+0.30, 1.02, 0),
+  new THREE.Vector3(FORM_X-FORM_LEN/2, TUBE_Y+0.02, 0),   // lands in the former's mouth
+];
+const web = new THREE.Group();
+for (let i=0;i<webPts.length-1;i++){
+  const a = webPts[i], b = webPts[i+1];
+  const len = a.distanceTo(b);
+  const seg = new THREE.Mesh(new THREE.PlaneGeometry(len, REEL_W), matFilm);
+  seg.position.set((a.x+b.x)/2, (a.y+b.y)/2, 0);
+  seg.rotation.z = Math.atan2(b.y-a.y, b.x-a.x);
+  seg.rotation.x = Math.PI/2;                       // ribbon lies flat across Z
+  web.add(seg);
+}
+root.add(web);
+
+// ---- former (folding box): the flat web closes into a TUBE around the product ----
+const former = new THREE.Group();
+// the box is built as a 4-bar shell (never a solid box: a solid box would seal the mouth the
+// tube passes through and the CORTE would show a closed lid)
+former.add(put(box(FORM_LEN,0.02,0.34,matSteel), 0,  0.16, 0));
+former.add(put(box(FORM_LEN,0.02,0.34,matSteel), 0, -0.16, 0));
+former.add(put(box(FORM_LEN,0.34,0.02,matSteel), 0, 0, -0.17));
+former.add(put(box(FORM_LEN,0.34,0.02,matSteel), 0, 0, 0.17));
+// the shoulder: the web converging from flat ribbon to tube diameter
+const shoulder = new THREE.Mesh(
+  new THREE.CylinderGeometry(TUBE_R, REEL_W*0.42, FORM_LEN, 20, 1, true), matFilm);
+shoulder.rotation.z = Math.PI/2;                    // axis Y -> X, narrow end toward +X
+former.add(shoulder);
+former.position.set(FORM_X, TUBE_Y, 0);
+root.add(former);
+
+// the formed tube: open-ended cylinder from the former to the jaws, with product inside
+const tube = new THREE.Mesh(
+  new THREE.CylinderGeometry(TUBE_R, TUBE_R, TUBE_X1-TUBE_X0, 24, 1, true), matFilm);
+tube.rotation.z = Math.PI/2;
+put(tube, (TUBE_X0+TUBE_X1)/2, TUBE_Y, 0);
+root.add(tube);
+// product inside the tube (proves the film wraps the product, not the air next to it)
+const tubeProds = new THREE.InstancedMesh(new THREE.BoxGeometry(PRODL,PRODH,PRODW), matProduct, 2);
+tubeProds.castShadow = true;
+for (let i=0;i<2;i++){ _m.makeTranslation(TUBE_X0+0.18+i*PITCH, TUBE_Y, 0); tubeProds.setMatrixAt(i,_m); }
+tubeProds.instanceMatrix.needsUpdate = true;
+root.add(tubeProds);
+
+// ---- fin sealer: the LONGITUDINAL seal, 3 roller pairs, fin hangs BELOW the tube ----
+const FIN_Y = TUBE_Y - TUBE_R - 0.035;
+const finStrip = new THREE.Mesh(new THREE.PlaneGeometry(TUBE_X1-TUBE_X0, 0.055), matFilm);
+finStrip.rotation.y = Math.PI/2;                     // vertical ribbon in the XY plane, hanging down
+put(finStrip, (TUBE_X0+TUBE_X1)/2, FIN_Y, 0);
+root.add(finStrip);
+
+const finRollers = new THREE.Group();
+const FIN_X0 = TUBE_X0+0.20;
+for (let i=0;i<3;i++){                               // "3 pairs of rollers" [CERT-web]
+  for (const sz of [-0.055, 0.055]){
+    const w = cyl(0.048, 0.028, matJaw, 18);
+    w.rotation.x = Math.PI/2;                        // wheel axis along Z, pinching the fin
+    finRollers.add(put(w, FIN_X0 + i*0.17, FIN_Y, sz));
+  }
+}
+root.add(finRollers);
+
+// ---- rotary cross-seal jaws: seal BOTH ends and CUT, one motion ----
+const jawTop = new THREE.Group(), jawBot = new THREE.Group();
+for (const g of [jawTop, jawBot]){
+  const hub = cyl(0.032, 0.30, matJaw, 16); hub.rotation.x = Math.PI/2; g.add(hub);
+  for (const ang of [0, Math.PI]){                   // two jaws per carrier
+    const arm = box(JAW_R*0.9, 0.028, 0.30, matJaw);
+    arm.position.set(Math.cos(ang)*JAW_R*0.5, Math.sin(ang)*JAW_R*0.5, 0);
+    arm.rotation.z = ang;
+    g.add(arm);
+    // the crimping face that meets the tube axis
+    const face = box(0.045, 0.022, 0.28, matJaw);
+    face.position.set(Math.cos(ang)*JAW_R, Math.sin(ang)*JAW_R, 0);
+    face.rotation.z = ang;
+    g.add(face);
+  }
+}
+jawTop.position.set(JAW_X, TUBE_Y + JAW_R, 0);
+jawBot.position.set(JAW_X, TUBE_Y - JAW_R, 0);
+root.add(jawTop); root.add(jawBot);
+// jaw housing (two side plates, not a solid box, so the jaws stay visible between them)
+root.add(inst(new THREE.BoxGeometry(0.30,0.42,0.03), matSteel,
+  [[JAW_X, TUBE_Y, -0.17],[JAW_X, TUBE_Y, 0.17]]));
+
+// ---- discharge: finished pillow packs with crimped ends ----
+const discharge = new THREE.Group();
+discharge.add(put(box(DIS_X1-DIS_X0,0.05,0.40,matSteel), (DIS_X0+DIS_X1)/2, WORK+0.10, 0));
+for (const sz of [-0.23, 0.23]) discharge.add(put(box(DIS_X1-DIS_X0,0.08,0.02,matSteel), (DIS_X0+DIS_X1)/2, WORK+0.15, sz));
+root.add(discharge);
+// packs: body + two crimped end tabs (the 3-side-sealed result of the sequence)
+const packBody = new THREE.InstancedMesh(new THREE.BoxGeometry(PRODL+0.03, PRODH+0.03, PRODW+0.03), matFilm, NPK);
+const packTabs = new THREE.InstancedMesh(new THREE.BoxGeometry(0.030, 0.045, PRODW+0.03), matFilm, NPK*2);
+packBody.castShadow = true;
+for (let i=0;i<NPK;i++){
+  const px = PACK_X0 + i*PACK_STEP;
+  _m.makeTranslation(px, WORK+0.16, 0); packBody.setMatrixAt(i,_m);
+  _m.makeTranslation(px-(PRODL+0.03)/2-0.015, WORK+0.16, 0); packTabs.setMatrixAt(i*2,_m);
+  _m.makeTranslation(px+(PRODL+0.03)/2+0.015, WORK+0.16, 0); packTabs.setMatrixAt(i*2+1,_m);
+}
+packBody.instanceMatrix.needsUpdate = true; packTabs.instanceMatrix.needsUpdate = true;
+root.add(packBody); root.add(packTabs);
+
+// ---- safety guards (polycarbonate) over the sealing section ----
+// Sized to the SEALING SECTION only (former .. jaws), not to the whole machine. The first build ran
+// a 1.70 m guard box down the middle at opacity 0.22 and it read as a frosted crate: the formed tube
+// — critical feature #1 — was unreadable in the DEFAULT state, which is the only state the gate
+// captures. A guard that hides the thing the asset exists to show is a defect, not safety.
+const GUARD_X0 = FORM_X - 0.25, GUARD_X1 = JAW_X + 0.20;
+const GUARD_L = GUARD_X1 - GUARD_X0, GUARD_CX = (GUARD_X0 + GUARD_X1)/2;
+// Side panels only, NO roof pane. Two translucent panes plus a lid stack their opacity along the
+// view ray and the section reads as a frosted crate; without the lid the same guard reads as glass.
+const guards = new THREE.Group();
+guards.add(inst(new THREE.BoxGeometry(GUARD_L,0.55,0.012), matGuard,
+  [[GUARD_CX, WORK+0.46, -WID/2+0.04],[GUARD_CX, WORK+0.46, WID/2-0.04]]));
+// open top frame instead of a pane, so the guard still reads as an enclosure
+guards.add(inst(new THREE.BoxGeometry(GUARD_L,0.025,0.025), matFrame,
+  [[GUARD_CX, WORK+0.735, -WID/2+0.04],[GUARD_CX, WORK+0.735, WID/2-0.04]]));
+root.add(guards);
+
+// ---- COTAS (dimension marks), hidden by default ----
+const cotas = new THREE.Group();
+cotas.visible = false;
+const matCota = new THREE.LineBasicMaterial({ color:0x00d4aa });
+const lineOf = (pts)=> new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+  pts.map(p=>new THREE.Vector3(...p))), matCota);
+// Dimension lines hug the body (z = WID/2 + 0.08) and carry end TICKS. The first version ran the
+// overall-length line at z +0.22 and y 0.02: from the spec camera it projected as a bare cyan
+// diagonal running off the bottom-left of the frame — a line with no ticks and no anchor does not
+// read as a dimension, it reads as a stray edge.
+const CZ = WID/2 + 0.08, CY = 0.06;
+cotas.add(lineOf([[X0,CY,CZ],[X0+LEN,CY,CZ]]));                                 // 4.10 m overall
+cotas.add(lineOf([[X0,CY-0.06,CZ],[X0,CY+0.06,CZ]]));                           //   tick, left end
+cotas.add(lineOf([[X0+LEN,CY-0.06,CZ],[X0+LEN,CY+0.06,CZ]]));                   //   tick, right end
+cotas.add(lineOf([[X0+0.06,0,CZ],[X0+0.06,WORK,CZ]]));                          // 0.90 m working height
+cotas.add(lineOf([[X0-0.02,WORK,CZ],[X0+0.14,WORK,CZ]]));                       //   tick at deck level
+cotas.add(lineOf([[REEL_X-REEL_R,REEL_Y,0],[REEL_X+REEL_R,REEL_Y,0]]));         // Ø0.40 m reel
+cotas.add(lineOf([[REEL_X-REEL_R,REEL_Y-0.05,0],[REEL_X-REEL_R,REEL_Y+0.05,0]]));
+cotas.add(lineOf([[REEL_X+REEL_R,REEL_Y-0.05,0],[REEL_X+REEL_R,REEL_Y+0.05,0]]));
+root.add(cotas);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;      // bake the frozen shadow once
+
+// ---- build-time guards ----
+// These use console.error, NOT console.assert. The catalog gate collects console ERRORS and reports
+// them in `errors[]`; it does not collect a failed assert. The first build shipped three packs
+// floating past the end of their belt with console.assert in place and the gate still returned
+// exit 0 with errors:[] — a guard the instrument cannot read is not a guard.
+{
+  const bb = new THREE.Box3().setFromObject(root), sz = new THREE.Vector3();
+  bb.getSize(sz);
+  if (sz.x > LEN + 0.30) console.error('BUILD: envelope X drift', sz.x, '>', LEN+0.30);
+  if (sz.y > 2.15 + 0.10) console.error('BUILD: envelope Y drift', sz.y);
+  if (sz.z > WID + 0.30) console.error('BUILD: envelope Z drift', sz.z);
+
+  // Containment: every discharge pack must sit ON the discharge belt, not past its end. This is the
+  // specific defect the envelope check missed, so it gets its own explicit assertion.
+  const halfPack = (PRODL+0.03)/2 + 0.030;          // body half-length + the crimped end tab
+  for (let i=0;i<NPK;i++){
+    const px = PACK_X0 + i*PACK_STEP;
+    if (px - halfPack < DIS_X0 || px + halfPack > DIS_X1)
+      console.error('BUILD: pack', i, 'at x', px.toFixed(3), 'is off the discharge belt',
+                    `[${DIS_X0.toFixed(2)}, ${DIS_X1.toFixed(2)}]`);
+  }
+}
+
+// ============================================================================
+// ZONE 3 — UI
+// ============================================================================
+let running = false, cut = false, phase = 0;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnRun = document.getElementById('btnRun');
+btnRun.onclick = ()=>{ running = !running; btnRun.classList.toggle('on', running); requestRender(); };
+
+const btnCut = document.getElementById('btnCut');
+btnCut.onclick = ()=>{
+  cut = !cut;
+  for (const c of CUTTABLE) c.m.opacity = cut ? c.cut : c.on;
+  btnCut.classList.toggle('on', cut);
+  requestRender();
+};
+
+const btnDim = document.getElementById('btnDim');
+btnDim.onclick = ()=>{ cotas.visible = !cotas.visible;
+  btnDim.classList.toggle('on', cotas.visible); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  if (running){
+    phase = (phase + 0.010) % (IN_LEN+PITCH);
+    layoutInfeed(phase);
+    reelGrp.rotation.z -= 0.012;
+    jawTop.rotation.z -= 0.05; jawBot.rotation.z += 0.05;
+    for (let i=0;i<finRollers.children.length;i++) finRollers.children[i].rotation.y += 0.06;
+    // MARCHA is a CONTINUOUS, indefinite translation: a frozen shadow would stay parked at the
+    // start pose for as long as the machine runs, so re-bake INSIDE the motion branch. (A bounded
+    // easing transition would only need the settle edge — the class of motion decides, not the family.)
+    renderer.shadowMap.needsUpdate = true;
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract ----------
+globalThis.__empacadoraFlowwrapApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__empacadora-flowwrapApp'] = globalThis.__empacadoraFlowwrapApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

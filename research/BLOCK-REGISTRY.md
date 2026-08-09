@@ -39,7 +39,7 @@ RENUMBER it to your range before requesting integration. session-A reconciles at
 | transporte | B70–B79 | B74 |
 | robotica | B80–B89 | B80 (B62 is its historical entry; new blocks go B80+) |
 | automotriz | B90–B99 | B90 (B63 historical; new blocks B90+) |
-| proceso / fluidos / utilities | B100–B119 | B100 |
+| proceso / fluidos / utilities | B100–B119 | B101 |
 | any new family | ask session-A | — |
 
 ## Enforcement — prevent at WRITE, not detect at read
