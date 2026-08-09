@@ -1,0 +1,319 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — seguridad/senaletica · floor safety marking set: aisle, crossing, hatched keep-clear,
+  bollards and a sign post.
+  Built from disenos/catalog/shell-template.html. Contract: __senaleticaApp.runtime + __qaRenderInfo +
+  data-app-ready, render-on-demand, shadows frozen (autoUpdate=false, 1024), DPR<=2.
+  Instancing (block54 §2.3): crossing stripes, hatch stripes, direction arrows and bollard bands.
+  EVERY floor marking is a coplanar-with-the-floor quad, so all of them carry polygonOffset AND a
+  stacked height — coplanar quads on a shared plane tear as the camera moves.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Señalética de piso — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">SEÑALÉTICA DE PISO — pasillo peatonal, cruce, zona rayada</div>
+  <div><span class="dim">pasillo 1.50 m · línea 0.10 m · bolardos Ø 0.11 m · poste de señales 2.20 m</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnCross" class="on">CRUCE PEATONAL</button>
+  <button id="btnHatch" class="on">ZONA RAYADA</button>
+  <button id="btnBol" class="on">BOLARDOS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const AISLE_W = 1.50;              // clear pedestrian aisle width
+const LINE_W = 0.10;               // marking line width
+const RUN = 7.0;                   // marked length
+const CROSS_X = 1.30;              // where the crossing cuts the aisle
+const CROSS_W = 1.10;              // crossing width along X
+const HATCH = { x: -2.15, z: -2.05, w: 1.60, d: 1.40 };   // keep-clear zone
+const POST_H = 2.20;
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 34);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 10.2, AZ = 1.02, EL = 0.44;  // higher than the house default: the subject is the FLOOR,
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.3 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));  // and far enough back that the whole marked area fits
+camera.lookAt(0, 0.35, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.35, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.5;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4, 7, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);                              // block54 §5-d: key light ≤1024
+// A 9 x 7 m slab under a 1024 map is the acne case: the depth step per texel is large, so the slab
+// self-shadows in stripes. normalBias fixes it where a plain depth bias only trades acne for peter-panning.
+sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.05;
+sun.shadow.camera.left=-6; sun.shadow.camera.right=6; sun.shadow.camera.top=6; sun.shadow.camera.bottom=-6;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.30));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+// The concrete slab IS part of this asset (a marking without a floor is not a marking), so it is
+// built under root rather than as the scene's throwaway ground.
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+// DROPPED 20 mm: the slab's top face sits at y = 0, and a scene ground at the same height wins the
+// depth test in patches — the concrete simply did not appear in the first capture.
+ground.rotation.x = -Math.PI/2; ground.position.y = -0.02; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: paint and tape are DIELECTRIC. Every floor material carries
+// polygonOffset: markings sit on the slab plane and would z-fight without it.
+// ============================================================================
+const floorMat = (color, offset)=> new THREE.MeshStandardMaterial({
+  color, metalness:0.0, roughness:0.80, polygonOffset:true,
+  polygonOffsetFactor:-offset, polygonOffsetUnits:-offset });
+const matSlab   = new THREE.MeshStandardMaterial({ color:0x4b5158, metalness:0.0, roughness:0.92 });
+const matLine   = floorMat(0xe0c02a, 2);   // y 0.004
+const matCross  = floorMat(0xe8e6e0, 4);   // y 0.008
+const matHatchA = floorMat(0xe0c02a, 3);   // y 0.005 — hatch FIELD
+const matHatchB = floorMat(0x24282d, 5);   // y 0.007 — hatch BARS, must beat the field
+const matArrow  = floorMat(0xe8e6e0, 6);   // y 0.010
+const matBorder = floorMat(0xe0c02a, 7);   // y 0.011 — the frame that clips the hatch
+const matBoll   = new THREE.MeshStandardMaterial({ color:0xd8b41e, metalness:0.0, roughness:0.55 });
+const matBollB  = new THREE.MeshStandardMaterial({ color:0x1c1f23, metalness:0.0, roughness:0.70 });
+const matPost   = new THREE.MeshStandardMaterial({ color:0xb9bec2, metalness:0.92, roughness:0.38 });
+const matWarn   = new THREE.MeshStandardMaterial({ color:0xe0c02a, metalness:0.0, roughness:0.44 });
+const matMand   = new THREE.MeshStandardMaterial({ color:0x1c56a8, metalness:0.0, roughness:0.44 });
+const matDark   = new THREE.MeshStandardMaterial({ color:0x1a1d21, metalness:0.0, roughness:0.6 });
+const matWhite  = new THREE.MeshStandardMaterial({ color:0xeceff1, metalness:0.0, roughness:0.5 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const dummy = new THREE.Object3D();
+// Floor quads are STACKED in y as well as polygon-offset: offset alone still tears when two
+// markings overlap each other (the crossing crosses the aisle lines).
+const quad = (parent, w, d, mat, x, z, y, ry=0)=>{
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+  m.rotation.set(-Math.PI/2, 0, ry);
+  m.position.set(x, y, z);
+  m.receiveShadow = true;
+  parent.add(m); return m;
+};
+
+// --- concrete slab ---
+const slab = new THREE.Mesh(new THREE.BoxGeometry(9.0, 0.06, 7.0), matSlab);
+slab.position.set(0, -0.03, -0.4); slab.receiveShadow = true; root.add(slab);
+
+// --- pedestrian aisle: two continuous lines ---
+for(const sz of [-1,1]) quad(root, RUN, LINE_W, matLine, 0, sz*AISLE_W/2, 0.004);
+
+// --- direction arrows down the middle of the aisle (instanced) ---
+const arrows = new THREE.Group();
+{
+  const shaft = new THREE.PlaneGeometry(0.34, 0.09);
+  const n = 5;
+  const im = new THREE.InstancedMesh(shaft, matArrow, n);
+  const head = new THREE.ConeGeometry(0.11, 0.20, 3);
+  const ih = new THREE.InstancedMesh(head, matArrow, n);
+  for(let i=0;i<n;i++){
+    const x = -RUN/2 + 0.9 + i*1.35;
+    dummy.position.set(x, 0.006, 0); dummy.rotation.set(-Math.PI/2, 0, 0); dummy.updateMatrix();
+    im.setMatrixAt(i, dummy.matrix);
+    dummy.position.set(x + 0.26, 0.006, 0); dummy.rotation.set(Math.PI/2, 0, -Math.PI/2); dummy.updateMatrix();
+    ih.setMatrixAt(i, dummy.matrix);
+  }
+  im.instanceMatrix.needsUpdate = true; ih.instanceMatrix.needsUpdate = true;
+  arrows.add(im, ih);
+}
+root.add(arrows);
+
+// --- pedestrian crossing: zebra stripes cutting across the aisle ---
+const crossing = new THREE.Group();
+{
+  const stripes = 7, pitch = CROSS_W / stripes;
+  const geo = new THREE.PlaneGeometry(pitch*0.55, AISLE_W + 2*LINE_W + 0.6);
+  const im = new THREE.InstancedMesh(geo, matCross, stripes);
+  im.receiveShadow = true;
+  for(let i=0;i<stripes;i++){
+    dummy.position.set(CROSS_X - CROSS_W/2 + pitch*(i + 0.5), 0.008, 0);
+    dummy.rotation.set(-Math.PI/2, 0, 0); dummy.updateMatrix();
+    im.setMatrixAt(i, dummy.matrix);
+  }
+  im.instanceMatrix.needsUpdate = true;
+  crossing.add(im);
+}
+root.add(crossing);
+
+// --- hatched keep-clear zone: yellow field + black diagonal bars, framed by a border ---
+const hatch = new THREE.Group();
+quad(hatch, HATCH.w, HATCH.d, matHatchA, HATCH.x, HATCH.z, 0.005);
+{
+  // Each 45° bar is CLIPPED to the zone rectangle instead of drawn at a fixed length: a constant
+  // length overhangs the yellow field at both ends, which is exactly what a hatch must not do.
+  const PITCH = 0.26, HALF_W = HATCH.w/2, HALF_D = HATCH.d/2;
+  const segs = [];
+  for(let a = -HALF_W - HATCH.d; a <= HALF_W; a += PITCH){
+    const x1 = Math.max(a, -HALF_W);
+    const z1 = -HALF_D + (x1 - a);
+    if(z1 > HALF_D) continue;                       // the line enters above the zone: no segment
+    const x2 = Math.min(a + HATCH.d, HALF_W);
+    const z2 = -HALF_D + (x2 - a);
+    const len = Math.hypot(x2 - x1, z2 - z1);
+    if(len < 0.04) continue;
+    segs.push({ cx: (x1 + x2)/2, cz: (z1 + z2)/2, len });
+  }
+  const geo = new THREE.PlaneGeometry(0.10, 1);
+  const im = new THREE.InstancedMesh(geo, matHatchB, segs.length);
+  im.receiveShadow = true;
+  segs.forEach((s,i)=>{
+    dummy.position.set(HATCH.x + s.cx, 0.007, HATCH.z + s.cz);
+    dummy.rotation.set(-Math.PI/2, 0, Math.PI/4);   // +45: after the -90 X flip this is the (+X,+Z)
+                                                   // diagonal the clip maths assumes; -45 gives the
+                                                   // OTHER diagonal and every bar collapses to one line
+    dummy.scale.set(1, s.len, 1);
+    dummy.updateMatrix();
+    im.setMatrixAt(i, dummy.matrix);
+  });
+  dummy.scale.set(1,1,1);
+  im.instanceMatrix.needsUpdate = true;
+  hatch.add(im);
+}
+// the hatch is CLIPPED by a border frame so the diagonals do not bleed out of the zone
+for(const [w,d,dx,dz] of [[HATCH.w+0.2,0.10,0,-(HATCH.d/2+0.05)],[HATCH.w+0.2,0.10,0,HATCH.d/2+0.05],
+                          [0.10,HATCH.d+0.2,-(HATCH.w/2+0.05),0],[0.10,HATCH.d+0.2,HATCH.w/2+0.05,0]]){
+  quad(hatch, w, d, matBorder, HATCH.x + dx, HATCH.z + dz, 0.011);
+}
+root.add(hatch);
+
+// --- bollards guarding the corner of the hatched zone ---
+const bollards = new THREE.Group();
+for(const bx of [HATCH.x - 0.55, HATCH.x + 0.25, HATCH.x + 1.05]){
+  const bz = HATCH.z + HATCH.d/2 + 0.45;
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.92, 16), matBoll);
+  post.castShadow = post.receiveShadow = true; post.position.set(bx, 0.46, bz);
+  bollards.add(post);
+  for(const by of [0.24, 0.62]){
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.10, 16), matBollB);
+    band.castShadow = true; band.position.set(bx, by, bz); bollards.add(band);
+  }
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 8, 0, Math.PI*2, 0, Math.PI/2), matBoll);
+  cap.castShadow = true; cap.position.set(bx, 0.92, bz); bollards.add(cap);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.11, 0.03, 16), matBollB);
+  base.receiveShadow = true; base.position.set(bx, 0.015, bz); bollards.add(base);
+}
+root.add(bollards);
+
+// --- sign post: warning triangle + mandatory disc, on a floor-flanged post ---
+const signPost = new THREE.Group();
+const px = 2.65, pz = -1.35;
+const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, POST_H, 14), matPost);
+pole.castShadow = pole.receiveShadow = true; pole.position.set(px, POST_H/2, pz);
+signPost.add(pole);
+const flange = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.095, 0.02, 16), matPost);
+flange.receiveShadow = true; flange.position.set(px, 0.01, pz); signPost.add(flange);
+// warning triangle (yellow field, dark border) facing the aisle
+const tri = new THREE.Mesh(new THREE.CircleGeometry(0.24, 3), matWarn);
+tri.position.set(px, POST_H - 0.30, pz + 0.02); tri.castShadow = true;
+signPost.add(tri);
+const triIn = new THREE.Mesh(new THREE.CircleGeometry(0.17, 3), matDark);
+triIn.position.set(px, POST_H - 0.30, pz + 0.028); signPost.add(triIn);
+// mandatory disc (blue field, white pictogram plate)
+const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.012, 24), matMand);
+disc.rotation.x = Math.PI/2; disc.position.set(px, POST_H - 0.78, pz + 0.02); disc.castShadow = true;
+signPost.add(disc);
+const discIn = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.014, 24), matWhite);
+discIn.rotation.x = Math.PI/2; discIn.position.set(px, POST_H - 0.78, pz + 0.024);
+signPost.add(discIn);
+root.add(signPost);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot   = document.getElementById('btnRot');
+const btnCross = document.getElementById('btnCross');
+const btnHatch = document.getElementById('btnHatch');
+const btnBol   = document.getElementById('btnBol');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(btnCross, crossing);
+toggle(btnHatch, hatch);
+toggle(btnBol, bollards);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__senaleticaApp = { runtime:{ scene, renderer, camera, root } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
