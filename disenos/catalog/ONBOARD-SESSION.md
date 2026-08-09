@@ -154,6 +154,14 @@ GOTCHAS ya detectados (evítalos):
   rodear nada) → compón desde rotaciones de EJE explícitas.
 - Un CORTE que solo quita el techo NO es corte: el muro cercano sigue tapando el interior. El toggle CORTE
   quita techo + muro cercano + puerta JUNTOS.
+- MALLA/REJILLA que debe dejar ver: el parámetro crítico es la PROFUNDIDAD de las barras, no el paso. Una
+  puerta perforada con barras de 10 mm de fondo se apila visualmente en vista 3/4 y se vuelve OPACA (tapó 42U
+  de equipo con exit 0); una perforada real es chapa ~1.5 mm → baja el fondo a ~2.5 mm y transparenta.
+- OFFSETS encadenados que se salen de su base (alternador colgando fuera del patín, barras 90 mm fuera del
+  gabinete): pon `console.assert` sobre la extensión resultante en vez de confiar en la aritmética; atrapa el
+  error en el primer render, barato.
+- FALSO NEGATIVO del gate (no es asset roto): `ready:false` + `error:'no-renderer'` + lista de errores VACÍA
+  + cero globals `__` = infra (unpkg tosió). Un asset roto DE VERDAD deja rastro en `errors`. Reintenta.
 
 Trabaja en bucle por todos los assets pendientes de tu familia. Cuando tu familia quede en done, avisa y
 elige otra familia libre si queda, o detente.
