@@ -1,0 +1,431 @@
+<!doctype html>
+<!--
+  tunel-enfriamiento — belt cooling tunnel (chocolate / bakery)
+  Spec:     disenos/catalog/proceso/tunel-enfriamiento/design-spec.yaml
+  Evidence: research/sources/B102-proceso-cooling/cooling-tunnel.md  [B102]
+
+  The decomposition IS the identity, and both measured sources give the same one:
+      open table 1 m | 3 lift-off insulated top sections (3 m) | open table 1 m   = 5.00 m
+  The insulated part is a LID, not a box. The belt is one continuous loop that runs under it and
+  comes back below the table, so the covered span is the only thing hidden — never the belt itself.
+
+  CORTE is a MATERIAL swap, never a geometry substitution (inherited from empacadora-flowwrap):
+  a hide-list and a restore-list are two different lists and they diverge silently.
+
+  Build guards use console.error, NOT console.assert — the catalog gate collects console ERRORS and
+  reports them in errors[]; a failed assert is invisible to it and ships at exit 0.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Túnel de enfriamiento — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Túnel de enfriamiento — banda continua</div>
+  <div><span class="dim">5.00 × 1.00 m · banda 420 mm · campana 3 × 1 m</span></div>
+  <div class="pass">Pase MATERIALS</div>
+  <div><span class="dim">mesa abierta → campana aislada → mesa abierta</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnRun">MARCHA</button>
+  <button id="btnCut">CORTE</button>
+  <button id="btnDim">COTAS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 13, 36);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+// Spec camera: az 64 deg, el 14 deg, fov 38, target_y 0.80, R 6.35 (derived from the frustum, then
+// ASSERTED below against the projected bbox — the gate cannot see the frame edge, so the page does).
+// The azimuth is MEASURED, not chosen: at az 46 the first capture put the infeed table deep in
+// foreshortening, so the 1 m + 3 m + 1 m decomposition — three of the four critical features — read
+// only at the outfeed end. Swinging toward side-on shows both open tables, the section joints and
+// the return strand under the deck at once; what it costs is the view INTO the hood mouth, and that
+// belongs to the CORTE state anyway.
+const AZ = 64*Math.PI/180, EL = 14*Math.PI/180, R = 6.35, TY = 0.80;
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TY + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TY, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TY, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;   // OFF: a rotating scene never settles
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.35;     // spec deviation: specular term for the stainless table + drums
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4, 6, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.05;
+sun.shadow.camera.left=-4.2; sun.shadow.camera.right=4.2; sun.shadow.camera.top=4.2; sun.shadow.camera.bottom=-4.2;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+// Camera-side fill: the DIFFUSE term on the vertical stainless and panel faces (HANDBOOK deviation;
+// metalness untouched — a vertical face cannot catch a specular from an elevated key at any height).
+const fill = new THREE.DirectionalLight(0xffffff, 0.85);
+fill.position.set(5.0, 2.0, 5.0);
+scene.add(fill);
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS (HANDBOOK §3; metalness near-binary)
+// ============================================================================
+const matSteel = new THREE.MeshStandardMaterial({ color:0xd2d6d8, metalness:0.90, roughness:0.30 });
+const matCoil  = new THREE.MeshStandardMaterial({ color:0xb9c0c4, metalness:0.92, roughness:0.38 });
+const matFrame = new THREE.MeshStandardMaterial({ color:0x333a40, metalness:0.0,  roughness:0.60 });
+// The insulated cover is a COATED sandwich panel = dielectric. Mid-value albedo on purpose: a
+// near-white panel burns out under ACES at exposure 1.15 with environmentIntensity 2.35 and the
+// section joints stop reading.
+const matPanel = new THREE.MeshStandardMaterial({ color:0x8c979c, metalness:0.0, roughness:0.55 });
+const matBelt  = new THREE.MeshStandardMaterial({ color:0x4a7f9e, metalness:0.0, roughness:0.55 });
+const matChoc  = new THREE.MeshStandardMaterial({ color:0x4a2f1e, metalness:0.0, roughness:0.45 });
+
+// CORTE = material swap. Only the hood shell is cuttable; there is no second concentric envelope
+// here (the evaporator is an object inside the hood, not a closed shell of its own), so cutting the
+// cover cannot leave an inner surface reading solid.
+const CUTTABLE = [ { m: matPanel, on: 1.00, cut: 0.20 } ];
+matPanel.transparent = true;   // declared up front so the swap never rebuilds a material
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+
+const box = (w,h,d,m)=>{ const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), m);
+                         o.castShadow=true; o.receiveShadow=true; return o; };
+const put = (o,x,y,z)=>{ o.position.set(x,y,z); return o; };   // Object3D.position has NO setter
+const inst = (geo, mat, xforms)=>{
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = true; im.receiveShadow = true;
+  const m = new THREE.Matrix4();
+  xforms.forEach((t,i)=>{ m.makeTranslation(t[0],t[1],t[2]); im.setMatrixAt(i,m); });
+  im.instanceMatrix.needsUpdate = true;
+  return im;
+};
+
+// ---- LAYOUT declared in ONE block, every x derived from the one before it ----
+// Chained offsets that each "look right" are the cheapest defect to prevent and the most expensive
+// to find; keeping them here makes an overrun arithmetic anyone can check.
+const LEN = 5.00, WID = 1.00, WORK = 0.90;          // [CERT-web] Selmi 5 m / 1000 mm; WORK is [INFER]
+const X0 = -LEN/2, X1 = LEN/2;                      // -2.50 .. +2.50
+const TABLE_L = 1.00;                               // [CERT-web] ChocoMa open tables, 1 m each end
+const HOOD_X0 = X0 + TABLE_L, HOOD_X1 = X1 - TABLE_L;   // -1.50 .. +1.50
+const HOOD_LEN = HOOD_X1 - HOOD_X0;                 // 3.00 = 3 sections
+const NSEC = 3, SEC_LEN = HOOD_LEN/NSEC, SEC_GAP = 0.014;
+const BELT_W = 0.420;                               // [CERT-web] Selmi working width
+const BELT_T = 0.010;
+const DRUM_R = 0.100;                               // [INFER] Ø0.20 — amended from Ø0.12, see below
+const DRUM_X = X1 - 0.10, DRUM_Y = WORK - DRUM_R;   // top tangent sits exactly on the belt line
+const RET_Y  = DRUM_Y - DRUM_R;                     // return strand = bottom tangent of the drums
+// The DECK is a shallow table, and its underside is NOT tied to the return strand. The first build
+// derived SLAB_BOT from RET_Y + 0.020, which filled the entire space between the two strands: the
+// return ran 20 mm under a slab and was invisible from any camera above the horizon. The belt then
+// read as a sheet lying on a bench — critical feature `return-run-under-the-table` cannot pass, and
+// no count, console check or draw-call budget can see it. Deck thickness is now stated on its own,
+// and the clearance below it is ASSERTED, not hoped for.
+const DECK_H = 0.090;
+const SLAB_TOP = WORK - BELT_T, SLAB_BOT = SLAB_TOP - DECK_H;
+const SLAB_H = SLAB_TOP - SLAB_BOT, SLAB_CY = (SLAB_TOP+SLAB_BOT)/2;
+const TABLE_W = 0.90;
+const HOOD_H = 0.320, HOOD_W = WID;                 // the cover overhangs the table: it lifts off
+const HOOD_Y0 = SLAB_TOP, HOOD_Y1 = HOOD_Y0 + HOOD_H;
+const PANEL_T = 0.050, SIDE_T = 0.040;              // [CERT-web] ChocoMa top covers 50 mm
+const EVAP_Y = HOOD_Y1 - PANEL_T - 0.075;
+const FAN_Y  = EVAP_Y - 0.075, FAN_R = 0.095;
+const FAN_X  = [-0.90, 0, 0.90];
+const PROD_PITCH = 0.20, PROD_Z = [-0.105, 0.105];
+const PRODL = 0.055, PRODH = 0.020, PRODW = 0.040;  // [INFER] under the 70 mm clearance [CERT-a]
+
+// ---- frame: painted legs, base rails, cross members ----
+const frame = new THREE.Group();
+const legXf = [];
+for (const lx of [X0+0.30, X0+1.70, X1-1.70, X1-0.30])
+  for (const lz of [-TABLE_W/2+0.06, TABLE_W/2-0.06]) legXf.push([lx, SLAB_BOT/2, lz]);
+frame.add(inst(new THREE.BoxGeometry(0.07, SLAB_BOT, 0.07), matFrame, legXf));
+frame.add(inst(new THREE.BoxGeometry(LEN-0.40, 0.06, 0.08), matFrame,
+  [[0, 0.05, -TABLE_W/2+0.06],[0, 0.05, TABLE_W/2-0.06]]));
+root.add(frame);
+
+// ---- belt table: the insulated deck the whole belt path sits on ----
+// It stops 0.10 m short of each drum so the strands visibly wrap around them.
+const tableLen = LEN - 0.32;
+root.add(put(box(tableLen, SLAB_H, TABLE_W, matSteel), 0, SLAB_CY, 0));
+// stainless side rails along the carrying run — they guide the product, and they are what the
+// lift-off cover lands on
+root.add(inst(new THREE.BoxGeometry(tableLen, 0.055, 0.020), matSteel,
+  [[0, WORK+0.020, -BELT_W/2-0.030],[0, WORK+0.020, BELT_W/2+0.030]]));
+
+// ---- the belt: ONE loop. Carrying strand on top, return strand BELOW the table ----
+const beltLen = (DRUM_X*2);
+root.add(put(box(beltLen, BELT_T, BELT_W, matBelt), 0, WORK-BELT_T/2, 0));
+root.add(put(box(beltLen, BELT_T, BELT_W, matBelt), 0, RET_Y+BELT_T/2, 0));
+// drums: axis along Z, the belt wraps them at both ends
+const drumGeo = new THREE.CylinderGeometry(DRUM_R, DRUM_R, BELT_W+0.06, 22);
+drumGeo.rotateX(Math.PI/2);                       // bake the axis flip into the geometry
+const drumHead = new THREE.Mesh(drumGeo, matSteel); drumHead.castShadow = true;
+const drumTail = new THREE.Mesh(drumGeo, matSteel); drumTail.castShadow = true;
+put(drumHead,  DRUM_X, DRUM_Y, 0); put(drumTail, -DRUM_X, DRUM_Y, 0);
+root.add(drumHead); root.add(drumTail);
+// the wrap itself: a half-cylinder of belt around each drum, so the loop closes visually
+const wrapGeo = new THREE.CylinderGeometry(DRUM_R+BELT_T, DRUM_R+BELT_T, BELT_W, 20, 1, true,
+                                           -Math.PI/2, Math.PI);
+wrapGeo.rotateX(Math.PI/2);
+const wrapH = new THREE.Mesh(wrapGeo, matBelt); put(wrapH, DRUM_X, DRUM_Y, 0);
+const wrapT = new THREE.Mesh(wrapGeo, matBelt); put(wrapT, -DRUM_X, DRUM_Y, 0); wrapT.rotation.z = Math.PI;
+root.add(wrapH); root.add(wrapT);
+
+// ---- drive: gearmotor hung under the outfeed end, bolted to the table ----
+const motor = new THREE.Group();
+motor.add(put(box(0.20,0.20,0.26,matFrame), 0, 0, 0));
+const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.028,0.16,14), matCoil);
+shaft.rotation.x = Math.PI/2; motor.add(put(shaft, 0, 0, -0.20));
+motor.position.set(DRUM_X-0.24, SLAB_BOT-0.14, 0.30);
+root.add(motor);
+
+// ---- hood: 3 lift-off insulated sections. OPEN at both ends: no end walls, ever ----
+// Built as separate panels, never a solid box. A solid box would seal the mouths the belt passes
+// through and the whole subject would read as a crate ("tapa invisible" rule).
+const hood = new THREE.Group();
+const topXf = [], sideXf = [], battenXf = [], handleXf = [];
+for (let s=0; s<NSEC; s++){
+  const cx = HOOD_X0 + SEC_LEN*(s+0.5);
+  topXf.push([cx, HOOD_Y1-PANEL_T/2, 0]);
+  sideXf.push([cx, (HOOD_Y0+HOOD_Y1-PANEL_T)/2, -HOOD_W/2+SIDE_T/2]);
+  sideXf.push([cx, (HOOD_Y0+HOOD_Y1-PANEL_T)/2,  HOOD_W/2-SIDE_T/2]);
+  handleXf.push([cx, HOOD_Y1+0.018, 0]);
+  if (s>0) battenXf.push([HOOD_X0 + SEC_LEN*s, HOOD_Y1-PANEL_T/2, 0]);   // the joint between sections
+}
+hood.add(inst(new THREE.BoxGeometry(SEC_LEN-SEC_GAP, PANEL_T, HOOD_W), matPanel, topXf));
+hood.add(inst(new THREE.BoxGeometry(SEC_LEN-SEC_GAP, HOOD_H-PANEL_T, SIDE_T), matPanel, sideXf));
+hood.add(inst(new THREE.BoxGeometry(0.026, PANEL_T+0.012, HOOD_W+0.010), matFrame, battenXf));
+// the handle each section is lifted by — "easy to handle without use of tools"
+const handleGeo = new THREE.TorusGeometry(0.075, 0.010, 8, 20, Math.PI);
+const handles = new THREE.InstancedMesh(handleGeo, matCoil, handleXf.length);
+handles.castShadow = true;
+{ const m = new THREE.Matrix4();
+  handleXf.forEach((t,i)=>{ m.makeTranslation(t[0],t[1],t[2]); handles.setMatrixAt(i,m); });
+  handles.instanceMatrix.needsUpdate = true; }
+hood.add(handles);
+root.add(hood);
+
+// ---- evaporator inside the hood: finned block + axial fans discharging DOWN onto the belt ----
+const evap = new THREE.Group();
+const EVAP_L = HOOD_LEN - 0.60;
+evap.add(put(box(EVAP_L, 0.020, 0.36, matCoil), 0, EVAP_Y+0.075, 0));      // top header
+evap.add(put(box(EVAP_L, 0.020, 0.36, matCoil), 0, EVAP_Y-0.075, 0));      // bottom header
+const NFIN = 26, finXf = [];
+for (let i=0;i<NFIN;i++) finXf.push([-EVAP_L/2 + (i+0.5)*(EVAP_L/NFIN), EVAP_Y, 0]);
+evap.add(inst(new THREE.BoxGeometry(0.006, 0.140, 0.34), matCoil, finXf));
+// return bends at the ends, so the block reads as a coil and not as a stack of plates
+evap.add(inst(new THREE.CylinderGeometry(0.014,0.014,0.15,10),  matCoil,
+  [[-EVAP_L/2-0.02, EVAP_Y, 0],[EVAP_L/2+0.02, EVAP_Y, 0]]));
+root.add(evap);
+
+const fans = [];
+for (const fx of FAN_X){
+  const g = new THREE.Group();
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.022,0.022,0.045,12), matCoil);
+  hub.castShadow = true; g.add(hub);
+  for (let b=0;b<4;b++){
+    const blade = box(0.075, 0.008, 0.032, matCoil);
+    blade.position.set(Math.cos(b*Math.PI/2)*0.050, 0, Math.sin(b*Math.PI/2)*0.050);
+    blade.rotation.y = b*Math.PI/2; blade.rotation.x = 0.35;
+    g.add(blade);
+  }
+  g.position.set(fx, FAN_Y, 0);
+  root.add(g); fans.push(g);
+  // fan ring: a TORUS, never a cylinder — a cylinder ring occludes exactly what it should frame
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(FAN_R, 0.008, 8, 24), matCoil);
+  ring.rotation.x = Math.PI/2; root.add(put(ring, fx, FAN_Y, 0));
+}
+
+// ---- product: chocolates along the whole belt, entering on one open table and leaving on the other
+const prodXf = [];
+for (let x = -DRUM_X+0.12; x <= DRUM_X-0.12; x += PROD_PITCH)
+  for (const pz of PROD_Z) prodXf.push([x, WORK+PRODH/2, pz]);
+const prods = new THREE.InstancedMesh(new THREE.BoxGeometry(PRODL,PRODH,PRODW), matChoc, prodXf.length);
+prods.castShadow = true; prods.receiveShadow = true;
+const _m = new THREE.Matrix4();
+function layoutProduct(phase){
+  const span = (DRUM_X-0.12)*2;
+  prodXf.forEach((t,i)=>{
+    let x = -DRUM_X+0.12 + (((t[0] + DRUM_X-0.12) + phase) % span);
+    _m.makeTranslation(x, t[1], t[2]); prods.setMatrixAt(i,_m);
+  });
+  prods.instanceMatrix.needsUpdate = true;
+}
+layoutProduct(0);
+root.add(prods);
+
+// ---- COTAS (dimension marks), hidden by default ----
+const cotas = new THREE.Group();
+cotas.visible = false;
+const matCota = new THREE.LineBasicMaterial({ color:0x00d4aa });
+const lineOf = (pts)=> new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+  pts.map(p=>new THREE.Vector3(...p))), matCota);
+const CZ = WID/2 + 0.10, CY = 0.06;
+cotas.add(lineOf([[X0,CY,CZ],[X1,CY,CZ]]));                          // 5.00 m overall
+cotas.add(lineOf([[X0,CY-0.06,CZ],[X0,CY+0.06,CZ]]));
+cotas.add(lineOf([[X1,CY-0.06,CZ],[X1,CY+0.06,CZ]]));
+cotas.add(lineOf([[X0+0.06,0,CZ],[X0+0.06,WORK,CZ]]));               // 0.90 m working height
+cotas.add(lineOf([[X0-0.02,WORK,CZ],[X0+0.14,WORK,CZ]]));
+cotas.add(lineOf([[HOOD_X0,HOOD_Y1+0.10,CZ],[HOOD_X1,HOOD_Y1+0.10,CZ]]));   // 3.00 m covered span
+cotas.add(lineOf([[HOOD_X0,HOOD_Y1+0.04,CZ],[HOOD_X0,HOOD_Y1+0.16,CZ]]));
+cotas.add(lineOf([[HOOD_X1,HOOD_Y1+0.04,CZ],[HOOD_X1,HOOD_Y1+0.16,CZ]]));
+root.add(cotas);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;      // bake the frozen shadow once
+
+// ---- build-time guards (console.error: the gate reads errors, it does NOT read a failed assert) ----
+{
+  const bb = new THREE.Box3().setFromObject(root), sz = new THREE.Vector3();
+  bb.getSize(sz);
+  if (sz.x > LEN + 0.20) console.error('BUILD: envelope X drift', sz.x, '>', LEN+0.20);
+  if (sz.z > WID + 0.30) console.error('BUILD: envelope Z drift', sz.z);
+  if (sz.y > 1.40)       console.error('BUILD: envelope Y drift', sz.y);
+
+  // The decomposition is the identity, so it gets asserted rather than trusted: the hood must be
+  // strictly INSIDE the belt span, leaving one open metre of table at each end.
+  if (!(HOOD_X0 > -DRUM_X && HOOD_X1 < DRUM_X))
+    console.error('BUILD: hood', HOOD_X0, HOOD_X1, 'is not inside the belt span', -DRUM_X, DRUM_X);
+  if (Math.abs((HOOD_X0 - X0) - TABLE_L) > 1e-6 || Math.abs((X1 - HOOD_X1) - TABLE_L) > 1e-6)
+    console.error('BUILD: open tables are not 1.00 m', HOOD_X0-X0, X1-HOOD_X1);
+  // The belt must be a LOOP, and the loop must be VISIBLE: the return strand runs below the deck
+  // with real air between them. A 0.02 m gap satisfies "below" and still reads as a solid bench, so
+  // the guard demands 0.06 m of clearance — the version of this check that only tested `RET_Y <
+  // SLAB_BOT` passed on the build where the strand was invisible.
+  if (!(RET_Y < SLAB_BOT - 0.060 && RET_Y > 0.05))
+    console.error('BUILD: return strand at', RET_Y, 'has no readable clearance under the deck at', SLAB_BOT);
+  // The hood is a LID: it must start at the table top, never reach the floor.
+  if (HOOD_Y0 < SLAB_TOP - 1e-6) console.error('BUILD: hood sinks below the table top', HOOD_Y0, SLAB_TOP);
+  // Product containment: nothing may sit past a drum.
+  for (const t of prodXf)
+    if (Math.abs(t[0]) > DRUM_X - PRODL/2) console.error('BUILD: product at x', t[0], 'is past the drum', DRUM_X);
+  // The evaporator must be inside the hood, under the cover and above the product.
+  if (EVAP_Y + 0.085 > HOOD_Y1 - PANEL_T || FAN_Y - 0.02 < WORK + PRODH + 0.05)
+    console.error('BUILD: evaporator/fan stack does not fit inside the hood', EVAP_Y, FAN_Y);
+
+  // FRAMING: the gate scores that the scene renders, never that it FITS. Project every bbox corner
+  // to NDC and fail loud outside the frame; the ceiling is 0.75, below the 4-line HUD.
+  camera.updateMatrixWorld(); camera.updateProjectionMatrix();
+  const v = new THREE.Vector3();
+  for (const cx of [bb.min.x, bb.max.x]) for (const cy of [bb.min.y, bb.max.y]) for (const cz of [bb.min.z, bb.max.z]){
+    v.set(cx,cy,cz).project(camera);
+    if (Math.abs(v.x) > 0.93 || v.y < -0.93 || v.y > 0.75)
+      console.error('BUILD: corner', cx.toFixed(2), cy.toFixed(2), cz.toFixed(2),
+                    'projects outside the frame at ndc', v.x.toFixed(3), v.y.toFixed(3));
+  }
+}
+
+// ============================================================================
+// ZONE 3 — UI
+// ============================================================================
+let running = false, cut = false, phase = 0;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnRun = document.getElementById('btnRun');
+btnRun.onclick = ()=>{ running = !running; btnRun.classList.toggle('on', running); requestRender(); };
+
+const btnCut = document.getElementById('btnCut');
+btnCut.onclick = ()=>{
+  cut = !cut;
+  for (const c of CUTTABLE) c.m.opacity = cut ? c.cut : c.on;
+  btnCut.classList.toggle('on', cut);
+  requestRender();
+};
+
+const btnDim = document.getElementById('btnDim');
+btnDim.onclick = ()=>{ cotas.visible = !cotas.visible;
+  btnDim.classList.toggle('on', cotas.visible); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  if (running){
+    phase = (phase + 0.006) % ((DRUM_X-0.12)*2);
+    layoutProduct(phase);
+    drumHead.rotation.z -= 0.03; drumTail.rotation.z -= 0.03;
+    for (const f of fans) f.rotation.y += 0.22;
+    // MARCHA is a CONTINUOUS, indefinite translation of GEOMETRY, so a frozen shadow would stay
+    // parked at the start pose for as long as the machine runs: re-bake INSIDE the motion branch.
+    // (A bounded easing transition would only need the settle edge — the CLASS of motion decides.)
+    renderer.shadowMap.needsUpdate = true;
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract ----------
+globalThis.__tunelEnfriamientoApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__tunel-enfriamientoApp'] = globalThis.__tunelEnfriamientoApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
