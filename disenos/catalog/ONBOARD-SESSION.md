@@ -113,6 +113,17 @@ GOTCHAS ya detectados (evítalos):
   capa inferior tapa a la de arriba (rayado que desaparece bajo su propio fondo).
 - LOSA grande + shadow map 1024 = acné en franjas → se arregla con sun.shadow.normalBias (~0.05), NO subiendo
   el bias de profundidad.
+- OCLUSIÓN por puertas: con la cámara del catálogo en +X/+Z, cada puerta con bisagra a la izquierda tapa la
+  sección a SU izquierda al abrir. No muevas la cámara: pon la sección importante en el extremo CERCANO a
+  cámara, y pon la BISAGRA del lado LEJANO (una bisagra del lado de cámara cruza el vano y tapa el interior).
+- El fix de plano vertical (fill+env alto) NO es preset GLOBAL: un sujeto horizontal/curvo (generador, torre)
+  se APLANA si se lo aplicas. Úsalo solo en caras verticales; en el resto es "deliberate non-deviation".
+- Un ESTADO revelado puede ser físicamente IMPOSIBLE (placa de presión saliéndose del bastidor): hazle a cada
+  estado la misma pregunta que a la disposición, "¿esto puede existir?", y acota recorridos.
+- Cuando la oclusión revelada es FÍSICA REAL (una puerta tapa de verdad la bahía de atrás), decláralo como
+  `known_view_limit` en el spec en vez de forzar geometría imposible.
+- PRODUCTO DE TECHO (difusor, VAV): el detalle va hacia la SALA y la cámara de revisión debe estar DEBAJO;
+  conos escalonados hacia arriba se ven como placa lisa desde el único ángulo real (abajo).
 
 Trabaja en bucle por todos los assets pendientes de tu familia. Cuando tu familia quede en done, avisa y
 elige otra familia libre si queda, o detente.
