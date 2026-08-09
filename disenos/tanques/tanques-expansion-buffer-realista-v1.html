@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tanques Expansión + Buffer — realista</title>
+<link rel="icon" href="data:,">                     <!-- favicon 404 pollutes the console sidecar -->
+<!-- SCALE: 1 unit = 1 m (original voxel scale was 1 vox = 0.05 m; re-authored as smooth geometry) -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700} #hud .pass{color:var(--accent)}
+  #hud .dim{color:var(--text-muted)}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Tanques Expansión + Buffer — realista</div>
+  <div><span class="pass">PASS: rounded-equipment</span> <span class="dim">· agua helada · lathe + swept-tube toolkit</span></div>
+  <div class="dim">Exp Ø0.60×1.50 m · Buffer Ø1.20×2.00 m</div>
+</div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { makeLatheBody } from '../showcase-rounded/lib/lathe-body.mjs';
+import { makeSweptTube } from '../showcase-rounded/lib/rmf-frames.mjs';
+import { makeProceduralMetalRough } from '../showcase-rounded/lib/procedural-pbr-canvas.mjs';
+
+// ---------------------------------------------------------------- scene / renderer
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 40);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;              // geometry added after boot needs one forced bake
+document.body.appendChild(renderer.domElement);
+
+// hero camera — framed on the whole `tanks` group (built below). Subject AABB ≈ x[-1.30,1.66],
+// y[0,2.45], z[-0.64,0.66]; center ≈ (0.18, 1.22, 0). Modest margin, both tanks fill the frame.
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(4.40, 3.70, 3.70);
+camera.lookAt(0.18, 1.22, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0.18, 1.22, 0);
+controls.autoRotate = false;                        // OFF — gate captures need a settled frame
+controls.maxPolarAngle = Math.PI * 0.495;
+
+// ---------------------------------------------------------------- IBL + house light rig
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// NOTE r160: scene.environmentIntensity is INERT here. Push bare metal per-material with
+// material.envMapIntensity (set to ~1.4 below).
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4, 6, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left = -3; sun.shadow.camera.right = 3;
+sun.shadow.camera.top = 3;   sun.shadow.camera.bottom = -3;
+sun.shadow.camera.near = 0.1; sun.shadow.camera.far = 24;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));                    // cool fill
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));                    // accent rim
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));           // lifts upward-facing steel
+const frontFill = new THREE.DirectionalLight(0xffffff, 0.55);           // lights the VERTICAL faces
+frontFill.position.set(2.5, 2.0, 5.0);
+scene.add(frontFill);
+
+// ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  new THREE.MeshStandardMaterial({ color: 0x0a0d12, roughness: 0.95, metalness: 0.0 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.001;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ---------------------------------------------------------------- materials
+const steelTex = await makeProceduralMetalRough({ roughnessBase: 0.28, metalness: 0.85 });
+// roughness/metalness are MULTIPLIERS over the packed map (three multiplies), so keep them at 1 and
+// let the map's painted values (roughnessBase 0.28, metalness 0.85) drive — else 0.28*0.28 reads too glossy.
+const steelMat = new THREE.MeshStandardMaterial({ color: 0xd0d4d8, metalness: 1, roughness: 1 });
+steelMat.roughnessMap = steelTex;                   // packed: roughness from GREEN
+steelMat.metalnessMap = steelTex;                   // packed: metalness from BLUE
+steelMat.envMapIntensity = 1.4;
+
+const pipeMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ab, metalness: 0.85, roughness: 0.34 });
+pipeMat.envMapIntensity = 1.4;
+
+const insulationMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, metalness: 0.0, roughness: 0.9 });
+const padMat   = new THREE.MeshStandardMaterial({ color: 0x2c3138, metalness: 0.02, roughness: 0.95 });
+const dialMat  = new THREE.MeshStandardMaterial({ color: 0xf3f5f8, metalness: 0.1, roughness: 0.3 });
+const bezelMat = new THREE.MeshStandardMaterial({ color: 0x22262e, metalness: 0.5, roughness: 0.6 });
+
+// ---------------------------------------------------------------- subject root
+const tanks = new THREE.Group();
+scene.add(tanks);
+
+// vessel profile for LatheGeometry (revolve around Y; x = radius, y = height).
+// dished BOTTOM head -> straight WALL -> dished TOP head, with shared wall points deduped.
+function vesselProfile({ R, H, hHead, seg = 10 }) {
+  const pts = [];
+  for (let k = 0; k <= seg; k++) {                          // bottom head: (0,0) -> (R,hHead)
+    const a = (Math.PI / 2) * (k / seg);
+    pts.push({ x: R * Math.sin(a), y: hHead * (1 - Math.cos(a)) });
+  }
+  pts.push({ x: R, y: H - hHead });                         // wall top (bottom already at (R,hHead))
+  for (let k = 1; k <= seg; k++) {                          // top head: (R,H-hHead) -> (0,H); skip dup a=0
+    const a = (Math.PI / 2) * (k / seg);
+    pts.push({ x: R * Math.cos(a), y: (H - hHead) + hHead * Math.sin(a) });
+  }
+  return pts;
+}
+
+// EXPANSION tank — Ø0.60×1.50 m (R=0.30). Original axis EX=-20 vox -> x=-1.0 m; base on legs at 0.25 m.
+const EX_X = -1.0, EX_BASE = 0.25, EX_R = 0.30, EX_H = 1.50, EX_HH = 0.25 * EX_R; // hHead = 0.075
+const exVessel = await makeLatheBody(vesselProfile({ R: EX_R, H: EX_H, hHead: EX_HH }), { segments: 48 }, steelMat);
+exVessel.position.set(EX_X, EX_BASE, 0);
+tanks.add(exVessel);
+
+// BUFFER tank — Ø1.20×2.00 m (R=0.60). Original axis BX=18 vox -> x=0.90 m; base on legs at 0.30 m.
+const BX_X = 0.90, BX_BASE = 0.30, BX_R = 0.60, BX_H = 2.00, BX_HH = 0.25 * BX_R; // hHead = 0.15
+const bufVessel = await makeLatheBody(vesselProfile({ R: BX_R, H: BX_H, hHead: BX_HH }), { segments: 48 }, steelMat);
+bufVessel.position.set(BX_X, BX_BASE, 0);
+tanks.add(bufVessel);
+
+// INSULATION jacket on the buffer — a slightly larger open cylinder over the cylindrical wall (matte gray).
+const insH = BX_H - 2 * BX_HH;                              // 1.70 m of straight wall
+const insGeo = new THREE.CylinderGeometry(BX_R + 0.04, BX_R + 0.04, insH, 48, 1, true);
+const insulation = new THREE.Mesh(insGeo, insulationMat);
+insulation.position.set(BX_X, BX_BASE + BX_HH + insH / 2, 0);
+insulation.castShadow = true; insulation.receiveShadow = true;
+tanks.add(insulation);
+
+// PIPES — interconnection run replaces the voxel pipe boxes (lines 231-239). Waypoints are the
+// original voxel runs converted to metres (×0.05): expansion bottom nozzle -> low horizontal run ->
+// riser -> buffer N1 nozzle at the wall.
+const interWaypoints = [
+  [-1.025, 0.22, -0.03],   // exit expansion bottom head (riser x=-20.5 vox)
+  [-1.025, 0.09, -0.03],   // down to the low run (y≈1.5 vox)
+  [-0.075, 0.09, -0.03],   // across (run A/B) to the buffer riser base
+  [-0.075, 0.72, -0.03],   // up the drop column (x=-1.5 vox, y 0..15)
+  [ 0.30,  0.72, -0.03],   // into buffer N1 at the wall (x=0.30 m = BX-R)
+];
+const interPipe = await makeSweptTube(interWaypoints, { radius: 0.03, targetEdgeLength: 0.04 }, pipeMat);
+interPipe.receiveShadow = true;
+tanks.add(interPipe);
+
+// FLANGE RINGS / NOZZLES — 4 flanged nozzles on the buffer wall (original N1..N4).
+function addNozzle(x, y, z, dirX) {
+  const stubLen = 0.10, stubR = 0.045;
+  const stub = new THREE.Mesh(new THREE.CylinderGeometry(stubR, stubR, stubLen, 20), steelMat);
+  stub.rotation.z = Math.PI / 2;                            // cylinder axis Y -> X
+  stub.position.set(x + dirX * stubLen / 2, y, z);
+  stub.castShadow = true; stub.receiveShadow = true;
+  tanks.add(stub);
+  const flange = new THREE.Mesh(new THREE.TorusGeometry(stubR + 0.022, 0.013, 12, 24), steelMat);
+  flange.rotation.y = Math.PI / 2;                          // torus normal -> X
+  flange.position.set(x + dirX * stubLen, y, z);
+  flange.castShadow = true; flange.receiveShadow = true;
+  tanks.add(flange);
+}
+const BUF_L = BX_X - BX_R, BUF_R = BX_X + BX_R;             // wall x at 0.30 and 1.50
+addNozzle(BUF_L, 0.725, -0.03, -1);                        // N1 low -x (piped)
+addNozzle(BUF_L, 1.775, -0.03, -1);                        // N2 high -x
+addNozzle(BUF_R, 0.725, -0.03, +1);                        // N3 low +x
+addNozzle(BUF_R, 1.775, -0.03, +1);                        // N4 high +x
+
+// MANOMETERS / thermometers — dial (CylinderGeometry) + bezel (TorusGeometry) where the original had
+// RING/DIAL voxels. `axis`: 'z' faces front (+z), 'y' faces up.
+function addGauge(x, y, z, r, axis) {
+  const dial = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.02, 24), dialMat);
+  const bezel = new THREE.Mesh(new THREE.TorusGeometry(r, 0.008, 12, 24), bezelMat);
+  if (axis === 'z') { dial.rotation.x = Math.PI / 2; }      // cylinder axis Y -> Z; torus already ⊥ Z
+  else { bezel.rotation.x = Math.PI / 2; }                  // face up: rotate the bezel ⊥ Y
+  dial.position.set(x, y, z);
+  bezel.position.set(x, y, z);
+  dial.castShadow = true; bezel.castShadow = true;
+  tanks.add(dial); tanks.add(bezel);
+}
+addGauge(EX_X, 1.30, EX_R + 0.04, 0.05, 'z');              // expansion manometer (front, air side)
+addGauge(BX_X + 0.10, BX_BASE + BX_H + 0.12, 0.0, 0.055, 'y'); // buffer manometer on the top head
+addGauge(0.87, 0.80, BX_R + 0.06, 0.045, 'z');            // buffer thermometer (low, front)
+addGauge(0.87, 1.60, BX_R + 0.06, 0.045, 'z');            // buffer thermometer (high, front)
+
+// SADDLE LEGS / BASE — kept simple (not the focus).
+function addLeg(x, z, h, w) {
+  const leg = new THREE.Mesh(new RoundedBoxGeometry(w, h, w, 2, w * 0.35), steelMat);
+  leg.position.set(x, h / 2, z);
+  leg.castShadow = true; leg.receiveShadow = true;
+  tanks.add(leg);
+}
+for (let i = 0; i < 3; i++) {                               // expansion: 3 legs at 120°
+  const a = i * (2 * Math.PI / 3) + 0.3;
+  addLeg(EX_X + 0.20 * Math.cos(a), 0.20 * Math.sin(a), EX_BASE, 0.045);
+}
+for (const [lx, lz] of [[0.50, -0.40], [0.50, 0.30], [1.20, -0.40], [1.20, 0.30]]) // buffer: 4 legs
+  addLeg(lx, lz, BX_BASE, 0.055);
+
+// base pads (housekeeping slabs, original PAD boxes)
+function addPad(cx, cz, w, d) {
+  const pad = new THREE.Mesh(new THREE.BoxGeometry(w, 0.01, d), padMat);
+  pad.position.set(cx, 0.005, cz);
+  pad.receiveShadow = true;
+  tanks.add(pad);
+}
+addPad(EX_X, -0.025, 0.90, 0.85);
+addPad(0.875, -0.025, 1.35, 1.35);
+
+// ---------------------------------------------------------------- QA hooks (install AFTER all awaits)
+globalThis.__qaRenderInfo = () => renderer.info.render;
+
+const SUBJECT = tanks;
+globalThis.__qaFraming = () => {
+  camera.updateMatrixWorld(); camera.updateProjectionMatrix();
+  const mvp = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  const b = new THREE.Box3().setFromObject(SUBJECT, true);
+  const mn = b.min, mx = b.max;
+  const corners = [
+    [mn.x, mn.y, mn.z], [mx.x, mn.y, mn.z], [mn.x, mx.y, mn.z], [mx.x, mx.y, mn.z],
+    [mn.x, mn.y, mx.z], [mx.x, mn.y, mx.z], [mn.x, mx.y, mx.z], [mx.x, mx.y, mx.z],
+  ];
+  const hudEl = document.querySelector('#hud');
+  const hud = hudEl ? (r => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }))(hudEl.getBoundingClientRect()) : null;
+  return { mvpElements: Array.from(mvp.elements), corners, W: innerWidth, H: innerHeight, hud };
+};
+
+// ---------------------------------------------------------------- render loop (starts after the build)
+renderer.shadowMap.needsUpdate = true;                     // one forced bake for post-boot geometry
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+document.documentElement.dataset.appReady = 'true';        // ready LAST
+</script>
+</body>
+</html>
