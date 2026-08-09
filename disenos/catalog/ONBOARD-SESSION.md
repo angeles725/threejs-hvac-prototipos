@@ -98,9 +98,12 @@ vehículo — un coche de 4.3 m domina el encuadre y compite con el sujeto.
 GOTCHAS ya detectados (evítalos):
 - Sujetos VERTICALES de metal desnudo (puertas, cladding, tableros) se leen gris plano. FÍSICA: una cara
   vertical NO puede recibir un reflejo especular de una luz ELEVADA, a cualquier altura de cámara (la
-  geometría de reflexión lo impide) → el brillo lo da el IBL, no una luz de relleno. FORMULACIÓN CORRECTA
-  (session-B, torniquete): sube environmentIntensity (p.ej. 2.8) para el término especular; el fill lateral
-  solo ayuda al término DIFUSO. NUNCA bajes metalness (rompe HANDBOOK §3.1). Documenta la desviación en el spec.
+  geometría de reflexión lo impide) → el término especular lo da el IBL, no una luz de relleno. OJO — REMEDIO
+  CORREGIDO: `scene.environmentIntensity` es INERTE en three r160 (la propiedad llegó en r163; el catálogo fija
+  r160), así que "subir environmentIntensity" NUNCA aplicó IBL en este track. La vía real de IBL en r160 es
+  `scene.environment` (un PMREM/envMap) + `material.envMapIntensity` por material. Si no montas eso, el término
+  especular de la cara vertical simplemente NO existe y el gris plano es un LÍMITE MEDIDO — regístralo como tal.
+  NUNCA bajes metalness para taparlo (rompe HANDBOOK §3.1). El fill lateral solo ayuda al término DIFUSO.
 - Racks/estructuras de carga: el bastidor debe cubrir la carga superior + margen (DGUV: +500 mm sobre el
   nivel más alto). No dejes carga volando por encima del puntal.
 - ACERO PINTADO no es metal desnudo: con env 1.9-2.2 + exposure 1.15 los paneles claros se queman. Para
@@ -229,6 +232,11 @@ elige otra familia libre si queda, o detente.
   con tres paquetes flotando fuera de la banda (empacadora-flowwrap). Usa `console.error` para toda salvaguarda de
   layout/geometría que quieras que el gate haga fallar; un assert es invisible para el instrumento. (Aparte: `SHOT_DIR`
   debe EXISTIR o el gate muere con ENOENT y parece fallo del asset — créalo antes de correr.)
+- MIRA LOS NÚMEROS MECÁNICOS ENTRE EDICIONES, no solo su aprobado: un check en verde NO significa que nada cambió.
+  Una regresión que borra geometría (un reemplazo `sd` que se traga un `scene.add(x)` dentro del comentario que
+  inserta) NO da error de consola ni chequeo rojo — la única señal es el conteo de draws bajando (p.ej. 30→29)
+  entre dos preflights. Compara draws/tris/geometrías antes y después de cada edición, y LEE la línea que produce
+  un reemplazo de texto (`sd`/`sed`) antes de fiarte de su exit code (puerta-seguridad).
 - UNA AFIRMACIÓN DE COMPORTAMIENTO HAY QUE ACCIONARLA, NO LEERLA: si lo que define al asset es su comportamiento
   (un enclavamiento forzado, una secuencia, un tope), la EVIDENCIA también debe serlo. No basta leer el handler y
   decir "está forzado": PÚLSALO en secuencia (p.ej. abrir puerta B con A abierta) con un `console.error` en el build
