@@ -1,0 +1,236 @@
+# DesignSpec — LV switchgear lineup (IEC 61439-2 form-segregated assembly)
+# First asset of the catalog `electricos` family.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+#
+# EVIDENCE DISCIPLINE — read this before trusting any number below.
+# This asset has NO preserved manufacturer datasheet. Its only [CERT] dimensional source is the
+# repo's own prior voxel study, which declares an explicit voxel:metre ratio and therefore carries
+# real metres. Everything derived from switchgear practice rather than from that file is marked
+# [INFER] and given a `confidence` under 0.8. No claim here is dressed up as [CERT-doc].
+
+design: tablero-switchgear
+family: electricos
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.025 m"   # inherited from the voxel study this asset re-derives
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 16 -> moderate/complex boundary.
+  scores: {silhouette: 1, components: 3, hierarchy: 2, repetition: 3,
+           material_layers: 2, detail: 3, occlusion: 1, action_readiness: 1}
+  tier: complex
+  notes: >
+    The silhouette is trivial (a box row) and everything else is not. The identity lives entirely in
+    the FRONT: how the sheet is subdivided, how deep each door is recessed, and what is behind it.
+    repetition 3 and detail 3 pull this above the `moderate` line — 14 doors and 24 MCCBs.
+    occlusion 1: the interior only exists once a door swings, and that state is not what the gate
+    screenshots, so it needs its own capture (see verification below).
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    dimensional_study: "disenos/switchgear/switchgear-voxel-v1.html (declares 1 voxel = 0.025 m)"
+    copper_correction: "research/HANDBOOK.md §3.1 (copper F0: #f0a67a-#f7bc9e, not 0xc0762e)"
+    isa101_states: "research/HANDBOOK.md §3.4 (grey is NORMAL; colour is for the actionable state)"
+
+references:
+  - source: "disenos/switchgear/switchgear-voxel-v1.html :L66,L131 (repo primary)"
+    evidences: >
+      [CERT] `// SCALE: 1 voxel = 0.025 m` with `const W = 120, H = 88, DEP = 32` — i.e. the prior
+      study fixes the envelope at 3.00 x 2.20 x 0.80 m. The 2.20 m body height and the ~0.8-0.9 m
+      depth carry straight into this asset; only the width changes, because that study modelled a
+      4-section board and this one is a 5-section lineup.
+    suitability: pass
+  - source: "research/HANDBOOK.md §3.0 (scale norm) + §3.1 (PBR palette) + §3.4 (ISA-101)"
+    evidences: >
+      [CERT] 1 unit = 1 m; near-binary metalness (an intermediate value on an untextured solid is a
+      shader-model artefact, not authoring); powder-coated sheet is a DIELECTRIC; copper must use the
+      corrected warm F0; neutral grey is the normal operating state.
+    suitability: pass
+  - source: "IEC 61439-2 modular practice (no copy preserved in sources/)"
+    evidences: >
+      [INFER] 2200 mm body over a ~100 mm plinth, section widths on a 400/600/800/1000 mm step, and
+      a continuous horizontal busbar chamber over the section tops. Stated from domain practice, NOT
+      from a fetched document — every dimension resting on it is confidence <= 0.7 below.
+    suitability: partial
+
+dimensions_real:
+  body_h_m:      {value: 2.20,  confidence: high}   # [CERT] voxel study H = 88 vx x 0.025
+  depth_m:       {value: 0.90,  confidence: med}    # [CERT] study says 0.80; widened for a rear cable zone
+  plinth_h_m:    {value: 0.10,  confidence: med}    # [INFER] standard base channel
+  overall_h_m:   {value: 2.30,  confidence: med}    # body + plinth
+  lineup_w_m:    {value: 3.20,  confidence: med}    # [INFER] 4 x 600 + 1 x 800 on the modular step
+  sec_feeder_w_m:{value: 0.60,  confidence: med}    # [INFER] modular step
+  sec_incomer_w_m:{value: 0.80, confidence: med}    # [INFER] an ACB needs the wider section
+  bus_chamber_h_m:{value: 0.30, confidence: low}    # [INFER] not published anywhere consulted
+  busbar_section_mm: {value: "45 x 10", confidence: low}   # [INFER] plausible for a mid-size lineup
+  busbar_pitch_m:{value: 0.062, confidence: low}    # [INFER] must exceed bar height — see §regression
+  sheet_t_m:     {value: 0.015, confidence: low}    # [INFER] modelled thickness, not gauge-accurate
+  door_reveal_m: {value: 0.010, confidence: low}    # [INFER] the shadow gap around each leaf
+  dev_plate_z_m: {value: 0.02,  confidence: med}    # mounting plate ~0.43 m behind the door face
+  riser_channel_w_m: {value: 0.13, confidence: low} # [INFER] vertical distribution bus channel
+
+hierarchy:
+  - name: root
+    children:
+      - name: carcass         # plinth, rear, roof, floor, end panels, internal division panels
+        pivot: [0, 0, 0]
+        animation: none
+        notes: >
+          Internal division panels STOP at the busbar chamber floor (y = 2.00). A divider taken to
+          the roof would cut the horizontal bus into 5 unconnected stubs, which is the difference
+          between a switchgear lineup and 5 separate boards standing in a row.
+      - name: busbars         # 4 copper bars (L1 L2 L3 N) + SMC insulator standoffs
+        pivot: [0, 0, 0]
+        animation: none
+      - name: busCover        # bolted removable cover over the bus chamber (the cutaway toggle)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: doors           # 14 leaves, EACH ITS OWN GROUP WITH THE ORIGIN ON ITS HINGE LINE
+        pivot: per-leaf hinge line (left stile)
+        animation: swing
+        attachment:
+          parent_socket: front_frame_stile
+          contact_type: hinge
+          gap_tolerance: 0.010
+      - name: interior        # mounting plates, vertical risers, 1 ACB, 24 MCCBs
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: paint-ral7035
+    family: painted-metal
+    color: "#cfd2cc"
+    metalness: 0.0             # powder-coated sheet is a DIELECTRIC — the predictable error here is
+    roughness: 0.55            # painting switchgear as bare metal because it is "a steel cabinet"
+    evidence: "HANDBOOK §3.1 'panelBox / panelDk -> 0.0-0.05, panel de gabinete pintado'"
+    confidence: 0.9
+  - id: paint-ral7035-shaded
+    family: painted-metal
+    color: "#b9bdb8"
+    metalness: 0.0
+    roughness: 0.58
+    evidence: "same coating, used on returns/side panels so the form reads without a value trick"
+    confidence: 0.85
+  - id: plinth-ral7022
+    family: painted-metal
+    color: "#3b4046"
+    metalness: 0.0
+    roughness: 0.62
+    evidence: "[INFER] base channels are conventionally a dark contrasting coat"
+    confidence: 0.7
+  - id: copper-busbar
+    family: bare-metal
+    color: "#f0a67a"
+    metalness: 1.0
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1 copper correction — the old 0xc0762e reads too dark/brown vs measured F0"
+    confidence: 0.9
+  - id: steel-galvanised
+    family: bare-metal
+    color: "#b6babc"
+    metalness: 0.92
+    roughness: 0.42
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0 — hinges, gland plate, truck rails, lifting eyes"
+    confidence: 0.9
+  - id: insulator-smc
+    family: plastic
+    color: "#6b4d2a"
+    metalness: 0.0
+    roughness: 0.65
+    evidence: "[INFER] moulded polyester bar supports; dielectric per HANDBOOK §3.1"
+    confidence: 0.7
+  - id: device-body
+    family: plastic
+    color: "#2a2e33"
+    metalness: 0.0
+    roughness: 0.60
+    evidence: "moulded breaker housing — dielectric"
+    confidence: 0.8
+  - id: lamp-isa101
+    family: emissive
+    color: "#5a6878"
+    metalness: 0.0
+    roughness: 0.40
+    evidence: "HANDBOOK §3.4 — the UNLIT lamp is the ISA-101 neutral; emissive only when abnormal"
+    confidence: 0.9
+
+critical_features:
+  - id: lineup-not-cubicle
+    desc: >
+      The subject is a ROW of sections under one continuous horizontal busbar, with a wider incoming
+      section carrying an ACB. A single cubicle would be a distribution board; the shared bus is what
+      makes it switchgear.
+    threshold: 0.80
+  - id: front-subdivision-reads
+    desc: >
+      Each leaf is inset by a visible shadow reveal, the compartment counts differ between sections
+      (3/4/3/4), and the louvres are recessed into a dark cavity. Without all three the lineup reads
+      as a bank of lockers — this was the observed failure of the first build.
+    threshold: 0.78
+  - id: interior-exists-at-door-depth
+    desc: >
+      With the doors open the compartments are populated at the FRONT of the cubicle: the ACB nearly
+      fills its compartment depth and the MCCBs stand off a mounting plate ~0.43 m behind the leaf.
+      Devices parked against the rear wall leave an open cubicle reading as an empty white box.
+    threshold: 0.75
+  - id: proportion-scale
+    desc: "A 1.8 m person reads correct beside a 2.30 m lineup; the plinth and door band scale to that."
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 380          # measured 342 — the 24 MCCBs are 4 InstancedMesh, not 120 draws
+    tris: 20000         # measured 10,022
+
+camera:
+  azimuth_deg: 42
+  elevation_deg: 12
+  fov: 38
+  target_y_m: 1.18
+  radius_m: 6.6
+
+lighting: house-rig + vertical-subject fill
+  # DOCUMENTED DEVIATION (the gotcha this family walks straight into): a switchgear lineup is one
+  # large VERTICAL plane. The house rig was calibrated on horizontal equipment tops, so a vertical
+  # face reflects the dark lower hemisphere and reads flat and dead. The fix is LIGHT, not material:
+  # one extra DirectionalLight(0xdce6f2, 0.85) aimed along the panel normal (+Z), and
+  # environmentIntensity 1.9 -> 2.2. metalness/roughness are UNCHANGED per HANDBOOK §3.1 —
+  # raising metalness on painted sheet to "fix" the greyness would be the actual error.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ABRIR PUERTAS"     # eased swing on the real hinge axes; holds needsRender only while moving,
+                        # and re-bakes the frozen shadow map ONCE when the motion settles
+  - "TAPA DE BARRAS"    # removes the bolted cover -> the busbar cutaway
+  - "FALLA (ISA-101)"   # one incomer trip lamp + ONE faulted feeder go red; the other 11 stay grey
+
+colorTarget:
+  # MEASURED from the headless SwiftShader capture at 1280x800, then frozen as the regression anchor.
+  # The crop was chosen by scanning the door band for the most uniform patch available: this one has
+  # a per-channel standard deviation of 0.00, so it samples the coated sheet and nothing else. A crop
+  # that clips a louvre or a handle would drift with any unrelated furniture edit.
+  srgb: [231, 232, 231]
+  deltaE00Max: 8
+  crop: "24x18+550+280"   # clean feeder-door face, upper compartment band, at 1280x800
+
+verification:
+  gate: "node disenos/catalog/tools/verify-catalog-asset.mjs electricos/tablero-switchgear"
+  measured: {ready: true, calls: 342, triangles: 10022, console_errors: 0, shadowAuto: false}
+  # THE GATE ALONE IS NOT ENOUGH FOR THIS ASSET. Its capture is the default (closed) state, so every
+  # toggle-gated body — the whole interior, the busbar cutaway — is unverified by it. Three real
+  # geometry defects here passed a green gate and were only caught by capturing the OPEN state:
+  #   1. the interior sat 0.43 m behind the doors, so every open cubicle was an empty white box;
+  #   2. full-height division panels chopped the continuous horizontal bus into 5 stubs;
+  #   3. the 4 busbars overlapped (80 mm bar on a 55 mm pitch) and fused into one solid slab.
+  # Counts were identical before and after all three fixes. Capture the toggled states.
+  known_flake: >
+    The gate fetches three.js from unpkg. A CDN hiccup surfaces as ready:false / error:'no-renderer'
+    with an EMPTY console-error list and zero __ globals — an infra failure wearing the costume of a
+    broken asset. Re-run before believing it.
