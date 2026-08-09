@@ -1,0 +1,218 @@
+# DesignSpec — cast-resin dry-type transformer, 3-phase, in a ventilated IP21 enclosure
+# Second asset of the catalog `electricos` family.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+#
+# EVIDENCE DISCIPLINE: no manufacturer datasheet was preserved for this asset. The only [CERT]
+# dimensional source is the repo's own voxel study, which declares an explicit voxel:metre ratio.
+# Everything else is [INFER] from transformer practice and carries confidence <= 0.7.
+
+design: transformador-seco
+family: electricos
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.025 m"
+
+complexity:
+  scores: {silhouette: 1, components: 3, hierarchy: 2, repetition: 2,
+           material_layers: 3, detail: 2, occlusion: 3, action_readiness: 0}
+  tier: complex
+  notes: >
+    occlusion 3 is the defining axis: the machine that matters is entirely INSIDE a plain sheet box,
+    so the default capture shows almost none of it. material_layers 3 because the asset has to hold
+    four distinct surface families at once — bare grain-oriented core, dielectric cast epoxy, bare
+    copper and coated enclosure sheet — and getting any one of them into the wrong family reads
+    instantly as the wrong machine.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    dimensional_study: "disenos/transformador/transformador-voxel-v1.html (1 voxel = 0.025 m)"
+    copper_correction: "research/HANDBOOK.md §3.1"
+    isa101_states: "research/HANDBOOK.md §3.4"
+
+references:
+  - source: "disenos/transformador/transformador-voxel-v1.html :L63,L150,L241,L242 (repo primary)"
+    evidences: >
+      [CERT] `// SCALE: 1 voxel = 0.025 m`; `const W = 60, D = 48` -> core block 1.50 x 1.20 m;
+      `const LIMBS = [15, 30, 45]` -> three limbs on a 15 vx = 0.375 m pitch;
+      `CORE_Y0 = 14, CORE_Y1 = 57` -> core height ~1.08 m; `COIL_Y0 = 18, COIL_Y1 = 53` -> coil
+      height ~0.88 m. The limb pitch and the coil height carry into this asset unchanged.
+    suitability: pass
+  - source: "research/HANDBOOK.md §3.1 (PBR palette) + §3.4 (ISA-101)"
+    evidences: >
+      [CERT] near-binary metalness; `coil -> 0.9-1.0` for bare aluminium/steel laminations;
+      the corrected warm copper F0; neutral grey as the ISA-101 normal state.
+    suitability: pass
+  - source: "cast-resin transformer practice (no document preserved in sources/)"
+    evidences: >
+      [INFER] enclosure clearance of roughly 0.20 m around the core+coil block; convection cooling
+      through bottom-intake / top-exhaust louvres; a winding temperature monitor with PT100 sensors
+      dropped into the coil ducts; a wheeled channel base for bidirectional rolling.
+    suitability: partial
+
+dimensions_real:
+  limb_pitch_m:   {value: 0.375, confidence: high}  # [CERT] 15 vx x 0.025
+  core_w_m:       {value: 1.50,  confidence: high}  # [CERT] 60 vx x 0.025
+  coil_h_m:       {value: 0.84,  confidence: med}   # [CERT] study 35 vx = 0.875, rounded
+  coil_outer_r_m: {value: 0.165, confidence: low}   # [INFER] must clear the limb and the pitch
+  core_stack_d_m: {value: 0.24,  confidence: low}   # [INFER] limb section depth
+  yoke_h_m:       {value: 0.22,  confidence: low}   # [INFER]
+  window_h_m:     {value: 0.88,  confidence: low}   # [INFER] follows the coil height plus clearance
+  base_h_m:       {value: 0.20,  confidence: low}   # [INFER] wheeled channel frame
+  enclosure_w_m:  {value: 1.90,  confidence: med}   # core width + ~0.20 clearance each side
+  enclosure_d_m:  {value: 1.50,  confidence: low}   # [INFER]
+  enclosure_h_m:  {value: 1.88,  confidence: low}   # [INFER]
+  overall_h_m:    {value: 2.08,  confidence: low}   # base + enclosure
+
+hierarchy:
+  - name: root
+    children:
+      - name: base            # rolling channel frame + 4 bidirectional wheels
+        pivot: [0, 0, 0]
+        animation: none
+      - name: core            # 3 step-lapped limbs, 2 yokes, clamping frames, tie rods
+        pivot: [0, 0, 0]
+        animation: none
+      - name: coils           # LV copper cylinder inside, ribbed HV cast-resin body outside, x3
+        pivot: [0, 0, 0]
+        animation: none
+      - name: terms           # HV delta links, tap-changer link plates, LV terminal bars
+        pivot: [0, 0, 0]
+        animation: none
+      - name: monitor         # winding temperature relay + PT100 leads into the coil ducts
+        pivot: [0, 0, 0]
+        animation: none
+      - name: enclosure       # ventilated IP21 housing — TOGGLABLE, and the whole point of the asset
+        pivot: [0, 0, 0]
+        animation: none
+        notes: >
+          EVERY wall must be parented to this group. A wall that defaults to `root` still renders,
+          still counts, and still hides the machine — the toggle then strips only the louvres and
+          labels and leaves a blank white box. That is a scene-graph defect masquerading as a
+          modelling one, and no draw-call count can see it.
+
+materials:
+  - id: core-grain-oriented
+    family: bare-metal
+    color: "#b4babe"
+    metalness: 0.95
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1 'coil / coilFrame -> 0.9-1.0' — laminations are bare metal"
+    confidence: 0.85
+  - id: cast-epoxy-resin
+    family: plastic
+    color: "#6f6b64"
+    metalness: 0.0             # a filled polymer. Glossy is not metallic — the predictable error
+    roughness: 0.42            # is giving the resin a metallic sheen because it reads shiny.
+    evidence: "HANDBOOK §3.1 dielectric metalness 0; anthracite is the conventional cast-resin tone"
+    confidence: 0.75
+  - id: copper-winding
+    family: bare-metal
+    color: "#f0a67a"
+    metalness: 1.0
+    roughness: 0.38
+    evidence: "HANDBOOK §3.1 copper correction (the old 0xc0762e reads too dark/brown)"
+    confidence: 0.9
+  - id: clamp-paint
+    family: painted-metal
+    color: "#2f4a63"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "[INFER] coated clamping frames; dielectric per HANDBOOK §3.1"
+    confidence: 0.7
+  - id: enclosure-ral7035
+    family: painted-metal
+    color: "#cfd2cc"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1 'panelBox -> 0.0-0.05, panel de gabinete pintado'"
+    confidence: 0.9
+  - id: lamp-isa101
+    family: emissive
+    color: "#5a6878"
+    metalness: 0.0
+    roughness: 0.40
+    evidence: "HANDBOOK §3.4 — unlit neutral is the normal state; red only for over-temperature"
+    confidence: 0.9
+
+critical_features:
+  - id: dry-not-oil
+    desc: >
+      No tank, no radiator fins, no conservator. The windings are open cast-resin cylinders in free
+      air inside a louvred box. Adding a sealed tank would make this an oil-immersed transformer —
+      a different machine that happens to share a name.
+    threshold: 0.85
+  - id: three-limb-core-with-resin-coils
+    desc: >
+      Three ribbed cast-resin cylinders on a 0.375 m pitch, each over a copper LV winding, threaded
+      on a step-lapped three-limb core closed by top and bottom yokes and held by clamping frames
+      and tie rods. The axial cooling ribs are the visual signature of a cast coil.
+    threshold: 0.80
+  - id: convection-path-reads
+    desc: >
+      Bottom intake and top exhaust louvre banks on the front and both sides, each recessed into a
+      dark cavity. A sealed enclosure on a dry-type transformer is not a styling choice, it is a
+      thermal impossibility.
+    threshold: 0.75
+  - id: proportion-scale
+    desc: "A 1.8 m person reads correct beside the 2.08 m enclosure."
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 120          # measured 92
+    tris: 12000         # measured 4,626
+
+camera:
+  azimuth_deg: 42
+  elevation_deg: 13
+  fov: 38
+  target_y_m: 1.05
+  radius_m: 5.4
+
+lighting: house-rig + vertical-subject fill
+  # DOCUMENTED DEVIATION: the enclosure is a large VERTICAL coated plane and the house rig was
+  # calibrated on horizontal equipment tops, so it reflects the dark lower hemisphere and reads
+  # flat. Fix is LIGHT, not material: DirectionalLight(0xdce6f2, 0.85) along the panel normal (+Z)
+  # and environmentIntensity 1.9 -> 2.2. metalness/roughness unchanged per HANDBOOK §3.1.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ENVOLVENTE IP21"     # hides the housing — this is the asset's primary reveal, not a nicety
+  - "ALARMA TEMP (ISA-101)"
+
+colorTarget:
+  # MEASURED from the headless SwiftShader capture at 1280x800. The gate captures the DEFAULT state,
+  # which is the closed enclosure, so the scored surface is the coated sheet. Crop chosen by scanning
+  # for the most uniform patch available: per-channel standard deviation 0.00.
+  srgb: [231, 232, 231]
+  deltaE00Max: 8
+  crop: "24x18+442+300"   # clean enclosure front panel, at 1280x800
+  secondary:
+    # The IDENTITY material of this asset is the cast resin, and it is invisible in the scored
+    # capture. Anchored here from the enclosure-off capture so a resin regression is still catchable.
+    id: cast-epoxy-resin
+    srgb: [157, 153, 147]
+    crop: "10x10+677+482"
+    capture: "transformador-seco-core.png (ENVOLVENTE IP21 toggled off)"
+
+verification:
+  gate: "node disenos/catalog/tools/verify-catalog-asset.mjs electricos/transformador-seco"
+  measured: {ready: true, calls: 92, triangles: 4626, console_errors: 0, shadowAuto: false}
+  # THE GATE CANNOT VERIFY THIS ASSET ON ITS OWN. Its capture is the closed enclosure, and the
+  # enclosure is exactly what hides the subject. Two defects passed a green gate here:
+  #   1. the five enclosure walls were parented to `root` instead of `enclosure`, so the reveal
+  #      toggle produced a featureless white box and the transformer was never visible at all;
+  #   2. the side louvre slats were built as front slats rotated about Y, and Euler XYZ applied the
+  #      tilt before the turn, so they rendered as diagonal stripes across the side walls.
+  # Both are invisible to ready/calls/triangles. Capture the toggled state.
+  known_flake: >
+    The gate fetches three.js from unpkg. A CDN hiccup surfaces as ready:false / error:'no-renderer'
+    with an EMPTY console-error list and zero __ globals — infra failure dressed as a broken asset.
+    Re-run before believing it.
