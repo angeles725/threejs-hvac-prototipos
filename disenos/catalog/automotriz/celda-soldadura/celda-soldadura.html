@@ -1,0 +1,410 @@
+<!doctype html>
+<!--
+  celda-soldadura — robotic spot-weld cell: 2 x ABB IRB 6700-235/2.65 with C-type weld guns,
+  a welding fixture, and an ISO 13857 mesh guard.
+  Dimensional evidence: research/threejs-block62.md §62.4
+    · robot   [CERT-doc] reach 2.65 m, payload 235 kg, mass 1250 kg, ax1 radius front 532 / back 633 mm,
+              floor mounted (no tilt), base plate 12 x M24
+    · guard   [CERT-web] min 1400 mm anti-climb, panels supplied at 2200 mm, floor gap <= 180 mm,
+              mesh Classic 50 x 30 mm
+    · gun     [CERT-web] C-type = COLLINEAR electrodes (vs X-type scissor), water-cooled through the tips
+  Built from disenos/catalog/shell-template.html — QA contract and render-on-demand preserved.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Celda de soldadura por puntos — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">CELDA DE SOLDADURA POR PUNTOS — 2 × IRB 6700-235/2.65</div>
+  <div><span class="dim">celda 7.20 × 6.00 m · valla</span> <span class="pass">2200 mm</span>
+       <span class="dim">· hueco al piso ≤ 180 mm</span></div>
+  <div><span class="dim">pinza tipo C: electrodos</span> <span class="pass">colineales</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnFence" class="on">VALLA</button>
+  <button id="btnReach">ALCANCE 2.65 m</button>
+  <button id="btnJig" class="on">UTILLAJE</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 20, 62);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 12.2;
+camera.position.set(R*Math.cos(1.30)*Math.cos(0.36), 1.1 + R*Math.sin(0.36), R*Math.sin(1.30)*Math.cos(0.36));
+camera.lookAt(0, 1.15, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.15, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.2;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(7, 11, 6); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0005;
+sun.shadow.camera.left=-7; sun.shadow.camera.right=7; sun.shadow.camera.top=7; sun.shadow.camera.bottom=-7;
+sun.shadow.camera.far = 34;
+scene.add(sun);
+// Block 62 §62.7 DEVIATION: the guard is a 2.2 m tall VERTICAL plane and the cabinets are vertical
+// bare/painted metal. Two fills aimed along their normals — NOT raised metalness.
+const fillA = new THREE.DirectionalLight(0xbcd2ff, 0.95); fillA.position.set(2, 1.3, 11); scene.add(fillA);
+const fillB = new THREE.DirectionalLight(0xbcd2ff, 0.75); fillB.position.set(-2, 1.3, -11); scene.add(fillB);
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.16));
+scene.add(new THREE.AmbientLight(0xffffff, 0.26));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(46,46),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS (HANDBOOK §3.1; Block 62 §62.6)
+// ============================================================================
+const matRobot  = new THREE.MeshStandardMaterial({ color:0xd9610f, metalness:0.0,  roughness:0.48 }); // painted arm
+const matRobotD = new THREE.MeshStandardMaterial({ color:0x484f56, metalness:0.0,  roughness:0.55 }); // graphite base
+const matSteel  = new THREE.MeshStandardMaterial({ color:0x9aa0a4, metalness:0.85, roughness:0.42 });
+const matJig    = new THREE.MeshStandardMaterial({ color:0x2f4a63, metalness:0.0,  roughness:0.58 }); // painted fixture
+const matGuard  = new THREE.MeshStandardMaterial({ color:0x1a1c1f, metalness:0.0,  roughness:0.65 }); // RAL 9011 frame
+const matCopper = new THREE.MeshStandardMaterial({ color:0xb1642c, metalness:0.9,  roughness:0.30 }); // electrode
+const matCab    = new THREE.MeshStandardMaterial({ color:0x4d5257, metalness:0.0,  roughness:0.50 });
+const matBiw    = new THREE.MeshStandardMaterial({ color:0x9aa1a6, metalness:0.75, roughness:0.55 });
+const matPad    = new THREE.MeshStandardMaterial({ color:0x14181c, roughness:0.95, metalness:0.0 });
+
+// procedural mesh-infill texture: Classic 50 x 30 mm, vertical wire 3.0 mm / horizontal 2.5 mm.
+// Drawn WHITE-ON-BLACK because it is used as an alphaMap: white = wire, black = opening.
+function meshTile(){
+  const N = 64, c = document.createElement('canvas'); c.width = c.height = N;
+  const g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0,0,N,N);
+  g.fillStyle = '#fff';
+  g.fillRect(0, 0, Math.max(2, Math.round(N*0.060)), N);   // vertical wire  3.0/50
+  g.fillRect(0, 0, N, Math.max(2, Math.round(N*0.083)));   // horizontal wire 2.5/30
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const solid = m => { m.castShadow = true; m.receiveShadow = true; return m; };
+const box = (w,h,d,x,y,z,mat=matSteel) => { const m = solid(new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat));
+  m.position.set(x,y,z); return m; };
+
+// --- cell + guard constants (Block 62 §62.4) --------------------------------
+const CELL_X = 7.20, CELL_Z = 6.00;          // [INFER] derived cell footprint
+const PANEL_W = 1.20, PANEL_H = 2.20;        // [CERT-web] 2200 mm supplied panel height
+const FLOOR_GAP = 0.18;                      // [CERT-web] <= 180 mm at the bottom edge
+const REACH = 2.65;                          // [CERT-doc] IRB 6700-235/2.65
+const AX1_FRONT = 0.532, AX1_BACK = 0.633;   // [CERT-doc] axis-1 slewing radii
+
+// --- cell floor pad ----------------------------------------------------------
+const pad = new THREE.Mesh(new THREE.PlaneGeometry(CELL_X, CELL_Z),
+  new THREE.MeshStandardMaterial({ color:0x141a21, roughness:0.95, metalness:0 }));
+pad.rotation.x = -Math.PI/2; pad.position.y = 0.004; pad.receiveShadow = true; root.add(pad);
+
+// --- guard: posts + mesh panels, REAL repetition -> InstancedMesh -----------
+const fence = new THREE.Group();
+const NX = Math.round(CELL_X/PANEL_W), NZ = Math.round(CELL_Z/PANEL_W);
+const GATE = {side:'-x', index:2};                                  // one panel bay is the access door
+const panelSlots = [], postPts = [];
+for(let i=0;i<NX;i++){
+  const x = -CELL_X/2 + PANEL_W*(i+0.5);
+  panelSlots.push({x, z:-CELL_Z/2, ry:0, gate:false});
+  panelSlots.push({x, z: CELL_Z/2, ry:0, gate:false});
+}
+for(let i=0;i<NZ;i++){
+  const z = -CELL_Z/2 + PANEL_W*(i+0.5);
+  panelSlots.push({x:-CELL_X/2, z, ry:Math.PI/2, gate:(i===GATE.index)});
+  panelSlots.push({x: CELL_X/2, z, ry:Math.PI/2, gate:false});
+}
+for(let i=0;i<=NX;i++){ const x = -CELL_X/2 + PANEL_W*i; postPts.push([x,-CELL_Z/2],[x,CELL_Z/2]); }
+for(let i=1;i<NZ;i++){ const z = -CELL_Z/2 + PANEL_W*i; postPts.push([-CELL_X/2,z],[CELL_X/2,z]); }
+
+const postGeom = new THREE.BoxGeometry(0.060, PANEL_H + FLOOR_GAP + 0.07, 0.040);
+const posts = new THREE.InstancedMesh(postGeom, matGuard, postPts.length);
+posts.castShadow = posts.receiveShadow = true;
+{ const m = new THREE.Matrix4();
+  postPts.forEach(([x,z],i)=>{ m.makeTranslation(x, (PANEL_H+FLOOR_GAP+0.07)/2, z); posts.setMatrixAt(i,m); });
+  posts.instanceMatrix.needsUpdate = true; }
+fence.add(posts);
+
+// panel frame (30 x 20 mm tube, [CERT-web]) as 4 instanced bars per bay
+const bays = panelSlots.filter(s=>!s.gate);
+const frameH = new THREE.BoxGeometry(PANEL_W-0.06, 0.030, 0.020);
+const frameV = new THREE.BoxGeometry(0.030, PANEL_H, 0.020);
+const fh = new THREE.InstancedMesh(frameH, matGuard, bays.length*2);
+const fv = new THREE.InstancedMesh(frameV, matGuard, bays.length*2);
+fh.castShadow = fv.castShadow = true;
+{ const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1,1,1), p = new THREE.Vector3();
+  let a=0, b=0;
+  for(const bay of bays){
+    q.setFromAxisAngle(new THREE.Vector3(0,1,0), bay.ry);
+    for(const dy of [FLOOR_GAP+0.015, FLOOR_GAP+PANEL_H-0.015]){
+      p.set(bay.x, dy, bay.z); m.compose(p,q,s); fh.setMatrixAt(a++, m);
+    }
+    for(const du of [-(PANEL_W/2-0.02), (PANEL_W/2-0.02)]){
+      p.set(bay.x + (bay.ry ? 0 : du), FLOOR_GAP+PANEL_H/2, bay.z + (bay.ry ? du : 0));
+      m.compose(p,q,s); fv.setMatrixAt(b++, m);
+    }
+  }
+  fh.instanceMatrix.needsUpdate = true; fv.instanceMatrix.needsUpdate = true; }
+fence.add(fh, fv);
+
+// mesh infill: one alpha-tested plane per bay, all sharing one instanced geometry + tiled texture
+const tile = meshTile();
+tile.repeat.set(PANEL_W/0.050, PANEL_H/0.030);          // 50 x 30 mm cells [CERT-web]
+// TRANSPARENT, not alphaTest: at 13 m the mipmapped wire coverage averages ~14 %, which an alphaTest
+// of 0.30 discards entirely — the guard would vanish exactly where it must read. Blending keeps the
+// mesh as a soft veil at distance and resolves into wires up close, with no cutout aliasing.
+const matMesh = new THREE.MeshBasicMaterial({ color:0x0e1013, alphaMap:tile, transparent:true,
+  opacity:0.95, depthWrite:false, side:THREE.DoubleSide });
+const infill = new THREE.InstancedMesh(new THREE.PlaneGeometry(PANEL_W-0.06, PANEL_H-0.05), matMesh, bays.length);
+{ const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1,1,1), p = new THREE.Vector3();
+  bays.forEach((bay,i)=>{ q.setFromAxisAngle(new THREE.Vector3(0,1,0), bay.ry);
+    p.set(bay.x, FLOOR_GAP+PANEL_H/2, bay.z); m.compose(p,q,s); infill.setMatrixAt(i,m); });
+  infill.instanceMatrix.needsUpdate = true; }
+fence.add(infill);
+
+// access gate in the open bay + its interlock switch
+{ const g = panelSlots.find(s=>s.gate);
+  const gate = new THREE.Group();
+  gate.add(box(0.030, PANEL_H, 0.020, 0, FLOOR_GAP+PANEL_H/2, -(PANEL_W/2-0.02), matGuard));
+  gate.add(box(0.030, PANEL_H, 0.020, 0, FLOOR_GAP+PANEL_H/2,  (PANEL_W/2-0.02), matGuard));
+  gate.add(box(0.030, 0.030, PANEL_W-0.06, 0, FLOOR_GAP+0.015, 0, matGuard));
+  gate.add(box(0.030, 0.030, PANEL_W-0.06, 0, FLOOR_GAP+PANEL_H-0.015, 0, matGuard));
+  const gm = new THREE.Mesh(new THREE.PlaneGeometry(PANEL_W-0.06, PANEL_H-0.05), matMesh);
+  gm.rotation.y = Math.PI/2; gm.position.y = FLOOR_GAP+PANEL_H/2; gm.castShadow = true; gate.add(gm);
+  gate.add(box(0.080, 0.150, 0.060, 0.03, 1.05, PANEL_W/2-0.10, matSteel));   // interlock switch
+  gate.add(box(0.045, 0.045, 0.220, 0.06, 1.05, PANEL_W/2-0.28, matGuard));   // handle
+  gate.position.set(g.x, 0, g.z); gate.rotation.y = 0;
+  fence.add(gate); }
+root.add(fence);
+
+// --- welding fixture (jig) ---------------------------------------------------
+const jig = new THREE.Group();
+const JX = 1.90, JZ = 1.15, JY = 0.90;                 // [INFER] fixture table
+for(const s of [1,-1]){
+  jig.add(box(JX, 0.09, 0.09, 0, JY-0.045, s*JZ/2, matJig));
+  jig.add(box(0.09, 0.09, JZ, s*JX/2, JY-0.045, 0, matJig));
+}
+for(const [sx,sz] of [[1,1],[1,-1],[-1,1],[-1,-1]]){
+  jig.add(box(0.10, JY-0.09, 0.10, sx*(JX/2-0.10), (JY-0.09)/2, sz*(JZ/2-0.10), matJig));
+  jig.add(box(0.20, 0.020, 0.20, sx*(JX/2-0.10), 0.010, sz*(JZ/2-0.10), matPad));   // floor plate
+}
+jig.add(box(JX-0.30, 0.05, JZ-0.30, 0, JY+0.025, 0, matJig));                        // sub-plate
+for(const [px,pz] of [[-0.62,-0.34],[0.62,-0.34],[-0.62,0.34],[0.62,0.34]]){         // locating pins
+  const pin = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.022,0.022,0.16,12), matSteel));
+  pin.position.set(px, JY+0.13, pz); jig.add(pin);
+  jig.add(box(0.13, 0.06, 0.13, px, JY+0.08, pz, matSteel));
+}
+for(const [cx,cz,r] of [[-0.80,0,0],[0.80,0,Math.PI],[0,-0.50,Math.PI/2],[0,0.50,-Math.PI/2]]){
+  const cl = new THREE.Group();                                                       // toggle clamps
+  cl.add(box(0.07, 0.22, 0.07, 0, JY+0.16, 0, matJig));
+  const arm = box(0.26, 0.045, 0.045, 0.12, JY+0.28, 0, matSteel); cl.add(arm);
+  cl.add(box(0.05, 0.09, 0.05, 0.23, JY+0.235, 0, matPad));   // urethane pad — copper is ONLY the electrodes
+  cl.position.set(cx, 0, cz); cl.rotation.y = r; jig.add(cl);
+}
+// the workpiece: a floor-pan sub-assembly in bare BIW steel (see the `carroceria` asset)
+const part = new THREE.Group();
+part.add(box(1.52, 0.014, 0.96, 0, JY+0.062, 0, matBiw));
+part.add(box(1.60, 0.150, 0.230, 0, JY+0.137, 0, matBiw));       // centre tunnel
+part.add(box(0.09, 0.080, 0.94, 0.42, JY+0.105, 0, matBiw));     // crossmember
+part.add(box(0.09, 0.080, 0.94, -0.42, JY+0.105, 0, matBiw));
+jig.add(part);
+root.add(jig);
+
+// --- robot: a REAL joint chain (j1 -> j2 -> j3 -> j5), posed over the fixture ---
+const L2 = 1.05, L3 = 1.00;                     // [INFER] link lengths inside the 2.65 m reach
+const GUN_X = 0.20, GUN_E = 0.42;               // gun mount on the flange; electrode axis in gun space
+const TOOL_D = 2.05;                            // horizontal base -> electrode axis for the solved pose
+function makeRobot(){
+  const g = new THREE.Group();
+  // FLOOR MOUNTED — [CERT-doc] "IRB 6700 are designed for floor mounting (no tilting allowed around
+  // X-axis or Y-axis)". No pedestal: the certified base plate sits straight on the cell floor,
+  // 12 x M24 on an ~800 mm bolt field.
+  const bp = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.40, 0.40, 0.045, 24), matSteel));
+  bp.position.y = 0.0225; g.add(bp);
+  for(let i=0;i<12;i++){
+    const a = i/12*Math.PI*2;
+    const bolt = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.020,0.020,0.035,8), matSteel));
+    bolt.position.set(Math.cos(a)*0.33, 0.058, Math.sin(a)*0.33); g.add(bolt);
+  }
+  // fixed base casting — its plan reads the ax1 radii: 532 mm front, 633 mm back
+  const base = solid(new THREE.Mesh(new THREE.BoxGeometry(AX1_FRONT+AX1_BACK, 0.36, 0.72), matRobotD));
+  base.position.set((AX1_FRONT-AX1_BACK)/2, 0.225, 0); g.add(base);
+
+  const j1 = new THREE.Group(); j1.position.y = 0.405; g.add(j1);
+  const turret = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.30,0.34,0.30,20), matRobot));
+  turret.position.y = 0.15; j1.add(turret);
+  const yoke = solid(new THREE.Mesh(new THREE.BoxGeometry(0.42,0.34,0.62), matRobot));
+  yoke.position.set(0.02, 0.40, 0); j1.add(yoke);
+
+  const j2 = new THREE.Group(); j2.position.y = 0.50; j1.add(j2);
+  const lower = solid(new THREE.Mesh(new THREE.BoxGeometry(0.28, L2, 0.34), matRobot));
+  lower.position.y = L2/2; j2.add(lower);
+  const sh = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.19,0.19,0.68,16), matRobotD));
+  sh.rotation.x = Math.PI/2; j2.add(sh);
+
+  const j3 = new THREE.Group(); j3.position.y = L2; j2.add(j3);
+  const el = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.17,0.50,16), matRobotD));
+  el.rotation.x = Math.PI/2; j3.add(el);
+  const upper = solid(new THREE.Mesh(new THREE.BoxGeometry(L3, 0.25, 0.28), matRobot));
+  upper.position.x = L3/2; j3.add(upper);
+
+  const j5 = new THREE.Group(); j5.position.x = L3; j3.add(j5);
+  const wr = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.125,0.115,0.34,16), matRobotD));
+  wr.rotation.z = Math.PI/2; wr.position.x = 0.17; j5.add(wr);
+  const fl = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.095,0.095,0.05,16), matSteel));
+  fl.rotation.z = Math.PI/2; fl.position.x = 0.36; j5.add(fl);
+
+  // C-TYPE weld gun [CERT-web]: both electrodes lie on ONE axis (here gun-local X = GUN_E), the
+  // moving one driven straight down onto the fixed one. An X-type would put the tips on scissor
+  // paths instead — that is the whole difference in silhouette, so it must be unmistakable.
+  const gun = new THREE.Group(); gun.position.x = GUN_X; j5.add(gun);
+  gun.add(box(0.28, 0.30, 0.26, 0.14, 0.06, 0, matRobotD));              // transformer body
+  gun.add(box(0.055, 0.055, 0.055, 0.24, 0.22, 0.11, matSteel));         // water fittings
+  gun.add(box(0.34, 0.070, 0.090, 0.29, 0.20, 0, matSteel));             // upper arm to the actuator
+  gun.add(box(0.34, 0.070, 0.090, 0.29, -0.14, 0, matSteel));            // C-arm, lower leg
+  gun.add(box(0.070, 0.14, 0.090, GUN_E, -0.14, 0, matSteel));           // C-arm return
+  const act = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.075,0.26,14), matRobotD));
+  act.position.set(GUN_E, 0.31, 0); gun.add(act);                        // pneumatic/servo actuator
+  gun.add(box(0.060, 0.14, 0.060, GUN_E, 0.11, 0, matSteel));            // moving electrode holder
+  const eUp = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.020,0.032,0.09,12), matCopper));
+  eUp.position.set(GUN_E, 0.020, 0); gun.add(eUp);                       // moving tip, points DOWN
+  const eDn = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.032,0.020,0.09,12), matCopper));
+  eDn.position.set(GUN_E, -0.060, 0); gun.add(eDn);                      // fixed tip, COLLINEAR
+  // dress pack along the upper arm
+  const dp = solid(new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,0.80,10), matRobotD));
+  dp.rotation.z = Math.PI/2; dp.position.set(0.45, 0.19, 0.19); j3.add(dp);
+
+  // POSE — 2-link IK solved so the electrode axis ends up VERTICAL over the part (see design-spec).
+  j2.rotation.z = -0.7324; j3.rotation.z = -0.0231; j5.rotation.z = 0.7555;
+  return {group:g, j1, j2, j3, j5};
+}
+
+// Each arm gets its OWN weld target on the part, and its base is set back by exactly the horizontal
+// distance the solved pose reaches. Placing both on the same diagonal would also stack them from the
+// default camera, which hides one robot entirely.
+// The weld points sit just OUTSIDE the fixture sub-plate in Z (|z| 0.45 > sub-plate 0.425) and the
+// arms come in along ±X, so the C-arm's lower leg passes UNDER the sub-plate to reach the panel
+// underside instead of intersecting it. A C-gun always needs that clearance path.
+const WELD_TARGETS = [[0.55, 0.45], [-0.55, -0.45]];
+const APPROACH = [0, Math.PI];
+const robots = new THREE.Group(), reachRings = new THREE.Group();
+for(let i=0;i<WELD_TARGETS.length;i++){
+  const [tx, tz] = WELD_TARGETS[i], a = APPROACH[i];
+  const rx = tx + TOOL_D*Math.cos(a), rz = tz + TOOL_D*Math.sin(a);
+  const r = makeRobot();
+  r.group.position.set(rx, 0, rz);
+  r.group.rotation.y = Math.atan2(-(tz-rz), tx-rx);     // local +X aims at this arm's weld target
+  robots.add(r.group);
+  // the THEORETICAL 2.65 m envelope. It reaches past the guard line on purpose — see the design-spec:
+  // a real cell restricts axis 1 mechanically instead of moving the fence out (IRB 6700 PS §1.3.4).
+  const ring = new THREE.Mesh(new THREE.RingGeometry(REACH-0.035, REACH, 72),
+    new THREE.MeshBasicMaterial({ color:0x00d4aa, side:THREE.DoubleSide, transparent:true, opacity:0.55 }));
+  ring.rotation.x = -Math.PI/2; ring.position.set(rx, 0.012, rz);
+  reachRings.add(ring);
+}
+reachRings.visible = false;
+root.add(robots, reachRings);
+
+// --- controllers + weld timers, OUTSIDE the guard ----------------------------
+const cabinets = new THREE.Group();
+for(const [cx,cz] of [[-4.35,-1.1],[-4.35,0.9]]){
+  cabinets.add(box(0.62, 1.10, 0.75, cx, 0.55, cz, matCab));
+  cabinets.add(box(0.66, 0.04, 0.79, cx, 1.12, cz, matRobotD));
+  cabinets.add(box(0.020, 0.22, 0.30, cx+0.315, 0.85, cz, matRobotD));   // pendant holster / panel
+}
+cabinets.add(box(0.45, 0.95, 0.55, 4.30, 0.475, -1.4, matCab));          // weld timer cabinet
+root.add(cabinets);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ============================================================================
+// ZONE 3 — UI (render is gated: every handler calls requestRender)
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(document.getElementById('btnFence'), fence);
+toggle(document.getElementById('btnReach'), reachRings);
+toggle(document.getElementById('btnJig'),   jig);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  if(controls.autoRotate) needsRender = true;
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__celdaSoldaduraApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__celda-soldaduraApp'] = globalThis.__celdaSoldaduraApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
