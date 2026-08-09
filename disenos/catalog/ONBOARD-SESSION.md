@@ -200,6 +200,13 @@ elige otra familia libre si queda, o detente.
   importan tanto como el criterio.
 - PUNTO CIEGO gate+sonda: ambos recorren `root`. Un objeto colgado de `scene` (no de root) no aparece en la
   cuenta. Cuelga todo de root salvo el plano de suelo.
+- SIMETRÍA build↔auditoría: al CONSTRUIR la regla es "el conteo no ve geometría → abre el PNG". Al AUDITAR
+  hace falta la INVERSA: el PNG TAMPOCO decide — una pieza pequeña, oscura u ocluida se lee igual que una
+  ausente. El desempate barato es MEDIR la escena (contar instancias + visibilidad + bounding boxes en mundo),
+  no mirar más fuerte. (31 assets auditados, 0 defectos reales; todas las falsas alarmas fueron de las sondas.)
+- Un CHECKER estático de contrato solo sirve si LEE el spec: gritar sobre un metalness/desviación que el spec
+  ya declara como EXCEPCIÓN documentada (con razón + confidence) es ruido. Y la banda §3.1 correcta es 0.06-0.84
+  (0.85-1.0 es metal comprometido válido, no artefacto).
 - LA SEÑAL VIENE DE MEDIR EL ESTADO CONCRETO, casi nunca de un patrón general. Los chequeos ESTÁTICOS/de-patrón
   fallan por ruido en este catálogo: "botón sin requestRender()" (24 falsos: el wiring usa helpers variados),
   cruce cita↔título (cruces legítimos), regex de geometría (casa dentro de Math.PI/2). El wiring y la geometría
