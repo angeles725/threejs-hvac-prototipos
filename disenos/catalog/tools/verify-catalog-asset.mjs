@@ -6,7 +6,10 @@ import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 
 const BIN = process.env.HOME + '/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell';
-const PORT = 9334;
+// Same parallel-session hazard as BASE: two worktrees running the probe at once fight over the
+// CDP debug port and one of them dies mid-run (observed: an unsettled top-level await pointing at
+// a SIBLING worktree's copy of this file). QA_PORT lets each session take its own.
+const PORT = Number(process.env.QA_PORT || 9334);
 // PARALLEL SESSIONS: each worktree serves ITS OWN copy of the repo, so two sessions sharing one
 // port would silently measure the wrong tree (asset 404s -> ready:false -> a good asset fails the
 // gate). QA_BASE lets a session bind its own port; the default keeps the documented 8899 flow.

@@ -1,0 +1,392 @@
+<!doctype html>
+<!--
+  manejadora-ahu — catalog asset, family `hvac`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional anchor: disenos/ahu/ahu-realistic-v1.html — the local AHU prototype declares
+  3.5 x 1.6 x 2.0 m [CERT], and research/HANDBOOK.md §3.0 gives the same 2.5-4 m / ~2 m band.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manejadora de aire (AHU) — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Manejadora de aire (AHU) — casco seccionado</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· compuerta · filtros · serpentín · ventilador plug</span></div>
+  <div class="dim">3.60 × 1.60 × 2.15 m</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoors">PUERTAS</button>
+  <button id="btnFan">VENTILADOR</button>
+  <button id="btnPipe">HIDRÁULICA</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const L = 3.60, W = 1.60, BODY_H = 2.00;   // casing envelope
+const BASE_H = 0.15;                       // channel base frame
+const Y0 = BASE_H, Y1 = BASE_H + BODY_H;   // casing bottom / top
+const PT = 0.05;                           // 50 mm sandwich panel
+const HZ = W/2;
+// section joints along X (the "sectioned casing" identity): mixing | filter | coil | fan | discharge
+const SEC = [-L/2, -1.20, -0.45, 0.30, 1.50, L/2];
+const SERVICE_Z = HZ;                      // +Z is the service face: doors, pipes, gauges
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 38);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 7.0, AZ = 0.86, EL = 0.28;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.15 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.15, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.15, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.1;   // long vertical casing — see the fill light note below
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(5, 8, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-4; sun.shadow.camera.right=4; sun.shadow.camera.top=4; sun.shadow.camera.bottom=-4;
+scene.add(sun);
+// VERTICAL-SUBJECT DEVIATION from the house rig (design-spec.yaml `lighting`): the casing is a
+// 3.6 m vertical wall. The extruded aluminium framework is BARE metal and would reflect the dark
+// horizon, so a camera-side fill mirrored about the service-face normal (+Z) gives it something
+// bright to reflect. Metalness/roughness stay per HANDBOOK §3.1.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.1);
+fill.position.set(-4.0, 3.0, 6.5);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+// Interior lamp: with the doors open the sections are a closed box facing away from every rig
+// light, so filter bank and fan read as black holes. Shadowless point light, inside the casing.
+const innerLamp = new THREE.PointLight(0xe6eef8, 9, 5.0, 2);
+innerLamp.position.set(0.10, BASE_H + 1.35, 0.10);
+scene.add(innerLamp);
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(36,36),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Sandwich panel + door leaf = COATED, dielectric (0.0). Extruded frame, damper blades and
+//   the impeller are bare metal (0.9-1.0). Filter media and the flexible collar are dielectric.
+// ============================================================================
+function finTexture(){
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#aab4b9'; g.fillRect(0,0,256,64);
+  for(let x=0; x<256; x+=4){ g.fillStyle = (x % 8 === 0) ? '#d6dde0' : '#8b959a'; g.fillRect(x,0,2,64); }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(16, 1);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const matPanel = new THREE.MeshStandardMaterial({ color:0xc9ced1, metalness:0.0,  roughness:0.55 });
+const matDoor  = new THREE.MeshStandardMaterial({ color:0xd3d8db, metalness:0.0,  roughness:0.50 });
+const matExtr  = new THREE.MeshStandardMaterial({ color:0xa5acb1, metalness:0.95, roughness:0.40 });
+const matFrame = new THREE.MeshStandardMaterial({ color:0xc0c6c9, metalness:0.95, roughness:0.38 });
+const matFin   = new THREE.MeshStandardMaterial({ color:0xd2dade, metalness:1.0,  roughness:0.42, map:finTexture() });
+const matMedia = new THREE.MeshStandardMaterial({ color:0xb6b09c, metalness:0.0,  roughness:0.95 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x1b1f23, metalness:0.0,  roughness:0.72 });
+const matMotor = new THREE.MeshStandardMaterial({ color:0x2c343d, metalness:0.0,  roughness:0.55 });
+const matFlex  = new THREE.MeshStandardMaterial({ color:0x23282c, metalness:0.0,  roughness:0.92 });
+const matPipe  = new THREE.MeshStandardMaterial({ color:0xb2b9bd, metalness:0.95, roughness:0.40 });
+const matValve = new THREE.MeshStandardMaterial({ color:0x8f3b2a, metalness:0.0,  roughness:0.50 });
+const matGlass = new THREE.MeshPhysicalMaterial({ color:0xcfe2e8, metalness:0.0, roughness:0.06,
+                                                  transmission:0.85, thickness:0.02, transparent:true, opacity:0.55 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,h,mat,x,y,z,rx=0,rz=0,seg=18)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz); p.add(m); return m; };
+
+// --- base frame: channel rails + cross members ---
+const base = new THREE.Group();
+for(const s of [-1,1]) put(base, L, BASE_H, 0.10, matFrame, 0, BASE_H/2, s*(HZ - 0.05));
+for(const x of SEC) put(base, 0.08, BASE_H*0.85, W - 0.20, matFrame, Math.max(-L/2+0.04, Math.min(L/2-0.04, x)), BASE_H/2, 0);
+root.add(base);
+
+// --- casing: 50 mm sandwich panels, roof, floor and the two end walls ---
+const casing = new THREE.Group();
+put(casing, L, PT, W, matPanel, 0, Y1 - PT/2, 0);                     // roof
+put(casing, L, PT, W, matPanel, 0, Y0 + PT/2, 0);                     // floor
+put(casing, L, BODY_H - 2*PT, PT, matPanel, 0, (Y0+Y1)/2, -(HZ - PT/2));            // blind side
+// SERVICE SIDE: the wall is built AROUND the two door openings. A door leaf hung on a solid wall
+// looks right closed and reveals nothing open — the first PUERTAS capture showed exactly that.
+const DOOR_MARGIN = 0.05, DOOR_SILL = 0.15;
+const OPENINGS = [[SEC[1] + DOOR_MARGIN, SEC[2] - DOOR_MARGIN], [SEC[3] + DOOR_MARGIN, SEC[4] - DOOR_MARGIN]];
+{
+  const yb = Y0 + PT, yt = Y1 - PT;                    // inner clear height of the side wall
+  const oy0 = yb + DOOR_SILL, oy1 = yt - DOOR_SILL;    // opening top / bottom
+  const edges = [-L/2, ...OPENINGS.flat(), L/2];
+  for(let i=0; i<edges.length; i+=2){                  // solid piers between the openings
+    const x0 = edges[i], x1 = edges[i+1];
+    if(x1 - x0 > 0.001) put(casing, x1 - x0, yt - yb, PT, matPanel, (x0+x1)/2, (yb+yt)/2, HZ - PT/2);
+  }
+  for(const [x0, x1] of OPENINGS){                     // header + sill over each opening
+    put(casing, x1 - x0, yt - oy1, PT, matPanel, (x0+x1)/2, (oy1 + yt)/2, HZ - PT/2);
+    put(casing, x1 - x0, oy0 - yb, PT, matPanel, (x0+x1)/2, (yb + oy0)/2, HZ - PT/2);
+    for(const px2 of [x0, x1])                         // door-frame return around the aperture
+      put(casing, 0.03, oy1 - oy0, PT, matExtr, px2, (oy0+oy1)/2, HZ - PT/2);
+  }
+}
+// end walls, each with its aperture: -X takes the damper, +X takes the discharge collar
+const DMP_W = 1.10, DMP_H = 1.20, DMP_CY = Y0 + 0.95;                 // damper aperture (Z x Y)
+const DIS_W = 0.95, DIS_H = 0.95, DIS_CY = Y0 + 1.05;                 // discharge aperture (Z x Y)
+function endWall(px, apW, apH, apCY){
+  const g = new THREE.Group();
+  const zL = -HZ + (HZ - apW/2)/2, zR = HZ - (HZ - apW/2)/2;
+  put(g, PT, BODY_H, HZ - apW/2, matPanel, px, (Y0+Y1)/2, zL);
+  put(g, PT, BODY_H, HZ - apW/2, matPanel, px, (Y0+Y1)/2, zR);
+  put(g, PT, (Y1 - (apCY + apH/2)), apW, matPanel, px, (Y1 + apCY + apH/2)/2, 0);
+  put(g, PT, ((apCY - apH/2) - Y0), apW, matPanel, px, (Y0 + apCY - apH/2)/2, 0);
+  return g;
+}
+casing.add(endWall(-L/2 + PT/2, DMP_W, DMP_H, DMP_CY));
+casing.add(endWall( L/2 - PT/2, DIS_W, DIS_H, DIS_CY));
+// extruded corner posts + section joint profiles (the visual signature of a sectioned casing)
+for(const x of SEC) for(const s of [-1,1])
+  put(casing, 0.06, BODY_H, 0.035, matExtr, x + (x === SEC[0] ? 0.03 : x === SEC[SEC.length-1] ? -0.03 : 0),
+      (Y0+Y1)/2, s*(HZ + 0.017));
+for(const s of [-1,1]){
+  put(casing, L, 0.055, 0.04, matExtr, 0, Y1 - 0.028, s*(HZ + 0.02));  // top rail
+  put(casing, L, 0.055, 0.04, matExtr, 0, Y0 + 0.028, s*(HZ + 0.02));  // bottom rail
+}
+// lifting lugs at the roof corners (how the section is actually craned into a plant room)
+for(const sx of [-1,1]) for(const sz of [-1,1])
+  put(casing, 0.10, 0.11, 0.03, matExtr, sx*(L/2 - 0.22), Y1 + 0.05, sz*(HZ - 0.14));
+root.add(casing);
+
+// --- inlet damper: opposed-blade louvre on the -X end, blades INSTANCED (real repetition) ---
+const damper = new THREE.Group();
+const dx = -L/2 + PT/2;
+const NB = 9, bH = DMP_H / NB;
+const bladeGeo = new THREE.BoxGeometry(0.02, bH * 0.92, DMP_W - 0.06);
+const blades = new THREE.InstancedMesh(bladeGeo, matExtr, NB);
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+for(let i=0;i<NB;i++){
+  _q.setFromEuler(new THREE.Euler(0, 0, (i % 2 ? 1 : -1) * 0.55));     // opposed blades
+  _p.set(dx - 0.02, DMP_CY - DMP_H/2 + (i + 0.5) * bH, 0);
+  blades.setMatrixAt(i, _m.compose(_p, _q, _s));
+}
+blades.instanceMatrix.needsUpdate = true; blades.castShadow = blades.receiveShadow = true;
+damper.add(blades);
+put(damper, 0.05, DMP_H + 0.08, 0.05, matExtr, dx - 0.03, DMP_CY, -(DMP_W/2 + 0.02));
+put(damper, 0.05, DMP_H + 0.08, 0.05, matExtr, dx - 0.03, DMP_CY,  (DMP_W/2 + 0.02));
+put(damper, 0.05, 0.05, DMP_W + 0.10, matExtr, dx - 0.03, DMP_CY + DMP_H/2 + 0.03, 0);
+put(damper, 0.05, 0.05, DMP_W + 0.10, matExtr, dx - 0.03, DMP_CY - DMP_H/2 - 0.03, 0);
+cyl(damper, 0.055, 0.14, matMotor, dx - 0.09, DMP_CY, DMP_W/2 + 0.12, 0, Math.PI/2, 12);  // damper actuator
+root.add(damper);
+
+// --- discharge: flanged collar + flexible connector on the +X end ---
+const outlet = new THREE.Group();
+const ox = L/2 - PT/2;
+put(outlet, 0.05, DIS_H + 0.10, DIS_W + 0.10, matExtr, ox + 0.03, DIS_CY, 0);
+put(outlet, 0.10, DIS_H, DIS_W, matFlex, ox + 0.10, DIS_CY, 0);
+put(outlet, 0.05, DIS_H + 0.10, DIS_W + 0.10, matExtr, ox + 0.17, DIS_CY, 0);
+put(outlet, 0.26, DIS_H - 0.02, DIS_W - 0.02, matFrame, ox + 0.32, DIS_CY, 0);
+root.add(outlet);
+
+// --- internals (readable once the doors swing open) ---
+const guts = new THREE.Group();
+// filter bank: 2 x 2 pleated cells in a rack, in the filter section
+const fx = (SEC[1] + SEC[2]) / 2;
+put(guts, 0.06, BODY_H - 2*PT - 0.04, W - 2*PT - 0.04, matExtr, fx, (Y0+Y1)/2, 0);
+for(const gz of [-0.36, 0.36]) for(const gy of [Y0 + 0.62, Y0 + 1.36]){
+  put(guts, 0.14, 0.62, 0.62, matMedia, fx, gy, gz);
+  put(guts, 0.03, 0.66, 0.66, matExtr, fx - 0.08, gy, gz);
+}
+// cooling coil: finned slab + drain pan, in the coil section
+const cx = (SEC[2] + SEC[3]) / 2;
+put(guts, 0.16, BODY_H - 2*PT - 0.30, W - 2*PT - 0.10, matFin, cx, (Y0+Y1)/2 + 0.06, 0);
+put(guts, 0.20, 0.05, W - 2*PT - 0.06, matExtr, cx, (Y0+Y1)/2 + 0.06 + (BODY_H - 2*PT - 0.30)/2, 0);
+put(guts, 0.42, 0.09, W - 2*PT - 0.06, matFrame, cx + 0.02, Y0 + PT + 0.045, 0);        // sloped drain pan
+// plug fan: backplate + instanced backward-curved blades + direct-drive motor
+const px = (SEC[3] + SEC[4]) / 2;
+const fanY = Y0 + 1.02;
+put(guts, 0.05, BODY_H - 2*PT - 0.04, W - 2*PT - 0.04, matExtr, SEC[3] + 0.10, (Y0+Y1)/2, 0);  // bulkhead
+const impeller = new THREE.Group();
+impeller.position.set(px - 0.10, fanY, 0);
+const back = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.02, 24), matExtr);
+back.rotation.z = Math.PI/2; back.castShadow = true; impeller.add(back);
+const vaneGeo = new THREE.BoxGeometry(0.16, 0.012, 0.14);
+const vanes = new THREE.InstancedMesh(vaneGeo, matExtr, 9);
+for(let i=0;i<9;i++){
+  const a = i * Math.PI * 2 / 9;
+  _q.setFromEuler(new THREE.Euler(a, 0, 0, 'XYZ'));
+  _p.set(0.09, Math.cos(a) * 0.24, Math.sin(a) * 0.24);
+  vanes.setMatrixAt(i, _m.compose(_p, _q, _s));
+}
+vanes.instanceMatrix.needsUpdate = true; vanes.castShadow = true;
+impeller.add(vanes);
+const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.30, 0.12, 20, 1, true), matExtr);
+cone.material = matExtr; cone.rotation.z = Math.PI/2; cone.position.set(0.20, 0, 0);
+impeller.add(cone);
+guts.add(impeller);
+cyl(guts, 0.16, 0.34, matMotor, px - 0.34, fanY, 0, 0, Math.PI/2, 16);                  // direct-drive motor
+put(guts, 0.30, 0.10, 0.34, matFrame, px - 0.20, fanY - 0.36, 0);                       // fan/motor bedplate
+for(const s of [-1,1]) put(guts, 0.10, 0.34, 0.08, matFrame, px - 0.20, fanY - 0.55, s*0.14);
+root.add(guts);
+
+// --- service face: hinged access doors on +Z (filter and fan sections) ---
+const doors = [];
+function accessDoor(x0, x1, withPort){
+  // sized to the aperture cut above, plus a small overlap onto the pier on every side
+  const w = (x1 - x0) - 2*DOOR_MARGIN + 0.06, h = (BODY_H - 2*PT) - 2*DOOR_SILL + 0.06;
+  const pivot = new THREE.Group();
+  pivot.position.set(x0 + DOOR_MARGIN - 0.03, 0, SERVICE_Z - PT/2);   // hinge on the -X edge of the opening
+  const leaf = new THREE.Group();
+  leaf.position.set(w/2, (Y0+Y1)/2, PT/2 + 0.014);
+  put(leaf, w, h, 0.045, matDoor, 0, 0, 0);
+  put(leaf, w + 0.03, 0.035, 0.052, matExtr, 0,  h/2 + 0.02, 0);
+  put(leaf, w + 0.03, 0.035, 0.052, matExtr, 0, -h/2 - 0.02, 0);
+  // two hinges + a lever handle on the free edge
+  for(const hy of [-h/2 + 0.20, h/2 - 0.20]) put(leaf, 0.05, 0.10, 0.05, matExtr, -w/2 - 0.02, hy, -0.01);
+  put(leaf, 0.05, 0.16, 0.10, matExtr, w/2 - 0.09, 0.02, 0.055);
+  put(leaf, 0.04, 0.05, 0.14, matDark, w/2 - 0.09, -0.10, 0.075);
+  if(withPort){                                             // inspection port on the fan section
+    put(leaf, 0.26, 0.26, 0.055, matExtr, -0.10, 0.30, 0.004);
+    put(leaf, 0.20, 0.20, 0.06, matGlass, -0.10, 0.30, 0.006);
+  }
+  pivot.add(leaf);
+  root.add(pivot);
+  doors.push(pivot);
+}
+accessDoor(SEC[1], SEC[2], false);      // filter section
+accessDoor(SEC[3], SEC[4], true);       // fan section
+
+// --- hydraulics: coil supply/return with isolation valves, out through the service face ---
+const pipes = new THREE.Group();
+// Chilled-water connections are STEEL, not copper: copper is the refrigerant vocabulary of the
+// chiller, and using it here would blur the two assets' material reads.
+for(const [i, y] of [[0, Y0 + 0.46], [1, Y0 + 0.80]]){
+  const zx = cx + (i ? 0.16 : -0.16);
+  cyl(pipes, 0.042, 0.58, matPipe, zx, y, HZ + 0.26, Math.PI/2, 0, 14);
+  cyl(pipes, 0.072, 0.04, matPipe, zx, y, HZ + 0.54, Math.PI/2, 0, 14);          // companion flange
+  cyl(pipes, 0.058, 0.11, matValve, zx, y, HZ + 0.34, Math.PI/2, 0, 12);         // isolation valve body
+  cyl(pipes, 0.070, 0.018, matValve, zx, y + 0.13, HZ + 0.34, 0, 0, 14);         // handwheel
+  put(pipes, 0.022, 0.10, 0.022, matValve, zx, y + 0.07, HZ + 0.34);             // stem
+}
+cyl(pipes, 0.028, 0.34, matPipe, cx + 0.02, Y0 - 0.02, HZ + 0.18, Math.PI/2, 0, 12);    // condensate drain
+cyl(pipes, 0.028, 0.22, matPipe, cx + 0.02, Y0 - 0.13, HZ + 0.33, 0, 0, 12);            // P-trap leg
+root.add(pipes);
+
+// --- section labels: magnehelic gauge over the filter section, nameplate on the fan section ---
+const trim = new THREE.Group();
+cyl(trim, 0.055, 0.03, matDark, fx + 0.30, Y0 + 1.70, HZ + 0.03, Math.PI/2, 0, 14);
+cyl(trim, 0.045, 0.035, matGlass, fx + 0.30, Y0 + 1.70, HZ + 0.045, Math.PI/2, 0, 14);
+put(trim, 0.24, 0.14, 0.006, matExtr, px + 0.42, Y0 + 1.72, HZ + 0.004);
+root.add(trim);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+//          Door swing and impeller spin are per-frame animations — both hold needsRender.
+// ============================================================================
+const DOOR_OPEN = -1.15;                  // ~66°, swings clear of the service face
+let doorTarget = 0, fanOn = false;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnDoors = document.getElementById('btnDoors');
+btnDoors.onclick = ()=>{ doorTarget = doorTarget === 0 ? DOOR_OPEN : 0;
+  btnDoors.classList.toggle('on', doorTarget !== 0); requestRender(); };
+
+const btnFan = document.getElementById('btnFan');
+btnFan.onclick = ()=>{ fanOn = !fanOn; btnFan.classList.toggle('on', fanOn); requestRender(); };
+
+const btnPipe = document.getElementById('btnPipe');
+btnPipe.onclick = ()=>{ pipes.visible = !pipes.visible; btnPipe.classList.toggle('on', !pipes.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  const d = doorTarget - doors[0].rotation.y;
+  if(Math.abs(d) > 0.0008){ for(const p of doors) p.rotation.y += d * 0.12; needsRender = true; }
+  if(fanOn){ impeller.rotation.x += 0.11; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__manejadoraAhuApp = __app;
+globalThis['__manejadora-ahuApp'] = __app;     // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
