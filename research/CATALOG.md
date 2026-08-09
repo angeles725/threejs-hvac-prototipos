@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **58 blocks**
+Total: **60 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -64,3 +64,5 @@ Total: **58 blocks**
 | 56 | [threejs-block56.md](threejs-block56.md) | Measured GPU-budget of the nave-Panccadia equipment visor, and the damping-safe render-on-demand implementation that follows from the data |
 | 57 | [threejs-block57.md](threejs-block57.md) | The industrial cold-room door: measured dimensional envelope, hardware vocabulary, and the one number the datasheets refuse to fix |
 | 58 | [threejs-block58.md](threejs-block58.md) | Selective pallet racking: the rack is SHORTER than the pallet, and a single bay is not a legal rack |
+| 59 | [threejs-block59.md](threejs-block59.md) | Sectional and roll-up industrial doors: the leaf is a chain of standard sections, and the box above the opening is a computed dimension |
+| 60 | [threejs-block60.md](threejs-block60.md) | Access control: the turnstile is fully published, the barrier only half is |

@@ -1,0 +1,203 @@
+# DesignSpec — 3-door upright glass merchandiser (self-contained, bottom-mount condenser)
+# Catalog family `retail` (worktree catalog-retail-lab).
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: refrigerador-vertical
+family: retail
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # the 24 mm pane package and the gasket line are material, not voxels
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 16 -> moderate/complex boundary.
+  scores: {silhouette: 2, components: 3, hierarchy: 2, repetition: 2,
+           material_layers: 3, detail: 2, occlusion: 1, action_readiness: 1}
+  tier: moderate
+  notes: >
+    material_layers 3 is the hard axis: the asset only reads if the pane is genuinely transmissive,
+    the interior is genuinely lit, and the painted cabinet stays dielectric. action_readiness 1: the
+    three leaves swing on their real hinge edges (outer bays outward, centre bay to the left).
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    glass: "disenos/catalog/puertas/puerta-cuarto-frio/ (MeshPhysicalMaterial transmission pane)"
+    painted_steel: "research/HANDBOOK.md §3.1 (coated surfaces are dielectric, metalness 0)"
+    instancing: "block54 §2.3 — 15 shelves + ~200 facings instanced; doors stay unique (they animate)"
+
+references:
+  - source: "upright glass-door merchandiser class (True GDM-72 / Imbera VR-35 size band)"
+    evidences: >
+      [INFER] No manufacturer datasheet was preserved for this family (retail is procedural-direct,
+      not needs-research). The envelope follows the 3-door merchandiser class: roughly 2.0 m wide,
+      0.75-0.80 m deep, ~2.0 m tall including the lit canopy, 5 adjustable shelves per bay and a
+      bottom-mounted condenser deck behind a louvered front grille. Values are med/low confidence.
+    suitability: partial
+  - source: "disenos/catalog/puertas/puerta-cuarto-frio/design-spec.yaml"
+    evidences: >
+      Refrigeration-door vocabulary already certified in this repo: frame-mounted perimeter gasket,
+      thermo glass, aluminium surround. Reused here as the door construction pattern.
+    suitability: pass
+
+dimensions_real:
+  width_m:        {value: 1.98, confidence: med}    # [INFER] 3-door class envelope
+  depth_m:        {value: 0.79, confidence: med}    # [INFER]
+  height_total_m: {value: 2.06, confidence: med}    # legs + cabinet + canopy
+  leg_h_m:        {value: 0.11, confidence: low}    # [INFER] adjustable feet / castor allowance
+  cabinet_h_m:    {value: 1.73, confidence: low}    # [INFER]
+  canopy_h_m:     {value: 0.22, confidence: low}    # [INFER] lit header band
+  bays:           {value: 3,    confidence: high}   # the asset IS the 3-door variant
+  door_w_m:       {value: 0.615, confidence: low}   # derived: (W - 4 mullions) / 3
+  door_h_m:       {value: 1.43, confidence: low}    # [INFER] leaf height
+  mullion_w_m:    {value: 0.045, confidence: low}   # [INFER]
+  frame_profile_m:{value: 0.036, confidence: low}   # [INFER] aluminium door frame
+  glass_pack_m:   {value: 0.024, confidence: low}   # [INFER] double-glazed package
+  side_wall_m:    {value: 0.055, confidence: low}   # [INFER] foamed insulated wall
+  shelf_levels:   {value: 5,    confidence: med}    # [INFER] the class standard
+  shelf_depth_m:  {value: 0.58, confidence: low}    # [INFER]
+  shelf_pitch_m:  {value: 0.29, confidence: low}    # [INFER] even spacing 0.46 -> 1.62
+  kick_h_m:       {value: 0.20, confidence: low}    # [INFER] condenser deck height
+
+hierarchy:
+  - name: root
+    children:
+      - name: legs
+        pivot: [0, 0, 0]
+        animation: none
+      - name: cab             # insulated shell + white liner + louvered condenser base
+        pivot: [0, 0, 0]
+        animation: none
+      - name: leds            # mullion strips + one point lamp per bay (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: shelves         # InstancedMesh 5 levels x 3 bays
+        pivot: [0, 0, 0]
+        animation: none
+      - name: door_pivot_0..2 # one group per leaf, pivot ON the hinge edge
+        pivot: ["hinge edge of each bay", 0, "front face + 0.012"]
+        animation: swing
+        attachment:
+          parent_socket: cabinet_face
+          contact_type: hinge
+          gap_tolerance: 0.002
+      - name: products        # instanced facings incl. the cabinet floor row (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: canopy          # full-depth cap + branded sign face + LED
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: cabinet-paint
+    family: painted-metal
+    color: "#2d3238"
+    metalness: 0.0             # powder-coated shell -> dielectric
+    roughness: 0.46
+    evidence: "HANDBOOK §3.1 painted/coated panel 0.0-0.05"
+    confidence: 0.85
+  - id: liner-white
+    family: plastic
+    color: "#eceff1"
+    metalness: 0.0
+    roughness: 0.60
+    evidence: "[INFER] ABS/painted interior liner — dielectric; it is what makes the lit interior read"
+    confidence: 0.8
+  - id: door-frame-alu
+    family: bare-metal
+    color: "#b4b9bd"
+    metalness: 0.92
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0; same family as the cold-room door surround"
+    confidence: 0.85
+  - id: wire-shelf
+    family: bare-metal
+    color: "#d4d8db"
+    metalness: 0.92
+    roughness: 0.26
+    evidence: "HANDBOOK §3.1 — chromed wire shelf, brighter and glossier than the frame"
+    confidence: 0.8
+  - id: pane-thermo
+    family: glass
+    color: "#eaf3f7"
+    metalness: 0.0
+    roughness: 0.04
+    transmission: 0.96
+    evidence: >
+      [CERT] Verified in this asset's own QA capture: at transmission 0.96 / opacity 0.22 the
+      interior product reads through the pane. The pane does NOT cast a shadow — a transmissive
+      pane with an opaque shadow reads as a solid door.
+    confidence: 0.85
+  - id: gasket
+    family: rubber
+    color: "#15181b"
+    metalness: 0.0
+    roughness: 0.88
+    evidence: "HANDBOOK §3.1 dielectric; same TPE seal family as puerta-cuarto-frio"
+    confidence: 0.85
+  - id: canopy-sign
+    family: painted-metal
+    color: "#b4361f"
+    metalness: 0.0
+    roughness: 0.42
+    evidence: "[INFER] printed branded header — coated, dielectric"
+    confidence: 0.7
+
+critical_features:
+  - id: see-through-merchandising
+    desc: >
+      The product is VISIBLE through the closed doors: transmissive panes plus a lit interior. This
+      is the whole point of a merchandiser, and it is the feature that failed twice while building
+      this asset (an opaque full-size gasket panel behind the pane, then an unlit interior).
+    threshold: 0.80
+  - id: three-bay-door-set
+    desc: >
+      Three framed glass leaves separated by lit mullions, each with a full-height tubular handle,
+      hinged on its own edge and swinging as a real leaf — not a decal-flat glass wall.
+    threshold: 0.78
+  - id: self-contained-cabinet
+    desc: >
+      Louvered condenser deck at the bottom, adjustable legs, insulated shell and a lit canopy: the
+      silhouette of a plug-in merchandiser rather than a walk-in cold room.
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 160          # transmission adds a second scene pass; the pane budget is intentionally wide
+    tris: 40000
+  measured:             # SwiftShader headless capture, 1280x800 — COUNTS are valid, frame time is NOT
+    draws: 137
+    tris: 18504
+    geometries: 71
+    root_meshes: 69
+
+camera:
+  azimuth_deg: 46
+  elevation_deg: 14
+  fov: 38
+  target_y_m: 1.05
+  radius_m: 5.2
+
+lighting: house-rig + vertical-subject fill + 3 interior bay lamps
+  # DOCUMENTED DEVIATION: an emissive strip does not illuminate anything, so the first capture had
+  # black panes. Three PointLights (one per bay, 2.4 m range) stand for the LED strips and are wired
+  # to the same toggle. The vertical fill follows the cold-room-door precedent; exposure 1.08 and
+  # environmentIntensity 1.6 keep the painted shell from clipping. Metalness/roughness unchanged.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ABRIR PUERTA"     # damped swing on the real hinge edges; sets needsRender while moving
+  - "PRODUCTO"         # instanced planogram on/off
+  - "ILUMINACIÓN"      # LED strips + bay lamps
+
+colorTarget:
+  # MEASURED from the rendered right side panel (headless SwiftShader capture at 1280x800):
+  # a flat unoccluded patch of the painted shell, per-channel std 0.0. Not a guessed value.
+  srgb: [23, 27, 33]
+  deltaE00Max: 8
+  crop: "70x140+790+400"   # right side panel at 1280x800

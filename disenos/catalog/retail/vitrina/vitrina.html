@@ -1,0 +1,317 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — retail/vitrina · serve-over deli / bakery display case with CURVED front glass.
+  Built from disenos/catalog/shell-template.html. Contract: __vitrinaApp.runtime + __qaRenderInfo +
+  data-app-ready, render-on-demand, shadows frozen (autoUpdate=false, 1024), DPR<=2.
+  Instancing (block54 §2.3): the display trays and their contents repeat along the deck; the
+  cabinet, the curved pane and the operator doors are unique meshes.
+  Lesson carried from retail/refrigerador-vertical: a lit case needs REAL lamps inside — an
+  emissive strip illuminates nothing and the product goes black behind the glass.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vitrina refrigerada de servicio — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">VITRINA REFRIGERADA DE SERVICIO — acero 304 + cristal curvo</div>
+  <div><span class="dim">1.60 × 1.10 × 1.28 m · cubeta expositora + puertas de operador</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnProd" class="on">PRODUCTO</button>
+  <button id="btnGlass" class="on">CRISTAL</button>
+  <button id="btnLed" class="on">ILUMINACIÓN</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const L = 1.60, D = 1.10;              // one serve-over module [INFER]
+const DECK_Y = 0.90;                   // display deck height — the working plane of the case
+const KICK_H = 0.12, KICK_INSET = 0.05;
+const TOP_Y = 1.28;                    // top rail
+const GLASS_R = 0.34;                  // curved-front radius
+const ARC_CZ = 0.24;                   // arc centre in Z; the pane springs from the front nose
+const PAN_D = 0.66, PAN_T = 0.05;      // stainless display pan (gastronorm-style well)
+const REAR_DOOR_H = 0.34;              // operator sliding doors at the back
+const TRAYS = 5;                       // trays along the deck
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 9, 26);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 3.7, AZ = 0.92, EL = 0.13;   // low enough to look INTO the case, not down onto the deck
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.95 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.92, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.92, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.0;   // bare 304 front panel: HANDBOOK §3.1 keeps metalness, the IBL carries the read
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4, 6, 3.5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-3; sun.shadow.camera.right=3; sun.shadow.camera.top=3; sun.shadow.camera.bottom=-3;
+scene.add(sun);
+// VERTICAL-SUBJECT FILL: the 0.9 m stainless front is a vertical bare-metal plane and reflects the
+// dark horizon. Mirror of the camera about the front normal (+Z). Metalness untouched (HANDBOOK §3.1).
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.0);
+fill.position.set(-3.5, 2.2, 5.5);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(18,18),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: bare 304 is metalness 0.9-1.0; the black granite front band,
+// the gasket and the trim are dielectric; the pane is transmissive glass.
+// ============================================================================
+const matSteel = new THREE.MeshStandardMaterial({ color:0xc9cdcf, metalness:0.93, roughness:0.32 });
+const matPan   = new THREE.MeshStandardMaterial({ color:0xd2d6d8, metalness:0.93, roughness:0.24 });
+const matStone = new THREE.MeshStandardMaterial({ color:0x23262a, metalness:0.0,  roughness:0.35 });
+const matKick  = new THREE.MeshStandardMaterial({ color:0x2b2f34, metalness:0.0,  roughness:0.7 });
+const matSeal  = new THREE.MeshStandardMaterial({ color:0x15181b, metalness:0.0,  roughness:0.88 });
+const matLed   = new THREE.MeshStandardMaterial({ color:0xffffff, emissive:0xfff0d8, emissiveIntensity:1.8,
+                                                  metalness:0.0, roughness:0.4 });
+// Real serve-over glass is nearly invisible; at transmission 0.96 the curved sweep vanished from the
+// QA capture entirely. Dropping transmission to 0.72 with a faint tint keeps the product legible AND
+// gives the pane a specular sheen, so the curve reads as a surface instead of empty air.
+const matGlass = new THREE.MeshPhysicalMaterial({ color:0xdaebf2, metalness:0.0, roughness:0.02,
+                                                  transmission:0.72, thickness:0.012, ior:1.5,
+                                                  transparent:true, opacity:0.5, side:THREE.DoubleSide });
+const matTray  = new THREE.MeshStandardMaterial({ color:0xb9bec2, metalness:0.9,  roughness:0.35 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (parent,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); parent.add(m); return m; };
+
+// --- base cabinet: stainless carcase, recessed kick, granite customer band ---
+const base = new THREE.Group();
+put(base, L, KICK_H, D - 2*KICK_INSET, matKick, 0, KICK_H/2, 0);
+put(base, L, DECK_Y - KICK_H - 0.16, D, matSteel, 0, KICK_H + (DECK_Y - KICK_H - 0.16)/2, 0);
+// granite band on the customer side — the shopfitting detail that separates a deli case from a bench
+put(base, L, 0.16, 0.02, matStone, 0, DECK_Y - 0.08, D/2 + 0.011);
+put(base, L, 0.16, D, matSteel, 0, DECK_Y - 0.08, 0);
+root.add(base);
+
+// --- display pan: the refrigerated well the product sits in ---
+const pan = new THREE.Group();
+put(pan, L - 0.06, PAN_T, PAN_D, matPan, 0, DECK_Y + PAN_T/2, 0.02);
+for(const sx of [-1,1]) put(pan, 0.02, 0.10, PAN_D, matPan, sx*(L/2 - 0.04), DECK_Y + 0.05, 0.02);
+put(pan, L - 0.06, 0.10, 0.02, matPan, 0, DECK_Y + 0.05, 0.02 - PAN_D/2);
+root.add(pan);
+
+// --- curved front glass: a quarter cylinder whose axis runs along the case length ---
+// CylinderGeometry's axis is +Y and theta starts at +Z; rotating -90° about Z puts the axis on X and
+// keeps theta running from +Z (the nose) to +Y (the top rail) — exactly the serve-over sweep.
+const glass = new THREE.Group();
+const arcGeo = new THREE.CylinderGeometry(GLASS_R, GLASS_R, L, 40, 1, true, 0, Math.PI/2);
+const arc = new THREE.Mesh(arcGeo, matGlass);
+arc.rotation.z = -Math.PI/2;
+arc.position.set(0, DECK_Y - 0.02, ARC_CZ);
+glass.add(arc);
+// quarter-disc end panels close the sweep at both ends
+for(const sx of [-1,1]){
+  const endGeo = new THREE.CircleGeometry(GLASS_R, 24, 0, Math.PI/2);
+  const end = new THREE.Mesh(endGeo, matGlass);
+  end.rotation.y = Math.PI/2;               // bring the disc into the YZ plane
+  end.position.set(sx*L/2, DECK_Y - 0.02, ARC_CZ);
+  glass.add(end);
+}
+// nose rail and top rail hold the pane — glass never floats in a real case
+put(glass, L, 0.035, 0.045, matSteel, 0, DECK_Y - 0.012, ARC_CZ + GLASS_R);
+put(glass, L, 0.05, 0.06, matSteel, 0, DECK_Y - 0.02 + GLASS_R + 0.02, ARC_CZ);
+root.add(glass);
+
+// --- canopy: the roof that spans from the top of the glass sweep back to the operator wall.
+// Without it the case reads as a bench with a slanted lid instead of a serve-over vitrina.
+const canopyZ0 = -(D/2), canopyZ1 = ARC_CZ + 0.06;
+put(root, L, 0.06, canopyZ1 - canopyZ0, matSteel, 0, TOP_Y - 0.03, (canopyZ0 + canopyZ1)/2);
+put(root, L, 0.05, 0.03, matSteel, 0, TOP_Y - 0.075, canopyZ1 - 0.015);   // front fascia of the canopy
+
+// --- LED batten under the canopy front edge ---
+const leds = new THREE.Group();
+put(leds, L - 0.10, 0.022, 0.03, matLed, 0, TOP_Y - 0.075, canopyZ1 - 0.05);
+const lamps = [];
+for(let i=0;i<3;i++){
+  const lamp = new THREE.PointLight(0xfff1dd, 3.2, 1.9, 2);
+  lamp.position.set((i-1)*L*0.33, TOP_Y - 0.12, ARC_CZ - 0.02);
+  leds.add(lamp); lamps.push(lamp);
+}
+root.add(leds);
+
+// --- operator side: sliding glass doors in a stainless frame ---
+const rear = new THREE.Group();
+put(rear, L, 0.04, 0.05, matSteel, 0, DECK_Y - 0.02, -(D/2 - 0.03));
+put(rear, L, 0.04, 0.05, matSteel, 0, DECK_Y + REAR_DOOR_H, -(D/2 - 0.03));
+for(const sx of [-1,1]){
+  const dgeo = new THREE.BoxGeometry(L/2 - 0.01, REAR_DOOR_H - 0.03, 0.008);
+  const dm = new THREE.Mesh(dgeo, matGlass);
+  dm.position.set(sx*(L/4), DECK_Y + REAR_DOOR_H/2, -(D/2 - 0.03) + sx*0.012);
+  rear.add(dm);
+  put(rear, 0.06, 0.10, 0.012, matSteel, sx*0.02 + sx*0.10, DECK_Y + REAR_DOOR_H/2, -(D/2 - 0.052));
+}
+// stainless spandrel closing the gap between the operator doors and the canopy
+put(rear, L, TOP_Y - 0.06 - (DECK_Y + REAR_DOOR_H + 0.02), 0.03, matSteel, 0,
+    (DECK_Y + REAR_DOOR_H + 0.02 + TOP_Y - 0.06)/2, -(D/2 - 0.03));
+put(rear, L, DECK_Y - KICK_H - 0.16, 0.02, matSteel, 0, KICK_H + (DECK_Y - KICK_H - 0.16)/2, -(D/2 - 0.011));
+root.add(rear);
+
+// --- product: stainless trays along the deck, each filled with instanced pieces ---
+const products = new THREE.Group();
+let seed = 20260808;
+const rnd = ()=> (seed = (seed*1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+const dummy = new THREE.Object3D();
+const TRAY_W = (L - 0.14) / TRAYS, TRAY_D = 0.44;
+const trayGeo = new THREE.BoxGeometry(TRAY_W - 0.02, 0.035, TRAY_D);
+const trays = new THREE.InstancedMesh(trayGeo, matTray, TRAYS);
+trays.castShadow = trays.receiveShadow = true;
+for(let i=0;i<TRAYS;i++){
+  dummy.position.set(-L/2 + 0.07 + TRAY_W*(i+0.5), DECK_Y + PAN_T + 0.018, 0.03);
+  dummy.rotation.set(0,0,0); dummy.updateMatrix();
+  trays.setMatrixAt(i, dummy.matrix);
+}
+trays.instanceMatrix.needsUpdate = true;
+products.add(trays);
+// deli/bakery pieces: two primitives, per-instance colour, deterministic layout
+const deli = [0xc2603f, 0xe0c07a, 0xb8452f, 0xe8d9b5, 0x8f5030, 0xd9a441];
+const matPiece = new THREE.MeshStandardMaterial({ metalness:0.0, roughness:0.62 });
+const pieceKinds = [
+  { geo: new THREE.CylinderGeometry(0.05,0.05,0.055,14), h:0.055, step:0.115 },   // round cheese/pâté
+  { geo: new THREE.BoxGeometry(0.10,0.06,0.14),          h:0.060, step:0.118 },   // block / terrine
+];
+const pieces = [];
+for(let i=0;i<TRAYS;i++){
+  const k = Math.floor(rnd()*pieceKinds.length), kind = pieceKinds[k];
+  const col = deli[Math.floor(rnd()*deli.length)];
+  const cols = Math.max(1, Math.floor((TRAY_W - 0.04) / kind.step));
+  for(let c=0;c<cols;c++) for(let r=0;r<2;r++){
+    pieces.push({ k, col,
+      x: -L/2 + 0.07 + TRAY_W*i + 0.03 + kind.step*(c+0.5),
+      y: DECK_Y + PAN_T + 0.036 + kind.h/2,
+      z: 0.03 + TRAY_D/2 - 0.10 - r*0.17 });
+  }
+}
+for(let k=0;k<pieceKinds.length;k++){
+  const mine = pieces.filter(p=>p.k===k);
+  if(!mine.length) continue;
+  const im = new THREE.InstancedMesh(pieceKinds[k].geo, matPiece, mine.length);
+  im.castShadow = im.receiveShadow = true;
+  const c = new THREE.Color();
+  mine.forEach((p,idx)=>{ dummy.position.set(p.x,p.y,p.z); dummy.rotation.set(0,0,0); dummy.updateMatrix();
+    im.setMatrixAt(idx, dummy.matrix); im.setColorAt(idx, c.setHex(p.col)); });
+  im.instanceMatrix.needsUpdate = true; if(im.instanceColor) im.instanceColor.needsUpdate = true;
+  products.add(im);
+}
+// price cards on the nose rail, one per tray
+const cardGeo = new THREE.BoxGeometry(TRAY_W*0.4, 0.05, 0.006);
+const cards = new THREE.InstancedMesh(cardGeo, new THREE.MeshStandardMaterial({ color:0xf0ece0, metalness:0, roughness:0.5 }), TRAYS);
+cards.castShadow = cards.receiveShadow = true;
+for(let i=0;i<TRAYS;i++){
+  dummy.position.set(-L/2 + 0.07 + TRAY_W*(i+0.5), DECK_Y + PAN_T + 0.05, 0.03 + TRAY_D/2 + 0.02);
+  dummy.rotation.set(-0.35,0,0); dummy.updateMatrix();
+  cards.setMatrixAt(i, dummy.matrix);
+}
+cards.instanceMatrix.needsUpdate = true;
+products.add(cards);
+root.add(products);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot   = document.getElementById('btnRot');
+const btnProd  = document.getElementById('btnProd');
+const btnGlass = document.getElementById('btnGlass');
+const btnLed   = document.getElementById('btnLed');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(btnProd, products);
+toggle(btnGlass, glass);
+btnLed.onclick = ()=>{ const on = matLed.emissiveIntensity > 0.1;
+  matLed.emissiveIntensity = on ? 0.0 : 1.8;
+  lamps.forEach(l=>{ l.intensity = on ? 0.0 : 3.2; });
+  btnLed.classList.toggle('on', !on); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__vitrinaApp = { runtime:{ scene, renderer, camera, root } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

@@ -1,0 +1,311 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — retail/estante-farmacia · single-sided pharmacy shelving, 2 bays x 7 levels.
+  Built from disenos/catalog/shell-template.html. Contract: __estanteFarmaciaApp.runtime +
+  __qaRenderInfo + data-app-ready, render-on-demand, shadows frozen (autoUpdate=false, 1024), DPR<=2.
+  Instancing (block54 §2.3): shelves, label strips, dividers, tilt bins and ~300 medicine cartons.
+  The back panel, uprights and header are unique meshes.
+  Difference from retail/gondola (same family, different object): single-sided, shallow (0.40 m),
+  tall (2.00 m), and the facings are DIVIDED — the divider run is the pharmacy identity.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estantería de farmacia — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">ESTANTERÍA DE FARMACIA — acero pintado + divisores</div>
+  <div><span class="dim">2.00 × 0.40 × 2.05 m · 2 bahías × 7 niveles · estantes inclinados 6°</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnProd" class="on">PRODUCTO</button>
+  <button id="btnDiv" class="on">DIVISORES</button>
+  <button id="btnBin" class="on">CAJONES</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const BAY_W = 1.00, BAYS = 2, W = BAY_W*BAYS;
+const H = 2.00, D = 0.40;
+const BASE_Y = 0.10;                       // plinth
+const SHELF_T = 0.018, SHELF_D = 0.34;
+const LEVELS = [0.14, 0.40, 0.66, 0.92, 1.18, 1.44, 1.70];   // 7 levels; the lowest sits on the plinth
+const TILT = 0.105;                        // ~6° forward tilt so the facings present themselves
+const UP_W = 0.05, UP_D = 0.05;
+const LABEL_H = 0.030;
+const HEADER_H = 0.14;
+const BIN_LEVELS = [0.14, 0.40];           // the two lowest levels carry tilt bins, not cartons
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 10, 30);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.02;                            // painted white steel clips at 1.15
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 4.6, AZ = 1.02, EL = 0.20;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.05 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.02, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.02, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.5;   // COATED steel: the bare-metal IBL boost would clip the shelves
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4, 6, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-3; sun.shadow.camera.right=3; sun.shadow.camera.top=3.5; sun.shadow.camera.bottom=-3.5;
+scene.add(sun);
+// VERTICAL-SUBJECT FILL: a 2 m shelving face reflects the dark horizon; fill on the camera side.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 0.8);
+fill.position.set(-4.0, 3.0, 6.0);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: powder-coated shelving is dielectric; the dividers and bins
+// are polymer; only the bracket detail is bare metal.
+// ============================================================================
+const matSteel = new THREE.MeshStandardMaterial({ color:0xdfe2e5, metalness:0.0, roughness:0.50 });
+const matShelf = new THREE.MeshStandardMaterial({ color:0xd6dade, metalness:0.0, roughness:0.56 });
+const matBack  = new THREE.MeshStandardMaterial({ color:0xbfc4c9, metalness:0.0, roughness:0.66 });
+const matLabel = new THREE.MeshStandardMaterial({ color:0xf3efe4, metalness:0.0, roughness:0.40 });
+const matDiv   = new THREE.MeshStandardMaterial({ color:0xc9d3da, metalness:0.0, roughness:0.28,
+                                                  transparent:true, opacity:0.55 });
+const matHead  = new THREE.MeshStandardMaterial({ color:0x1f6b5c, metalness:0.0, roughness:0.44 });
+const matKick  = new THREE.MeshStandardMaterial({ color:0x353a41, metalness:0.0, roughness:0.72 });
+const matBin   = new THREE.MeshStandardMaterial({ metalness:0.0, roughness:0.52 });
+const matCart  = new THREE.MeshStandardMaterial({ metalness:0.0, roughness:0.62 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const dummy = new THREE.Object3D();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (parent,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); parent.add(m); return m; };
+
+// --- plinth + kick ---
+put(root, W, BASE_Y - 0.02, D - 0.06, matKick, 0, (BASE_Y - 0.02)/2, 0);
+put(root, W, 0.02, D, matSteel, 0, BASE_Y - 0.01, 0);
+
+// --- back panel: slotted sheet with horizontal joints, the only continuous surface ---
+put(root, W, H - BASE_Y, 0.022, matBack, 0, BASE_Y + (H - BASE_Y)/2, -(D/2 - 0.011));
+for(const y of [0.77, 1.33, 1.89]){
+  put(root, W, 0.010, 0.026, matKick, 0, y, -(D/2 - 0.012));
+}
+
+// --- uprights at every bay joint + closed end panels ---
+for(let i=0;i<=BAYS;i++){
+  const x = Math.min(Math.max(-W/2 + i*BAY_W, -W/2 + UP_W/2), W/2 - UP_W/2);
+  put(root, UP_W, H - BASE_Y, UP_D, matSteel, x, BASE_Y + (H - BASE_Y)/2, -(D/2 - UP_D/2 - 0.022));
+}
+for(const sx of [-1,1]) put(root, 0.022, H - BASE_Y, D, matSteel, sx*(W/2 - 0.011), BASE_Y + (H-BASE_Y)/2, 0);
+
+// --- shelves + label strips: 6 levels x 2 bays, identical -> instanced (block54 §2.3) ---
+// The shelf is TILTED forward: a pharmacy shelf presents its facings instead of hiding them behind
+// the front lip. The label strip stays vertical on the front edge, so it is a separate batch.
+const shelfGeo = new THREE.BoxGeometry(BAY_W - 0.06, SHELF_T, SHELF_D);
+const shelves = new THREE.InstancedMesh(shelfGeo, matShelf, LEVELS.length*BAYS);
+shelves.castShadow = shelves.receiveShadow = true;
+const labelGeo = new THREE.BoxGeometry(BAY_W - 0.06, LABEL_H, 0.008);
+const labels = new THREE.InstancedMesh(labelGeo, matLabel, LEVELS.length*BAYS);
+labels.castShadow = labels.receiveShadow = true;
+const lipGeo = new THREE.BoxGeometry(BAY_W - 0.06, 0.024, 0.008);
+const lips = new THREE.InstancedMesh(lipGeo, matShelf, LEVELS.length*BAYS);
+lips.castShadow = lips.receiveShadow = true;
+let si = 0;
+const bayX = b => -W/2 + BAY_W*(b + 0.5);
+for(const y of LEVELS){
+  for(let b=0;b<BAYS;b++){
+    dummy.position.set(bayX(b), y, -0.01); dummy.rotation.set(TILT, 0, 0); dummy.updateMatrix();
+    shelves.setMatrixAt(si, dummy.matrix);
+    const frontZ = -0.01 + Math.cos(TILT)*SHELF_D/2, frontY = y - Math.sin(TILT)*SHELF_D/2;
+    dummy.position.set(bayX(b), frontY + 0.014, frontZ + 0.006); dummy.rotation.set(0,0,0); dummy.updateMatrix();
+    lips.setMatrixAt(si, dummy.matrix);
+    dummy.position.set(bayX(b), frontY - LABEL_H/2, frontZ + 0.010); dummy.rotation.set(0,0,0); dummy.updateMatrix();
+    labels.setMatrixAt(si, dummy.matrix);
+    si++;
+  }
+}
+shelves.instanceMatrix.needsUpdate = labels.instanceMatrix.needsUpdate = lips.instanceMatrix.needsUpdate = true;
+root.add(shelves, lips, labels);
+
+// --- dividers: transparent polymer fins that split each shelf into facing channels ---
+const dividers = new THREE.Group();
+const DIV_PER_BAY = 5;
+const divGeo = new THREE.BoxGeometry(0.006, 0.13, SHELF_D - 0.03);
+const divs = new THREE.InstancedMesh(divGeo, matDiv, LEVELS.length*BAYS*(DIV_PER_BAY+1));
+let di = 0;
+for(const y of LEVELS){
+  for(let b=0;b<BAYS;b++){
+    for(let k=0;k<=DIV_PER_BAY;k++){
+      const x = bayX(b) - (BAY_W - 0.08)/2 + (BAY_W - 0.08)*k/DIV_PER_BAY;
+      dummy.position.set(x, y + 0.072, -0.01); dummy.rotation.set(TILT,0,0); dummy.updateMatrix();
+      divs.setMatrixAt(di++, dummy.matrix);
+    }
+  }
+}
+divs.instanceMatrix.needsUpdate = true;
+dividers.add(divs);
+root.add(dividers);
+
+// --- tilt bins on the two lowest levels: OTC packs live in bins, not in divided channels ---
+const bins = new THREE.Group();
+const binColors = [0x2f6fb0, 0x3f8f5a, 0xc4442f, 0xe0a53a];
+const BINS_PER_BAY = 4;
+const binGeo = new THREE.BoxGeometry(BAY_W/BINS_PER_BAY - 0.03, 0.14, SHELF_D - 0.06);
+{
+  const im = new THREE.InstancedMesh(binGeo, matBin, BIN_LEVELS.length*BAYS*BINS_PER_BAY);
+  im.castShadow = im.receiveShadow = true;
+  const c = new THREE.Color(); let bi = 0;
+  for(const y of BIN_LEVELS) for(let b=0;b<BAYS;b++) for(let k=0;k<BINS_PER_BAY;k++){
+    const x = bayX(b) - BAY_W/2 + (BAY_W/BINS_PER_BAY)*(k+0.5);
+    dummy.position.set(x, y + 0.078, -0.01); dummy.rotation.set(TILT,0,0); dummy.updateMatrix();
+    im.setMatrixAt(bi, dummy.matrix);
+    im.setColorAt(bi, c.setHex(binColors[(k + b) % binColors.length]));
+    bi++;
+  }
+  im.instanceMatrix.needsUpdate = true; if(im.instanceColor) im.instanceColor.needsUpdate = true;
+  bins.add(im);
+}
+root.add(bins);
+
+// --- product: medicine cartons standing in the divided channels of the upper levels ---
+const products = new THREE.Group();
+let seed = 20260808;
+const rnd = ()=> (seed = (seed*1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+const pharma = [0xe8e4d8, 0xd8e6ef, 0xe6dfe9, 0xdfe9d8, 0xf0e2d2, 0xe9d9d9];
+const cartonGeo = new THREE.BoxGeometry(0.042, 0.115, 0.075);
+const upper = LEVELS.filter(y => !BIN_LEVELS.includes(y));
+const cells = [];
+for(const y of upper){
+  for(let b=0;b<BAYS;b++){
+    for(let k=0;k<DIV_PER_BAY;k++){
+      const x0 = bayX(b) - (BAY_W - 0.08)/2 + (BAY_W - 0.08)*k/DIV_PER_BAY;
+      const x1 = bayX(b) - (BAY_W - 0.08)/2 + (BAY_W - 0.08)*(k+1)/DIV_PER_BAY;
+      const col = pharma[Math.floor(rnd()*pharma.length)];
+      const n = Math.max(1, Math.floor((x1 - x0 - 0.012)/0.046));
+      for(let i=0;i<n;i++){
+        const x = x0 + 0.006 + 0.046*(i + 0.5);
+        for(let r=0;r<2;r++){
+          const zLocal = SHELF_D/2 - 0.06 - r*0.085;
+          cells.push({ col, x,
+            y: y + SHELF_T/2 + 0.058 + Math.sin(TILT)*(-zLocal),
+            z: -0.01 + Math.cos(TILT)*zLocal });
+        }
+      }
+    }
+  }
+}
+{
+  const im = new THREE.InstancedMesh(cartonGeo, matCart, cells.length);
+  im.castShadow = im.receiveShadow = true;
+  const c = new THREE.Color();
+  cells.forEach((p,idx)=>{ dummy.position.set(p.x,p.y,p.z); dummy.rotation.set(TILT,0,0); dummy.updateMatrix();
+    im.setMatrixAt(idx, dummy.matrix); im.setColorAt(idx, c.setHex(p.col)); });
+  im.instanceMatrix.needsUpdate = true; if(im.instanceColor) im.instanceColor.needsUpdate = true;
+  products.add(im);
+}
+root.add(products);
+
+// --- header band: it sits on the FRONT plane and the cap spans the full depth. Parking it at the
+// back left a floating green slab with a visible gap over the shelving in the first QA capture.
+put(root, W, 0.024, D, matSteel, 0, H - 0.012, 0);
+put(root, W - 0.02, HEADER_H, 0.026, matHead, 0, H + HEADER_H/2, D/2 - 0.02);
+put(root, W, 0.022, 0.05, matSteel, 0, H + HEADER_H, D/2 - 0.02);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot  = document.getElementById('btnRot');
+const btnProd = document.getElementById('btnProd');
+const btnDiv  = document.getElementById('btnDiv');
+const btnBin  = document.getElementById('btnBin');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible; btn.classList.toggle('on', obj.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(btnProd, products);
+toggle(btnDiv, dividers);
+toggle(btnBin, bins);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__estanteFarmaciaApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__estante-farmaciaApp'] = globalThis.__estanteFarmaciaApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

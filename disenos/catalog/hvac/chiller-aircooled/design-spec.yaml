@@ -1,0 +1,230 @@
+# DesignSpec — air-cooled screw chiller (packaged outdoor unit)
+# First asset of the catalog `hvac` family.
+# EVIDENCE DISCIPLINE: `hvac` is NOT a needs-research family, so this asset has no preserved
+# manufacturer datasheet behind it. The only certified dimensional anchor is the local corpus
+# (research/HANDBOOK.md §3.0 reference table). Everything narrower than that table is [INFER] and
+# is marked `low`/`med` confidence here rather than dressed up as measured.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: chiller-aircooled
+family: hvac
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # fin pitch and panel gauge are material, not voxels
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 15 -> moderate.
+  scores: {silhouette: 2, components: 3, hierarchy: 1, repetition: 3,
+           material_layers: 2, detail: 2, occlusion: 1, action_readiness: 1}
+  tier: moderate
+  notes: >
+    A long low box whose identity is the pairing of a FINNED CONDENSER BAND with a TOP FAN DECK
+    over a closed machine compartment. repetition 3: fins (64 per slab) and the 4-fan array are
+    genuine repetition and are instanced. occlusion 1: the compressors and evaporator live inside
+    the compartment and are only readable with the panels toggled off.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    finned_coil_recipe: "disenos/in-row/inrow-cooler-realistic-v1.html (instanced fins + fin canvas texture)"
+    palette: "research/HANDBOOK.md §3.1 (near-binary metalness; corrected copper #f0a67a)"
+    status_colors: "research/HANDBOOK.md §3.4 (ISA-101: grey is the normal state, not green)"
+
+references:
+  - source: "research/HANDBOOK.md §3.0 (tabla de dimensiones de referencia)"
+    evidences: "[CERT] 'Chiller enfriado por aire | 3-5 m largo x ~2 m alto' — the sanity envelope this asset sits inside."
+    suitability: pass
+  - source: "disenos/in-row/inrow-cooler-realistic-v1.html §serpentín"
+    evidences: >
+      [CERT] Proven local recipe for a finned coil that survives the gate: teal/alu core + instanced
+      0.004 m fin slats + perimeter frame + copper headers, one draw call for the fin pack.
+    suitability: pass
+  - source: "research/HANDBOOK.md §3.1 (paleta PBR corregida)"
+    evidences: >
+      [CERT] `coil` aluminium fins metalness 0.9-1.0; `panelBox` painted casing 0.0-0.05;
+      `copper` must be #f0a67a-ish, not the old brown 0xc0762e.
+    suitability: pass
+
+dimensions_real:
+  # CONFIDENCE DISCIPLINE: only the HANDBOOK envelope is certified. The internal breakdown is a
+  # coherent choice inside that envelope, not a measurement of any specific model.
+  length_m:        {value: 4.20, confidence: med}    # [CERT] inside the 3-5 m band, §3.0
+  width_m:         {value: 2.25, confidence: low}    # [INFER] two coil slabs + a plenum wide enough for 880 mm fans
+  height_m:        {value: 2.42, confidence: med}    # [CERT] "~2 m alto" order of magnitude, fan cowl included
+  base_frame_h_m:  {value: 0.16, confidence: low}    # [INFER] channel rail + neoprene isolator pads
+  machine_top_m:   {value: 1.05, confidence: low}    # [INFER] compartment tall enough for a horizontal screw compressor
+  coil_y0_m:       {value: 1.10, confidence: low}    # [INFER] coil band starts above the compartment
+  coil_y1_m:       {value: 2.06, confidence: low}    # [INFER] coil band ends under the fan deck
+  coil_thickness_m:{value: 0.11, confidence: low}    # [INFER] multi-row finned pack
+  coil_length_m:   {value: 4.04, confidence: low}    # [INFER] full length minus the end tube sheets
+  fan_diameter_m:  {value: 0.88, confidence: low}    # [INFER] common axial condenser fan size
+  fan_count:       {value: 4,    confidence: low}    # [INFER] set by the coil length / fan pitch
+  fan_pitch_m:     {value: 1.02, confidence: low}    # [INFER] 4 fans distributed over the deck
+  evap_shell_d_m:  {value: 0.58, confidence: low}    # [INFER] shell-and-tube evaporator, insulated
+  compressor_count:{value: 2,    confidence: low}    # [INFER] two independent refrigerant circuits
+  water_nozzle_d_m:{value: 0.17, confidence: low}    # [INFER] grooved-end chilled-water connection
+
+hierarchy:
+  - name: root
+    children:
+      - name: base            # channel rails, cross members, neoprene isolator pads
+        pivot: [0, 0, 0]
+        animation: none
+      - name: machine         # evaporator, 2 screw compressors, oil separators (inside the compartment)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: pipes           # chilled-water nozzles + copper suction/discharge line set (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: coils           # 2 vertical finned slabs + plenum end walls
+        pivot: [0, 0, 0]
+        animation: none
+      - name: skin            # removable machine-compartment panels (togglable, reveals `machine`)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: panelBox        # control enclosure: HMI + ISA-101 lamps, same end as the water nozzles
+        pivot: [0, 0, 0]
+        animation: none
+      - name: fanDeck         # deck plate, venturi rings, 4 rotors (instanced blades), instanced guard
+        pivot: [0, 0, 0]
+        animation: spin       # rotors only; the deck itself is static
+        children:
+          - name: rotor[0..3]
+            pivot: [fan_x, 2.30, 0]
+            animation: spin
+
+materials:
+  - id: aluminium-fin
+    family: bare-metal
+    color: "#d2dade"
+    metalness: 1.0
+    roughness: 0.42
+    map: "procedural canvas: vertical fin ribbing, repeat 28x1"
+    evidence: "HANDBOOK §3.1 `coil` -> 0.9-1.0 (aletas de aluminio)"
+    confidence: 0.9
+    note: >
+      The FIRST QA capture used a dark fin map (#8d979c base) and the coil read as a black hole:
+      on a metal, the map tints F0, so a dark map on a vertical face reflecting the dark horizon
+      collapses to near-black. The fix was raising the map value, NOT lowering metalness.
+  - id: galvanised-frame
+    family: bare-metal
+    color: "#c0c6c9"
+    metalness: 0.95
+    roughness: 0.38
+    evidence: "HANDBOOK §3.1 `skid`/`coilFrame` -> 0.85-1.0"
+    confidence: 0.85
+  - id: painted-casing
+    family: painted-metal
+    color: "#cfd4d7"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1 `panelBox` -> 0.0-0.05 (panel de gabinete pintado)"
+    confidence: 0.9
+  - id: compressor-shell
+    family: painted-metal
+    color: "#394450"
+    metalness: 0.0
+    roughness: 0.48
+    evidence: "HANDBOOK §3.1 `compBody` -> 0.0-0.05 (carcasa pintada, dieléctrico)"
+    confidence: 0.9
+  - id: elastomeric-insulation
+    family: rubber
+    color: "#191c20"
+    metalness: 0.0
+    roughness: 0.92
+    evidence: "HANDBOOK §3.1 dielectric; closed-cell insulation over the evaporator shell"
+    confidence: 0.8
+  - id: copper-line
+    family: bare-metal
+    color: "#f0a67a"
+    metalness: 1.0
+    roughness: 0.30
+    evidence: "HANDBOOK §3.1 `copper` correction: #f0a67a-#f7bc9e, aligned to Filament's measured F0"
+    confidence: 0.85
+  - id: neoprene-pad
+    family: rubber
+    color: "#101316"
+    metalness: 0.0
+    roughness: 0.95
+    evidence: "HANDBOOK §3.1 dielectric (caucho)"
+    confidence: 0.8
+
+critical_features:
+  - id: condenser-band-read
+    desc: >
+      The upper third of the long sides is a continuous FINNED band — visible vertical fin ribbing
+      with a tube sheet at each end — not a flat painted panel. This is what separates a chiller
+      from a generic packaged box.
+    threshold: 0.80
+  - id: fan-deck-array
+    desc: >
+      Four axial fans sit on the top deck in venturi rings with a wire guard over each; the blades
+      are visible through the guard and the array spans the condenser length.
+    threshold: 0.78
+  - id: service-face
+    desc: >
+      One end carries the control enclosure (HMI + ISA-101 lamps) AND the grooved chilled-water
+      nozzles, so the unit has a readable service face rather than four blank ends.
+    threshold: 0.75
+  - id: closed-machine-compartment
+    desc: >
+      The lower section is a closed compartment of bolted removable panels with visible joint
+      strips — no open cavity. With PANELES off, the evaporator, two screw compressors and the
+      oil separators are readable inside.
+    threshold: 0.75
+  - id: proportion-scale
+    desc: "At 4.20 x 2.25 x 2.42 m a 1.8 m person reads correct beside the unit: shoulder height is about the coil base."
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 110      # measured 98 at the review camera (SwiftShader headless, DPR 1)
+    tris: 30000     # measured 8,946
+
+camera:
+  azimuth_deg: 46
+  elevation_deg: 17
+  fov: 38
+  target_y_m: 1.25
+  radius_m: 8.4
+
+lighting: house-rig + vertical-subject fill
+  # DOCUMENTED DEVIATION (same class as puerta-cuarto-frio): the house rig was calibrated on
+  # horizontal equipment surfaces. This subject is a long VERTICAL wall of coil and casing that
+  # reflects the dark horizon. One extra DirectionalLight sits camera-side, mirrored about the
+  # panel normal (+Z), and environmentIntensity goes 1.9 -> 2.1. Metalness/roughness are UNCHANGED.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "VENTILADORES"     # per-frame rotor spin; holds needsRender only while running
+  - "PANELES"          # removes the machine-compartment casing, revealing compressors + evaporator
+  - "HIDRÁULICA"       # hides the water nozzles and the copper line set
+
+instancing:
+  # block54 §2.3 — instancing ONLY where the repetition is real.
+  - what: "condenser fins"
+    count: "64 per slab x 2 slabs"
+    draws_saved: "128 meshes -> 2"
+  - what: "fan blades"
+    count: "5 per rotor x 4 rotors"
+    draws_saved: "20 meshes -> 4 (one InstancedMesh per rotor, because each rotor spins on its own)"
+  - what: "fan guard rings + crossbars"
+    count: "3 rings + 3 bars x 4 fans"
+    draws_saved: "24 meshes -> 2"
+  # NOT instanced: compressors, evaporator, nozzles, control enclosure — unique parts.
+
+colorTarget:
+  # MEASURED from the rendered painted casing (headless SwiftShader capture at 1280x800), then
+  # frozen as the regression anchor. Not a guessed sRGB.
+  srgb: [217, 218, 221]
+  deltaE00Max: 8
+  crop: "90x70+400+440"    # clean casing panel between two joint strips, at 1280x800
+  secondary_observed:
+    coil_fin_band: [58, 70, 78]   # crop 120x80+420+300 — recorded so a future regression can tell
+                                  # "the coil went black again" from "the paint drifted".
