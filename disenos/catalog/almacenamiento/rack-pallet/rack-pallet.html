@@ -1,0 +1,290 @@
+<!doctype html>
+<!--
+  rack-pallet — catalog asset, family `almacenamiento`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block58.md  (SSI SCHÄFER PR 350 / PR 600 + EN 13698-1)
+  Spec: ./design-spec.yaml
+  NOTE: 3 bays, not 1 — DGUV 108-007 requires a rack row to have at least 3 bays [Block 58 §58.5].
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rack selectivo de pallets — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Rack selectivo de pallets — fila de 3 bahías</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· puntal galvanizado · viga RAL 5010</span></div>
+  <div class="dim">bahía 2.70 m · fondo 1.05 m · pallet EUR 1.20 × 0.80 m (vuela 75 mm)</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnPal" class="on">PALLETS</button>
+  <button id="btnDeck" class="on">WIRE DECKS</button>
+  <button id="btnGuard" class="on">GUARDS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 58]) ----------
+const BAYS = 3, LEVELS = 3;                // [CERT-doc] DGUV 108-007 minimum row / minimum levels
+const BAY_W = 2.70;                        // [CERT-doc] catalogue beam length
+const DEPTH = 1.05;                        // [CERT-doc] rack depth for a 1,200 mm pallet stored in depth
+const UP_W = 0.090, UP_D = 0.075;          // [CERT-doc] 90 mm profile width
+const BEAM_H = 0.110, BEAM_D = 0.050;      // [CERT-doc] CE 110 — the profile number IS the height
+const PITCH = 0.050;                       // [CERT-doc] 50 : 50 system hole pattern
+const LEVEL_Y = [1.60, 3.20, 4.80];        // [INFER] 1.60 m pitch, under the 2,500 mm compartment max
+const FRAME_H = 6.10;                      // [INFER] top load 4.80+0.144+0.68 = 5.62, plus the DGUV
+                                           // §1.1 end-frame increase of >= 500 mm above rack height
+const PAL_L = 1.20, PAL_W = 0.80, PAL_H = 0.144;   // [CERT-web]/[CERT-a] EN 13698-1
+const OVERHANG = (PAL_L - DEPTH) / 2;      // 0.075 — THE defining detail: the pallet overhangs
+const ROW_W = BAYS * BAY_W;
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 22, 60);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 300);
+const R = 16.5, AZ = 0.700, EL = 0.20;                          // 42° azimuth / 12° elevation (spec camera)
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 2.85 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 2.85, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 2.85, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(9, 14, 8); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-8; sun.shadow.camera.right=8; sun.shadow.camera.top=8; sun.shadow.camera.bottom=-8;
+sun.shadow.camera.far = 40;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(60,60),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Galvanized upright = BARE METAL (0.92). Painted RAL 5010 beam = DIELECTRIC (0.0):
+//   [Block 58] §58.3 — painting the beam as metal-blue is the predictable error here.
+// ============================================================================
+const matUp    = new THREE.MeshStandardMaterial({ color:0xb9bdbe, metalness:0.92, roughness:0.46 });
+const matBeam  = new THREE.MeshStandardMaterial({ color:0x15597f, metalness:0.0,  roughness:0.55 });
+const matDeck  = new THREE.MeshStandardMaterial({ color:0x9fa4a6, metalness:0.90, roughness:0.52 });
+const matWood  = new THREE.MeshStandardMaterial({ color:0xa8814f, metalness:0.0,  roughness:0.82 });
+const matGuard = new THREE.MeshStandardMaterial({ color:0xd8a413, metalness:0.0,  roughness:0.60 });
+const matLoad  = new THREE.MeshStandardMaterial({ color:0xb8a184, metalness:0.0,  roughness:0.90 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Repetition is instanced (first real InstancedMesh case in the catalog,
+//          [Block 54] low-repetition caveat no longer applies): braces, beams, footplates,
+//          deck wires, deck channels and the pallet parts are all InstancedMesh.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xforms, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = im.receiveShadow = true;
+  xforms.forEach((t,i)=>{
+    _p.set(t[0], t[1], t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0));
+    _s.set(t[6]||1, t[7]||1, t[8]||1);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s));
+  });
+  im.instanceMatrix.needsUpdate = true;
+  parent.add(im);
+  return im;
+}
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+
+// bay centre x for bay b, and the 4 frame x positions
+const frameX = i => -ROW_W/2 + i*BAY_W;                 // 0..BAYS  → 4 frames for 3 bays
+const bayCx  = b => -ROW_W/2 + (b+0.5)*BAY_W;
+
+// --- frames: 2 galvanized posts (front/rear) + brace lattice + footplates ---
+const frames = new THREE.Group();
+const postGeo = new THREE.BoxGeometry(UP_W, FRAME_H, UP_D);
+for(let i=0;i<=BAYS;i++){
+  for(const z of [-DEPTH/2 + UP_D/2, DEPTH/2 - UP_D/2]){
+    const p = new THREE.Mesh(postGeo, matUp);
+    p.castShadow = p.receiveShadow = true;
+    p.position.set(frameX(i), FRAME_H/2, z);
+    frames.add(p);
+  }
+}
+// perforation: a shallow slot every 50 mm on the front face of each post (the 50:50 hole pattern)
+const slotX = [], nSlots = Math.floor((FRAME_H - 0.20) / PITCH);
+for(let i=0;i<=BAYS;i++) for(let k=0;k<nSlots;k++){
+  slotX.push([frameX(i), 0.12 + k*PITCH, DEPTH/2 - UP_D + 0.001, 0,0,0, 1,1,1]);
+}
+instanced(new THREE.BoxGeometry(UP_W*0.42, 0.016, 0.004),
+  new THREE.MeshStandardMaterial({ color:0x6d7376, metalness:0.9, roughness:0.6 }), slotX, frames);
+// brace lattice between front and rear post (the welded frame of the catalogue text)
+const braces = [], braceLen = Math.hypot(DEPTH - UP_D, 0.62);
+for(let i=0;i<=BAYS;i++){
+  for(let k=0; k<8; k++){
+    const y = 0.35 + k*0.62;
+    if(y + 0.62 > FRAME_H) break;
+    braces.push([frameX(i), y + 0.31, 0, (k%2 ? 1 : -1) * Math.atan2(DEPTH-UP_D, 0.62), 0, 0, 1, 1, 1]);
+  }
+  for(let k=0; k<9; k++){                                  // horizontal struts
+    const y = 0.35 + k*0.62;
+    if(y > FRAME_H) break;
+    braces.push([frameX(i), y, 0, Math.PI/2, 0, 0, 1, (DEPTH-UP_D)/braceLen, 1]);
+  }
+}
+instanced(new THREE.BoxGeometry(0.040, braceLen, 0.030), matUp, braces, frames);
+// footplates — "Solid floor plates safely transfer the loads to the floor" [CERT-doc]
+const feet = [];
+for(let i=0;i<=BAYS;i++) for(const z of [-DEPTH/2 + UP_D/2, DEPTH/2 - UP_D/2]) feet.push([frameX(i), 0.008, z]);
+instanced(new THREE.BoxGeometry(0.16, 0.016, 0.14), matUp, feet, frames);
+root.add(frames);
+
+// --- beams: painted RAL 5010, 2 per bay per level, bolt-free into the upright ---
+const beams = [];
+for(const y of LEVEL_Y) for(let b=0;b<BAYS;b++) for(const z of [-DEPTH/2 + BEAM_D/2, DEPTH/2 - BEAM_D/2]){
+  beams.push([bayCx(b), y - BEAM_H/2, z]);
+}
+instanced(new THREE.BoxGeometry(BAY_W - UP_W, BEAM_H, BEAM_D), matBeam, beams, root);
+// the welded 5-hook end connector, as a small painted lug at each beam end
+const lugs = [];
+for(const y of LEVEL_Y) for(let b=0;b<BAYS;b++) for(const sx of [-1,1]) for(const z of [-DEPTH/2 + BEAM_D/2, DEPTH/2 - BEAM_D/2]){
+  lugs.push([bayCx(b) + sx*(BAY_W - UP_W)/2, y - BEAM_H/2, z]);
+}
+instanced(new THREE.BoxGeometry(0.02, BEAM_H + 0.03, BEAM_D + 0.02), matBeam, lugs, root);
+
+// --- wire decks (DGUV §1.6): transverse wires + longitudinal support channels ---
+const decks = new THREE.Group();
+const wires = [], chans = [];
+const WIRE_STEP = 0.10;
+for(const y of LEVEL_Y) for(let b=0;b<BAYS;b++){
+  const n = Math.floor((BAY_W - UP_W - 0.06) / WIRE_STEP);
+  const x0 = bayCx(b) - (n-1)*WIRE_STEP/2;
+  for(let k=0;k<n;k++) wires.push([x0 + k*WIRE_STEP, y + 0.008, 0]);
+  for(const z of [-DEPTH/2 + 0.12, 0, DEPTH/2 - 0.12]) chans.push([bayCx(b), y + 0.002, z]);
+}
+instanced(new THREE.BoxGeometry(0.006, 0.006, DEPTH - 0.06), matDeck, wires, decks);
+instanced(new THREE.BoxGeometry(BAY_W - UP_W - 0.04, 0.012, 0.030), matDeck, chans, decks);
+root.add(decks);
+
+// --- pallets: EUR 1200 x 800, THE overhang detail — 1.20 m deep on a 1.05 m frame ---
+const pallets = new THREE.Group();
+const deckTop = [], blocks = [], skids = [], loads = [];
+const palX = [];
+for(let b=0;b<BAYS;b++){
+  const gap = (BAY_W - 3*PAL_W) / 4;                       // 4 x 75 mm clearance [Block 58 §58.4]
+  for(let p=0;p<3;p++) palX.push(bayCx(b) - BAY_W/2 + gap*(p+1) + PAL_W*(p+0.5));
+}
+for(const y of LEVEL_Y) for(const x of palX){
+  const base = y + 0.014;                                  // sits on the beam top face
+  deckTop.push([x, base + PAL_H - 0.011, 0]);              // top boards
+  skids.push([x, base + 0.011, 0]);                        // bottom boards
+  for(const z of [-PAL_L/2 + 0.075, 0, PAL_L/2 - 0.075]) blocks.push([x, base + PAL_H/2, z]);
+  loads.push([x, base + PAL_H + 0.35, 0]);
+}
+instanced(new THREE.BoxGeometry(PAL_W, 0.022, PAL_L), matWood, deckTop, pallets);
+instanced(new THREE.BoxGeometry(PAL_W, 0.022, PAL_L*0.82), matWood, skids, pallets);
+instanced(new THREE.BoxGeometry(PAL_W*0.9, PAL_H - 0.044, 0.10), matWood, blocks, pallets);
+instanced(new THREE.BoxGeometry(PAL_W - 0.05, 0.68, PAL_L - 0.08), matLoad, loads, pallets);
+root.add(pallets);
+
+// --- corner protectors at the free-standing end frames (DGUV §1.4) ---
+const guards = new THREE.Group();
+for(const i of [0, BAYS]) for(const z of [-DEPTH/2 + UP_D/2, DEPTH/2 - UP_D/2]){
+  const g = box(UP_W + 0.09, 0.40, UP_D + 0.09, matGuard);
+  g.position.set(frameX(i), 0.20, z);
+  guards.add(g);
+}
+root.add(guards);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible;
+  btn.classList.toggle('on', obj.visible); renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(document.getElementById('btnPal'), pallets);
+toggle(document.getElementById('btnDeck'), decks);
+toggle(document.getElementById('btnGuard'), guards);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__rackPalletApp = __app;
+globalThis['__rack-palletApp'] = __app;            // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
