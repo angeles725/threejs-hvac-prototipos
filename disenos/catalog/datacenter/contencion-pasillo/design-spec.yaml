@@ -1,0 +1,180 @@
+# DesignSpec — cold-aisle containment over two rack rows
+# Third asset of the catalog `datacenter` family.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+#
+# EVIDENCE DISCIPLINE: no manufacturer datasheet was preserved. The 600 mm access-floor grid and
+# the 600 x 1000 mm rack footprint are conventions, not fetched standards. All [INFER], <= 0.7.
+
+design: contencion-pasillo
+family: datacenter
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+
+complexity:
+  scores: {silhouette: 2, components: 3, hierarchy: 2, repetition: 3,
+           material_layers: 3, detail: 2, occlusion: 2, action_readiness: 2}
+  tier: complex
+  notes: >
+    The subject is the ENCLOSURE, not the cabinets. That drives one deliberate asymmetry: the racks
+    are simplified and instanced while the frame, roof and doors carry the detail. Twelve fully
+    modelled racks would cost more than the containment itself and would make this a duplicate of
+    rack-servidores at 12x the price.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    detailed_rack: "disenos/catalog/datacenter/rack-servidores/ (the one that carries rack detail)"
+    air_source: "disenos/catalog/datacenter/crac-crah/ (the unit that feeds this plenum)"
+
+references:
+  - source: "research/HANDBOOK.md §3.1 (PBR palette)"
+    evidences: >
+      [CERT] near-binary metalness; extruded aluminium is bare metal; polycarbonate glazing is a
+      transparent DIELECTRIC and must sit at metalness 0.
+    suitability: pass
+  - source: "containment practice (no document preserved in sources/)"
+    evidences: >
+      [INFER] the aisle is a whole number of floor tiles wide (2 x 600 mm here); perforated tiles
+      belong INSIDE the containment only; brush or foam seals close the joint onto the rack tops;
+      end doors slide rather than swing because a swinging leaf fouls a 1.2 m aisle.
+    suitability: partial
+
+dimensions_real:
+  tile_m:       {value: 0.60, confidence: med}
+  aisle_w_m:    {value: 1.20, confidence: med}   # exactly 2 tiles — not an arbitrary width
+  rack_w_m:     {value: 0.60, confidence: med}
+  rack_d_m:     {value: 1.00, confidence: low}
+  rack_h_m:     {value: 2.00, confidence: low}
+  racks_per_row:{value: 6,    confidence: low}
+  row_l_m:      {value: 3.60, confidence: low}
+  containment_h_m: {value: 2.30, confidence: low}
+  plenum_h_m:   {value: 0.45, confidence: low}
+
+hierarchy:
+  - name: root
+    children:
+      - name: floorGrp        # pedestals, solid tiles, perforated tiles INSIDE the aisle + holes
+        pivot: [0, 0, 0]
+        animation: none
+      - name: racks           # 12 simplified racks, instanced; both doors perforated
+        pivot: [0, 0, 0]
+        animation: none
+      - name: frame           # posts, eaves beams, purlins, brush seals onto the rack tops
+        pivot: [0, 0, 0]
+        animation: none
+      - name: roof            # polycarbonate panels between purlins (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: end_doors       # glazed sliding pairs at BOTH ends
+        pivot: per-leaf, travel along Z
+        animation: slide
+
+materials:
+  - id: frame-aluminium
+    family: bare-metal
+    color: "#c0c5c8"
+    metalness: 0.93
+    roughness: 0.40
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0 — mill-finish extrusion"
+    confidence: 0.85
+  - id: roof-polycarbonate
+    family: glass
+    color: "#cfe0e6"
+    metalness: 0.0             # a transparent dielectric is metalness 0, ALWAYS. Giving glazing a
+    roughness: 0.08            # metalness is the classic glass error.
+    opacity: 0.26
+    evidence: "HANDBOOK §3.1 dielectric (vidrio) metalness 0"
+    confidence: 0.85
+  - id: rack-powdercoat
+    family: painted-metal
+    color: "#2f343b"
+    metalness: 0.0
+    roughness: 0.52
+    evidence: "HANDBOOK §3.1 painted enclosure 0.0-0.05"
+    confidence: 0.9
+  - id: seal-brush
+    family: rubber
+    color: "#1a1d21"
+    metalness: 0.0
+    roughness: 0.80
+    evidence: "HANDBOOK §3.1 dielectric — brush/foam seal strip"
+    confidence: 0.8
+  - id: floor-tile
+    family: painted-metal
+    color: "#40454b"
+    metalness: 0.0
+    roughness: 0.74
+    evidence: "coated steel access-floor tile"
+    confidence: 0.75
+
+critical_features:
+  - id: sealed-on-six-faces
+    desc: >
+      Roof panels above, sliding doors at BOTH ends, rack rows closing both long sides, floor
+      below. One open end and the asset depicts a bypass, not containment — which is the whole
+      failure this equipment exists to prevent.
+    threshold: 0.85
+  - id: perforated-tiles-inside-only
+    desc: >
+      Perforated tiles land within the contained aisle and nowhere else. Outside it they would be
+      dumping cold supply into the very room the containment isolates.
+    threshold: 0.82
+  - id: both-rack-doors-perforated
+    desc: >
+      Air enters the rack front and leaves the back, so both doors are screens. A solid rear door
+      dead-ends the path the containment creates.
+    threshold: 0.78
+  - id: doors-slide-not-swing
+    desc: "A swinging leaf would foul a 1.20 m aisle; the leaves travel on a top track."
+    threshold: 0.75
+  - id: aisle-is-whole-tiles
+    desc: "The aisle is exactly 2 x 600 mm, so the containment lands on the floor grid."
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 100          # measured 69 — the racks cost 6 InstancedMesh, not 12 rack assemblies
+    tris: 34000         # measured 28,990 (the perforated screens dominate)
+
+camera:
+  azimuth_deg: 49
+  elevation_deg: 17
+  fov: 38
+  target_y_m: 1.30
+  radius_m: 9.6
+
+lighting: house-rig + vertical-subject fill
+  # DOCUMENTED DEVIATION: near-black rack rows are the dominant vertical mass. Panel-normal fill
+  # 1.35, environmentIntensity 2.4, ambient 0.30. metalness/roughness unchanged per HANDBOOK §3.1.
+  # NOTE the flip side, visible in the capture: the raised floor is HORIZONTAL, so the same raised
+  # IBL that rescues the racks also lifts the tiles. That is the rig behaving correctly, not a
+  # material error — the tiles were darkened once and left there rather than chased further.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "TECHO"                # roof panels off — shows the frame and the aisle from above
+  - "PUERTAS CORREDERAS"   # eased slide along the track
+  - "PISO TÉCNICO"
+
+colorTarget:
+  srgb: [31, 37, 45]
+  deltaE00Max: 8
+  crop: "16x16+757+321"   # clean rack body face at 1280x800, per-channel std 0.00
+
+verification:
+  gate: "node disenos/catalog/tools/verify-catalog-asset.mjs datacenter/contencion-pasillo"
+  state_probe: "node disenos/catalog/tools/probe-state.mjs datacenter/contencion-pasillo btnDoor,btnRoof open"
+  measured: {ready: true, calls: 69, triangles: 28990, console_errors: 0, shadowAuto: false}
+  # Caught by reading the capture: only the aisle-facing rack doors were perforated, so every rack
+  # rear was a solid slab — the containment fed air into cabinets that had no way to exhaust it.
+  # Counts moved (23,662 -> 28,990 tris) but nothing in the gate would have flagged the first
+  # version as wrong; it simply drew fewer triangles.
+  known_flake: >
+    The gate fetches three.js from unpkg. A CDN hiccup surfaces as ready:false / error:'no-renderer'
+    with an EMPTY console-error list and zero __ globals. Re-run before believing it.

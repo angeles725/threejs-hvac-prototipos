@@ -1,0 +1,188 @@
+# DesignSpec — detuned power-factor correction capacitor bank, 2 sections, 6 steps
+# Eighth asset of the catalog `electricos` family.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+#
+# EVIDENCE DISCIPLINE: no manufacturer datasheet was preserved. Every dimension is [INFER] from
+# PF-correction practice at confidence <= 0.7. Nothing here is presented as [CERT-doc].
+
+design: banco-capacitores
+family: electricos
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+
+complexity:
+  scores: {silhouette: 1, components: 3, hierarchy: 2, repetition: 3,
+           material_layers: 3, detail: 2, occlusion: 3, action_readiness: 1}
+  tier: complex
+  notes: >
+    material_layers 3 is carried almost entirely by the detuning reactor: laminated core (bare
+    steel), enamelled copper coil, dielectric formers and a steel clamping angle, all inside one
+    0.25 m component. Collapse them and the reactor reads as a grey brick.
+    repetition 3: 6 identical steps, each a can + contactor + fuse, so the step hardware instances.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    isa101_states: "research/HANDBOOK.md §3.4"
+
+references:
+  - source: "research/HANDBOOK.md §3.1 (PBR palette) + §3.4 (ISA-101)"
+    evidences: >
+      [CERT] near-binary metalness; extruded aluminium cans and laminated cores are bare metal,
+      coil formers and cabinet sheet are dielectrics; corrected warm copper; neutral grey normal.
+    suitability: pass
+  - source: "PF-correction practice (no document preserved in sources/)"
+    evidences: >
+      [INFER] a detuning reactor per step wherever harmonics are present, because a plain
+      capacitor-and-contactor bank resonates; capacitor life is strongly temperature-dependent, so
+      the cabinet carries a real intake-to-extraction path; a PF regulator with per-step indication
+      drives the contactors; discharge resistors bleed the cans down after a step drops out.
+    suitability: partial
+
+dimensions_real:
+  section_w_m:  {value: 0.80, confidence: low}
+  sections:     {value: 2,    confidence: low}
+  total_w_m:    {value: 1.60, confidence: low}
+  depth_m:      {value: 0.50, confidence: low}
+  body_h_m:     {value: 2.00, confidence: low}
+  plinth_h_m:   {value: 0.10, confidence: low}
+  overall_h_m:  {value: 2.10, confidence: low}
+  steps:        {value: 6,    confidence: low}
+  can_dia_m:    {value: 0.086, confidence: low}
+  can_h_m:      {value: 0.26,  confidence: low}
+  reactors:     {value: 3,    confidence: low}
+
+hierarchy:
+  - name: root
+    children:
+      - name: carcass         # plinth, walls, roof, division panel, front frame
+        pivot: [0, 0, 0]
+        animation: none
+      - name: roof_fans       # 2 extraction hoods, hubs and grille bars
+        pivot: per-hub, spin about Y
+        animation: rotate
+        notes: "gated on a state flag; only then does it hold needsRender true"
+      - name: capGuts         # 6 cans + tops + bushings, contactors, fuses, step bus,
+                              # control transformer, discharge resistors, DIN rail + terminal blocks
+        pivot: [0, 0, 0]
+        animation: none
+      - name: rctGuts         # 3 detuning reactors (core, coils, formers, clamps) + main breaker
+        pivot: [0, 0, 0]
+        animation: none
+      - name: doors           # 2 leaves, hinged left, eased swing
+        pivot: per-leaf left stile
+        animation: swing
+
+materials:
+  - id: capacitor-can-aluminium
+    family: bare-metal
+    color: "#c4c9cc"
+    metalness: 0.95
+    roughness: 0.36
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0 — extruded aluminium can"
+    confidence: 0.85
+  - id: reactor-lamination
+    family: bare-metal
+    color: "#a4aaae"
+    metalness: 0.95
+    roughness: 0.42
+    evidence: "HANDBOOK §3.1 'coilFrame -> 0.85-1.0, marco de acero'"
+    confidence: 0.8
+  - id: reactor-coil-enamelled
+    family: bare-metal
+    color: "#d8894f"
+    metalness: 0.85
+    roughness: 0.52            # enamelled, so duller than a bare bar but still a metal
+    evidence: "HANDBOOK §3.1 copper correction, darkened for the enamel film"
+    confidence: 0.7
+  - id: coil-former
+    family: plastic
+    color: "#6b4d2a"
+    metalness: 0.0
+    roughness: 0.66
+    evidence: "HANDBOOK §3.1 dielectric metalness 0"
+    confidence: 0.75
+  - id: paint-ral7035
+    family: painted-metal
+    color: "#cfd2cc"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1 'panelBox -> 0.0-0.05'"
+    confidence: 0.9
+  - id: lamp-isa101
+    family: emissive
+    color: "#5a6878"
+    metalness: 0.0
+    roughness: 0.40
+    evidence: "HANDBOOK §3.4 — engaged steps take the neutral-green ON, never red"
+    confidence: 0.9
+
+critical_features:
+  - id: detuned-not-plain
+    desc: >
+      A reactor section with 3 detuning reactors, each a laminated three-limb core with copper
+      coils on dielectric formers under steel clamps. Modelling only the cans would be modelling
+      the failure mode: on a harmonic-rich supply a plain bank resonates.
+    threshold: 0.82
+  - id: step-hardware-complete
+    desc: >
+      Each of the 6 steps is a can with bushings over its own contactor and fuse, wired to the
+      step bus. A can without switching hardware is a fixed bank, not a regulated one.
+    threshold: 0.80
+  - id: thermal-path-present
+    desc: >
+      Recessed intake louvres low on both doors and extraction hoods with fans on the roof.
+      Capacitor life is temperature-driven; sealing this cabinet would shorten it sharply.
+    threshold: 0.75
+  - id: section-is-filled
+    desc: >
+      Control transformer, discharge resistors and terminal rail occupy the bottom of the
+      capacitor section. Two step rows alone left ~0.5 m of bare backplate reading as unfinished.
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 200          # measured 145
+    tris: 12000         # measured 5,622
+
+camera:
+  azimuth_deg: 42
+  elevation_deg: 11
+  fov: 38
+  target_y_m: 1.06
+  radius_m: 5.0
+
+lighting: house-rig + vertical-subject fill
+  # DOCUMENTED DEVIATION: two large VERTICAL coated doors; the house rig was calibrated on
+  # horizontal equipment tops. Fix is LIGHT: DirectionalLight(0xdce6f2, 0.85) along the panel
+  # normal (+Z), environmentIntensity 2.2. metalness/roughness unchanged per HANDBOOK §3.1.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ABRIR PUERTAS"
+  - "EXTRACCIÓN"            # gated per-frame roof-fan spin
+  - "ESCALONES (ISA-101)"   # 4 of 6 steps engage in neutral-green; correction is normal, not a fault
+
+colorTarget:
+  srgb: [231, 232, 231]
+  deltaE00Max: 8
+  crop: "22x18+487+240"   # clean door face at 1280x800, per-channel std 0.00
+
+verification:
+  gate: "node disenos/catalog/tools/verify-catalog-asset.mjs electricos/banco-capacitores"
+  state_probe: "node disenos/catalog/tools/probe-state.mjs electricos/banco-capacitores btnDoor open"
+  measured: {ready: true, calls: 145, triangles: 5622, console_errors: 0, shadowAuto: false}
+  # KNOWN VIEW LIMIT, stated rather than hidden: with both leaves hinged left and the catalog camera
+  # at +X/+Z, the open capacitor door stands across the reactor bay, so the reactor section is NOT
+  # visible in the doors-open capture. This is correct physics, not a modelling defect — the bay was
+  # verified by orbiting. The capacitor section is the one placed nearest the camera because the
+  # cans and the regulator are this asset's identity.
+  known_flake: >
+    The gate fetches three.js from unpkg. A CDN hiccup surfaces as ready:false / error:'no-renderer'
+    with an EMPTY console-error list and zero __ globals. Re-run before believing it.

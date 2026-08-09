@@ -1,0 +1,181 @@
+# DesignSpec — downflow precision cooling unit (CRAC/CRAH) discharging into a raised-floor plenum
+# Second asset of the catalog `datacenter` family.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+#
+# EVIDENCE DISCIPLINE: no manufacturer datasheet was preserved. The 600 mm access-floor grid is the
+# only near-certain figure and it is stated from convention, not from a fetched standard. Every
+# dimension is [INFER] at confidence <= 0.7.
+
+design: crac-crah
+family: datacenter
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+
+complexity:
+  scores: {silhouette: 2, components: 3, hierarchy: 2, repetition: 3,
+           material_layers: 3, detail: 2, occlusion: 3, action_readiness: 2}
+  tier: complex
+  notes: >
+    silhouette 2 rather than 1 because the RAISED FLOOR is part of the asset. The unit's entire
+    logic is top return -> filters -> coil -> bottom discharge into a plenum, and a downflow unit
+    standing on bare slab is just a cabinet blowing at the ground. Modelling the floor is what
+    makes the machine legible.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    isa101_states: "research/HANDBOOK.md §3.4"
+    sibling: "disenos/catalog/datacenter/contencion-pasillo/ (the aisle this unit feeds)"
+
+references:
+  - source: "research/HANDBOOK.md §3.0 (scale) + §3.1 (PBR palette) + §3.4 (ISA-101)"
+    evidences: >
+      [CERT] 1 unit = 1 m; near-binary metalness; aluminium fins and copper tubes are bare metal
+      while filter media and cabinet coating are dielectrics.
+    suitability: pass
+  - source: "computer-room cooling practice (no document preserved in sources/)"
+    evidences: >
+      [INFER] 600 mm access-floor grid on adjustable pedestals; 0.40-0.60 m plenum depth; downflow
+      arrangement with EC plug fans under the floor line; an A-frame coil to win face area over
+      footprint; a condensate drain pan under every cooling coil; perforated tiles forming the cold
+      aisle in front of the unit.
+    suitability: partial
+
+dimensions_real:
+  unit_w_m:     {value: 1.75, confidence: low}
+  unit_d_m:     {value: 0.90, confidence: low}
+  overall_h_m:  {value: 2.40, confidence: low}   # measured from the STRUCTURAL SLAB, not the deck
+  plenum_h_m:   {value: 0.45, confidence: low}
+  floor_tile_m: {value: 0.60, confidence: med}   # the access-floor grid, by convention
+  coil_h_m:     {value: 0.78, confidence: low}
+  fans:         {value: 3,    confidence: low}
+  fan_r_m:      {value: 0.27, confidence: low}
+
+hierarchy:
+  - name: root
+    children:
+      - name: floorGrp        # pedestals, solid tiles, PERFORATED cold-aisle tiles + their holes
+        pivot: [0, 0, 0]      # togglable — turning it off is what reveals the discharge plenum
+        animation: none
+      - name: carcass         # sealed shell above the deck + OPEN frame below it
+        pivot: [0, 0, 0]
+        animation: none
+        notes: >
+          The section below the deck is a frame with open sides, never a closed box. Boxing it in
+          would seal the discharge path the whole machine exists to feed.
+      - name: return_grille   # top opening, angled bars, return filter mat
+        pivot: [0, 0, 0]
+        animation: none
+      - name: guts            # filter bank, A-frame coil with fins, drain pan, EC fans, CHW pipework
+        pivot: per-fan hub, spin about Y
+        animation: rotate
+      - name: hmi_band        # FIXED band above the doors: display, lamps, nameplate
+        pivot: [0, 0, 0]
+        animation: none
+      - name: doors           # 2 access leaves
+        pivot: per-leaf left stile
+        animation: swing
+
+materials:
+  - id: coil-fin-aluminium
+    family: bare-metal
+    color: "#a9b0b4"
+    metalness: 0.92
+    roughness: 0.58
+    evidence: "HANDBOOK §3.1 'coil -> 0.9-1.0, aletas de aluminio'"
+    confidence: 0.85
+  - id: filter-media
+    family: fabric
+    color: "#5b5f52"
+    metalness: 0.0             # the tempting slip: filter bank and coil sit 100 mm apart and look
+    roughness: 0.95            # similar in a photo, and they are OPPOSITE surface families.
+    evidence: "HANDBOOK §3.1 dielectric metalness 0"
+    confidence: 0.8
+  - id: cabinet-ral7035
+    family: painted-metal
+    color: "#cfd2cc"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "HANDBOOK §3.1 'panelBox -> 0.0-0.05'"
+    confidence: 0.9
+  - id: floor-tile
+    family: painted-metal
+    color: "#565b61"
+    metalness: 0.0
+    roughness: 0.72
+    evidence: "coated steel access-floor tile — dielectric"
+    confidence: 0.75
+  - id: chw-pipe
+    family: bare-metal
+    color: "#b9bec1"
+    metalness: 0.90
+    roughness: 0.44
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0"
+    confidence: 0.8
+
+critical_features:
+  - id: downflow-story-complete
+    desc: >
+      Top return grille with filter mat, filter bank, coil, EC plug fans BELOW the floor line, and
+      an open discharge frame feeding the plenum. The path must be continuous end to end.
+    threshold: 0.85
+  - id: raised-floor-is-part-of-it
+    desc: >
+      Pedestals, 600 mm tiles and a band of perforated tiles forming the cold aisle in front. Take
+      the floor away and the unit stops being a downflow machine.
+    threshold: 0.80
+  - id: coil-and-filter-are-different-materials
+    desc: >
+      Bare aluminium fins over copper against dielectric filter media in cardboard frames, with a
+      drain pan under the coil block.
+    threshold: 0.78
+  - id: a-frame-coil
+    desc: "Two coil slabs angled into an A so the face area exceeds the cabinet footprint."
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 160          # measured 113
+    tris: 16000         # measured 9,902
+
+camera:
+  azimuth_deg: 42
+  elevation_deg: 13
+  fov: 38
+  target_y_m: 1.18
+  radius_m: 6.4
+
+lighting: house-rig + vertical-subject fill
+  # DOCUMENTED DEVIATION: the cabinet front is a large VERTICAL coated plane. Fix is LIGHT:
+  # DirectionalLight(0xdce6f2, 0.85) along the panel normal (+Z), environmentIntensity 2.2.
+  # metalness/roughness unchanged per HANDBOOK §3.1.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ABRIR PUERTAS"
+  - "VENTILADORES EC"     # gated per-frame spin
+  - "PISO TÉCNICO"        # removing the floor is the reveal: it exposes the discharge plenum
+
+colorTarget:
+  srgb: [231, 232, 231]
+  deltaE00Max: 8
+  crop: "22x18+500+260"   # clean access door face at 1280x800, per-channel std 0.00
+
+verification:
+  gate: "node disenos/catalog/tools/verify-catalog-asset.mjs datacenter/crac-crah"
+  state_probe:
+    - "node disenos/catalog/tools/probe-state.mjs datacenter/crac-crah btnDoor open"
+    - "node disenos/catalog/tools/probe-state.mjs datacenter/crac-crah btnFloor plenum"
+  measured: {ready: true, calls: 113, triangles: 9902, console_errors: 0, shadowAuto: false}
+  # This asset needs TWO toggled captures, not one: the doors-open shot verifies the coil and filter
+  # bank, and only the floor-off shot verifies that the discharge section under the deck is an open
+  # frame rather than a sealed box. Either one alone leaves half the machine unchecked.
+  known_flake: >
+    The gate fetches three.js from unpkg. A CDN hiccup surfaces as ready:false / error:'no-renderer'
+    with an EMPTY console-error list and zero __ globals. Re-run before believing it.

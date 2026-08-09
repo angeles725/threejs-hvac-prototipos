@@ -1,0 +1,358 @@
+<!doctype html>
+<!--
+  banco-baterias — catalog asset, family `datacenter`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Spec: ./design-spec.yaml
+  NOTE ON SCOPE vs electricos/ups: that asset is the POWER cabinet, with one battery cabinet
+  attached only to show where the DC link goes. THIS one is the BANK — three cabinets wired as one
+  series string, with the string disconnect, the inter-cabinet links and the monitoring system that
+  only exist once there is more than one cabinet. No power conversion appears anywhere in it.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banco de baterías VRLA — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.025 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Banco de baterías VRLA — 3 gabinetes en serie, 60 bloques</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· jarra de ABS · bornes y puentes de plomo</span></div>
+  <div class="dim">2.16 × 0.85 × 2.00 m · desconectador de cadena + monitoreo por bloque</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">ABRIR PUERTAS</button>
+  <button id="btnLink" class="on">PUENTES ENTRE GABINETES</button>
+  <button id="btnAlm">BLOQUE DÉBIL (ISA-101)</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const NCAB = 3, CAB_W = 0.72, GAP = 0.00;
+const TOTAL_W = NCAB*CAB_W;                  // 2.16 — cabinets bolted together, not spaced
+const DEPTH = 0.85, PLINTH_H = 0.10, BODY_H = 1.90;
+const TOP_Y = PLINTH_H + BODY_H;             // 2.00
+const FRONT_Z = DEPTH/2;
+const DOOR_Y0 = PLINTH_H + 0.05, DOOR_Y1 = TOP_Y - 0.14;
+const NSHELF = 4, PER_SHELF = 5;             // 20 blocks per cabinet, 60 in the string
+const cabX = i => -TOTAL_W/2 + (i + 0.5)*CAB_W;
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 9, 32);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 5.6, AZ = 0.73, EL = 0.20, TGT_Y = 1.04;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TGT_Y + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TGT_Y, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TGT_Y, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.2;        // vertical-subject deviation — see design-spec §lighting
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.6, 5.4, 4.2); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-3.0; sun.shadow.camera.right=3.0; sun.shadow.camera.top=2.8; sun.shadow.camera.bottom=-2.8;
+sun.shadow.camera.far = 17;
+scene.add(sun);
+const faceFill = new THREE.DirectionalLight(0xdce6f2, 0.85);    // panel-normal fill (the deviation)
+faceFill.position.set(0.6, 1.3, 4.8);
+scene.add(faceFill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(24,24),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   One VRLA block is THREE surface families in an object 0.10 m wide: moulded ABS jar, moulded
+//   lid, lead posts and lead straps. Painting the whole battery as one material is the giveaway.
+// ============================================================================
+const matPaint  = new THREE.MeshStandardMaterial({ color:0xcfd2cc, metalness:0.0, roughness:0.55 });
+const matPaintD = new THREE.MeshStandardMaterial({ color:0xb9bdb8, metalness:0.0, roughness:0.58 });
+const matPlinth = new THREE.MeshStandardMaterial({ color:0x3b4046, metalness:0.0, roughness:0.62 });
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xb6babc, metalness:0.92, roughness:0.42 });
+const matJar    = new THREE.MeshStandardMaterial({ color:0x22262b, metalness:0.0,  roughness:0.44 });
+const matLid    = new THREE.MeshStandardMaterial({ color:0x3a4046, metalness:0.0,  roughness:0.40 });
+const matLead   = new THREE.MeshStandardMaterial({ color:0x9aa0a6, metalness:0.90, roughness:0.48 });
+const matCable  = new THREE.MeshStandardMaterial({ color:0x14171a, metalness:0.0,  roughness:0.78 });
+const matCableR = new THREE.MeshStandardMaterial({ color:0x7a1e1e, metalness:0.0,  roughness:0.72 });
+const matBrk    = new THREE.MeshStandardMaterial({ color:0x2a2e33, metalness:0.0,  roughness:0.60 });
+const matPlastic= new THREE.MeshStandardMaterial({ color:0x1a1d21, metalness:0.0,  roughness:0.52 });
+const matSense  = new THREE.MeshStandardMaterial({ color:0x1d4536, metalness:0.0,  roughness:0.70 });
+const matLabel  = new THREE.MeshStandardMaterial({ color:0xf2f3ef, metalness:0.0,  roughness:0.70 });
+const matWarn   = new THREE.MeshStandardMaterial({ color:0xd8b81a, metalness:0.0,  roughness:0.62 });
+const matScreen = new THREE.MeshStandardMaterial({ color:0x0d1a16, metalness:0.0,  roughness:0.16,
+                                                   emissive:0x0a2a22, emissiveIntensity:0.9 });
+// ISA-101 §3.4
+const matLedOff = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4 });
+const matLedRun = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                   emissive:0x0d3a2a, emissiveIntensity:1.0 });
+const matLedAlm = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                   emissive:0xd8760f, emissiveIntensity:1.6 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xforms, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = im.receiveShadow = true;
+  xforms.forEach((t,i)=>{
+    _p.set(t[0], t[1], t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0));
+    _s.set(t[6]??1, t[7]??1, t[8]??1);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s));
+  });
+  im.instanceMatrix.needsUpdate = true;
+  parent.add(im); return im;
+}
+function box(w,h,d,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+function cyl(rt,rb,h,seg,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+
+// --- carcasses: three cabinets BOLTED TOGETHER, sharing division panels ---
+box(TOTAL_W - 0.05, PLINTH_H, DEPTH - 0.05, matPlinth, 0, PLINTH_H/2, 0);
+box(TOTAL_W, BODY_H, 0.015, matPaintD, 0, PLINTH_H + BODY_H/2, -DEPTH/2 + 0.008);
+box(TOTAL_W, 0.015, DEPTH, matPaint, 0, TOP_Y - 0.008, 0);
+box(TOTAL_W, 0.015, DEPTH, matPaintD, 0, PLINTH_H + 0.008, 0);
+for(let i=0;i<=NCAB;i++){
+  const x = -TOTAL_W/2 + i*CAB_W, end = (i===0 || i===NCAB);
+  box(0.015, BODY_H, DEPTH, matPaintD, x + (i===0 ? 0.008 : (i===NCAB ? -0.008 : 0)), PLINTH_H + BODY_H/2, 0);
+  box(0.034, DOOR_Y1 - DOOR_Y0, 0.030, matPaint,
+      x + (i===0 ? 0.017 : (i===NCAB ? -0.017 : 0)), (DOOR_Y0 + DOOR_Y1)/2, FRONT_Z - 0.015);
+  if(!end)                                                       // the bolted joint between shells
+    box(0.020, BODY_H - 0.10, 0.020, matSteel, x, PLINTH_H + BODY_H/2, -DEPTH/2 + 0.05);
+}
+box(TOTAL_W, DOOR_Y0 - PLINTH_H, 0.030, matPaint, 0, (PLINTH_H + DOOR_Y0)/2, FRONT_Z - 0.015);
+box(TOTAL_W, TOP_Y - DOOR_Y1,    0.030, matPaint, 0, (DOOR_Y1 + TOP_Y)/2,    FRONT_Z - 0.015);
+// low-level ventilation: VRLA still off-gasses, so the cabinets are never fully sealed
+{ const slats = [];
+  for(let i=0;i<NCAB;i++) for(let k=0;k<3;k++)
+    slats.push([cabX(i), PLINTH_H + 0.16 + k*0.032, FRONT_Z - 0.004, -0.42, 0, 0, CAB_W*0.5, 1, 1]);
+  instanced(new THREE.BoxGeometry(1.0, 0.018, 0.012), matPaintD, slats, root);
+}
+
+// --- interiors: 4 shelves x 5 blocks per cabinet, strapped in series along each shelf ---
+const guts = new THREE.Group();
+const SH_Y = [DOOR_Y0 + 0.14, DOOR_Y0 + 0.46, DOOR_Y0 + 0.78, DOOR_Y0 + 1.10];
+const jars = [], lids = [], posts = [], straps = [], senseW = [];
+const sensors = [];
+for(let c=0;c<NCAB;c++){
+  const cx = cabX(c);
+  for(let s=0;s<NSHELF;s++){
+    const sy = SH_Y[s];
+    box(CAB_W - 0.08, 0.014, DEPTH - 0.14, matSteel, cx, sy, -0.02, guts);        // shelf
+    for(const sz of [-1, 1])                                                       // shelf supports
+      box(0.02, 0.05, DEPTH - 0.16, matSteel, cx + sz*(CAB_W/2 - 0.05), sy - 0.03, -0.02, guts);
+    const step = (CAB_W - 0.22)/(PER_SHELF - 1);
+    for(let k=0;k<PER_SHELF;k++){
+      const bx = cx - (CAB_W - 0.22)/2 + k*step;
+      jars.push([bx, sy + 0.112, -0.02]);
+      lids.push([bx, sy + 0.219, -0.02]);
+      for(const dz of [-0.055, 0.055]) posts.push([bx, sy + 0.239, -0.02 + dz]);
+      // inter-block strap, alternating front/rear so the series path zig-zags along the shelf
+      if(k < PER_SHELF - 1) straps.push([bx + step/2, sy + 0.245, -0.02 + (k%2 ? -0.055 : 0.055)]);
+      // one voltage/temperature sense lead per block — this is what makes it a MONITORED bank
+      senseW.push([bx + 0.030, sy + 0.258, -0.02 + 0.055]);
+      sensors.push({ c, s, k });
+    }
+    // shelf-to-shelf jumper on the free end
+    if(s < NSHELF - 1)
+      box(0.012, 0.30, 0.012, matCable, cx + (s%2 ? -1 : 1)*(CAB_W/2 - 0.05), sy + 0.30, -0.02, guts);
+  }
+  // per-cabinet monitoring module on the inside of the top rail
+  box(0.18, 0.10, 0.06, matSense, cx, DOOR_Y1 - 0.08, 0.06, guts);
+}
+instanced(new THREE.BoxGeometry(0.105, 0.21, 0.17), matJar,  jars,  guts);
+instanced(new THREE.BoxGeometry(0.108, 0.014, 0.174), matLid, lids, guts);
+instanced(new THREE.CylinderGeometry(0.010, 0.010, 0.026, 8), matLead, posts, guts);
+instanced(new THREE.BoxGeometry((CAB_W - 0.22)/(PER_SHELF - 1), 0.008, 0.022), matLead, straps, guts);
+instanced(new THREE.BoxGeometry(0.006, 0.014, 0.006), matSense, senseW, guts);
+root.add(guts);
+
+// --- inter-cabinet links + string disconnect: the parts that only exist because it is a BANK ---
+const links = new THREE.Group();
+for(let c=0;c<NCAB-1;c++){
+  const x = -TOTAL_W/2 + (c + 1)*CAB_W;
+  for(const sy of [SH_Y[1] + 0.26, SH_Y[3] + 0.26]){
+    box(0.16, 0.014, 0.030, matCableR, x, sy, 0.02, links);
+    for(const sx of [-1, 1]) cyl(0.012, 0.012, 0.030, 8, matLead, x + sx*0.07, sy, 0.02, links);
+  }
+}
+// string disconnect + fuse on the right-hand cabinet, with the DC feed leaving toward the UPS
+box(0.22, 0.30, 0.16, matBrk, cabX(NCAB-1) + 0.16, DOOR_Y1 - 0.22, 0.02, links);
+box(0.06, 0.06, 0.035, matPlastic, cabX(NCAB-1) + 0.16, DOOR_Y1 - 0.22, 0.11, links);
+// The DC feed must stay INSIDE the shell and leave through a gland, not sail through the side
+// wall. At 0.30 m out from the last cabinet centre these bars overran TOTAL_W/2 by 90 mm and read
+// as cables floating in mid-air beside the bank.
+for(const sy of [-1, 1])
+  box(0.22, 0.030, 0.014, matCableR, cabX(NCAB-1) + 0.16, DOOR_Y1 - 0.34 + sy*0.05, -0.16, links);
+box(0.10, 0.10, 0.03, matSteel, cabX(NCAB-1) + 0.24, DOOR_Y1 - 0.34, -DEPTH/2 + 0.02, links);  // gland plate
+console.assert(cabX(NCAB-1) + 0.16 + 0.11 <= TOTAL_W/2 + 1e-6,
+  'DC feed bars overrun the cabinet shell');
+root.add(links);
+
+// --- fixed HMI band above the doors: the battery monitoring system ---
+const leds = [];
+{
+  const by = (DOOR_Y1 + TOP_Y)/2;
+  box(0.30, 0.10, 0.024, matPlastic, -0.55, by, FRONT_Z + 0.010);
+  box(0.24, 0.055, 0.008, matScreen, -0.55, by, FRONT_Z + 0.023);
+  for(let k=0;k<3;k++){
+    const l = cyl(0.011, 0.011, 0.012, 12, matLedOff, -0.22 + k*0.055, by, FRONT_Z + 0.012);
+    l.rotation.x = Math.PI/2;
+    l.userData.role = k===0 ? 'run' : (k===2 ? 'alarm' : 'aux');
+    leds.push(l);
+  }
+  box(0.26, 0.06, 0.006, matWarn,  0.62, by, FRONT_Z + 0.004);       // battery hazard plate
+  box(0.26, 0.06, 0.006, matLabel, 0.28, by, FRONT_Z + 0.004);
+}
+
+// ---------- doors ----------
+const doors = [];
+for(let i=0;i<NCAB;i++){
+  const REVEAL = 0.010, cx = cabX(i);
+  const w = CAB_W - 0.068 - 2*REVEAL, h = DOOR_Y1 - DOOR_Y0 - 2*REVEAL;
+  const cy = (DOOR_Y0 + DOOR_Y1)/2, x0 = cx - CAB_W/2 + 0.034;
+  const g = new THREE.Group(); g.position.set(x0, 0, FRONT_Z + 0.006);
+  const lx = REVEAL + w/2;
+  box(w, h, 0.020, matPaint, lx, cy, 0, g);
+  for(const sy of [-1, 1]) box(w, 0.020, 0.045, matPaintD, lx, cy + sy*(h/2 - 0.010), -0.030, g);
+  for(const hy of [cy - h/2 + 0.10, cy, cy + h/2 - 0.10])
+    box(0.020, 0.070, 0.026, matSteel, 0.012, hy, -0.008, g);
+  box(0.045, 0.120, 0.012, matPlastic, lx + w/2 - 0.045, cy, 0.016, g);
+  box(0.016, 0.075, 0.030, matPlastic, lx + w/2 - 0.045, cy - 0.02, 0.032, g);
+  box(w*0.55 + 0.008, 0.032, 0.004, matPlastic, lx, cy - h/2 + 0.06, 0.012, g);
+  box(w*0.55, 0.020, 0.004, matLabel,           lx, cy - h/2 + 0.06, 0.015, g);
+  box(0.14, 0.14, 0.005, matWarn, lx, cy + 0.42, 0.012, g);          // hazard label per door
+  root.add(g); doors.push(g);
+}
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const OPEN_ANGLE = -2.05;
+let doorTarget = 0, doorPos = 0;
+const btnDoor = document.getElementById('btnDoor');
+btnDoor.onclick = ()=>{ doorTarget = doorTarget ? 0 : 1;
+  btnDoor.classList.toggle('on', !!doorTarget); requestRender(); };
+
+const btnLink = document.getElementById('btnLink');
+btnLink.onclick = ()=>{ links.visible = !links.visible;
+  btnLink.classList.toggle('on', links.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnAlm = document.getElementById('btnAlm');
+let alarm = false;
+btnAlm.onclick = ()=>{
+  alarm = !alarm; btnAlm.classList.toggle('on', alarm);
+  // ISA-101 §3.4: a monitored bank's normal state is ONE "string healthy" lamp and nothing else.
+  // A weak block is amber — actionable at the next service visit, not a trip.
+  leds.forEach(l=>{ const r = l.userData.role;
+    l.material = alarm ? (r === 'alarm' ? matLedAlm : matLedOff)
+                       : (r === 'run'   ? matLedRun : matLedOff); });
+  requestRender();
+};
+leds.forEach(l=>{ if(l.userData.role === 'run') l.material = matLedRun; });
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(Math.abs(doorPos - doorTarget) > 0.001){
+    doorPos += (doorTarget - doorPos) * 0.10;
+    if(Math.abs(doorPos - doorTarget) <= 0.001){
+      doorPos = doorTarget;
+      renderer.shadowMap.needsUpdate = true;   // re-bake once the swing settles, not every frame
+    }
+    doors.forEach((d,i)=>{ d.rotation.y = OPEN_ANGLE * doorPos * (1 - i*0.07); });
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__bancoBateriasApp = __app;
+globalThis['__banco-bateriasApp'] = __app;         // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

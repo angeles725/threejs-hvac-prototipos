@@ -1,0 +1,332 @@
+<!doctype html>
+<!--
+  pdu — catalog asset, family `electricos`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Spec: ./design-spec.yaml
+  NOTE ON SCOPE, so this does not collide with datacenter/pdu-rack: THIS is the FLOOR-STANDING PDU
+  — a cabinet containing a K-rated isolation transformer, a main breaker and branch panelboards.
+  The datacenter asset of the same family name is a 0U vertical outlet strip inside a rack. Same
+  three letters, two different machines, and they must stay visibly different.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDU de piso (transformador + tableros) — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.025 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">PDU de piso — transformador de aislamiento + tableros de derivación</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· chapa RAL 7035 · núcleo laminado · barra de cobre</span></div>
+  <div class="dim">1.00 × 0.90 × 2.05 m · 2 tableros × 21 derivaciones · salida por piso técnico</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">ABRIR PUERTA</button>
+  <button id="btnPanel">TAPAS DE TABLERO</button>
+  <button id="btnAlm">SOBRECARGA (ISA-101)</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const W = 1.00, D = 0.90, PLINTH_H = 0.10, BODY_H = 1.95;
+const TOP_Y = PLINTH_H + BODY_H;                 // 2.05
+const FRONT_Z = D/2;
+const DOOR_Y0 = PLINTH_H + 0.05, DOOR_Y1 = TOP_Y - 0.34;   // the HMI band sits above the door
+const NBR = 21;                                   // branch breakers per panelboard
+const XFMR_H = 0.62;
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 7, 28);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 4.6, AZ = 0.73, EL = 0.20, TGT_Y = 1.04;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TGT_Y + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TGT_Y, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TGT_Y, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.2;        // vertical-subject deviation — see design-spec §lighting
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.2, 5.0, 3.8); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-2.4; sun.shadow.camera.right=2.4; sun.shadow.camera.top=2.6; sun.shadow.camera.bottom=-2.6;
+sun.shadow.camera.far = 14;
+scene.add(sun);
+const faceFill = new THREE.DirectionalLight(0xdce6f2, 0.85);    // panel-normal fill (the deviation)
+faceFill.position.set(0.5, 1.3, 4.4);
+scene.add(faceFill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+// ============================================================================
+const matPaint  = new THREE.MeshStandardMaterial({ color:0xcfd2cc, metalness:0.0, roughness:0.55 });
+const matPaintD = new THREE.MeshStandardMaterial({ color:0xb9bdb8, metalness:0.0, roughness:0.58 });
+const matPlinth = new THREE.MeshStandardMaterial({ color:0x3b4046, metalness:0.0, roughness:0.62 });
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xb6babc, metalness:0.92, roughness:0.42 });
+const matCopper = new THREE.MeshStandardMaterial({ color:0xf0a67a, metalness:1.0,  roughness:0.34 });
+const matCore   = new THREE.MeshStandardMaterial({ color:0xb4babe, metalness:0.95, roughness:0.36 });
+const matCoil   = new THREE.MeshStandardMaterial({ color:0x6f6b64, metalness:0.0,  roughness:0.44 });
+const matPlastic= new THREE.MeshStandardMaterial({ color:0x1a1d21, metalness:0.0,  roughness:0.52 });
+const matBrk    = new THREE.MeshStandardMaterial({ color:0x2a2e33, metalness:0.0,  roughness:0.60 });
+const matBrkTog = new THREE.MeshStandardMaterial({ color:0x8d9298, metalness:0.0,  roughness:0.55 });
+const matDead   = new THREE.MeshStandardMaterial({ color:0xa8ada8, metalness:0.0,  roughness:0.60 });
+const matLabel  = new THREE.MeshStandardMaterial({ color:0xf2f3ef, metalness:0.0,  roughness:0.70 });
+const matScreen = new THREE.MeshStandardMaterial({ color:0x0d1a16, metalness:0.0,  roughness:0.16,
+                                                   emissive:0x0a2a22, emissiveIntensity:0.9 });
+// ISA-101 §3.4
+const matLampOff = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4 });
+const matLampRun = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                    emissive:0x0d3a2a, emissiveIntensity:1.0 });
+const matLampAlm = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                    emissive:0xd8760f, emissiveIntensity:1.5 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xforms, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = im.receiveShadow = true;
+  xforms.forEach((t,i)=>{
+    _p.set(t[0], t[1], t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0));
+    _s.set(t[6]??1, t[7]??1, t[8]??1);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s));
+  });
+  im.instanceMatrix.needsUpdate = true;
+  parent.add(im); return im;
+}
+function box(w,h,d,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+function cyl(rt,rb,h,seg,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  (parent||root).add(m); return m;
+}
+
+// --- plinth (the cable exit is DOWNWARD into a raised floor) + carcass shell ---
+box(W - 0.05, PLINTH_H, D - 0.05, matPlinth, 0, PLINTH_H/2, 0);
+box(W - 0.34, 0.05, D - 0.36, new THREE.MeshStandardMaterial({ color:0x14181d, metalness:0, roughness:1 }),
+    0, 0.025, -0.06);                                                       // floor cable void
+box(W, BODY_H, 0.015, matPaintD, 0, PLINTH_H + BODY_H/2, -D/2 + 0.008);
+for(const sx of [-1, 1]) box(0.015, BODY_H, D, matPaintD, sx*(W/2 - 0.008), PLINTH_H + BODY_H/2, 0);
+box(W, 0.015, D, matPaint, 0, TOP_Y - 0.008, 0);
+box(W, 0.015, D, matPaintD, 0, PLINTH_H + 0.008, 0);
+box(W, DOOR_Y0 - PLINTH_H, 0.030, matPaint, 0, (PLINTH_H + DOOR_Y0)/2, FRONT_Z - 0.015);
+for(const sx of [-1, 1])
+  box(0.034, DOOR_Y1 - DOOR_Y0, 0.030, matPaint, sx*(W/2 - 0.017), (DOOR_Y0 + DOOR_Y1)/2, FRONT_Z - 0.015);
+
+// --- fixed HMI band above the door: metering display, lamps, main breaker handle ---
+const lamps = [];
+{
+  const by = (DOOR_Y1 + TOP_Y)/2;
+  box(W, TOP_Y - DOOR_Y1, 0.030, matPaint, 0, by, FRONT_Z - 0.015);
+  box(0.32, 0.24, 0.026, matPlastic, -0.19, by, FRONT_Z + 0.010);
+  box(0.26, 0.145, 0.008, matScreen, -0.19, by + 0.02, FRONT_Z + 0.024);
+  for(let k=0;k<4;k++){
+    const l = cyl(0.013, 0.013, 0.014, 12, matLampOff, -0.28 + k*0.06, by - 0.085, FRONT_Z + 0.012);
+    l.rotation.x = Math.PI/2;
+    l.userData.role = k===0 ? 'run' : (k===3 ? 'alarm' : 'aux');
+    lamps.push(l);
+  }
+  // main input breaker: rotary operator through the fixed band, with its ON/OFF arc plate
+  cyl(0.052, 0.052, 0.022, 16, matPlastic, 0.24, by + 0.02, FRONT_Z + 0.012).rotation.x = Math.PI/2;
+  box(0.030, 0.090, 0.030, matBrkTog, 0.24, by + 0.05, FRONT_Z + 0.028);
+  box(0.20, 0.16, 0.005, matLabel, 0.24, by + 0.02, FRONT_Z + 0.002);
+}
+
+// --- interior: K-rated isolation transformer at the bottom, panelboards above ---
+const guts = new THREE.Group();
+const GZ = 0.04;
+box(W - 0.06, DOOR_Y1 - DOOR_Y0, 0.012, matPaintD, 0, (DOOR_Y0 + DOOR_Y1)/2, GZ - 0.22, guts);
+// transformer: 3 limbs + yokes + coils, on a channel base. Sized to sit UNDER the panelboards,
+// which is what forces this cabinet to be 0.90 m deep where a plain panelboard would be 0.20.
+{
+  const ty = DOOR_Y0 + 0.10, cw = 0.62;
+  for(const sy of [0, 1]) box(cw, 0.10, 0.30, matCore, -0.16, ty + 0.05 + sy*(XFMR_H - 0.10), GZ - 0.02, guts);
+  for(const dx of [-0.22, 0, 0.22]){
+    box(0.09, XFMR_H - 0.20, 0.30, matCore, -0.16 + dx, ty + XFMR_H/2, GZ - 0.02, guts);
+    cyl(0.098, 0.098, XFMR_H - 0.24, 18, matCoil, -0.16 + dx, ty + XFMR_H/2, GZ - 0.02, guts);
+  }
+  for(const sz of [-1, 1]) box(cw + 0.06, 0.05, 0.03, matSteel, -0.16, ty + 0.03, GZ - 0.02 + sz*0.17, guts);
+  box(0.36, 0.030, 0.010, matCopper, -0.16, ty + XFMR_H + 0.05, GZ + 0.06, guts);   // secondary bar
+}
+// two panelboards side by side above the transformer, each NBR branch poles on a bus
+const panelboards = new THREE.Group();
+const PB_Y0 = DOOR_Y0 + XFMR_H + 0.24, PB_H = DOOR_Y1 - PB_Y0 - 0.06;
+const brks = [], togs = [];
+for(const px of [-0.235, 0.235]){
+  box(0.42, PB_H, 0.10, matBrk, px, PB_Y0 + PB_H/2, GZ + 0.02, guts);               // panelboard box
+  for(let k=0;k<NBR;k++){
+    const row = k % Math.ceil(NBR/2), col = k < Math.ceil(NBR/2) ? -1 : 1;
+    const by = PB_Y0 + 0.05 + row*((PB_H - 0.10)/Math.ceil(NBR/2));
+    brks.push([px + col*0.10, by, GZ + 0.075]);
+    togs.push([px + col*0.10, by, GZ + 0.098]);
+  }
+  box(0.36, 0.030, 0.010, matCopper, px, PB_Y0 + PB_H - 0.02, GZ + 0.06, guts);      // panel bus
+}
+instanced(new THREE.BoxGeometry(0.17, 0.030, 0.05), matBrk,    brks, guts);
+instanced(new THREE.BoxGeometry(0.030, 0.018, 0.020), matBrkTog, togs, guts);
+// hinged deadfront covers over both panelboards — the layer between the door and live parts
+for(const px of [-0.235, 0.235]){
+  const c = box(0.42, PB_H, 0.010, matDead, px, PB_Y0 + PB_H/2, GZ + 0.105, panelboards);
+  box(0.30, 0.026, 0.004, matLabel, px, PB_Y0 + 0.03, GZ + 0.112, panelboards);
+  for(const sy of [-1, 1])
+    cyl(0.010, 0.010, 0.014, 8, matSteel, px, PB_Y0 + PB_H/2 + sy*(PB_H/2 - 0.03), GZ + 0.113, panelboards)
+      .rotation.x = Math.PI/2;
+  c.userData.tag = 'deadfront';
+}
+guts.add(panelboards);
+root.add(guts);
+
+// ---------- door ----------
+const doors = [];
+{
+  const REVEAL = 0.010;
+  const w = W - 0.068 - 2*REVEAL, h = DOOR_Y1 - DOOR_Y0 - 2*REVEAL;
+  const cy = (DOOR_Y0 + DOOR_Y1)/2, x0 = -W/2 + 0.034;
+  const g = new THREE.Group(); g.position.set(x0, 0, FRONT_Z + 0.006);
+  const lx = REVEAL + w/2;
+  box(w, h, 0.020, matPaint, lx, cy, 0, g);
+  for(const sy of [-1, 1]) box(w, 0.020, 0.045, matPaintD, lx, cy + sy*(h/2 - 0.010), -0.030, g);
+  for(const hy of [cy - h/2 + 0.10, cy, cy + h/2 - 0.10])
+    box(0.020, 0.070, 0.026, matSteel, 0.012, hy, -0.008, g);
+  box(0.045, 0.120, 0.012, matPlastic, lx + w/2 - 0.045, cy, 0.016, g);
+  box(0.016, 0.075, 0.030, matPlastic, lx + w/2 - 0.045, cy - 0.02, 0.032, g);
+  box(w*0.55 + 0.008, 0.032, 0.004, matPlastic, lx, cy - h/2 + 0.06, 0.012, g);
+  box(w*0.55, 0.020, 0.004, matLabel,           lx, cy - h/2 + 0.06, 0.015, g);
+  // recessed vent bank low on the door — a K-rated transformer inside needs a convection path
+  box(w*0.70 + 0.012, 0.24 + 0.012, 0.005, matPaintD, lx, cy - h/2 + 0.30, 0.006, g);
+  box(w*0.70, 0.24, 0.004, matPlastic, lx, cy - h/2 + 0.30, 0.009, g);
+  const slats = [];
+  for(let k=0;k<6;k++) slats.push([lx, cy - h/2 + 0.40 - k*0.040, 0.016, -0.42, 0, 0, w*0.70, 1, 1]);
+  instanced(new THREE.BoxGeometry(1.0, 0.019, 0.012), matPaint, slats, g);
+  root.add(g); doors.push(g);
+}
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const OPEN_ANGLE = -2.05;
+let doorTarget = 0, doorPos = 0;
+const btnDoor = document.getElementById('btnDoor');
+btnDoor.onclick = ()=>{ doorTarget = doorTarget ? 0 : 1;
+  btnDoor.classList.toggle('on', !!doorTarget); requestRender(); };
+
+// The deadfront is a SECOND barrier, not part of the door. Dropping both in one toggle would
+// misrepresent the access sequence: opening the door exposes the deadfront, not live parts.
+const btnPanel = document.getElementById('btnPanel');
+btnPanel.classList.add('on');
+btnPanel.onclick = ()=>{ panelboards.visible = !panelboards.visible;
+  btnPanel.classList.toggle('on', panelboards.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnAlm = document.getElementById('btnAlm');
+let alarm = false;
+btnAlm.onclick = ()=>{
+  alarm = !alarm; btnAlm.classList.toggle('on', alarm);
+  lamps.forEach(l=>{ const r = l.userData.role;
+    l.material = alarm ? (r === 'alarm' ? matLampAlm : matLampOff)
+                       : (r === 'run'   ? matLampRun : matLampOff); });
+  requestRender();
+};
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(Math.abs(doorPos - doorTarget) > 0.001){
+    doorPos += (doorTarget - doorPos) * 0.10;
+    if(Math.abs(doorPos - doorTarget) <= 0.001){
+      doorPos = doorTarget;
+      renderer.shadowMap.needsUpdate = true;   // re-bake once the swing settles, not every frame
+    }
+    doors.forEach(d=>{ d.rotation.y = OPEN_ANGLE * doorPos; });
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__pduApp = { runtime:{ scene, renderer, camera, root } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
