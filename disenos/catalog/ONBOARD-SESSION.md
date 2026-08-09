@@ -130,6 +130,9 @@ GOTCHAS ya detectados (evítalos):
 - INFRA (no es fallo de asset): con varias sesiones corriendo QA a la vez, chrome-headless-shell se cae
   intermitente ("unsettled top-level await", exit 13) → REINTENTA, da exit 0. Junto con exit 2 (servidor
   caído) son los dos casos de "no concluyente"; nunca los trates como asset roto.
+- Bajo alta CONTENCIÓN (muchas sesiones con chrome a la vez) la captura puede salir VACÍA (HUD presente,
+  canvas NEGRO) en un asset que en la corrida siguiente renderiza perfecto — y el gate da ready=undefined.
+  Si auditas o integras POR CAPTURA, REINTENTA antes de reportar/rechazar; una captura vacía aislada es infra.
 - "TAPA INVISIBLE" (regla fuerte para cualquier asset con INTERIOR): tres cosas tapan la boca sin verse en
   los conteos — (1) el gabinete como BOX macizo (su cara frontal queda tras el hueco) → constrúyelo como
   cascarón de 5 paneles; (2) la cara de sellado con CylinderGeometry = disco lleno → RingGeometry; (3) el
