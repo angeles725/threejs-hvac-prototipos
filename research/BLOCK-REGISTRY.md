@@ -36,6 +36,7 @@ RENUMBER it to your range before requesting integration. session-A reconciles at
 | B101 | proceso (catalog-proceso-4) | CIP skid dimensions (linear 600 L, arithmetically closed) |
 | B102 | proceso (catalog-proceso-2) | belt cooling tunnel — hood is a lift-off lid, not a box |
 | B125 | core three.js library: numerical methods & core math (session-A 2026-08-09) | framing/projection near-plane trap, bounding-volume integrity, tessellation, core math gotchas, r160 color/IBL/lighting, equation families |
+| B126 | core three.js library: curved/rounded equipment geometry (session-A 2026-08-09) | LatheGeometry (revolution surfaces), RoundedBoxGeometry(segments=1 sweet spot), three-subdivide Loop subdivision (external, removed r125), round-edge normalMap (~89% tri savings), PBR colorSpace map table (green roughness/blue metalness/uv1 AO), CatmullRomCurve3 centripetal + TubeGeometry elbow budget, CapsuleGeometry r160-core, SphereGeometry correct triangle formula (2·W·(H−1)), CylinderGeometry default=32 waste, on-screen-size decision rule, 4-item adopt shortlist |
 
 > Note: `research/sources/B59-proceso-dims/` is a NAMESPACED source folder (proceso), not block B59.
 > Source folders are namespaced by family (`B63-automotriz-dims`) so a number clash never merges two corpora.
@@ -48,7 +49,7 @@ RENUMBER it to your range before requesting integration. session-A reconciles at
 | robotica | B80–B89 | B80 (B62 is its historical entry; new blocks go B80+) |
 | automotriz | B90–B99 | B90 (B63 historical; new blocks B90+) |
 | proceso / fluidos / utilities | B100–B119 | B103 (B100 empacadora-flowwrap, B101 skid-cip, B102 tunel-enfriamiento) |
-| core three.js library: numerical methods & core math (session-A 2026-08-09) | B125–B134 | B126 (B125 consumed: numerical-methods-core-math) |
+| core three.js library: numerical methods & core math (session-A 2026-08-09) | B125–B134 | B127 (B125 consumed: numerical-methods-core-math; B126 consumed: curved/rounded-geometry) |
 | any new family | ask session-A | — |
 
 ## Enforcement — prevent at WRITE, not detect at read
