@@ -1,0 +1,287 @@
+<!doctype html>
+<!--
+  CATALOG ASSET — seguridad/regadera-emergencia · combination emergency shower + eyewash station.
+  Built from disenos/catalog/shell-template.html. Contract: __regaderaEmergenciaApp.runtime +
+  __qaRenderInfo + data-app-ready, render-on-demand, shadows frozen (autoUpdate=false, 1024), DPR<=2.
+  NO instancing: nothing here repeats enough to earn a batch (block54 §2.3 is a licence, not a rule).
+  The geometry is driven by the ACTUATION heights — the reason this object exists is that a blinded
+  operator must find the valve, so every height below is a functional constraint, not styling.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Regadera de emergencia con lavaojos — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">REGADERA DE EMERGENCIA + LAVAOJOS — acero galvanizado / 304</div>
+  <div><span class="dim">regadera a 2.20 m · lavaojos a 1.00 m · válvula de vástago a 1.65 m</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnShower">ACCIONAR REGADERA</button>
+  <button id="btnEye">ACCIONAR LAVAOJOS</button>
+  <button id="btnSign" class="on">SEÑALIZACIÓN</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const RISER_R = 0.021;                 // DN32 riser
+const HEAD_Y = 2.20;                   // shower head height (inside the 2.08-2.44 m band)
+const HEAD_R = 0.125;                  // 250 mm shower head
+const VALVE_Y = 1.65;                  // stay-open ball valve, reachable at <=1.73 m
+const ROD_Y = 1.42;                    // bottom of the triangular pull rod
+const EYE_Y = 1.00;                    // eyewash spray heads (inside the 0.84-1.14 m band)
+const BOWL_R = 0.175, BOWL_H = 0.075;
+const OFFSET_Z = 0.28;                 // eyewash arm reach from the riser
+const SPRAY_R = 0.28;                  // shower pattern radius at the body (>=0.51 m diameter)
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 7, 22);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.10;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 4.3, AZ = 0.92, EL = 0.16;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.25 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.22, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.22, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.0;   // bare galvanised/304 pipework: the IBL carries the metal read
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3, 6, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-2; sun.shadow.camera.right=2; sun.shadow.camera.top=2.6; sun.shadow.camera.bottom=-2.6;
+scene.add(sun);
+// VERTICAL-SUBJECT FILL: a 2.3 m bare-metal riser reflects the dark horizon and collapses to flat
+// grey without a camera-side fill. Metalness untouched (HANDBOOK §3.1).
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.1);
+fill.position.set(-3.0, 2.4, 4.5);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(18,18),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1: galvanised pipe and the 304 bowl are BARE metal; the ABS
+// shower head, the dust covers, the paddle and the sign are dielectric.
+// ============================================================================
+const matPipe  = new THREE.MeshStandardMaterial({ color:0xc6cacd, metalness:0.92, roughness:0.34 });
+// DoubleSide: the bowl is an open shell, and a single-sided shell shows as a dark hole from above.
+const matBowl  = new THREE.MeshStandardMaterial({ color:0xd0d4d6, metalness:0.93, roughness:0.26,
+                                                  side:THREE.DoubleSide });
+const matHead  = new THREE.MeshStandardMaterial({ color:0xe7e9ea, metalness:0.0,  roughness:0.48 });
+const matGreen = new THREE.MeshStandardMaterial({ color:0x1f7a4d, metalness:0.0,  roughness:0.50 });
+const matYellow= new THREE.MeshStandardMaterial({ color:0xd8b41e, metalness:0.0,  roughness:0.52 });
+const matCover = new THREE.MeshStandardMaterial({ color:0x2f8f5c, metalness:0.0,  roughness:0.55 });
+const matValve = new THREE.MeshStandardMaterial({ color:0xb08b3e, metalness:0.90, roughness:0.34 });
+const matSign  = new THREE.MeshStandardMaterial({ color:0x1f7a4d, metalness:0.0,  roughness:0.45 });
+const matWater = new THREE.MeshPhysicalMaterial({ color:0xbfe6f5, metalness:0.0, roughness:0.08,
+                                                  transmission:0.85, thickness:0.05, ior:1.33,
+                                                  transparent:true, opacity:0.30, side:THREE.DoubleSide });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY
+// ============================================================================
+const root = new THREE.Group();
+const cyl = (parent, r0, r1, h, seg, mat, x,y,z, rx=0, rz=0)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, h, seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); m.rotation.set(rx,0,rz);
+  parent.add(m); return m;
+};
+const box = (parent,w,h,d,mat,x,y,z)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z); parent.add(m); return m; };
+
+// --- floor flange + riser ---
+cyl(root, 0.085, 0.095, 0.018, 20, matPipe, 0, 0.009, 0);
+for(let i=0;i<4;i++){
+  const a = i*Math.PI/2 + Math.PI/4;
+  cyl(root, 0.008, 0.008, 0.03, 8, matValve, Math.cos(a)*0.065, 0.02, Math.sin(a)*0.065);
+}
+cyl(root, RISER_R, RISER_R, HEAD_Y - 0.02, 18, matPipe, 0, (HEAD_Y - 0.02)/2 + 0.018, 0);
+
+// --- shower branch: elbow, stay-open ball valve at reachable height, head ---
+cyl(root, RISER_R, RISER_R, 0.06, 16, matPipe, 0, HEAD_Y, 0);
+// A deep cone reads as a lampshade. An emergency shower head is a SHALLOW bowl: wide face, small
+// rise, so the 500 mm pattern is legible as a spray plate rather than a light fitting.
+const head = new THREE.Mesh(new THREE.CylinderGeometry(HEAD_R*0.5, HEAD_R, 0.045, 26), matHead);
+head.castShadow = head.receiveShadow = true; head.position.set(0, HEAD_Y - 0.045, 0);
+root.add(head);
+cyl(root, HEAD_R*0.99, HEAD_R*0.99, 0.010, 26, matHead, 0, HEAD_Y - 0.072, 0);   // perforated face plate
+
+// valve body + the triangular pull rod hanging from its lever
+cyl(root, 0.036, 0.036, 0.075, 16, matValve, 0, VALVE_Y, 0);
+const rodPivot = new THREE.Group();
+rodPivot.position.set(0, VALVE_Y - 0.02, 0);
+const lever = box(rodPivot, 0.020, 0.016, 0.16, matValve, 0, 0, 0.08);
+const rod = new THREE.Group();
+cyl(rod, 0.008, 0.008, VALVE_Y - ROD_Y, 10, matPipe, 0, -(VALVE_Y - ROD_Y)/2 - 0.02, 0.15);
+// the triangle the operator grabs — the recognisable actuator of an emergency shower
+const tri = new THREE.Group();
+tri.position.set(0, -(VALVE_Y - ROD_Y) - 0.02, 0.15);
+cyl(tri, 0.009, 0.009, 0.26, 10, matPipe, 0, -0.11, 0, 0, 0);
+for(const s of [-1,1]) cyl(tri, 0.009, 0.009, 0.20, 10, matPipe, s*0.055, -0.16, 0, 0, s*0.55);
+cyl(tri, 0.009, 0.009, 0.19, 10, matPipe, 0, -0.245, 0, 0, Math.PI/2);
+rod.add(tri);
+rodPivot.add(rod);
+root.add(rodPivot);
+
+// --- eyewash branch: arm, bowl, two spray heads with dust covers, push paddle, waste pipe ---
+const eye = new THREE.Group();
+cyl(eye, RISER_R*0.85, RISER_R*0.85, OFFSET_Z, 14, matPipe, 0, EYE_Y - 0.10, OFFSET_Z/2, Math.PI/2, 0);
+const bowl = new THREE.Mesh(new THREE.CylinderGeometry(BOWL_R, BOWL_R*0.72, BOWL_H, 26, 1, true), matBowl);
+bowl.castShadow = bowl.receiveShadow = true; bowl.position.set(0, EYE_Y - 0.055, OFFSET_Z);
+eye.add(bowl);
+cyl(eye, BOWL_R*0.72, BOWL_R*0.72, 0.008, 26, matBowl, 0, EYE_Y - 0.092, OFFSET_Z);
+const sprayHeads = [];
+for(const sx of [-1,1]){
+  cyl(eye, 0.020, 0.024, 0.05, 12, matBowl, sx*0.075, EYE_Y - 0.012, OFFSET_Z);
+  const cover = new THREE.Mesh(new THREE.SphereGeometry(0.028, 14, 8, 0, Math.PI*2, 0, Math.PI/2), matCover);
+  cover.castShadow = true; cover.position.set(sx*0.075, EYE_Y + 0.014, OFFSET_Z);
+  eye.add(cover); sprayHeads.push(cover);
+}
+// push paddle on its own hinge — the second actuator
+const paddlePivot = new THREE.Group();
+paddlePivot.position.set(0, EYE_Y - 0.075, OFFSET_Z + BOWL_R*0.55);
+box(paddlePivot, 0.30, 0.014, 0.11, matYellow, 0, 0, 0.055);
+eye.add(paddlePivot);
+cyl(eye, 0.026, 0.026, 0.34, 12, matPipe, 0, EYE_Y - 0.25, OFFSET_Z);      // waste pipe
+root.add(eye);
+
+// --- water: shower cone + two eyewash arcs, hidden until the actuator is pulled ---
+const showerWater = new THREE.Mesh(new THREE.CylinderGeometry(HEAD_R*0.8, SPRAY_R, HEAD_Y - 0.20, 26, 1, true), matWater);
+showerWater.position.set(0, (HEAD_Y - 0.20)/2 + 0.06, 0);
+showerWater.visible = false;
+root.add(showerWater);
+const eyeWater = new THREE.Group();
+for(const sx of [-1,1]){
+  const jet = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.011, 8, 16, Math.PI*0.8), matWater);
+  jet.position.set(sx*0.075, EYE_Y + 0.02, OFFSET_Z);
+  jet.rotation.set(Math.PI/2, 0, sx > 0 ? -0.5 : Math.PI + 0.5);
+  eyeWater.add(jet);
+}
+eyeWater.visible = false;
+root.add(eyeWater);
+
+// --- signage: the green location sign on the riser + the floor keep-clear disc ---
+const signs = new THREE.Group();
+// The sign faces the APPROACH side (+Z, same side as the eyewash bowl and the pull triangle):
+// mounted on -Z the viewer only ever sees its blank back.
+box(signs, 0.30, 0.22, 0.008, matSign, 0, 1.90, 0.03);
+box(signs, 0.24, 0.16, 0.004, matHead, 0, 1.90, 0.037);
+const disc = new THREE.Mesh(new THREE.CircleGeometry(0.62, 40),
+  new THREE.MeshStandardMaterial({ color:0x1f7a4d, metalness:0.0, roughness:0.9 }));
+disc.rotation.x = -Math.PI/2; disc.position.set(0, 0.004, 0.10); disc.receiveShadow = true;
+signs.add(disc);
+const discIn = new THREE.Mesh(new THREE.CircleGeometry(0.54, 40),
+  new THREE.MeshStandardMaterial({ color:0x11151b, metalness:0.0, roughness:0.92 }));
+discIn.rotation.x = -Math.PI/2; discIn.position.set(0, 0.006, 0.10);
+signs.add(discIn);
+root.add(signs);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ============================================================================
+// ZONE 3 — UI. render is GATED: every handler and both animations call requestRender().
+// ============================================================================
+const btnRot    = document.getElementById('btnRot');
+const btnShower = document.getElementById('btnShower');
+const btnEye    = document.getElementById('btnEye');
+const btnSign   = document.getElementById('btnSign');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+let rodTarget = 0, rodAngle = 0, padTarget = 0, padAngle = 0;
+btnShower.onclick = ()=>{ rodTarget = rodTarget ? 0 : 1; btnShower.classList.toggle('on', !!rodTarget);
+  showerWater.visible = !!rodTarget; renderer.shadowMap.needsUpdate = true; requestRender(); };
+btnEye.onclick = ()=>{ padTarget = padTarget ? 0 : 1; btnEye.classList.toggle('on', !!padTarget);
+  eyeWater.visible = !!padTarget;
+  sprayHeads.forEach(c=>{ c.visible = !padTarget; });        // the dust covers blow off when it runs
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+btnSign.onclick = ()=>{ signs.visible = !signs.visible; btnSign.classList.toggle('on', signs.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+function animate(){
+  requestAnimationFrame(animate);
+  if(Math.abs(rodAngle - rodTarget) > 0.001){                 // per-frame branch -> keep rendering
+    rodAngle += (rodTarget - rodAngle) * 0.15;
+    rodPivot.rotation.x = 0.42 * rodAngle;                    // the lever swings down with the pull
+    needsRender = true;
+  }
+  if(Math.abs(padAngle - padTarget) > 0.001){
+    padAngle += (padTarget - padAngle) * 0.18;
+    paddlePivot.rotation.x = -0.55 * padAngle;                // paddle pushed down
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+globalThis.__regaderaEmergenciaApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__regadera-emergenciaApp'] = globalThis.__regaderaEmergenciaApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

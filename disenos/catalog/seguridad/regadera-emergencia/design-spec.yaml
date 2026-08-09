@@ -1,0 +1,193 @@
+# DesignSpec — combination emergency shower + eyewash station (floor mounted)
+# Catalog family `seguridad` (worktree catalog-retail-lab).
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: regadera-emergencia
+family: seguridad
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # 8-9 mm rod stock is below voxel resolution: built from segments
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 13 -> moderate.
+  scores: {silhouette: 2, components: 2, hierarchy: 2, repetition: 0,
+           material_layers: 2, detail: 2, action_readiness: 3, occlusion: 0}
+  tier: moderate
+  notes: >
+    action_readiness 3 is the whole point: BOTH actuators work, and each one is on its own hinge —
+    the pull rod swings the valve lever, the paddle swings the eyewash valve, and each reveals its
+    own water. repetition 0 -> no instancing (block54 §2.3 is a licence, not an obligation).
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+  reuse_pointers:
+    bare_metal: "research/HANDBOOK.md §3.1 (galvanised pipe / 304 bowl: metalness 0.9-1.0)"
+    vertical_fill: "disenos/catalog/puertas/puerta-cuarto-frio/ (camera-side fill for vertical metal)"
+
+references:
+  - source: "emergency shower / eyewash actuation-height practice (ANSI-ISEA Z358.1 class rules)"
+    evidences: >
+      [INFER] The standard is RECALLED, not preserved as a document in sources/ — treat every value
+      as inference, not as a citation. The rules modelled: the shower head sits in a ~2.1-2.4 m band;
+      the spray pattern is at least ~0.5 m across at chest height; the valve must be reachable
+      (under ~1.7 m) and stay open hands-free once actuated; the eyewash nozzles sit in a
+      ~0.85-1.15 m band and are protected by dust covers that the flow blows off.
+    suitability: partial
+
+dimensions_real:
+  head_y_m:        {value: 2.20, confidence: med}   # [INFER] inside the shower-head band
+  head_d_m:        {value: 0.25, confidence: low}   # [INFER] shower plate diameter
+  spray_d_m:       {value: 0.56, confidence: med}   # [INFER] pattern at body height, above the ~0.5 m rule
+  valve_y_m:       {value: 1.65, confidence: med}   # [INFER] reachable stay-open valve
+  pull_rod_low_y_m:{value: 1.42, confidence: low}   # [INFER] top of the triangle grip
+  eyewash_y_m:     {value: 1.00, confidence: med}   # [INFER] inside the nozzle band
+  bowl_d_m:        {value: 0.35, confidence: low}   # [INFER] 304 receptor bowl
+  arm_offset_m:    {value: 0.28, confidence: low}   # [INFER] bowl reach from the riser
+  riser_d_m:       {value: 0.042, confidence: low}  # [INFER] DN32 riser
+  paddle_w_m:      {value: 0.30, confidence: low}   # [INFER] push paddle
+  floor_disc_d_m:  {value: 1.24, confidence: low}   # [INFER] keep-clear marking
+
+hierarchy:
+  - name: root
+    children:
+      - name: base_riser      # floor flange, anchor bolts, DN32 riser
+        pivot: [0, 0, 0]
+        animation: none
+      - name: shower          # head, face plate, valve body
+        pivot: [0, 0, 0]
+        animation: none
+      - name: rodPivot        # valve lever + pull rod + triangle grip — hinge AT the valve stem
+        pivot: [0, 1.63, 0]
+        animation: pull
+        attachment:
+          parent_socket: valve_stem
+          contact_type: hinge
+          gap_tolerance: 0.002
+      - name: eye             # arm, bowl, spray heads with dust covers, waste pipe
+        pivot: [0, 0, 0]
+        animation: none
+      - name: paddlePivot     # push paddle — its OWN hinge, independent of the shower
+        pivot: [0, 0.925, 0.376]
+        animation: push
+      - name: showerWater     # spray cone, visible only while actuated
+        pivot: [0, 0, 0]
+        animation: none
+      - name: eyeWater        # two arcs, visible only while actuated
+        pivot: [0, 0, 0]
+        animation: none
+      - name: signs           # green location sign + floor keep-clear disc (togglable)
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: pipe-galvanised
+    family: bare-metal
+    color: "#c6cacd"
+    metalness: 0.92
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0"
+    confidence: 0.85
+  - id: bowl-304
+    family: bare-metal
+    color: "#d0d4d6"
+    metalness: 0.93
+    roughness: 0.26
+    evidence: >
+      HANDBOOK §3.1. Rendered DoubleSide: the bowl is an open shell and a single-sided shell reads
+      as a dark hole from above (seen in this asset's first capture).
+    confidence: 0.85
+  - id: head-abs
+    family: plastic
+    color: "#e7e9ea"
+    metalness: 0.0
+    roughness: 0.48
+    evidence: "[INFER] moulded ABS shower plate — dielectric"
+    confidence: 0.75
+  - id: valve-brass
+    family: bare-metal
+    color: "#b08b3e"
+    metalness: 0.90
+    roughness: 0.34
+    evidence: "HANDBOOK §3.1 bare-metal"
+    confidence: 0.8
+  - id: paddle-yellow
+    family: painted-metal
+    color: "#d8b41e"
+    metalness: 0.0
+    roughness: 0.52
+    evidence: "[INFER] coated actuator paddle — high-visibility"
+    confidence: 0.75
+  - id: sign-green
+    family: painted-metal
+    color: "#1f7a4d"
+    metalness: 0.0
+    roughness: 0.45
+    evidence: "[INFER] safety-condition green (the ISO colour for emergency equipment)"
+    confidence: 0.75
+  - id: water
+    family: liquid
+    color: "#bfe6f5"
+    metalness: 0.0
+    roughness: 0.08
+    transmission: 0.85
+    evidence: "[INFER] transmissive cone; ior 1.33 is water, unlike the 1.5 used for the glass assets"
+    confidence: 0.7
+
+critical_features:
+  - id: two-independent-actuators
+    desc: >
+      The pull triangle and the push paddle are separate hinges driving separate outlets: pulling
+      the shower does NOT start the eyewash and vice versa. Certified by the two toggle captures.
+    threshold: 0.80
+  - id: actuation-heights
+    desc: >
+      Head at 2.20 m, valve at 1.65 m (reachable), eyewash nozzles at 1.00 m — the height set that
+      makes the station usable by a blinded operator, and the reason the object looks as it does.
+    threshold: 0.78
+  - id: dust-covers
+    desc: >
+      The eyewash nozzles wear dust covers when idle and lose them when the flow starts — the small
+      detail that separates an emergency eyewash from a sink tap.
+    threshold: 0.70
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 50
+    tris: 20000
+  measured:             # SwiftShader headless capture, 1280x800 — COUNTS are valid, frame time is NOT
+    draws: 30
+    tris: 1722
+    geometries: 31
+    root_meshes: 32
+
+camera:
+  azimuth_deg: 53
+  elevation_deg: 9.2
+  fov: 38
+  target_y_m: 1.22
+  radius_m: 4.3
+
+lighting: house-rig + camera-side fill
+  # DOCUMENTED DEVIATION: a 2.3 m bare-metal riser is the extreme case of the vertical-subject
+  # problem — it reflects the dark horizon along its whole length. Fill 1.1 and environmentIntensity
+  # 2.0; metalness/roughness untouched (HANDBOOK §3.1).
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "ACCIONAR REGADERA"   # pull rod swings the valve lever; spray cone appears
+  - "ACCIONAR LAVAOJOS"   # paddle swings; dust covers come off, arcs appear
+  - "SEÑALIZACIÓN"        # sign + floor keep-clear disc
+
+colorTarget:
+  # MEASURED from the rendered riser (headless SwiftShader capture at 1280x800). The strip is only
+  # 3 px wide ON PURPOSE: the riser is a 42 mm cylinder, so a wider crop measures its shading
+  # gradient instead of its material. Per-channel std ~3.8.
+  srgb: [161, 166, 170]
+  deltaE00Max: 8
+  crop: "3x60+635+524"   # lit band of the riser at 1280x800
