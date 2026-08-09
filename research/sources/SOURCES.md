@@ -96,6 +96,13 @@
 | B61-storage-dims/shelving-rivet-specs | B61-storage-dims | https://www.shelving.com/pages/rivet-shelving-info | 2026-08-09T02:38:06Z | 3e11c91d7cc4b84a232d49608409fbe71bb2f56b6a5f1692dcbbe8800eea4561 | B61 |
 | B61-storage-dims/utz-euro-container | B61-storage-dims | https://www.utzgroup.co.uk/stacking-container-600-400-220/ | 2026-08-09T02:38:08Z | 7adf27603b6713d0164d9535f67f02289c2b50171cfa0b3a7cfe0d962758b330 | B61 |
 | B61-storage-dims/wikipedia-euro-container | B61-storage-dims | https://en.wikipedia.org/wiki/Euro_container | 2026-08-09T02:38:08Z | c274c206b922e2e47fdd7ad21ddb5e56174167633d9806ac1eeced108d571be0 | B61 |
+| datasheets/ur10e-e-series-datasheet | datasheets | https://www.universal-robots.com/media/1807466/ur10e_e-series_datasheets_web.pdf | 2026-08-09T02:16:12Z | 2a5ec6e0b7ae767ebeee169e1fab563951a19e6676a041683f43834e410fc797 | |
+| datasheets/abb-irb6700-product-spec | datasheets | https://cdn.pennair.com/media/2023/11/3HAC080365-PS-IRB-6700-on-OmniCore-en.pdf | 2026-08-09T02:16:15Z | a31dc28b3e27bd4c25f3c99f95873487c99b98408c1e0bc936a47f9800c50f58 | |
+| datasheets/abb-irb660-palletizer | datasheets | https://library.e.abb.com/public/bb6f658190ee693bc1257b28005760dc/IRB660_PR10284EN_D_HR.pdf | 2026-08-09T02:16:16Z | 35c856f776aeabf6023cfee5b3d3a5269caf46faf04c81b378163b5c72c05421 | |
+| datasheets/mir250-specifications | datasheets | https://ai.motion.com/wp-content/uploads/2025/10/MiR250-Specifications-2.99.pdf | 2026-08-09T02:17:13Z | 98ef10ceead3c4e59ec162c2a8e945bfbfc6bd8f64348bc2e54627812274b178 | |
+| web-snapshots/robot-safety.net_en_dimensions-and-fastening-of-robot-safety-fences_.md | web-snapshot | https://robot-safety.net/en/dimensions-and-fastening-of-robot-safety-fences/ | 2026-08-09T02:17:15Z | 4b5b10b56738cb368fb4ffd2a3e7320fa37169b3692a1fe23b94797a912c8017 | |
+| datasheets/sick-c4000-basic-c40s-1301aa030 | datasheets | https://www.sick.com/media/pdf/0/70/670/dataSheet_C40S-1301AA030_1022210_en.pdf | 2026-08-09T02:18:31Z | 8ad354012c07f068dce9a924d337ebb154aaac7de2ddb8009420c5af3510f227 | |
+| web-snapshots/assets.robotiq.com_website-assets_support_documents_document_online_2F-85_2F-140.md | web-snapshot | https://assets.robotiq.com/website-assets/support_documents/document/online/2F-85_2F-140_TM_InstructionManual_HTML5_20190503.zip/2F-85_2F-140_TM_InstructionManual_HTML5/Content/6.%20Specifications.htm | 2026-08-09T02:20:16Z | 5b19cdca67f90a75c58fc4bf7658ca9986819973baf16784a6decc97263b70d9 | |
 
 ## Structure
 
