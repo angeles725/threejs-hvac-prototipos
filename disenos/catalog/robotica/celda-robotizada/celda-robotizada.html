@@ -1,0 +1,408 @@
+<!doctype html>
+<!--
+  celda-robotizada — catalog asset, family `robotica`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block62.md §62.7 — ISO 13857 fence heights (1400 mm
+  minimum, 2000 mm in practice, ≤180 mm floor gap) and the SICK C4000 light curtain (48 × 40 mm
+  housing, 1350 mm protective field, housing = field + ~76 mm). Arm proportions from §62.2.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Celda robotizada con vallado y cortina — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+  #state{position:absolute;left:14px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text-muted);line-height:1.6}
+  #state b{color:#fff;font-weight:600}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Celda robotizada — vallado 2000 mm + cortina de luz</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· ISO 13857 · EN ISO 14120 · C4000</span></div>
+  <div class="dim">recinto 4.60 × 4.00 m · hueco al suelo 150 mm (máx. 180) · campo protegido 1350 mm</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">PUERTA</button>
+  <button id="btnCurtain" class="on">CORTINA</button>
+  <button id="btnMesh" class="on">MALLA</button>
+</div>
+<div id="state"></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 62] §62.7) ----------
+const CELL_X = 4.60, CELL_Z = 4.00;   // [INFER] cell footprint sized around the arm's reach
+const FENCE_H  = 2.000;               // [CERT-a] ISO 13857: 1400 mm is the MINIMUM; 2000 is practice
+const FENCE_MIN = 1.400;              // [CERT-a] the minimum, recorded so the choice is auditable
+const FLOOR_GAP = 0.150;              // [CERT-a] must be ≤ 180 mm
+const POST = 0.060;                   // [INFER] 60 × 60 mm post
+const BAY = 1.15;                     // [INFER] panel bay width
+const CURTAIN_S  = 1.350;             // [CERT-doc] SICK C4000 protective field height
+const CURTAIN_L1 = 1.426;             // [CERT-doc] housing length for S = 1350
+const CURTAIN_W = 0.048, CURTAIN_D = 0.040;   // [CERT-doc] 48 × 40 mm housing cross-section
+const OPENING_W = 1.20;               // [INFER] material entry/exit opening the curtain guards
+const MESH_PITCH = 0.11;              // [INFER] mesh pitch — coarse enough to be a guard, not a screen
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 14, 44);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 9.4, AZ = 0.86, EL = 0.30, TY = 1.15;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TY + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TY, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TY, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.0;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(6, 9, 5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0005;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-6; sun.shadow.camera.right=6; sun.shadow.camera.top=6; sun.shadow.camera.bottom=-6;
+scene.add(sun);
+// Vertical-subject fill ([Block 57] gotcha): posts, mesh and curtain columns are all VERTICAL
+// metal. Without a light to reflect the whole guard reads as flat grey. Materials unchanged.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.05);
+fill.position.set(-5.5, 3.6, 7.5);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+// ============================================================================
+const matPost  = new THREE.MeshStandardMaterial({ color:0xdcdfe1, metalness:0.0, roughness:0.52 });
+const matFrame = new THREE.MeshStandardMaterial({ color:0xf0b429, metalness:0.0, roughness:0.55 });
+const matMesh  = new THREE.LineBasicMaterial({ color:0x9aa3ab, transparent:true, opacity:0.85 });
+const matGrey  = new THREE.MeshStandardMaterial({ color:0x3b4148, metalness:0.0, roughness:0.60 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x1d2126, metalness:0.0, roughness:0.70 });
+const matSteel = new THREE.MeshStandardMaterial({ color:0xc9ced1, metalness:0.92, roughness:0.32 });
+const matPaint = new THREE.MeshStandardMaterial({ color:0xdd6a1e, metalness:0.0, roughness:0.48 });
+const matBeam  = new THREE.MeshBasicMaterial({ color:0xff4d3d, transparent:true, opacity:0.45 });
+const matLamp  = new THREE.MeshBasicMaterial({ color:0x00d4aa });
+const matFloor = new THREE.MeshStandardMaterial({ color:0x171b21, metalness:0.0, roughness:0.95 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,len,mat,x,y,z,axis='y',seg=16)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,len,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  if(axis==='x') m.rotation.z = Math.PI/2;
+  if(axis==='z') m.rotation.x = Math.PI/2;
+  p.add(m); return m; };
+
+// cell floor slab, so the enclosure reads as a defined work area
+const slab = box(CELL_X + 0.6, 0.02, CELL_Z + 0.6, matFloor);
+slab.position.y = 0.011; root.add(slab);
+
+// --- perimeter definition: bays around the rectangle, minus the door bay and the opening bay ---
+// Each bay is {cx, cz, rot, kind}. kind: 'panel' | 'door' | 'opening'
+const bays = [];
+{
+  const nx = Math.round(CELL_X / BAY), nz = Math.round(CELL_Z / BAY);
+  const bx = CELL_X / nx, bz = CELL_Z / nz;
+  for(let i=0;i<nx;i++){
+    const cx = -CELL_X/2 + bx*(i + 0.5);
+    bays.push({ cx, cz: -CELL_Z/2, w: bx, rot: 0, kind: (i === nx-1) ? 'opening' : 'panel' });
+    bays.push({ cx, cz:  CELL_Z/2, w: bx, rot: 0, kind: 'panel' });
+  }
+  for(let i=0;i<nz;i++){
+    const cz = -CELL_Z/2 + bz*(i + 0.5);
+    bays.push({ cx: -CELL_X/2, cz, w: bz, rot: Math.PI/2, kind: (i === 0) ? 'door' : 'panel' });
+    bays.push({ cx:  CELL_X/2, cz, w: bz, rot: Math.PI/2, kind: 'panel' });
+  }
+}
+
+// --- posts: real repetition -> InstancedMesh (block54 §2.3) ---
+const postPositions = [];
+for(const b of bays){
+  const half = b.w/2, s = Math.sin(b.rot), c = Math.cos(b.rot);
+  for(const sgn of [-1,1]) postPositions.push([b.cx + sgn*half*c, b.cz + sgn*half*s]);
+}
+// de-duplicate shared posts so the count is honest
+const uniq = [];
+for(const [x,z] of postPositions)
+  if(!uniq.some(([ux,uz]) => Math.abs(ux-x) < 0.02 && Math.abs(uz-z) < 0.02)) uniq.push([x,z]);
+const posts = new THREE.InstancedMesh(new THREE.BoxGeometry(POST, FENCE_H, POST), matPost, uniq.length);
+posts.castShadow = posts.receiveShadow = true;
+{ const m = new THREE.Matrix4();
+  uniq.forEach(([x,z], i) => { m.makeTranslation(x, FENCE_H/2, z); posts.setMatrixAt(i, m); }); }
+posts.instanceMatrix.needsUpdate = true;
+root.add(posts);
+// post feet
+const feet = new THREE.InstancedMesh(new THREE.BoxGeometry(0.16, 0.014, 0.16), matPost, uniq.length);
+feet.castShadow = true;
+{ const m = new THREE.Matrix4();
+  uniq.forEach(([x,z], i) => { m.makeTranslation(x, 0.03, z); feet.setMatrixAt(i, m); }); }
+feet.instanceMatrix.needsUpdate = true;
+root.add(feet);
+
+// --- panel frames + one shared mesh LineSegments ---
+// The frame bars are IDENTICAL across every bay, so they are collected and drawn as InstancedMesh
+// (block54 §2.3 — instancing only where repetition is real). Drawn per-panel this was 44 draw
+// calls of the same two bars; the posts and feet already work the same way.
+const frameV = [], frameH = [];      // {x,y,z,rot} for vertical / horizontal bars
+const meshPts = [];
+function buildPanel(cx, cz, w, rot, y0, y1, collectMesh = true){
+  const c = Math.cos(rot), s = Math.sin(rot);
+  const hx = w/2 - 0.05;
+  for(const sgn of [-1,1]) frameV.push({ x: cx + sgn*hx*c, y: (y0+y1)/2, z: cz + sgn*hx*s, rot, len: y1-y0 });
+  for(const y of [y0 + 0.015, y1 - 0.015]) frameH.push({ x: cx, y, z: cz, rot, len: w - 0.10 });
+  if(!collectMesh) return;
+  // mesh lines are collected in WORLD space into ONE LineSegments — a grid per panel would be
+  // ~10 extra draw calls for something that is visually one guard.
+  const toWorld = (lx, ly) => [cx + lx*c, ly, cz + lx*s];
+  for(let x = -hx; x <= hx + 1e-6; x += MESH_PITCH) meshPts.push(...toWorld(x, y0 + 0.03), ...toWorld(x, y1 - 0.03));
+  for(let y = y0 + 0.03; y <= y1 - 0.03 + 1e-6; y += MESH_PITCH) meshPts.push(...toWorld(-hx, y), ...toWorld(hx, y));
+}
+
+const doorGroup = new THREE.Group();     // the interlocked access door, on its real hinge line
+let doorBay = null, openingBay = null;
+for(const b of bays){
+  if(b.kind === 'panel'){ buildPanel(b.cx, b.cz, b.w, b.rot, FLOOR_GAP, FENCE_H); }
+  else if(b.kind === 'door'){ doorBay = b; }
+  else { openingBay = b; }
+}
+// materialise the collected bars: one InstancedMesh per bar orientation
+const frames = new THREE.Group();
+function instanceBars(list, vertical){
+  if(!list.length) return;
+  const len = list[0].len;
+  const geo = vertical ? new THREE.BoxGeometry(0.030, len, 0.020)
+                       : new THREE.BoxGeometry(len, 0.030, 0.020);
+  const im = new THREE.InstancedMesh(geo, matFrame, list.length);
+  im.castShadow = im.receiveShadow = true;
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0,1,0);
+  const one = new THREE.Vector3(1,1,1);
+  list.forEach((b, i) => {
+    q.setFromAxisAngle(up, -b.rot);
+    m.compose(new THREE.Vector3(b.x, b.y, b.z), q, one.clone().setY(b.len / len));
+    im.setMatrixAt(i, m);
+  });
+  im.instanceMatrix.needsUpdate = true;
+  frames.add(im);
+}
+// bars are grouped by length so one geometry serves each group at scale 1
+for(const [len, group] of groupByLen(frameV)) instanceBars(group.map(b=>({...b, len})), true);
+for(const [len, group] of groupByLen(frameH)) instanceBars(group.map(b=>({...b, len})), false);
+function groupByLen(list){
+  const map = new Map();
+  for(const b of list){ const k = b.len.toFixed(3);
+    if(!map.has(k)) map.set(k, []); map.get(k).push(b); }
+  return [...map].map(([k, g]) => [Number(k), g]);
+}
+root.add(frames);
+const meshGeo = new THREE.BufferGeometry();
+meshGeo.setAttribute('position', new THREE.Float32BufferAttribute(meshPts, 3));
+const meshLines = new THREE.LineSegments(meshGeo, matMesh);
+root.add(meshLines);
+
+// --- access door: hinged on the post, so it swings on the REAL hinge line ---
+{
+  const b = doorBay;
+  const c = Math.cos(b.rot), s = Math.sin(b.rot);
+  const hingeX = b.cx - (b.w/2)*c, hingeZ = b.cz - (b.w/2)*s;
+  doorGroup.position.set(hingeX, 0, hingeZ);
+  doorGroup.rotation.y = -b.rot;
+  const leaf = new THREE.Group(); leaf.position.set(b.w/2, 0, 0); doorGroup.add(leaf);
+  put(leaf, 0.035, FENCE_H - FLOOR_GAP, 0.030, matFrame, -(b.w/2 - 0.04), (FLOOR_GAP+FENCE_H)/2, 0);
+  put(leaf, 0.035, FENCE_H - FLOOR_GAP, 0.030, matFrame,  (b.w/2 - 0.04), (FLOOR_GAP+FENCE_H)/2, 0);
+  put(leaf, b.w - 0.08, 0.035, 0.030, matFrame, 0, FLOOR_GAP + 0.018, 0);
+  put(leaf, b.w - 0.08, 0.035, 0.030, matFrame, 0, FENCE_H - 0.018, 0);
+  // door mesh as its own small LineSegments so it travels with the leaf
+  const dp = [];
+  const dx0 = -(b.w/2 - 0.04), dx1 = (b.w/2 - 0.04);
+  for(let x = dx0; x <= dx1 + 1e-6; x += MESH_PITCH){ dp.push(x, FLOOR_GAP + 0.05, 0, x, FENCE_H - 0.05, 0); }
+  for(let y = FLOOR_GAP + 0.05; y <= FENCE_H - 0.05 + 1e-6; y += MESH_PITCH){ dp.push(dx0, y, 0, dx1, y, 0); }
+  const dg = new THREE.BufferGeometry();
+  dg.setAttribute('position', new THREE.Float32BufferAttribute(dp, 3));
+  leaf.add(new THREE.LineSegments(dg, matMesh));
+  // safety interlock switch on the closing edge — this is what makes it a GUARD, not a gate
+  put(leaf, 0.05, 0.13, 0.05, matDark, b.w/2 - 0.04, 1.05, 0.05);
+  put(leaf, 0.03, 0.09, 0.03, matSteel, b.w/2 - 0.04, 1.05, 0.10);
+  root.add(doorGroup);
+  var doorLeaf = doorGroup;   // hinge group is what rotates
+}
+
+// --- material opening + SICK C4000 light curtain (emitter / receiver columns) ---
+const curtain = new THREE.Group();
+{
+  const b = openingBay;
+  const c = Math.cos(b.rot), s = Math.sin(b.rot);
+  const half = OPENING_W/2;
+  for(const sgn of [-1,1]){
+    const x = b.cx + sgn*half*c, z = b.cz + sgn*half*s;
+    // housing = protective field + ~76 mm [CERT-doc], mounted so the field starts near the floor
+    const col = put(curtain, CURTAIN_W, CURTAIN_L1, CURTAIN_D, matGrey, x, FLOOR_GAP + CURTAIN_L1/2, z);
+    col.rotation.y = -b.rot;
+    const win = put(curtain, CURTAIN_W*0.7, CURTAIN_S, 0.006, matDark,
+      x + Math.sin(-b.rot)*0.022, FLOOR_GAP + 0.038 + CURTAIN_S/2, z + Math.cos(-b.rot)*0.022);
+    win.rotation.y = -b.rot;
+  }
+  // the protective field itself: a translucent plane spanning the opening, S = 1350 mm tall
+  const field = put(curtain, OPENING_W, CURTAIN_S, 0.004, matBeam,
+    b.cx, FLOOR_GAP + 0.038 + CURTAIN_S/2, b.cz);
+  field.rotation.y = -b.rot;
+  field.castShadow = false; field.receiveShadow = false;
+}
+root.add(curtain);
+
+// --- status beacon on a corner post ---
+{
+  const bx = -CELL_X/2, bz = -CELL_Z/2;
+  cyl(root, 0.045, 0.11, matLamp, bx, FENCE_H + 0.06, bz, 'y', 14);
+  cyl(root, 0.050, 0.05, matDark, bx, FENCE_H + 0.13, bz, 'y', 14);
+}
+
+// --- the machine being guarded: a compact 6-axis arm on a pedestal (proportions from §62.2) ---
+const arm = new THREE.Group(); arm.position.set(-0.35, 0, 0.25); root.add(arm);
+{
+  put(arm, 0.70, 0.45, 0.60, matGrey, 0, 0.225, 0);                 // pedestal
+  const j1 = new THREE.Group(); j1.position.y = 0.45; arm.add(j1);
+  j1.rotation.y = -0.5;
+  cyl(j1, 0.24, 0.22, matPaint, 0, 0.11, 0, 'y', 20);
+  put(j1, 0.30, 0.34, 0.42, matPaint, 0.12, 0.34, 0);
+  const j2 = new THREE.Group(); j2.position.set(0.12, 0.50, 0); j1.add(j2);
+  j2.rotation.z = -0.62;
+  cyl(j2, 0.12, 0.40, matGrey, 0, 0, 0, 'z', 16);
+  cyl(j2, 0.095, 0.78, matPaint, 0, 0.39, 0, 'y', 12);
+  const j3 = new THREE.Group(); j3.position.set(0, 0.78, 0); j2.add(j3);
+  j3.rotation.z = 1.05;
+  cyl(j3, 0.10, 0.32, matGrey, 0, 0, 0, 'z', 14);
+  cyl(j3, 0.070, 0.66, matPaint, 0.33, 0, 0, 'x', 12);
+  const j5 = new THREE.Group(); j5.position.set(0.66, 0, 0); j3.add(j5);
+  cyl(j5, 0.075, 0.20, matGrey, 0, 0, 0, 'z', 14);
+  cyl(j5, 0.055, 0.14, matSteel, 0.10, 0, 0, 'x', 14);
+  // workpiece table inside the cell
+  put(arm, 0.80, 0.06, 0.60, matSteel, 1.05, 0.85, -0.10);
+  for(const sx of [-1,1]) for(const sz of [-1,1])
+    put(arm, 0.05, 0.85, 0.05, matGrey, 1.05 + sx*0.36, 0.425, -0.10 + sz*0.26);
+}
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const stateEl = document.getElementById('state');
+let doorTarget = 0;
+function report(open){
+  stateEl.innerHTML = `<b>${open ? 'PUERTA ABIERTA — celda no segura' : 'CELDA CERRADA'}</b><br>` +
+    `valla ${(FENCE_H*1000).toFixed(0)} mm (mín. ISO 13857 ${(FENCE_MIN*1000).toFixed(0)})<br>` +
+    `hueco al suelo ${(FLOOR_GAP*1000).toFixed(0)} mm · máx. 180 mm`;
+}
+report(false);
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnDoor = document.getElementById('btnDoor');
+// swings OUTWARD: an access door that opens into the cell fouls the machine it guards
+btnDoor.onclick = ()=>{ doorTarget = doorTarget === 0 ? 1.75 : 0;
+  btnDoor.classList.toggle('on', doorTarget !== 0); report(doorTarget !== 0); requestRender(); };
+
+const btnCurtain = document.getElementById('btnCurtain');
+btnCurtain.onclick = ()=>{ curtain.visible = !curtain.visible; btnCurtain.classList.toggle('on', curtain.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnMesh = document.getElementById('btnMesh');
+btnMesh.onclick = ()=>{ meshLines.visible = !meshLines.visible; btnMesh.classList.toggle('on', meshLines.visible); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+let wasMoving = false;
+function animate(){
+  requestAnimationFrame(animate);
+  // the hinge group starts at -bay.rot, so the door's OWN angle is rotation.y + bay.rot
+  const cur = doorLeaf.rotation.y + doorBay.rot;
+  const delta = doorTarget - cur;
+  const moving = Math.abs(delta) > 0.0008;
+  if(moving){ doorLeaf.rotation.y += delta * 0.12; needsRender = true; }
+  if(wasMoving && !moving){ renderer.shadowMap.needsUpdate = true; needsRender = true; }
+  wasMoving = moving;
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root },
+                setDoor: open => { doorTarget = open ? 1.75 : 0; btnDoor.classList.toggle('on', open);
+                                   report(open); requestRender(); },
+                fence: { height_m: FENCE_H, iso13857_min_m: FENCE_MIN, floor_gap_m: FLOOR_GAP },
+                curtain: { field_m: CURTAIN_S, housing_m: CURTAIN_L1, section_m: [CURTAIN_W, CURTAIN_D] },
+                postCount: uniq.length };
+globalThis.__celdaRobotizadaApp = __app;
+globalThis['__celda-robotizadaApp'] = __app;   // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

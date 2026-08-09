@@ -1,0 +1,176 @@
+# DesignSpec — fenced robot cell with light-curtain guarded opening
+# Evidence: [Block 62] §62.7 (research/threejs-block62.md) — ISO 13857 fence heights via a safety
+# practitioner source, EN ISO 14120 guard construction, and the preserved SICK C4000 data sheet.
+# Arm proportions reuse §62.2. Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: celda-robotizada
+family: robotica
+track: needs-research
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 16 -> complex.
+  scores: {silhouette: 2, components: 3, hierarchy: 2, repetition: 3,
+           material_layers: 2, detail: 2, occlusion: 1, action_readiness: 1}
+  tier: complex
+  notes: >
+    repetition 3 — this is the instancing asset of the family: posts, feet and every frame bar
+    repeat around the perimeter, and the whole mesh infill is ONE LineSegments. Built naively the
+    cell cost 81 draw calls; instanced it costs 36 for the identical picture.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/threejs-block62.md
+  reuse_pointers:
+    instancing: "disenos/catalog/almacenamiento/rack-pallet/ (instancing only where repetition is real)"
+    hinge_rule: "disenos/catalog/puertas/puerta-cuarto-frio/ (door pivots on the hinge line)"
+    arm_proportions: "disenos/catalog/robotica/brazo-robotico-6ejes/"
+
+references:
+  - source: "sources/web-snapshots/robot-safety.net_en_dimensions-and-fastening-of-robot-safety-fences_.md"
+    evidences: >
+      ISO 13857 minimum height against climbing over = 1400 mm, and only at the maximum permissible
+      distance from the hazard [CERT-a]; robot cell fences in practice 2000 mm or higher [CERT-a];
+      above 2700 mm the over-reach term drops out [CERT-a]; gap between floor and the lower edge of
+      the panel ≤ 180 mm [CERT-a]; fasteners must be loss-protected [CERT-a].
+    suitability: pass
+  - source: "sources/datasheets/sick-c4000-basic-c40s-1301aa030 (SICK C4000 Basic)"
+    evidences: >
+      Resolution 14 mm; protective field height S = 1350 mm; housing cross-section 48 × 40 mm;
+      housing length L1 = 1426 mm for S = 1350 (L1 ≈ S + 72…78 mm across the range) [CERT-doc].
+    suitability: pass
+
+dimensions_real:
+  cell_x_m:        {value: 4.60,  confidence: low}    # [INFER] sized around the arm's reach
+  cell_z_m:        {value: 4.00,  confidence: low}    # [INFER]
+  fence_height_m:  {value: 2.000, confidence: med}    # [CERT-a] common practice, above the minimum
+  fence_min_m:     {value: 1.400, confidence: high}   # [CERT-a] ISO 13857 minimum — recorded, not used
+  floor_gap_m:     {value: 0.150, confidence: high}   # [CERT-a] chosen INSIDE the ≤180 mm limit
+  post_section_m:  {value: 0.060, confidence: low}    # [INFER]
+  bay_width_m:     {value: 1.15,  confidence: low}    # [INFER]
+  mesh_pitch_m:    {value: 0.11,  confidence: low}    # [INFER] guard mesh, not a fine screen
+  curtain_field_m: {value: 1.350, confidence: high}   # [CERT-doc] SICK C4000 S
+  curtain_housing_m:{value: 1.426,confidence: high}   # [CERT-doc] L1 for S = 1350
+  curtain_section_m:{value: [0.048, 0.040], confidence: high}   # [CERT-doc] 48 × 40 mm
+  opening_w_m:     {value: 1.20,  confidence: low}    # [INFER] material entry/exit width
+
+hierarchy:
+  - name: root
+    children:
+      - name: slab              # defined work area under the enclosure
+      - name: posts             # InstancedMesh, de-duplicated at shared corners
+      - name: post_feet         # InstancedMesh
+      - name: frames            # InstancedMesh per bar length (verticals / horizontals)
+      - name: mesh_lines        # ONE LineSegments for the whole perimeter infill
+      - name: door              # hinged on the post, swings OUTWARD
+        pivot: "the post at the bay edge — the real hinge line, not the leaf centre"
+        animation: swing
+        children:
+          - name: door_frame
+          - name: door_mesh     # its own LineSegments so it travels with the leaf
+          - name: interlock_switch
+      - name: curtain           # emitter + receiver columns and the protective field plane
+      - name: beacon            # status light on a corner post
+      - name: arm               # the guarded machine: pedestal + 6-axis arm + work table
+
+materials:
+  - id: post-galvanised
+    family: painted-metal
+    color: "#dcdfe1"
+    metalness: 0.0             # galvanised/painted post — DIELECTRIC (HANDBOOK §3.1)
+    roughness: 0.52
+    evidence: "HANDBOOK §3.1"
+    confidence: 0.7
+  - id: frame-yellow
+    family: painted-metal
+    color: "#f0b429"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "safety-yellow frame is the guard vocabulary that says GUARD rather than fence [CERT-a]"
+    confidence: 0.7
+  - id: mesh-wire
+    family: bare-metal
+    color: "#9aa3ab"
+    metalness: 0.0             # drawn as LineBasicMaterial — lines are unlit by design
+    roughness: 1.0
+    evidence: "one LineSegments for the whole infill; a lit tube mesh would cost thousands of tris"
+    confidence: 0.6
+  - id: curtain-housing
+    family: painted-metal
+    color: "#3b4148"
+    metalness: 0.0
+    roughness: 0.60
+    evidence: "[CERT-doc] extruded housing, 48 × 40 mm"
+    confidence: 0.75
+  - id: protective-field
+    family: emissive-overlay
+    color: "#ff4d3d"
+    metalness: 0.0
+    roughness: 1.0
+    evidence: "informational overlay (MeshBasicMaterial, opacity 0.45) — not a physical surface"
+    confidence: 0.6
+
+critical_features:
+  - id: guard-geometry-is-auditable
+    desc: >
+      The fence is 2000 mm with a 150 mm floor gap, and the HUD states both alongside the ISO 13857
+      minimum (1400 mm) and the 180 mm gap limit. Anyone can check the model against the standard
+      instead of trusting it.
+    threshold: 0.85
+  - id: curtain-proportion
+    desc: >
+      The curtain columns are 48 × 40 mm and 1426 mm long for a 1350 mm protective field — the
+      housing is visibly LONGER than the field it protects. A curtain drawn as a thin rod reads as
+      a lamp ([Block 62] §62.7).
+    threshold: 0.78
+  - id: instancing-earns-its-place
+    desc: >
+      Posts, feet and frame bars are InstancedMesh and the infill is one LineSegments: 36 draw
+      calls instead of 81 for the same image. This is the asset where repetition is genuinely real.
+    threshold: 0.80
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 45
+    tris: 40000
+  measured:
+    draws: 36
+    tris: 1662
+    console_errors: 0
+
+camera:
+  azimuth_deg: 49.3
+  elevation_deg: 17.2
+  fov: 38
+  target_y_m: 1.15
+  radius_m: 9.4
+
+lighting: house-rig + vertical-subject fill
+  # Posts, mesh and curtain columns are ALL vertical metal — the strongest case in the family for
+  # the [Block 57] fill. Fill 1.05 opposite the key, environmentIntensity 2.0, materials unchanged.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "PUERTA"     # interlocked access door, swings OUTWARD so it cannot foul the machine
+  - "CORTINA"    # light-curtain columns + protective field
+  - "MALLA"      # hide the infill to inspect the frame structure
+
+public_api:
+  - "__celdaRobotizadaApp.setDoor(true|false)"
+  - "__celdaRobotizadaApp.fence      # {height_m, iso13857_min_m, floor_gap_m}"
+  - "__celdaRobotizadaApp.curtain    # {field_m, housing_m, section_m}"
+  - "__celdaRobotizadaApp.postCount  # de-duplicated post count"
+
+colorTarget:
+  # MEASURED from a rendered fence post (headless SwiftShader capture at 1280x800), frozen as the
+  # regression anchor. A crop on the mesh panel would mix wire and background and drift.
+  srgb: [222, 224, 225]
+  deltaE00Max: 8
+  crop: "9x70+716+430"   # clean post face, door closed, at 1280x800
