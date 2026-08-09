@@ -1,0 +1,340 @@
+<!doctype html>
+<!--
+  tolva-dosificador — catalog asset, family `proceso`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Evidence: research/sources/B59-proceso-dims/mass-flow-hopper-screw-feeder.md
+  Spec: ./design-spec.yaml
+  NOTE: two shape facts carry this asset, and both are invisible to a draw-call count.
+   1. Every converging wall must stand >= 70 deg from horizontal (15-20 deg from vertical) — on the
+      hidden axis as well as the visible one.
+   2. The screw must have a TAPER CONE and INCREASING PITCH over the inlet slot. A constant-pitch
+      auger draws only from the back of the opening; it renders fine and does not work.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tolva con dosificador de tornillo — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Tolva de flujo másico con dosificador de tornillo (pérdida de peso)</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· inox 304 · accionamiento pintado</span></div>
+  <div class="dim">paredes ≥ 70° · salida en ranura 450 × 200 mm · tornillo de paso variable sobre cono</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnFeed">DOSIFICANDO</button>
+  <button id="btnCut">CORTE</button>
+  <button id="btnDim">COTAS</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+const TOP_W = 0.900, TOP_D = 0.900;      // [INFER] hopper top section
+const STRAIGHT = 0.550;                  // [INFER]
+const SLOT_L = 0.450, SLOT_W = 0.200;    // [INFER] outlet slot — long, to feed the whole screw inlet
+const TRANS_H = 0.960;                   // [INFER] chosen so BOTH wall angles clear 70 deg
+const AXIS_Y = 0.520;                    // [INFER] screw centreline
+const SCREW_OD = 0.160;                  // [INFER]
+const TROUGH_L = 1.120;                  // [INFER]
+const HOP_X = -0.300;                    // hopper sits over the REAR half of the screw inlet
+const TROUGH_X0 = -0.680, TROUGH_X1 = TROUGH_X0 + TROUGH_L;
+
+// the evidenced criterion, computed rather than asserted (see COTAS)
+// ALONG the slot the wall closes 0.900 -> 0.450 (76.8 deg); ACROSS it, 0.900 -> 0.200 (70.0 deg).
+// The ACROSS wall is the shallow one and therefore the one that governs: TRANS_H is set so that it,
+// not the comfortable one, clears the 70 deg criterion.
+const ANG_ALONG  = Math.atan2(TRANS_H, (TOP_W - SLOT_L)/2) * 180/Math.PI;   // 76.8 deg
+const ANG_ACROSS = Math.atan2(TRANS_H, (TOP_D - SLOT_W)/2) * 180/Math.PI;   // 70.0 deg — governing
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 8, 30);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.05, 120);
+const R = 4.30, AZ = 0.803, EL = 0.209;                         // 46° azimuth / 12° elevation (spec camera)
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 1.05 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 1.05, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 1.05, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+// MEASURED LIMIT, recorded so nobody repeats the experiment: the converging walls read darker than
+// the rest of the stainless (59,63,67 against 95,101,105 on the straight section and 181,185,188 on
+// the screw tube), and that is PHYSICS, not a bug. Their normals point downward (measured y = -0.34
+// and -0.23), and at metalness 0.92 a surface is lit by what it reflects, so they reflect floor.
+// A camera above the horizon can never see the key light reflected off a downward-facing face —
+// solving R = 2(N.V)N - V for these normals puts the required light source below the floor.
+// Tried and rejected: extra fills (+7 sRGB, negligible); a bounce card added to the PMREM scene
+// (no effect at any brightness up to 6x — RoomEnvironment's own floor occludes it; raised above
+// that floor it blows out the whole map instead). Left as-is: the shape is right, the material
+// claim is intact, and lowering metalness to fake brightness would break it.
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.5;      // DEVIATION (spec §lighting): large bright metal planes
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.6, 4.0, 2.2); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-1.8; sun.shadow.camera.right=1.8; sun.shadow.camera.top=2.2; sun.shadow.camera.bottom=-2.2;
+sun.shadow.camera.far = 12;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xdfe9f5, 0.7);
+fill.position.set(3.0, 1.6, 3.4); scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+// The converging walls have normals that point DOWNWARD (measured: y = -0.34 and -0.23), so they
+// see the dark floor, not the sky. That is the vertical-metal gotcha in its sloped variant, and the
+// house rig cannot reach it: a hopper is the one shape whose main faces aim below the horizon.
+// The fix is a brighter GROUND term — physically the floor bounce — plus a low fill aimed up into
+// those normals. metalness stays 0.92; darkening it would have been the wrong repair.
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x6d7681, 1.0));
+const bounce = new THREE.DirectionalLight(0xcfd8e4, 0.45);
+bounce.position.set(1.8, -1.2, 2.6); scene.add(bounce);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS.
+// ============================================================================
+const matShell = new THREE.MeshStandardMaterial({ color:0xc6cbcd, metalness:0.92, roughness:0.32,
+                                                  side:THREE.DoubleSide });
+const matShellCut = new THREE.MeshStandardMaterial({ color:0xc6cbcd, metalness:0.92, roughness:0.32,
+                                                     transparent:true, opacity:0.16, side:THREE.DoubleSide,
+                                                     depthWrite:false });
+const matScrew = new THREE.MeshStandardMaterial({ color:0xb6bcbf, metalness:0.92, roughness:0.36,
+                                                  side:THREE.DoubleSide });
+const matDrive = new THREE.MeshStandardMaterial({ color:0x4e565c, metalness:0.0,  roughness:0.55 });
+const matFrame = new THREE.MeshStandardMaterial({ color:0x343b40, metalness:0.0,  roughness:0.60 });
+const matCell  = new THREE.MeshStandardMaterial({ color:0x9aa0a3, metalness:0.88, roughness:0.40 });
+const matDim   = new THREE.MeshStandardMaterial({ color:0x00d4aa, metalness:0.0,  roughness:0.6,
+                                                  emissive:0x0b3b32, emissiveIntensity:1.0 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+function mesh(geo, mat, parent){ const m = new THREE.Mesh(geo, mat);
+  m.castShadow = m.receiveShadow = true; if(parent) parent.add(m); return m; }
+function cylX(rt, rb, len, seg=24){ const g = new THREE.CylinderGeometry(rt, rb, len, seg); g.rotateZ(Math.PI/2); return g; }
+
+// A rectangle-to-rectangle frustum. Built explicitly because the outlet is a SLOT: a CylinderGeometry
+// with 4 sides can only taper to a square, and a square outlet would break the feeder rule.
+function frustum(tw, td, bw, bd, h){
+  const t = [[-tw/2,h,-td/2],[tw/2,h,-td/2],[tw/2,h,td/2],[-tw/2,h,td/2]];
+  const b = [[-bw/2,0,-bd/2],[bw/2,0,-bd/2],[bw/2,0,bd/2],[-bw/2,0,bd/2]];
+  const pos = [];
+  // Winding matters here even with DoubleSide: side only decides what gets DRAWN, while lighting
+  // uses the vertex normal. With the two triangles wound the other way, computeVertexNormals points
+  // every wall inward and the stainless hopper shades as flat dark grey — a lighting bug that looks
+  // exactly like the "vertical metal reads flat" symptom but is not fixable with any light.
+  for(let i=0;i<4;i++){
+    const j = (i+1)%4;
+    pos.push(...b[i], ...t[j], ...b[j]);
+    pos.push(...b[i], ...t[i], ...t[j]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+// --- hopper: straight section + square-to-slot transition ---
+const hopper = new THREE.Group();
+const hopBase = AXIS_Y + 0.100;                                   // transition lands on the trough
+const trans = mesh(frustum(TOP_W, TOP_D, SLOT_L, SLOT_W, TRANS_H), matShell, hopper);
+trans.position.set(HOP_X, hopBase, 0);
+const straight = mesh(new THREE.BoxGeometry(TOP_W, STRAIGHT, TOP_D), matShell, hopper);
+straight.position.set(HOP_X, hopBase + TRANS_H + STRAIGHT/2, 0);
+mesh(new THREE.BoxGeometry(TOP_W + 0.040, 0.030, TOP_D + 0.040), matShell, hopper)
+  .position.set(HOP_X, hopBase + TRANS_H + STRAIGHT + 0.015, 0);  // top rim
+root.add(hopper);
+
+// --- trough: feeder tube with the inlet slot open to the hopper, discharge spout at the far end ---
+const trough = new THREE.Group();
+const tube = mesh(cylX(SCREW_OD/2 + 0.014, SCREW_OD/2 + 0.014, TROUGH_L, 28), matShell, trough);
+tube.position.set((TROUGH_X0 + TROUGH_X1)/2, AXIS_Y, 0);
+for(const sx of [TROUGH_X0, TROUGH_X1])                           // end plates
+  mesh(new THREE.CylinderGeometry(SCREW_OD/2 + 0.026, SCREW_OD/2 + 0.026, 0.016, 24).rotateZ(Math.PI/2), matShell, trough)
+    .position.set(sx, AXIS_Y, 0);
+const collar = mesh(new THREE.BoxGeometry(SLOT_L + 0.030, 0.100, SLOT_W + 0.030), matShell, trough);
+collar.position.set(HOP_X, AXIS_Y + 0.070, 0);                    // inlet collar under the hopper
+const spout = mesh(new THREE.CylinderGeometry(0.070, 0.070, 0.180, 24), matShell, trough);
+spout.position.set(TROUGH_X1 - 0.090, AXIS_Y - 0.150, 0);
+mesh(new THREE.CylinderGeometry(0.090, 0.090, 0.018, 24), matShell, trough)
+  .position.set(TROUGH_X1 - 0.090, AXIS_Y - 0.245, 0);
+root.add(trough);
+
+// --- screw: centre pipe + TAPER CONE under the inlet + VARIABLE-PITCH flighting ---
+// The cone runs from the rear of the inlet to about its centre, and the pitch grows along the inlet,
+// exactly as the source describes. Both details exist so the screw draws along the WHOLE slot.
+const screw = new THREE.Group();
+const inletX0 = HOP_X - SLOT_L/2, inletX1 = HOP_X + SLOT_L/2;
+mesh(cylX(0.026, 0.026, TROUGH_L - 0.06, 20), matScrew, screw).position.set((TROUGH_X0 + TROUGH_X1)/2, AXIS_Y, 0);
+const cone = mesh(cylX(0.026, 0.062, (inletX1 - inletX0)*0.55, 20), matScrew, screw);
+cone.position.set(inletX0 + (inletX1 - inletX0)*0.275, AXIS_Y, 0);   // taper cone, rear→mid of inlet
+// flighting: one helical ribbon, pitch increasing across the inlet then constant downstream
+function flight(x0, x1, pitchAt, rAt){
+  const pts = [], N = 260;
+  let x = x0, phase = 0;
+  for(let i=0;i<=N;i++){
+    const t = i/N; x = x0 + (x1-x0)*t;
+    const p = pitchAt(x), r = rAt(x);
+    phase += ((x1-x0)/N) / p * Math.PI*2;
+    pts.push(new THREE.Vector3(x, AXIS_Y + Math.cos(phase)*r, Math.sin(phase)*r));
+  }
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), N, 0.007, 6, false);
+}
+const rOuter = SCREW_OD/2 - 0.004;
+const pitchAt = x => {
+  if(x <= inletX0) return 0.060;
+  if(x >= inletX1) return 0.150;
+  return 0.060 + (0.150 - 0.060) * (x - inletX0)/(inletX1 - inletX0);   // [CERT-web] variable pitch
+};
+const rAt = x => rOuter;
+mesh(flight(TROUGH_X0 + 0.04, TROUGH_X1 - 0.04, pitchAt, rAt), matScrew, screw);
+root.add(screw);
+
+// --- drive: gearmotor at the tail ---
+const drive = new THREE.Group();
+mesh(cylX(0.070, 0.070, 0.060, 20), matDrive, drive).position.set(TROUGH_X0 - 0.030, AXIS_Y, 0);
+mesh(new THREE.BoxGeometry(0.150, 0.190, 0.180), matDrive, drive).position.set(TROUGH_X0 - 0.135, AXIS_Y, 0);
+mesh(cylX(0.075, 0.075, 0.230, 24), matDrive, drive).position.set(TROUGH_X0 - 0.325, AXIS_Y, 0);
+mesh(cylX(0.060, 0.070, 0.070, 20), matDrive, drive).position.set(TROUGH_X0 - 0.475, AXIS_Y, 0);
+mesh(new THREE.BoxGeometry(0.090, 0.070, 0.080), matDrive, drive).position.set(TROUGH_X0 - 0.300, AXIS_Y + 0.115, 0);
+root.add(drive);
+
+// --- frame on LOAD CELLS: what makes it loss-in-weight rather than volumetric ---
+const frame = new THREE.Group();
+const legX = [-0.660, 0.360], legZ = [-0.330, 0.330];
+for(const x of legX) for(const z of legZ){
+  mesh(new THREE.BoxGeometry(0.060, AXIS_Y - 0.170, 0.060), matFrame, frame)
+    .position.set(x, (AXIS_Y - 0.170)/2, z);
+  mesh(new THREE.BoxGeometry(0.140, 0.014, 0.140), matFrame, frame).position.set(x, 0.007, z);
+  mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.070, 16), matCell, frame)   // load cell
+    .position.set(x, AXIS_Y - 0.135, z);
+  mesh(new THREE.BoxGeometry(0.110, 0.014, 0.110), matCell, frame).position.set(x, AXIS_Y - 0.093, z);
+}
+for(const z of legZ)
+  mesh(new THREE.BoxGeometry(legX[1]-legX[0]+0.06, 0.050, 0.040), matFrame, frame)
+    .position.set((legX[0]+legX[1])/2, AXIS_Y - 0.070, z);
+for(const x of legX)
+  mesh(new THREE.BoxGeometry(0.040, 0.050, legZ[1]-legZ[0]), matFrame, frame)
+    .position.set(x, AXIS_Y - 0.070, 0);
+root.add(frame);
+
+// --- COTAS: the 70-degree wall criterion, marked on BOTH converging directions ---
+const dims = new THREE.Group(); dims.visible = false;
+function wallMark(len, ang, x, z, rotY){
+  const b = mesh(new THREE.BoxGeometry(0.008, len, 0.008), matDim, dims);
+  b.position.set(x, hopBase + TRANS_H/2, z);
+  b.rotation.set(0, rotY, (Math.PI/2 - ang*Math.PI/180) * (rotY === 0 ? 1 : 1));
+  return b;
+}
+wallMark(TRANS_H/Math.sin(ANG_ALONG*Math.PI/180), ANG_ALONG,
+         HOP_X + (TOP_W/2 + SLOT_L/2)/2, TOP_D/2 + 0.02, 0);
+const across = mesh(new THREE.BoxGeometry(0.008, TRANS_H/Math.sin(ANG_ACROSS*Math.PI/180), 0.008), matDim, dims);
+across.position.set(HOP_X + TOP_W/2 + 0.02, hopBase + TRANS_H/2, (TOP_D/2 + SLOT_W/2)/2);
+across.rotation.x = -(Math.PI/2 - ANG_ACROSS*Math.PI/180);
+mesh(new THREE.BoxGeometry(0.500, 0.008, 0.008), matDim, dims)
+  .position.set(HOP_X, hopBase - 0.02, TOP_D/2 + 0.02);
+root.add(dims);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let feeding = false, cut = false;
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnFeed = document.getElementById('btnFeed');
+btnFeed.onclick = ()=>{ feeding = !feeding; btnFeed.classList.toggle('on', feeding); requestRender(); };
+
+const cutTargets = [trans, straight, tube, spout, collar];   // the collar sits directly over the
+// inlet slot, so leaving it opaque hides the taper cone and the variable pitch — the exact detail
+// the cut exists to show.
+const btnCut = document.getElementById('btnCut');
+btnCut.onclick = ()=>{ cut = !cut; btnCut.classList.toggle('on', cut);
+  for(const m of cutTargets){ m.material = cut ? matShellCut : matShell; m.castShadow = !cut; }
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnDim = document.getElementById('btnDim');
+btnDim.onclick = ()=>{ dims.visible = !dims.visible; btnDim.classList.toggle('on', dims.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(feeding){ screw.rotation.x += 0.05; needsRender = true; }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root },
+                angles:{ along: ANG_ALONG, across: ANG_ACROSS } };
+globalThis.__tolvaDosificadorApp = __app;
+globalThis['__tolva-dosificadorApp'] = __app;      // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
