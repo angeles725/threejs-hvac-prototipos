@@ -1,0 +1,726 @@
+<!doctype html>
+<!--
+  skid-cip — catalog asset, family `proceso`. LINEAR two-tank CIP station, 600 L class.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Spec (BINDING): ./design-spec.yaml — every dimension below is quoted from it, not re-derived.
+  Dimensional evidence: research/sources/B101-cip-dims/ (Suncombe envelope table, Alfa Laval
+  DIN 11850 tube table, LKH pump table, LKB valve table, Promag H 300, Ullmer used unit).
+
+  THE LOAD-BEARING GEOMETRY, and why it closes:
+      cone 0.114 + barrel 1.057 + Klopper head 0.164 = 1.335 m vessel
+      upper deck 0.450 + 1.335                       = 1.785 m <= 1.800 m published envelope
+  So the vessels stand ON the upper deck and the pump bay lives UNDERNEATH them. That two-storey
+  split is the identity of the asset; everything else is detail hung off it.
+
+  RIG NOTE (measured, not assumed): `scene.environmentIntensity` DOES NOT EXIST in three r160 —
+  grep the r160 bundle, there are zero occurrences. Every sibling asset that sets it is setting a
+  dead property. The r160 knob that actually carries the brushed-stainless recipe is
+  `material.envMapIntensity`, so the metals below carry envMapIntensity 2.15 AND the scene property
+  is kept for forward-compat with r163+. Never lower metalness to fake the read (HANDBOOK §3.1).
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skid CIP 2 tanques 600 L — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Skid CIP lineal — 2 tanques 600 L · 3.200 × 1.000 × 1.800 m</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· inox 316L cepillado · motor PINTADO</span></div>
+  <div class="dim">tanques sobre cubierta 0.450 · bahía de bombas debajo · LKH-20 / IEC 90</div>
+  <div class="dim">main DN50 53.0/50.0 · clamp sanitario · fondo cónico 15° + fondo Klöpper</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnCorte">CORTE</button>
+  <button id="btnValvulas">VALVULAS</button>
+  <button id="btnFlujo">FLUJO</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const PI = Math.PI;
+
+// ============================================================================
+// DIMENSIONS — all from design-spec.yaml §dimensions_real. Do not "improve" these.
+// Axis convention: +X = skid length (3.200), +Z = skid depth (1.000), +Y = up.
+// ============================================================================
+const SKID_L = 3.200, SKID_W = 1.000, SKID_H = 1.800;
+const XA = SKID_L/2, ZA = SKID_W/2;                  // 1.600 / 0.500
+const SHS = 0.050;                                   // [INFER] square-pipe frame section
+const DECK_Y   = 0.450;                              // [INFER] upper deck TOP — forced by the envelope
+const DECK_T   = 0.006;
+const RAIL_T_HI = DECK_Y - DECK_T, RAIL_T_LO = RAIL_T_HI - SHS;   // 0.444 / 0.394
+const RAIL_B_LO = 0.100, RAIL_B_HI = RAIL_B_LO + SHS;             // 0.100 / 0.150
+const POST_X = [-1.575, -0.525, 0.525, 1.575], POST_Z = [-0.475, 0.475];
+
+// --- vessel (600 L, D 0.850) ---
+const TD = 0.850, TR = TD/2;                         // [CERT-a] largest bore clearing the 1.000 frame
+const BARREL = 1.057;                                // [CERT-a] 0.600 m3 / (pi/4 D^2)
+const CROWN_R = 1.00*TD, KNUCK_R = 0.10*TD;          // DIN 28011 Klopper
+const dcv = CROWN_R - KNUCK_R, dxv = TR - KNUCK_R;
+const dyv = Math.sqrt(dcv*dcv - dxv*dxv);
+const HEAD_D = CROWN_R - dyv;                        // 0.1647 ≈ 0.1935 D  [CERT-a]
+const CONE_D = 0.114;                                // [CERT-a] (D/2) tan 15°
+const APEX_Y = DECK_Y;                               // cone apex sits at deck level
+const TAN_LO = APEX_Y + CONE_D;                      // 0.564  cone→barrel tangent
+const TAN_HI = TAN_LO + BARREL;                      // 1.621  barrel→head tangent
+const TOP_Y  = TAN_HI + HEAD_D;                      // 1.7857 vessel top
+const OUT_R  = 0.0335;                               // outlet ferrule radius (DN50 ferrule)
+const OUT_Y  = TAN_LO - (TR - OUT_R)*Math.tan(15*PI/180);   // 0.4591
+const TANK_X = [-0.80, 0.30];                        // chemical, rinse (spec §hierarchy pivots)
+const TANK_Z = -0.075;                               // barrel front tangent → z 0.350, rear → -0.500
+
+// --- sanitary tube (EN 10357-A / DIN 11850 R2) ---
+const D50_OD = 0.053, D50_R = D50_OD/2;              // [CERT-doc] DN50 53.0 mm OD
+const D40_R  = 0.041/2;                              // [CERT-doc] DN40 branch
+const ELB_R  = 0.085;                                // long-radius elbow ~1.6 D
+
+// --- pump set: LKH-20 head + IEC 90 painted motor ---
+const PUMP_Z   = 0.320;                              // solved from SIGHT_CEIL below, not chosen by eye
+const SHAFT_Y  = 0.205;                              // [CERT-doc] F, IEC 90 — at the BOTTOM of its published
+  // adjustment range, not the top. The leaflet footnote is explicit that F 262 "can be reduced by min. 59 mm"
+  // on the adjustable legs, i.e. down to 0.203 m, and F is the ONE letter the leaflet anchors. Deliberate:
+  // at F(max) the deck's front edge buries the entire pump set from the spec camera (measured, attempt 1 —
+  // only the leg brackets rendered), and the painted-motor-vs-bare-stainless feature cannot be scored on a
+  // set nobody can see. Lowering the pump is inside the datasheet; moving the deck is not.
+const HEAD_L   = 0.253, MOT_L = 0.434, MOT_R = 0.157/2;
+const VOL_R    = 0.095;
+const PUMP_XIN = [-1.28, -0.36, 0.56];               // inlet FACE x (each head faces -X)
+const volX  = k => PUMP_XIN[k] + 0.1125;             // volute centre = discharge riser x
+const motCx = k => PUMP_XIN[k] + HEAD_L + 0.217;     // motor centre x
+
+// --- valve / instrument / panel ---
+const V_F = 0.1057, V_H2 = 0.092, V_K = 0.120;       // [CERT-doc] LKB DN50 F / H2 / K
+const FM_FACE = 0.140, FM_STACK = 0.309;             // [CERT-doc] Promag H 300 DN50
+const FM_HEAD = [0.200, 0.141, 0.059];
+const PAN_W = 0.760, PAN_H = 0.760, PAN_D = 0.300;   // [CERT-web] Rittal AE1014.600
+const PAN_X = 1.30, PAN_Y0 = 0.550, PAN_Z = -0.020;
+
+// --- piping levels ---
+const SUC_Y = SHAFT_Y, SUC_Z = TANK_Z;               // common suction manifold, under the tanks
+const SUC_TAP = [-1.46, -0.54, 0.38];                // manifold → pump branch take-offs
+const MAIN_Z  = 0.405;                               // 0.017 clear of the barrel front tangent (0.350) AND
+const SUP_Y   = 0.620, RET_Y = 1.300;                // 0.019 clear of the front top rail crossing the deck
+const RISER_Z = MAIN_Z;
+
+// --- spec camera, declared EARLY: the pump bay's z is solved from it, not guessed ---
+const CAM_R = 5.75, AZ = 44*PI/180, EL = 18*PI/180, TGT_Y = 0.85;
+const CAM_Y = TGT_Y + CAM_R*Math.sin(EL), CAM_Z = CAM_R*Math.sin(AZ)*Math.cos(EL);
+// The deck's front-top edge is what buries a pump bay. At a given z, everything BELOW this line is
+// visible from the spec camera and everything above it sits in the deck's shadow.
+const EDGE_Z = POST_Z[1] + SHS/2;
+const SIGHT_SLOPE = (CAM_Y - RAIL_T_HI)/(CAM_Z - EDGE_Z);
+const SIGHT_CEIL = z => RAIL_T_HI - (EDGE_Z - z)*SIGHT_SLOPE;
+
+// ---------- cheap invariants (ONBOARD: assert extents, do not trust chained offsets) ----------
+const chk = (ok,msg)=>{ console.assert(ok, 'skid-cip INVARIANT: '+msg); return ok; };
+chk(Math.abs(TOP_Y - (DECK_Y + 1.335)) < 0.012, `vessel top ${TOP_Y.toFixed(4)} must land at 1.785`);
+chk(TOP_Y <= SKID_H, `vessel top ${TOP_Y.toFixed(3)} must stay under the 1.800 envelope`);
+chk(TANK_Z - TR >= -ZA - 0.001 && TANK_Z + TR <= ZA, 'barrel must stay inside the 1.000 m width');
+chk(SHAFT_Y + 0.104 < RAIL_T_LO, 'pump head must clear the underside of the deck beams');
+chk(SHAFT_Y + 0.100 < SIGHT_CEIL(PUMP_Z),
+    `whole pump set must sit below the deck sight line (top ${(SHAFT_Y+0.100).toFixed(3)} vs ceiling ${SIGHT_CEIL(PUMP_Z).toFixed(3)})`);
+chk(PUMP_XIN[0] >= -XA && motCx(2) + MOT_L/2 <= XA, 'pump sets must stay inside the frame');
+chk(MAIN_Z - 0.038 > TANK_Z + TR, 'main header collars must clear the barrel front tangent');
+chk(RISER_Z + D50_R < POST_Z[1] - SHS/2, 'riser must clear the front top rail while crossing the deck');
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 11, 38);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+// Spec camera azimuth 44° / elevation 18° / fov 38 / target y 0.85. RADIUS DEVIATION: the spec's
+// R 5.20 puts the near-bottom bbox corner at ndcY -0.927 — inside the letter of |ndc| <= 0.93 but
+// with zero margin, and the gate CANNOT see a clipped frame. R lifted to 5.75 (declared above,
+// because the pump bay's depth is solved from it). Reframed by moving the CAMERA, never by sinking
+// the subject (ONBOARD).
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.05, 120);
+camera.position.set(CAM_R*Math.cos(AZ)*Math.cos(EL), TGT_Y + CAM_R*Math.sin(EL), CAM_R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TGT_Y, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TGT_Y, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;    // OFF by default: a rotating scene never settles
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envScene = new RoomEnvironment();
+// WHY THIS IS NOT THE STOCK ENVIRONMENT. A vertical bare-metal cylinder seen from ABOVE reflects
+// BELOW the horizon (R = 2(N·V)N - V with a horizontal normal), and every one of RoomEnvironment's
+// six area lights sits at y 8.9-20 — entirely above it. That is precisely why attempt 1 rendered the
+// dished heads bright and the 0.85 m barrels as dark drums: measured mean 67-78 sRGB at sd 17.5,
+// against the recipe's 86/92/97 and the reference photograph's sd 45.7. The ONBOARD's own escape
+// hatch is light placed UNDER the horizon or an environment of our own; this is both, and it is the
+// legitimate alternative to dropping metalness, which would break the material claim outright.
+{
+  const g = new THREE.BoxGeometry();
+  const card = (lum, sx, sz, px, py, pz)=>{
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial());
+    m.material.color.setScalar(lum);                       // same convention as createAreaLightMaterial
+    m.scale.set(sx, 0.05, sz); m.position.set(px, py, pz); envScene.add(m);
+  };
+  // Bounce cards on the room floor (inner floor y = -0.93), in the quadrant the spec camera looks
+  // from. Horizontal RADIUS is the knob: it sets the reflected elevation, and r 2.5 -> -19°,
+  // r 5.0 -> -10° is exactly the band a 1.057 m barrel subtends from this camera.
+  // The band this barrel actually reflects, solved rather than eyeballed: barrel top y 1.621 is seen
+  // at +9.3° so it reflects -9.3° (card radius 4.8); barrel bottom y 0.564 at +18.6° reflects -18.6°
+  // (card radius 2.3). Two cards straddle that band with DIFFERENT luminance, which is what produces
+  // a vertical gradient instead of the flat wash a single big card gives.
+  card( 2.4, 1.9, 1.8,  2.00, -0.84,  1.90);  // r ~2.3 -> LOWER barrel: darker toward the horizon
+  card(11.0, 2.6, 2.4,  3.70, -0.80,  3.40);  // r ~5.0 -> UPPER barrel: where it catches the key
+  card( 1.6, 3.0, 3.0, -3.00, -0.86, -2.80);  // far side: cooler, dimmer
+  card( 1.1, 3.0, 3.0, -4.00, -0.86,  3.50);
+  // A fifth card TIGHT under the subject (radius 0-2 -> elevation -25° to -70°). The 15° cone bottom
+  // is a DOWNWARD-facing metal face, the one case the ONBOARD records as unfixable by ordinary light;
+  // it is unfixable by light ABOVE the horizon, which is the whole point. A floor card inside r 2 is
+  // in its reflected direction, so the cone stops reading as a black band under the barrel.
+  card( 0.7, 1.3, 1.3,  0.55, -0.87,  0.55);
+}
+scene.environment = pmrem.fromScene(envScene, 0.035).texture;
+envScene.dispose();
+pmrem.dispose();
+const ENV_I = 2.15;                    // brushed-stainless recipe value
+scene.environmentIntensity = ENV_I;    // no-op on r160 (property does not exist) — kept for r163+
+                                       // the value that BITES on r160 is envMapIntensity, per material
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4.2, 6.2, 3.6); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);                              // block54 §5-d: key light <= 1024
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+sun.shadow.camera.left=-2.9; sun.shadow.camera.right=2.9;
+sun.shadow.camera.top=2.9; sun.shadow.camera.bottom=-2.9; sun.shadow.camera.far = 18;
+scene.add(sun);
+// FRONTAL fill from the camera side — the brushed-stainless recipe's diffuse term for vertical
+// stainless. NOT RectAreaLight: the §3.3 studio softbox stalls the SwiftShader shader compile.
+const fill = new THREE.DirectionalLight(0xdfe9f5, 0.80);
+fill.position.set(3.4, 1.9, 5.4); scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness: bare 316L ~0.92, PAINTED motor 0.0.
+// ============================================================================
+function brushedRoughTex(){                                     // library recipe: brushed-stainless
+  const c=document.createElement('canvas'); c.width=512; c.height=512; const g=c.getContext('2d');
+  g.fillStyle='#565656'; g.fillRect(0,0,512,512);
+  for(let i=0;i<2600;i++){ const y=Math.random()*512, len=40+Math.random()*180, x=Math.random()*512,
+        v=120+(Math.random()*40-20);
+    g.strokeStyle=`rgba(${v},${v},${v},0.16)`; g.lineWidth=Math.random()<0.5?1:0.6;
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x+len, y+(Math.random()*2-1)); g.stroke(); }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(2,2); return t;
+}
+const roughMap = brushedRoughTex();
+
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xc6cbcd, metalness:0.92, roughness:0.30,
+                                                   roughnessMap:roughMap, envMapIntensity:ENV_I });
+const matSteelCut = new THREE.MeshStandardMaterial({ color:0xc6cbcd, metalness:0.92, roughness:0.30,
+                                                   roughnessMap:roughMap, envMapIntensity:ENV_I,
+                                                   transparent:true, opacity:0.16, side:THREE.DoubleSide,
+                                                   depthWrite:false });   // depthWrite OFF or the cut reveals nothing
+const matFrame  = new THREE.MeshStandardMaterial({ color:0xb7bbbc, metalness:0.90, roughness:0.42,
+                                                   roughnessMap:roughMap, envMapIntensity:ENV_I });
+const matInt    = new THREE.MeshStandardMaterial({ color:0xb9bfc2, metalness:0.92, roughness:0.34,
+                                                   envMapIntensity:ENV_I });
+const matMotor  = new THREE.MeshStandardMaterial({ color:0x3b4d6a, metalness:0.0, roughness:0.52 });
+const matSeal   = new THREE.MeshStandardMaterial({ color:0x23262a, metalness:0.0, roughness:0.85 });
+const matHmi    = new THREE.MeshStandardMaterial({ color:0xbcd3d8, metalness:0.0, roughness:0.15,
+                                                   emissive:0x2c6a76, emissiveIntensity:0.85 });
+const matYellow = new THREE.MeshStandardMaterial({ color:0xd8a413, metalness:0.0, roughness:0.60 });
+const matRed    = new THREE.MeshStandardMaterial({ color:0xb3261e, metalness:0.0, roughness:0.50 });
+const matGlass  = new THREE.MeshStandardMaterial({ color:0xdde3e5, metalness:0.0, roughness:0.10,
+                                                   transparent:true, opacity:0.40 });  // NOT transmission
+const matPanel  = new THREE.MeshStandardMaterial({ color:0xbfc4c6, metalness:0.90, roughness:0.38,
+                                                   roughnessMap:roughMap, envMapIntensity:ENV_I });
+// overlay materials (UI states, not material claims)
+const matHi     = new THREE.MeshStandardMaterial({ color:0x9fe8d8, metalness:0.90, roughness:0.28,
+                                                   emissive:0x0d6d5c, emissiveIntensity:0.9, envMapIntensity:ENV_I });
+const matHiSeal = new THREE.MeshStandardMaterial({ color:0x0d6d5c, metalness:0.0, roughness:0.5,
+                                                   emissive:0x0d6d5c, emissiveIntensity:0.7 });
+const matFlowSup= new THREE.MeshStandardMaterial({ color:0x39d6c4, metalness:0.0, roughness:0.35,
+                                                   emissive:0x0f7b6c, emissiveIntensity:0.85 });
+const matFlowRet= new THREE.MeshStandardMaterial({ color:0xe8a24a, metalness:0.0, roughness:0.35,
+                                                   emissive:0x7a4410, emissiveIntensity:0.85 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Instancing is used ONLY on true repetition runs (spec §complexity: the 8
+//   feet and the tri-clamp collars) plus the pump legs/fins and the valve hardware, which are the
+//   same physical part repeated. Every vessel, pump body and cabinet panel is a unique mesh.
+// ============================================================================
+const root = new THREE.Group();
+const _m=new THREE.Matrix4(), _q=new THREE.Quaternion(), _p=new THREE.Vector3(), _s=new THREE.Vector3(1,1,1);
+
+function mesh(geo, mat, parent){ const m=new THREE.Mesh(geo, mat);
+  m.castShadow = m.receiveShadow = true; (parent||root).add(m); return m; }
+function instanced(geo, mat, xf, parent){                 // xf: [x,y,z,rx,ry,rz]
+  const im = new THREE.InstancedMesh(geo, mat, xf.length);
+  im.castShadow = im.receiveShadow = true;
+  xf.forEach((t,i)=>{ _p.set(t[0],t[1],t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0));
+    im.setMatrixAt(i, _m.compose(_p,_q,_s)); });
+  im.instanceMatrix.needsUpdate = true; (parent||root).add(im); return im;
+}
+function instancedM(geo, mat, mats, parent){              // xf: array of Matrix4
+  const im = new THREE.InstancedMesh(geo, mat, mats.length);
+  im.castShadow = im.receiveShadow = true;
+  mats.forEach((m,i)=>im.setMatrixAt(i,m));
+  im.instanceMatrix.needsUpdate = true; (parent||root).add(im); return im;
+}
+const box = (w,h,d)=> new THREE.BoxGeometry(w,h,d);
+const cylX = (r,l,s=24)=> new THREE.CylinderGeometry(r,r,l,s).rotateZ(PI/2);
+const cylZ = (r,l,s=24)=> new THREE.CylinderGeometry(r,r,l,s).rotateX(PI/2);
+const V3 = (x,y,z)=> new THREE.Vector3(x,y,z);
+
+// --- rounded polyline → tube. Corners become real long-radius elbows, never sharp mitres. ---
+function roundPath(pts, r, seg=9){
+  const out=[pts[0].clone()];
+  for(let i=1;i<pts.length-1;i++){
+    const p=pts[i], a=pts[i-1], b=pts[i+1];
+    const v1=a.clone().sub(p), v2=b.clone().sub(p);
+    const d=Math.min(r, v1.length()*0.48, v2.length()*0.48);
+    const s0=p.clone().addScaledVector(v1.normalize(), d);
+    const e0=p.clone().addScaledVector(v2.normalize(), d);
+    out.push(s0);
+    for(let k=1;k<seg;k++){ const t=k/seg, u=1-t;
+      out.push(s0.clone().multiplyScalar(u*u).addScaledVector(p, 2*u*t).addScaledVector(e0, t*t)); }
+    out.push(e0);
+  }
+  out.push(pts[pts.length-1].clone());
+  return out;
+}
+function tube(pts, r, mat, segs, parent){
+  const curve = new THREE.CatmullRomCurve3(roundPath(pts, ELB_R), false, 'centripetal', 0.5);
+  return mesh(new THREE.TubeGeometry(curve, segs||70, r, 10, false), mat, parent);
+}
+
+// ---------------------------------------------------------------- frame (304 SHS, two decks)
+const frame = new THREE.Group(); root.add(frame);
+{
+  // 8 adjustable ball feet — the only instanced run the spec names, plus the collars below.
+  const padXf=[], stemXf=[];
+  for(const x of POST_X) for(const z of POST_Z){ padXf.push([x,0.008,z]); stemXf.push([x,0.059,z]); }
+  chk(padXf.length===8, 'spec fixes EIGHT adjustable ball feet');
+  instanced(new THREE.CylinderGeometry(0.048,0.048,0.016,16), matFrame, padXf, frame);
+  instanced(new THREE.CylinderGeometry(0.017,0.017,0.086,12), matFrame, stemXf, frame);
+
+  const longG = box(SKID_L, SHS, SHS), crossG = box(SHS, SHS, SKID_W - 2*SHS);
+  instanced(longG, matFrame, POST_Z.map(z=>[0, RAIL_B_LO+SHS/2, z]), frame);          // bottom rails
+  instanced(crossG, matFrame, POST_X.map(x=>[x, RAIL_B_LO+SHS/2, 0]), frame);
+  instanced(longG, matFrame, POST_Z.map(z=>[0, RAIL_T_LO+SHS/2, z]), frame);          // top rails
+  instanced(crossG, matFrame, POST_X.map(x=>[x, RAIL_T_LO+SHS/2, 0]), frame);
+  const postH = RAIL_T_LO - RAIL_B_HI;                                                 // 0.244
+  const postXf=[]; for(const x of POST_X) for(const z of POST_Z) postXf.push([x, RAIL_B_HI+postH/2, z]);
+  instanced(box(SHS, postH, SHS), matFrame, postXf, frame);
+  // rear-plane diagonals (the frame is a real braced structure, not four sticks)
+  const bay = POST_X[1]-POST_X[0], rise = postH, dl = Math.hypot(bay, rise), ang = Math.atan2(rise, bay);
+  instanced(box(dl, 0.030, 0.020), matFrame, [
+    [(POST_X[0]+POST_X[1])/2, RAIL_B_HI+rise/2, -0.475, 0, 0,  ang],
+    [(POST_X[2]+POST_X[3])/2, RAIL_B_HI+rise/2, -0.475, 0, 0, -ang]], frame);
+  // upper deck plate: the visible floor the vessels stand on
+  mesh(box(SKID_L-2*SHS, DECK_T, 0.928), matFrame, frame).position.set(0, DECK_Y-DECK_T/2, -0.014);
+}
+
+// ---------------------------------------------------------------- vessels
+const tankProfile = (()=>{
+  const p=[], TANG = Math.atan2(-dyv, dxv);
+  p.push(new THREE.Vector2(0.0,   OUT_Y-0.030));
+  p.push(new THREE.Vector2(OUT_R, OUT_Y-0.030));
+  p.push(new THREE.Vector2(OUT_R, OUT_Y));
+  p.push(new THREE.Vector2(TR,    TAN_LO));                    // 15° cone (straight, exact)
+  p.push(new THREE.Vector2(TR,    TAN_HI));                    // barrel
+  for(let i=1;i<=8;i++){ const t = TANG*(i/8);                 // Klopper knuckle, r = 0.1 D
+    p.push(new THREE.Vector2(TR-KNUCK_R+KNUCK_R*Math.cos(t), TAN_HI-KNUCK_R*Math.sin(t))); }
+  const cy = TAN_HI - dyv;
+  for(let i=1;i<=16;i++){ const t = TANG + (-PI/2 - TANG)*(i/16);   // Klopper crown, R = 1.0 D
+    p.push(new THREE.Vector2(CROWN_R*Math.cos(t), cy - CROWN_R*Math.sin(t))); }
+  return p;
+})();
+chk(Math.abs(tankProfile[tankProfile.length-1].y - TOP_Y) < 1e-6, 'lathe profile must close at TOP_Y');
+const shellGeo = new THREE.LatheGeometry(tankProfile, 56);
+const shells = TANK_X.map(x=>{ const m = mesh(shellGeo, matSteel); m.position.set(x, 0, TANK_Z); return m; });
+
+{ // vessel furniture — every run instanced across the two identical vessels
+  const weld=[], skirt=[], portNeck=[], portLid=[], portRing=[], vent=[],
+        sight=[], sightFit=[], ball=[];
+  const PORT_A = 0.60, PORT_RAD = 0.26;                        // top CIP/inspection port, off-axis
+  const VENT_A = 2.35, VENT_RAD = 0.33;
+  const SIGHT_A = 0.55, SIGHT_RAD = 0.452;
+  for(const x of TANK_X){
+    weld.push([x, TAN_LO, TANK_Z, PI/2], [x, TAN_HI, TANK_Z, PI/2]);
+    skirt.push([x, DECK_Y + 0.022, TANK_Z]);                   // ring skirt: the vessel is carried by the frame
+    const px = x + Math.cos(PORT_A)*PORT_RAD, pz = TANK_Z + Math.sin(PORT_A)*PORT_RAD;
+    portNeck.push([px, 1.7375, pz]); portLid.push([px, 1.7610, pz]); portRing.push([px, 1.7560, pz, PI/2]);
+    const vx = x + Math.cos(VENT_A)*VENT_RAD, vz = TANK_Z + Math.sin(VENT_A)*VENT_RAD;
+    vent.push([vx, 1.7300, vz]);
+    const sx = x + Math.cos(SIGHT_A)*SIGHT_RAD, sz = TANK_Z + Math.sin(SIGHT_A)*SIGHT_RAD;
+    sight.push([sx, 1.090, sz]);
+    for(const fy of [0.660, 1.520]) sightFit.push([
+      x + Math.cos(SIGHT_A)*0.4385, fy, TANK_Z + Math.sin(SIGHT_A)*0.4385, 0, -SIGHT_A, -PI/2]);
+    ball.push([x, 1.470, TANK_Z]);
+  }
+  instanced(new THREE.TorusGeometry(TR+0.002, 0.007, 6, 40), matSteel, weld);
+  instanced(new THREE.CylinderGeometry(0.160,0.160,0.044,28,1,true), matSteel, skirt);  // OPEN ring, not a plug
+  instanced(new THREE.CylinderGeometry(0.110,0.110,0.035,28), matSteel, portNeck);
+  instanced(new THREE.CylinderGeometry(0.118,0.118,0.012,28), matSteel, portLid);
+  instanced(new THREE.TorusGeometry(0.115,0.011,6,28), matSteel, portRing);
+  instanced(new THREE.CylinderGeometry(0.022,0.022,0.050,14), matSteel, vent);
+  instanced(new THREE.CylinderGeometry(0.014,0.014,0.860,12), matGlass, sight);         // level sight tube
+  instanced(new THREE.CylinderGeometry(0.015,0.015,0.056,10), matSteel, sightFit);
+  instanced(new THREE.SphereGeometry(0.048, 18, 12), matInt, ball);                     // CIP spray ball
+  // spray-ball dip pipe: from the top port down to the axis. One geometry, two instances.
+  const dip = new THREE.CatmullRomCurve3(roundPath([
+    V3(Math.cos(PORT_A)*PORT_RAD, 1.735, Math.sin(PORT_A)*PORT_RAD),
+    V3(Math.cos(PORT_A)*PORT_RAD, 1.560, Math.sin(PORT_A)*PORT_RAD),
+    V3(0, 1.560, 0), V3(0, 1.470, 0)], 0.07), false, 'centripetal', 0.5);
+  instanced(new THREE.TubeGeometry(dip, 44, 0.017, 8, false), matInt,
+            TANK_X.map(x=>[x, 0, TANK_Z]));
+}
+
+// ---------------------------------------------------------------- pump bay (3 LKH-20 + IEC 90)
+const pumpBay = new THREE.Group(); root.add(pumpBay);
+{
+  const legXf=[], padXf=[], brkXf=[], finXf=[];
+  for(let k=0;k<3;k++){
+    const xi = PUMP_XIN[k], mc = motCx(k), xm0 = xi + HEAD_L;
+    // --- wetted head: BARE 316L (unique meshes, per spec) ---
+    mesh(cylX(0.0318, 0.055, 20), matSteel, pumpBay).position.set(xi+0.0275, SHAFT_Y, PUMP_Z); // suction port J1
+    mesh(cylX(VOL_R, 0.115, 30), matSteel, pumpBay).position.set(xi+0.1125, SHAFT_Y, PUMP_Z);  // volute
+    mesh(cylX(0.100, 0.020, 30), matSteel, pumpBay).position.set(xi+0.180, SHAFT_Y, PUMP_Z);   // backplate
+    mesh(cylX(0.062, 0.063, 20), matSteel, pumpBay).position.set(xi+0.2215, SHAFT_Y, PUMP_Z);  // adapter
+    mesh(new THREE.CylinderGeometry(0.0335,0.0335,0.078,18), matSteel, pumpBay)
+      .position.set(volX(k), SHAFT_Y+0.056, PUMP_Z);                                            // discharge J2
+    // --- PAINTED IEC 90 motor: dielectric, metalness 0.0. This contrast IS the material claim. ---
+    mesh(cylX(0.076, 0.035, 26), matMotor, pumpBay).position.set(xm0-0.0175, SHAFT_Y, PUMP_Z);
+    mesh(cylX(MOT_R, 0.290, 30), matMotor, pumpBay).position.set(xm0+0.180, SHAFT_Y, PUMP_Z);
+    mesh(new THREE.CylinderGeometry(0.080,0.072,0.100,26).rotateZ(PI/2), matMotor, pumpBay)
+      .position.set(xm0+0.375, SHAFT_Y, PUMP_Z);                                                // fan cowl
+    mesh(box(0.100, 0.075, 0.055), matMotor, pumpBay)
+      .position.set(xm0+0.130, SHAFT_Y, PUMP_Z+MOT_R+0.026);                                    // terminal box
+    // adjustable legs (4 per set, LKH standard) + the bracket they bolt to
+    const brkTop = SHAFT_Y - MOT_R, brkBot = brkTop - 0.016;    // bracket underside
+    brkXf.push([mc, (brkTop+brkBot)/2, PUMP_Z]);
+    for(const sx of [-1,1]) for(const sz of [-1,1]){
+      legXf.push([mc + sx*0.140, (0.012 + brkBot)/2, PUMP_Z + sz*0.072]);
+      padXf.push([mc + sx*0.140, 0.006,              PUMP_Z + sz*0.072]);
+    }
+    for(let f=0;f<16;f++){                                   // cooling fins over the upper frame arc
+      const a = -PI*0.36 + f*(PI*0.72/15);
+      finXf.push([xm0+0.180, SHAFT_Y + Math.cos(a)*MOT_R, PUMP_Z + Math.sin(a)*MOT_R, a, 0, 0]);
+    }
+    chk(brkBot - 0.012 > 0.05, `pump ${k}: adjustable legs must keep a real stroke under the bracket`);
+  }
+  instanced(box(0.330, 0.016, 0.180), matMotor, brkXf, pumpBay);
+  instanced(new THREE.CylinderGeometry(0.014,0.014,SHAFT_Y-MOT_R-0.028,10), matSteel, legXf, pumpBay);
+  instanced(new THREE.CylinderGeometry(0.030,0.030,0.012,12), matSteel, padXf, pumpBay);
+  instanced(box(0.286, 0.020, 0.006), matMotor, finXf, pumpBay);
+}
+
+// ---------------------------------------------------------------- piping
+const piping = new THREE.Group(); root.add(piping);
+const flowSupply = [], flowReturn = [];                      // meshes recoloured by FLUJO
+const collars = [];                                          // [pos, axis] — instanced tri-clamps
+const addCollar = (p, ax)=> collars.push([p, ax.clone().normalize()]);
+
+{ // --- suction side: tank outlets → common manifold → forward branches → pump inlets ---
+  const man = mesh(cylX(D50_R, SUC_TAP[2]-SUC_TAP[0], 22), matSteel, piping);
+  man.position.set((SUC_TAP[0]+SUC_TAP[2])/2, SUC_Y, SUC_Z);
+  flowSupply.push(man);
+  for(const x of TANK_X){
+    const dl = mesh(new THREE.CylinderGeometry(D50_R, D50_R, OUT_Y-SUC_Y+0.02, 22), matSteel, piping);
+    dl.position.set(x, (OUT_Y+SUC_Y)/2+0.01, SUC_Z); flowSupply.push(dl);
+    addCollar(V3(x, OUT_Y-0.014, SUC_Z), V3(0,1,0));
+    addCollar(V3(x, SUC_Y+0.075, SUC_Z), V3(0,1,0));
+  }
+  for(let k=0;k<3;k++){
+    const t = tube([V3(SUC_TAP[k], SUC_Y, SUC_Z), V3(SUC_TAP[k], SUC_Y, PUMP_Z),
+                    V3(PUMP_XIN[k], SUC_Y, PUMP_Z)], D50_R, matSteel, 56, piping);
+    flowSupply.push(t);
+    addCollar(V3(PUMP_XIN[k]-0.016, SUC_Y, PUMP_Z), V3(1,0,0));
+  }
+  addCollar(V3(SUC_TAP[1], SUC_Y, SUC_Z+0.115), V3(0,0,1));
+}
+
+{ // --- discharge U-loops: the visual signature. Up out of the bay, forward, up through the deck. ---
+  for(let k=0;k<3;k++){
+    const xd = volX(k);
+    const t = tube([V3(xd, SHAFT_Y+0.088, PUMP_Z), V3(xd, 0.395, PUMP_Z),
+                    V3(xd, 0.395, RISER_Z), V3(xd, SUP_Y, RISER_Z)], D50_R, matSteel, 88, piping);
+    flowSupply.push(t);
+    addCollar(V3(xd, SHAFT_Y+0.104, PUMP_Z), V3(0,1,0));
+    addCollar(V3(xd, 0.560, RISER_Z), V3(0,1,0));
+  }
+}
+
+{ // --- supply main (pump discharge → plant) and return main (plant → tanks) ---
+  const sx0=-1.320, sx1=1.320;
+  const sup = mesh(cylX(D50_R, sx1-sx0, 22), matSteel, piping);
+  sup.position.set((sx0+sx1)/2, SUP_Y, MAIN_Z); flowSupply.push(sup);
+  const rx0=-0.980, rx1=1.320;
+  const ret = mesh(cylX(D50_R, rx1-rx0, 22), matSteel, piping);
+  ret.position.set((rx0+rx1)/2, RET_Y, MAIN_Z); flowReturn.push(ret);
+  for(const x of [sx0+0.020, sx1-0.020]) addCollar(V3(x, SUP_Y, MAIN_Z), V3(1,0,0));
+  for(const x of [rx0+0.020, rx1-0.020]) addCollar(V3(x, RET_Y, MAIN_Z), V3(1,0,0));
+  for(let k=0;k<3;k++) addCollar(V3(volX(k)+0.052, SUP_Y, MAIN_Z), V3(1,0,0));
+  // return drops into each vessel: up, then radially into a shell nozzle on the upper barrel
+  for(const x of TANK_X){
+    const t = tube([V3(x, RET_Y, MAIN_Z), V3(x, 1.500, MAIN_Z), V3(x, 1.500, TANK_Z+TR+0.008)],
+                   D50_R, matSteel, 56, piping);
+    flowReturn.push(t);
+    addCollar(V3(x, 1.500, TANK_Z+TR+0.030), V3(0,0,1));
+    addCollar(V3(x, RET_Y+0.070, MAIN_Z), V3(0,1,0));
+    const nz = mesh(cylZ(0.040, 0.030, 18), matSteel, piping);
+    nz.position.set(x, 1.500, TANK_Z+TR+0.012); flowReturn.push(nz);
+  }
+  // DN40 dosing branch off the supply main (spec: branch lines step down one size).
+  // The end z is SOLVED from the barrel, not copied from the tangent: at x = -0.62 the shell is
+  // 40 mm behind its own front tangent, and a copied z leaves the branch floating in air.
+  const DOS_X = -0.62, dqx = DOS_X - TANK_X[0];
+  const dosZ = TANK_Z + Math.sqrt(TR*TR - dqx*dqx);
+  chk(dosZ < TANK_Z + TR, 'dosing branch must land ON the barrel, not at the tangent plane');
+  const dos = tube([V3(DOS_X, SUP_Y, MAIN_Z), V3(DOS_X, 0.900, MAIN_Z), V3(DOS_X, 0.900, dosZ+0.006)],
+                   D40_R, matSteel, 44, piping);
+  flowSupply.push(dos);
+  addCollar(V3(DOS_X, 0.760, MAIN_Z), V3(0,1,0));
+}
+
+// ---------------------------------------------------------------- valve train (LKB DN50)
+const valveMeshes = [];
+{
+  const list = [
+    // suction isolation, one per pump, on the forward branch run — NOT on the tank droplegs: those
+    // sit at z -0.075, which SIGHT_CEIL puts 140 mm inside the deck's shadow.
+    [V3(SUC_TAP[0], SUC_Y, 0.200), V3(0,0,1), V3(1,0,0)],
+    [V3(SUC_TAP[1], SUC_Y, 0.200), V3(0,0,1), V3(1,0,0)],
+    [V3(SUC_TAP[2], SUC_Y, 0.200), V3(0,0,1), V3(1,0,0)],
+    // discharge isolation. The neck points +X, NOT +Z: with a +Z neck the K 120 handle centres at
+    // z 0.505 and the lever pokes 18 mm through the published 1.000 m width. Measured, not guessed.
+    [V3(volX(0), 0.510, RISER_Z), V3(0,1,0), V3(1,0,0)],       // pump discharge valves
+    [V3(volX(1), 0.510, RISER_Z), V3(0,1,0), V3(1,0,0)],
+    [V3(volX(2), 0.510, RISER_Z), V3(0,1,0), V3(1,0,0)],
+    [V3(1.060, SUP_Y, MAIN_Z),    V3(1,0,0), V3(0,1,0)],       // supply main isolation
+    [V3(1.060, RET_Y, MAIN_Z),    V3(1,0,0), V3(0,1,0)],       // return main isolation
+  ];
+  const bodyM=[], neckM=[], handM=[], gripM=[];
+  const xAx=new THREE.Vector3(), yAx=new THREE.Vector3(), zAx=new THREE.Vector3();
+  for(const [p, axis, neck] of list){
+    yAx.copy(axis).normalize();
+    zAx.copy(neck).addScaledVector(yAx, -neck.dot(yAx)).normalize();
+    xAx.crossVectors(yAx, zAx).normalize();
+    const basis = new THREE.Matrix4().makeBasis(xAx, yAx, zAx);
+    const put = (lx,ly,lz)=> new THREE.Matrix4().copy(basis).setPosition(
+      p.x + xAx.x*lx + yAx.x*ly + zAx.x*lz,
+      p.y + xAx.y*lx + yAx.y*ly + zAx.y*lz,
+      p.z + xAx.z*lx + yAx.z*ly + zAx.z*lz);
+    bodyM.push(put(0,0,0)); neckM.push(put(0,0,0.070));
+    handM.push(put(0,0,0.100)); gripM.push(put(V_K/2 - 0.012, 0, 0.100));
+    for(const e of [-1,1]){                                     // both lever tips, in world z
+      const tz = p.z + zAx.z*0.100 + xAx.z*e*V_K/2;
+      chk(Math.abs(tz) <= ZA, `valve lever tip z ${tz.toFixed(3)} must stay inside the 1.000 m width`);
+    }
+    addCollar(p.clone().addScaledVector(yAx, V_F/2 + 0.006), yAx.clone());
+    addCollar(p.clone().addScaledVector(yAx, -(V_F/2 + 0.006)), yAx.clone());
+  }
+  valveMeshes.push(
+    instancedM(new THREE.CylinderGeometry(0.045,0.045,V_F,26), matSteel, bodyM, root),
+    instancedM(new THREE.CylinderGeometry(0.019,0.023,0.050,14).rotateX(PI/2), matSteel, neckM, root),
+    instancedM(box(V_K, 0.020, 0.026), matSteel, handM, root),
+    instancedM(new THREE.CylinderGeometry(0.013,0.013,0.030,10).rotateZ(PI/2), matSeal, gripM, root));
+  chk(Math.abs(V_H2 - 0.092) < 1e-9, 'LKB DN50 H2 is a datasheet number, not a style choice');
+}
+
+// ---------------------------------------------------------------- instruments
+{
+  const FM_X = 0.200, FM_R = 0.038, pipeTop = SUP_Y + FM_R;   // the METER body OD, not the DN50 main
+  mesh(cylX(FM_R, FM_FACE, 26), matSteel, piping).position.set(FM_X, SUP_Y, MAIN_Z);
+  mesh(new THREE.CylinderGeometry(0.030,0.034,0.092,18), matSteel, piping)
+    .position.set(FM_X, pipeTop+0.046, MAIN_Z);
+  mesh(box(FM_HEAD[0], FM_HEAD[1], FM_HEAD[2]), matPanel, piping)
+    .position.set(FM_X, pipeTop+0.092+FM_HEAD[1]/2, MAIN_Z);
+  mesh(box(0.110, 0.068, 0.006), matHmi, piping)
+    .position.set(FM_X, pipeTop+0.092+FM_HEAD[1]/2+0.012, MAIN_Z+FM_HEAD[2]/2+0.003);
+  chk(Math.abs((pipeTop+0.092+FM_HEAD[1]) - (SUP_Y - FM_R + FM_STACK)) < 0.002,
+      'Promag stack must total 0.309 from the meter-tube underside');
+  addCollar(V3(FM_X-FM_FACE/2-0.012, SUP_Y, MAIN_Z), V3(1,0,0));
+  addCollar(V3(FM_X+FM_FACE/2+0.012, SUP_Y, MAIN_Z), V3(1,0,0));
+
+  // three dial gauges (part census from the reference photograph)
+  const g=[[-0.900, SUP_Y],[0.780, SUP_Y],[0.200, RET_Y]];
+  instanced(new THREE.CylinderGeometry(0.010,0.010,0.045,10), matSteel,
+            g.map(([x,y])=>[x, y+D50_R+0.022, MAIN_Z]), piping);
+  instanced(cylZ(0.050, 0.026, 22), matPanel,
+            g.map(([x,y])=>[x, y+D50_R+0.095, MAIN_Z]), piping);
+  instanced(cylZ(0.044, 0.005, 22), matGlass,
+            g.map(([x,y])=>[x, y+D50_R+0.095, MAIN_Z+0.016]), piping);
+  // conductivity + temperature probes in the supply main
+  instanced(new THREE.CylinderGeometry(0.017,0.021,0.085,12), matSteel,
+            [[-0.350, SUP_Y+0.055, MAIN_Z],[-0.150, SUP_Y+0.055, MAIN_Z]], piping);
+}
+
+// ---------------------------------------------------------------- control cabinet (+X end)
+{
+  const cab = new THREE.Group(); root.add(cab);
+  mesh(box(PAN_D, 0.100, PAN_W-0.060), matFrame, cab).position.set(PAN_X, DECK_Y+0.050, PAN_Z);
+  mesh(box(PAN_D, PAN_H, PAN_W), matPanel, cab).position.set(PAN_X, PAN_Y0+PAN_H/2, PAN_Z);
+  const doorX = PAN_X + PAN_D/2 + 0.007;
+  mesh(box(0.014, PAN_H-0.060, PAN_W-0.060), matPanel, cab).position.set(doorX, PAN_Y0+PAN_H/2, PAN_Z);
+  mesh(box(0.010, 0.230, 0.310), matFrame, cab).position.set(doorX+0.012, PAN_Y0+0.560, PAN_Z+0.060);
+  mesh(box(0.006, 0.185, 0.262), matHmi,  cab).position.set(doorX+0.020, PAN_Y0+0.560, PAN_Z+0.060);
+  mesh(box(0.008, 0.130, 0.130), matYellow, cab).position.set(doorX+0.011, PAN_Y0+0.290, PAN_Z-0.180);
+  mesh(cylX(0.027, 0.026, 16), matRed, cab).position.set(doorX+0.028, PAN_Y0+0.290, PAN_Z-0.180);
+  instanced(cylX(0.014, 0.020, 12), matHmi,
+    [[doorX+0.014, PAN_Y0+0.290, PAN_Z+0.020],
+     [doorX+0.014, PAN_Y0+0.290, PAN_Z+0.090],
+     [doorX+0.014, PAN_Y0+0.290, PAN_Z+0.160]], cab);
+  chk(doorX + 0.030 < XA, 'cabinet door furniture must stay inside the 3.200 m length');
+  chk(PAN_Y0 + PAN_H <= TOP_Y, 'cabinet must not overtop the vessels');
+}
+
+// tri-clamp collars: ferrule pair + clamp band, instanced once for the WHOLE skid. This runs LAST
+// on purpose: the valve train and the instrument set both push joints onto the same list, and an
+// earlier build would silently drop every collar added after it.
+{
+  const yUp = V3(0,1,0), ferMats=[], bandMats=[];
+  for(const [p, ax] of collars){
+    _q.setFromUnitVectors(yUp, ax);
+    ferMats.push(new THREE.Matrix4().compose(p, _q, _s.set(1,1,1)));
+    bandMats.push(new THREE.Matrix4().compose(p, _q, _s.set(1,1,1)));
+  }
+  chk(collars.length >= 24, `a sanitary skid must show tri-clamp joints (have ${collars.length})`);
+  instancedM(new THREE.CylinderGeometry(0.0345,0.0345,0.020,20), matSteel, ferMats, piping);
+  instancedM(new THREE.TorusGeometry(0.0345,0.0105,6,18), matFrame, bandMats, piping);
+}
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- framing self-check: the gate CANNOT see a clipped subject (ONBOARD) ----------
+{
+  // controls.update() FIRST, and it is not a formality. OrbitControls calls update() at the end of
+  // its own constructor, using its DEFAULT target (0,0,0) — which re-aims the camera with lookAt
+  // before `controls.target.set(0, TGT_Y, 0)` on the next line can take effect. Until update() runs
+  // again the camera still points at the origin, so this check reads a camera the renderer never
+  // uses: measured here as top +0.989 / bottom -0.411 against the true +0.572 / -0.817, i.e. the
+  // mandated anti-clipping check would report a 0.75 HUD overrun that does not exist.
+  controls.update();
+  camera.updateMatrixWorld(true); camera.updateProjectionMatrix();
+  const bb = new THREE.Box3().setFromObject(root);
+  let mx=0, top=-9, bot=9;
+  for(const X of [bb.min.x,bb.max.x]) for(const Y of [bb.min.y,bb.max.y]) for(const Z of [bb.min.z,bb.max.z]){
+    const v = V3(X,Y,Z).project(camera);
+    mx = Math.max(mx, Math.abs(v.x)); top = Math.max(top, v.y); bot = Math.min(bot, v.y);
+  }
+  chk(mx <= 0.93 && Math.abs(bot) <= 0.93, `root bbox must fit: |ndcX| ${mx.toFixed(3)}, bottom ${bot.toFixed(3)}`);
+  chk(top <= 0.75, `root bbox top ${top.toFixed(3)} must stay below the 4-line HUD`);
+  console.info(`skid-cip framing: |ndcX| ${mx.toFixed(3)} top ${top.toFixed(3)} bottom ${bot.toFixed(3)} · ` +
+               `bbox ${(bb.max.x-bb.min.x).toFixed(3)} x ${(bb.max.z-bb.min.z).toFixed(3)} x ${bb.max.y.toFixed(3)} m`);
+}
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: EVERY handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+// CORTE — the exchange is declared in ONE place so the hide-list and the restore-list cannot
+// diverge (ONBOARD: a substitute group that drops a part leaves its neighbour floating). Here the
+// hide-list is EMPTY BY CONSTRUCTION: the chemical vessel is sectioned by swapping its shell to a
+// translucent depthWrite:false material, so no solid is removed and nothing can end up unsupported.
+// What it reveals was already in the scene: the spray ball, its dip pipe and the 15° cone bottom.
+const CORTE = { target: shells[0], off: matSteel, on: matSteelCut, hide: [], show: [] };
+chk(CORTE.hide.length === CORTE.show.length, 'CORTE hide-list and restore-list must stay symmetric');
+let cut = false;
+const btnCorte = document.getElementById('btnCorte');
+btnCorte.onclick = ()=>{ cut = !cut; btnCorte.classList.toggle('on', cut);
+  CORTE.target.material = cut ? CORTE.on : CORTE.off;
+  CORTE.target.castShadow = !cut;
+  CORTE.hide.forEach(o=>o.visible = !cut);
+  CORTE.show.forEach(o=>o.visible = cut);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+// VALVULAS — highlight the whole valve train (bodies, necks, handles, grips)
+let vHi = false;
+const vBase = valveMeshes.map(m=>m.material);
+const btnValv = document.getElementById('btnValvulas');
+btnValv.onclick = ()=>{ vHi = !vHi; btnValv.classList.toggle('on', vHi);
+  valveMeshes.forEach((m,i)=>{ m.material = vHi ? (vBase[i]===matSeal ? matHiSeal : matHi) : vBase[i]; });
+  requestRender(); };
+
+// FLUJO — supply path (tanks → pumps → main) vs return path (plant → vessels)
+let flow = false;
+const supBase = flowSupply.map(m=>m.material), retBase = flowReturn.map(m=>m.material);
+const btnFlujo = document.getElementById('btnFlujo');
+btnFlujo.onclick = ()=>{ flow = !flow; btnFlujo.classList.toggle('on', flow);
+  flowSupply.forEach((m,i)=>{ m.material = flow ? matFlowSup : supBase[i]; });
+  flowReturn.forEach((m,i)=>{ m.material = flow ? matFlowRet : retBase[i]; });
+  requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__skidCipApp = __app;
+globalThis['__skid-cipApp'] = __app;               // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
