@@ -11,6 +11,7 @@
 import puppeteer from 'puppeteer-core';
 const CHROME = '/home/cristian/.cache/puppeteer/chrome/linux-150.0.7871.46/chrome-linux64/chrome';
 
+const PORT = process.env.PORT || 8123;   // was hardcoded 8123 → measured another worktree's tree with exit 0
 const rawArgs = process.argv.slice(2);
 let URL_SUFFIX = '';
 const FILES = [];
@@ -43,7 +44,7 @@ for (const f of FILES) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 900 });
   await page.evaluateOnNewDocument(INIT);
-  const url = 'http://localhost:8123/' + encodeURIComponent(f).replace(/%2F/g,'/') + URL_SUFFIX;
+  const url = `http://localhost:${PORT}/` + encodeURIComponent(f).replace(/%2F/g,'/') + URL_SUFFIX;
   try {
     await page.goto(url, { waitUntil: 'load', timeout: 60000 });
     await new Promise(r => setTimeout(r, 9000));

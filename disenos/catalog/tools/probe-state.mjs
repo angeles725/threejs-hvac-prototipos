@@ -8,7 +8,8 @@ import { writeFileSync } from 'node:fs';
 
 const BIN = process.env.HOME + '/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell';
 const PORT = Number(process.env.CDP_PORT || 9336);   // override para evitar colisión entre probes concurrentes
-const BASE = process.env.BASE || 'http://127.0.0.1:8899';
+const BASE = process.env.BASE_URL || process.env.BASE || 'http://127.0.0.1:8899';
+console.error(`[probe-state] BASE=${BASE}`);   // announce the tree we will measure (8899 often serves ANOTHER worktree)
 const SHOT_DIR = process.env.SHOT_DIR || '.';
 const [target, btnList, suffix = 'state'] = process.argv.slice(2);
 const BUTTONS = (btnList || '').split(',').filter(Boolean);

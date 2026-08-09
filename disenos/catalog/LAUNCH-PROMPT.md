@@ -18,12 +18,20 @@ varias sesiones eligen el mismo worktree porque ListAgents las nombra por el cwd
    dile al usuario que no hay quién asigne.
 2. **session-A te responde: worktree propio + rama propia + slugs disjuntos.** Cada sesión escribe en SU worktree
    (índice git propio), así que dos `git add` nunca colisionan — la colisión que causó todo esto queda eliminada
-   por construcción, no por vigilancia. `cd` a ese worktree para trabajar. La SEÑAL FIABLE de ocupación es tu
-   `<worktree>/.session-claim.local` (untracked) con tu SOCKET + hora, contrastable contra ListAgents (socket vivo
-   = respeta, ausente = huérfano, bórralo). OJO: el `cd` NO cambia tu nombre en ListAgents — ese se fija al NACER
-   la sesión por el cwd, así que una sesión lanzada desde master siempre sale `three-js-XX`; por eso el nombre no
-   sirve de testigo y el socket del claim sí. (Para que el nombre también sirva, la sesión tendría que lanzarse ya
-   con el cwd dentro del worktree — es cosa del lanzamiento, no de este prompt.)
+   por construcción, no por vigilancia. `cd` a ese worktree para trabajar. La SEÑAL de ocupación es tu
+   `<worktree>/.session-claim.local` (untracked) con `socket=`, `pid=`, `tmux=`, `name+ref` de ListAgents,
+   `claimed=` y `last_activity=`. REGLAS DEL CLAIM (ninguna basta sola):
+   - QUIEN CIERRA BORRA SU CLAIM — es parte del handoff, al mismo nivel que escribir RESUME.md y avisar a session-A.
+   - El testigo de vitalidad VERIFICABLE es `ps -p <pid>` (+ correlación tmux/hora de arranque), NO "socket ausente
+     en ListAgents": ListAgents NO muestra sockets, así que ese chequeo no se puede ejecutar. pid muerto = huérfano
+     por MUERTE → bórralo y toma. pid vivo pero `last_activity` viejo + su RESUME dice cerrado = huérfano por
+     TERMINACIÓN → confírmalo con la sesión (pregúntale) antes de tomar; no lo pises a ciegas.
+   - VITALIDAD NO ES ACTIVIDAD: un pid vivo no significa que el trabajo siga. Por eso hacen falta las dos mitades
+     (borrado al cerrar + last_activity), o un claim vivo-y-quieto bloquea el worktree para siempre.
+   META-PRINCIPIO (vale para todo el contrato): cada señal que se aprieta suele medir algo DISTINTO de lo que la
+   decisión necesita — el nombre de ListAgents mide el cwd (no la ocupación), un claim tracked mide el último
+   commit (no al dueño), un lock por pid mide el proceso (no el trabajo). Antes de fijar una regla, pregunta qué
+   mide exactamente y si es eso lo que decide.
 3. **Ponte al día:** `git -C <worktree> merge master` (NO `--ff-only`: tu rama tiene commits propios y el ff-only
    aborta). Si el worktree tiene `RESUME.md`, LÉELO y continúa lo que falta; no rehagas lo ya hecho.
 4. **Modela con el pipeline canónico:** por CADA slug asignado corre `/design3d <slug> threejs` (spec-first + gates

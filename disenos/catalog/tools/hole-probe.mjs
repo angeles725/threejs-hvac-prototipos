@@ -17,7 +17,8 @@ const freePort = () => new Promise((res, rej) => {
   s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); });
 });
 const PORT = Number(process.env.CDP_PORT || await freePort());
-const BASE = process.env.BASE || 'http://127.0.0.1:8899';
+const BASE = process.env.BASE_URL || process.env.BASE || 'http://127.0.0.1:8899';
+console.error(`[hole-probe] BASE=${BASE}`);   // announce the tree we will measure (8899 often serves ANOTHER worktree)
 const SHOT_DIR = process.env.SHOT_DIR || '.';
 const [target, btnList = ''] = process.argv.slice(2);
 const slug = target.split('/').pop();
