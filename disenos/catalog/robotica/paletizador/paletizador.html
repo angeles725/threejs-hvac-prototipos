@@ -1,0 +1,347 @@
+<!doctype html>
+<!--
+  paletizador — catalog asset, family `robotica`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block62.md §62.6 (ABB IRB 660 Industrial Robot, PR10284EN_D).
+  THE POINT OF THIS ASSET: a palletizer is a 4-AXIS machine with a PARALLELOGRAM linkage and a
+  vertical-keeping tie rod. It has no axes 4/5, and the tool flange stays horizontal at every arm
+  pose — that is why the box never tips. Modelling it as a 6-axis arm with a big gripper is the
+  single most common way to get this machine wrong ([Block 62] §62.6).
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robot paletizador 4 ejes 3.15 m — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+  #state{position:absolute;left:14px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text-muted);line-height:1.6}
+  #state b{color:#fff;font-weight:600}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Robot paletizador — 4 ejes · 250 kg · alcance 3.15 m</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· IRB 660-250/3.15 · IP67</span></div>
+  <div class="dim">paralelogramo + tirante: la brida se mantiene HORIZONTAL en toda la carrera</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnPose">CICLO →</button>
+  <button id="btnCell" class="on">CELDA</button>
+  <button id="btnLink">TIRANTE</button>
+</div>
+<div id="state"></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 62] §62.6) ----------
+const REACH  = 3.150;    // [CERT-doc] reach
+const R_BODY = 0.400;    // [CERT-doc] working-range cote "R400" — radius of the swing body
+const AX2_X  = 0.350;    // [INFER] axis-2 offset from the axis-1 centre
+const AX2_Y  = 1.100;    // [INFER] shoulder height, not published in the datasheet
+const L_LOWER = 1.350;   // [CERT-doc cote "1350"] read as the lower arm [INFER assignment]
+const L_UPPER = REACH - AX2_X - L_LOWER;   // = 1.450, the residual that closes the certified reach
+const STOP_MECH = 1.211, STOP_WORK = 1.131;  // [CERT-doc] mechanical stop / max working range cotes
+
+// axis working ranges, degrees [CERT-doc]. FOUR axes — there is no axis 4 or 5 on this machine.
+const LIMITS = { a1:[-180,180], a2:[-42,85], a3:[-20,120], a6:[-300,300] };
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 16, 46);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+// The subject is the CELL, not just the robot: the target sits between the machine, the infeed
+// conveyor and the pallet, or the pallet falls out of frame at the bottom.
+const R = 8.6, AZ = 1.02, EL = 0.30, TX = 1.05, TY = 1.25, TZ = 0.20;
+camera.position.set(TX + R*Math.cos(AZ)*Math.cos(EL), TY + R*Math.sin(EL), TZ + R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(TX, TY, TZ);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(TX, TY, TZ);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.0;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(6, 9, 5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0005;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-6; sun.shadow.camera.right=6; sun.shadow.camera.top=6; sun.shadow.camera.bottom=-6;
+scene.add(sun);
+// Vertical-subject fill ([Block 57] gotcha): the tie rod, the flange and the conveyor rollers are
+// bare metal on vertical faces. Fill opposite the key; materials unchanged per HANDBOOK §3.1.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 1.0);
+fill.position.set(-5.0, 3.5, 7.0);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+// ============================================================================
+const matPaint = new THREE.MeshStandardMaterial({ color:0xdd6a1e, metalness:0.0,  roughness:0.48 });
+const matPaint2= new THREE.MeshStandardMaterial({ color:0xc85c19, metalness:0.0,  roughness:0.52 });
+const matGrey  = new THREE.MeshStandardMaterial({ color:0x3b4148, metalness:0.0,  roughness:0.60 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x1d2126, metalness:0.0,  roughness:0.70 });
+const matSteel = new THREE.MeshStandardMaterial({ color:0xc9ced1, metalness:0.92, roughness:0.32 });
+const matRod   = new THREE.MeshStandardMaterial({ color:0xa8aeb3, metalness:0.90, roughness:0.38 });
+const matBox   = new THREE.MeshStandardMaterial({ color:0xc8873f, metalness:0.0,  roughness:0.66 });
+const matPallet= new THREE.MeshStandardMaterial({ color:0x8a6a44, metalness:0.0,  roughness:0.85 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Chain: base → j1(Y) → j2(Z) → j3(Z) → wrist(counter-rotated) → j6(Y) → tool
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const cyl = (p,r,len,mat,x,y,z,axis='y',seg=16)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,len,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  if(axis==='x') m.rotation.z = Math.PI/2;
+  if(axis==='z') m.rotation.x = Math.PI/2;
+  p.add(m); return m; };
+
+// --- base + swing body (R400 [CERT-doc]) ---
+const base = new THREE.Group();
+put(base, 1.10, 0.16, 0.90, matGrey, 0, 0.08, 0);
+root.add(base);
+const j1 = new THREE.Group(); j1.position.set(0, 0.16, 0); root.add(j1);
+cyl(j1, R_BODY, 0.34, matPaint, 0, 0.17, 0, 'y', 24);                 // the R400 swing body
+put(j1, 0.60, 0.62, 0.72, matPaint, AX2_X*0.6, 0.34 + 0.31, 0);       // shoulder pedestal
+put(j1, 0.34, 0.44, 0.80, matPaint2, -0.24, 0.34 + 0.22, 0);          // counterweight box
+cyl(j1, 0.16, 0.62, matDark, -0.30, 0.62, 0, 'z', 16);                // axis-2 drive motor
+
+// --- j2 : lower arm (the driven bar of the parallelogram) ---
+const j2 = new THREE.Group(); j2.position.set(AX2_X, AX2_Y - 0.16, 0); j1.add(j2);
+cyl(j2, 0.15, 0.56, matGrey, 0, 0, 0, 'z', 20);
+const lower = new THREE.Group(); j2.add(lower);
+put(lower, 0.22, L_LOWER, 0.30, matPaint, 0, L_LOWER/2, 0);
+put(lower, 0.10, L_LOWER*0.86, 0.40, matPaint2, 0, L_LOWER*0.46, 0);
+
+// --- j3 : upper arm, carried at the top of the lower arm ---
+const j3 = new THREE.Group(); j3.position.set(0, L_LOWER, 0); j2.add(j3);
+cyl(j3, 0.13, 0.46, matGrey, 0, 0, 0, 'z', 18);
+put(j3, L_UPPER, 0.20, 0.26, matPaint, L_UPPER/2, 0, 0);
+put(j3, L_UPPER*0.9, 0.09, 0.34, matPaint2, L_UPPER*0.46, 0.02, 0);
+
+// --- THE PARALLELOGRAM: two tie rods. Rod A runs from the shoulder pedestal up beside the lower
+//     arm; rod B runs from the elbow out beside the upper arm to the wrist. Together they hold the
+//     tool flange horizontal — they are the machine, not decoration.
+const rods = new THREE.Group();
+const rodA = cyl(rods, 0.030, L_LOWER, matRod, 0, 0, 0, 'y', 10);     // parallel to the lower arm
+const rodB = cyl(rods, 0.028, L_UPPER, matRod, 0, 0, 0, 'y', 10);
+root.add(rods);
+
+// --- wrist: counter-rotated so the flange stays HORIZONTAL, then axis 6 turns about the vertical
+const wrist = new THREE.Group(); wrist.position.set(L_UPPER, 0, 0); j3.add(wrist);
+cyl(wrist, 0.11, 0.26, matGrey, 0, -0.08, 0, 'y', 18);
+const j6 = new THREE.Group(); j6.position.set(0, -0.21, 0); wrist.add(j6);
+cyl(j6, 0.135, 0.045, matSteel, 0, 0, 0, 'y', 24);                    // tool flange (horizontal)
+
+// --- tool: a layer gripper — two clamp jaws plus a retractable plate, the palletiser vocabulary
+const tool = new THREE.Group(); j6.add(tool);
+put(tool, 0.90, 0.10, 0.70, matDark, 0, -0.08, 0);                    // frame
+for(const sx of [-1,1]) put(tool, 0.05, 0.30, 0.66, matGrey, sx*0.44, -0.27, 0);   // clamp jaws
+put(tool, 0.86, 0.03, 0.62, matSteel, 0, -0.41, 0);                   // retractable bottom plate
+// the layer being carried
+const carried = new THREE.Group(); tool.add(carried);
+for(const [dx,dz] of [[-0.28,-0.16],[0.0,-0.16],[0.28,-0.16],[-0.28,0.16],[0.0,0.16],[0.28,0.16]])
+  put(carried, 0.26, 0.20, 0.30, matBox, dx, -0.29, dz);
+
+// --- cell context: infeed conveyor + pallet with a built stack (real repetition -> InstancedMesh)
+const cell = new THREE.Group();
+{ // infeed conveyor
+  put(cell, 1.60, 0.10, 0.80, matGrey, 2.35, 0.86, -1.55);
+  for(const sx of [-1,1]) for(const sz of [-1,1])
+    put(cell, 0.08, 0.86, 0.08, matGrey, 2.35 + sx*0.72, 0.43, -1.55 + sz*0.34);
+  const rollerGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.76, 10);
+  const rollers = new THREE.InstancedMesh(rollerGeo, matSteel, 12);   // real repetition
+  rollers.castShadow = true;
+  { const m = new THREE.Matrix4(), q = new THREE.Quaternion()
+      .setFromAxisAngle(new THREE.Vector3(1,0,0), Math.PI/2);
+    const s = new THREE.Vector3(1,1,1);
+    for(let i=0;i<12;i++)
+      { m.compose(new THREE.Vector3(2.35 - 0.66 + i*0.12, 0.955, -1.55), q, s); rollers.setMatrixAt(i, m); } }
+  rollers.instanceMatrix.needsUpdate = true;
+  cell.add(rollers);
+  // pallet
+  put(cell, 1.20, 0.06, 1.00, matPallet, 2.10, 0.03, 1.35);
+  put(cell, 1.20, 0.09, 0.14, matPallet, 2.10, 0.105, 1.35);
+  for(const dz of [-0.42, 0, 0.42]) put(cell, 1.16, 0.02, 0.12, matPallet, 2.10, 0.16, 1.35 + dz);
+  // the stack already palletised — 3 layers × 6 boxes, one InstancedMesh (block54 §2.3)
+  const stackGeo = new THREE.BoxGeometry(0.26, 0.20, 0.30);
+  const stack = new THREE.InstancedMesh(stackGeo, matBox, 18);
+  stack.castShadow = stack.receiveShadow = true;
+  { const m = new THREE.Matrix4(); let i = 0;
+    for(let layer=0; layer<3; layer++)
+      for(const [dx,dz] of [[-0.28,-0.16],[0.0,-0.16],[0.28,-0.16],[-0.28,0.16],[0.0,0.16],[0.28,0.16]])
+        { m.makeTranslation(2.10 + dx, 0.17 + 0.10 + layer*0.20, 1.35 + dz); stack.setMatrixAt(i++, m); } }
+  stack.instanceMatrix.needsUpdate = true;
+  cell.add(stack);
+}
+root.add(cell);
+
+scene.add(root);
+
+// ---------- kinematics: 4 axes + the parallelogram constraint ----------
+const rad = d => d*Math.PI/180;
+const clamp = (v,[lo,hi]) => Math.min(hi, Math.max(lo, v));
+const stateEl = document.getElementById('state');
+let cur = { a1:-33, a2:51, a3:37, a6:0 };
+const v0 = new THREE.Vector3(), v1 = new THREE.Vector3();
+function placeRod(rod, from, to){
+  // aim a unit-Y cylinder along an arbitrary segment: midpoint + quaternion from +Y to the segment
+  const dir = v1.copy(to).sub(from);
+  const len = dir.length();
+  rod.position.copy(from).addScaledVector(dir, 0.5);
+  rod.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
+  rod.scale.set(1, len / (rod === rodA ? L_LOWER : L_UPPER), 1);
+}
+function setPose(p){
+  cur = { a1:clamp(p.a1,LIMITS.a1), a2:clamp(p.a2,LIMITS.a2), a3:clamp(p.a3,LIMITS.a3), a6:clamp(p.a6,LIMITS.a6) };
+  j1.rotation.y = -rad(cur.a1);
+  j2.rotation.z = -rad(cur.a2);
+  j3.rotation.z =  rad(cur.a3);
+  // THE CONSTRAINT: the wrist counter-rotates by the sum of the arm angles, so the flange — and
+  // everything it carries — stays horizontal at every pose. This is the analytic stand-in for the
+  // real 4-bar, and it is exact for a true parallelogram ([Block 62] §62.8 rule 4).
+  wrist.rotation.z = rad(cur.a2) - rad(cur.a3);
+  j6.rotation.y = rad(cur.a6);
+  // the visible tie rods follow the same geometry, offset to the side of each arm
+  root.updateMatrixWorld(true);
+  const shoulder = v0.set(AX2_X - 0.16, AX2_Y + 0.10, 0.26).clone();
+  const elbowW = new THREE.Vector3(0, L_LOWER, 0.26).applyMatrix4(j2.matrixWorld);
+  const wristW = new THREE.Vector3(L_UPPER, 0, 0.26).applyMatrix4(j3.matrixWorld);
+  placeRod(rodA, shoulder, elbowW);
+  placeRod(rodB, elbowW, wristW);
+  const flangeY = new THREE.Vector3(0,0,0).applyMatrix4(j6.matrixWorld).y;
+  stateEl.innerHTML = `<b>${cycleName}</b> · 4 ejes<br>` +
+    `A1 ${cur.a1.toFixed(0)}° · A2 ${cur.a2.toFixed(0)}° · A3 ${cur.a3.toFixed(0)}° · A6 ${cur.a6.toFixed(0)}°<br>` +
+    `brida a ${flangeY.toFixed(2)} m · horizontal por tirante`;
+}
+
+// authored cycle: pick from the infeed, lift, place on the stack
+const CYCLE = [
+  // Angles SOLVED, not eyeballed. For a target wrist point (r, y) the two-link chain gives
+  //   1.35·sin(a2) + 1.45·cos(a3-a2) = r - AX2_X ,  1.35·cos(a2) + 1.45·sin(a3-a2) = y - AX2_Y
+  // Picking poses by eye put the carried layer 17 cm INSIDE the infeed conveyor — geometry the
+  // gate's 38 clean draw calls reported as a pass. a6 counter-rotates the layer by the axis-1 swing
+  // so the boxes land square on the pallet.
+  { name:'RECOGIDA',  a1:-33, a2:51, a3:37, a6:0   },   // layer sitting on the infeed rollers
+  { name:'ELEVACIÓN', a1:-33, a2:30, a3:62, a6:0   },   // clear of the conveyor
+  { name:'GIRO',      a1:33,  a2:30, a3:62, a6:-66 },   // swung over the pallet, layer squared up
+  { name:'DEPÓSITO',  a1:33,  a2:42, a3:11, a6:-66 },   // layer resting on top of the stack
+];
+let cycleIdx = 0;
+let cycleName = CYCLE[0].name;
+setPose(CYCLE[0]);
+
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let target = { ...CYCLE[0] };
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnPose = document.getElementById('btnPose');
+btnPose.onclick = ()=>{ cycleIdx = (cycleIdx + 1) % CYCLE.length; target = { ...CYCLE[cycleIdx] };
+  cycleName = CYCLE[cycleIdx].name; requestRender(); };
+
+const btnCell = document.getElementById('btnCell');
+btnCell.onclick = ()=>{ cell.visible = !cell.visible; btnCell.classList.toggle('on', cell.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnLink = document.getElementById('btnLink');
+btnLink.onclick = ()=>{ rods.visible = !rods.visible; btnLink.classList.toggle('on', !rods.visible);
+  btnLink.textContent = rods.visible ? 'TIRANTE' : 'TIRANTE OCULTO';
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+let wasMoving = false;
+function animate(){
+  requestAnimationFrame(animate);
+  let moving = false, next = {};
+  for(const k of ['a1','a2','a3','a6']){
+    const d = target[k] - cur[k];
+    if(Math.abs(d) > 0.05){ next[k] = cur[k] + d*0.10; moving = true; } else next[k] = target[k];
+  }
+  if(moving){ setPose(next); needsRender = true; }
+  if(wasMoving && !moving){ renderer.shadowMap.needsUpdate = true; needsRender = true; }
+  wasMoving = moving;
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const goToPose = (p, name='CUSTOM') => { target = { ...cur, ...p }; cycleName = name; requestRender(); };
+const __app = { runtime:{ scene, renderer, camera, root }, goToPose, setPose, cycle:CYCLE, limits:LIMITS,
+                flangeWorldY: () => { root.updateMatrixWorld(true);
+                  return new THREE.Vector3(0,0,0).applyMatrix4(j6.matrixWorld).y; } };
+globalThis.__paletizadorApp = __app;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

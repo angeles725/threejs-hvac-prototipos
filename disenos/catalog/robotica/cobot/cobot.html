@@ -1,0 +1,319 @@
+<!doctype html>
+<!--
+  cobot — catalog asset, family `robotica`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block62.md §62.3 (Universal Robots UR10e Technical
+  Specification, Dec 2024) — the ONE datasheet in this family that prints its link lengths.
+  Joint-hierarchy contract: [Block 62] §62.8.
+  Spec: ./design-spec.yaml
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cobot 12.5 kg / 1300 mm sobre banco — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+  #joints{position:absolute;left:14px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text-muted);line-height:1.6}
+  #joints b{color:#fff;font-weight:600}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Cobot colaborativo — 12.5 kg · alcance 1300 mm</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· UR10e · IP54 · &lt;65 dB(A)</span></div>
+  <div class="dim">base Ø190 mm · d1 180.7 · a2 612.7 · a3 571.55 mm</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnPose">POSE →</button>
+  <button id="btnBench" class="on">BANCO</button>
+  <button id="btnBox" class="on">PIEZA</button>
+</div>
+<div id="joints"></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 62] §62.3) ----------
+// The UR10e drawing prints the kinematic chain itself — these are CERTIFIED link lengths, not
+// silhouette guesses. Check: A2 + A3 + D5 = 1304.1 mm ≈ the published 1300 mm reach.
+const D1 = 0.1807;    // [CERT-doc] base -> shoulder height
+const A2 = 0.6127;    // [CERT-doc] upper arm
+const A3 = 0.57155;   // [CERT-doc] forearm
+const D4 = 0.17415;   // [CERT-doc] wrist-1 lateral offset
+const D5 = 0.11985;   // [CERT-doc] wrist-2 offset
+const D6 = 0.11655;   // [INFER] wrist-3 -> tool flange, not printed on the drawing
+const FOOT_R = 0.095; // [CERT-doc] Ø190 mm footprint
+const BENCH_H = 0.90, BENCH_W = 1.60, BENCH_D = 0.80;   // [INFER] context bench
+
+// every joint is ±360° on this machine [CERT-doc]
+const LIMITS = { a1:[-360,360], a2:[-360,360], a3:[-360,360], a4:[-360,360], a5:[-360,360], a6:[-360,360] };
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 8, 26);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 3.3, AZ = 0.85, EL = 0.24, TY = 1.15;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TY + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TY, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TY, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 2.0;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3, 6, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-2.5; sun.shadow.camera.right=2.5; sun.shadow.camera.top=2.5; sun.shadow.camera.bottom=-2.5;
+scene.add(sun);
+// The polished aluminium joint bands are BARE metal on near-vertical cylinders: without a light to
+// reflect they read as flat grey ([Block 57] gotcha). One fill opposite the key. Materials unchanged.
+const fill = new THREE.DirectionalLight(0xf2f6ff, 0.95);
+fill.position.set(-3.0, 2.4, 4.5);
+scene.add(fill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   A cobot's identity is the two-material rhythm: matt DIELECTRIC shells (plastic/painted alloy)
+//   banded by BARE machined aluminium at every joint. Give the bands metalness 0 and the machine
+//   stops reading as a cobot.
+// ============================================================================
+const matShell = new THREE.MeshStandardMaterial({ color:0xe3e6e8, metalness:0.0, roughness:0.42 });
+const matBand  = new THREE.MeshStandardMaterial({ color:0xb7bcc0, metalness:0.90, roughness:0.30 });
+const matDark  = new THREE.MeshStandardMaterial({ color:0x22262b, metalness:0.0,  roughness:0.72 });
+const matBlue  = new THREE.MeshStandardMaterial({ color:0x2f6fb5, metalness:0.0,  roughness:0.45 });
+const matBench = new THREE.MeshStandardMaterial({ color:0x9aa3ab, metalness:0.0,  roughness:0.70 });
+const matTop   = new THREE.MeshStandardMaterial({ color:0xbfc6cb, metalness:0.85, roughness:0.38 });
+const matPart  = new THREE.MeshStandardMaterial({ color:0xc8873f, metalness:0.0,  roughness:0.60 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Chain: bench → j1(Y) → j2(Z) → j3(Z) → j4(Z) → j5(Y) → j6(X) → flange → tool
+//   Axis ASSIGNMENT within the wrist is [INFER]; the OFFSET MAGNITUDES are [CERT-doc].
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+// tube helper: a cylinder whose AXIS is X, Y or Z — the wrist needs all three
+const tube = (p,r,len,mat,x,y,z,axis='y',seg=18)=>{
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,len,seg), mat);
+  m.castShadow = m.receiveShadow = true; m.position.set(x,y,z);
+  if(axis==='x') m.rotation.z = Math.PI/2;
+  if(axis==='z') m.rotation.x = Math.PI/2;
+  p.add(m); return m; };
+
+// --- context bench: the cobot's identity is that it sits WHERE PEOPLE WORK ---
+const bench = new THREE.Group();
+put(bench, BENCH_W, 0.045, BENCH_D, matTop, 0, BENCH_H - 0.022, 0);
+put(bench, BENCH_W - 0.10, 0.06, BENCH_D - 0.10, matBench, 0, BENCH_H - 0.075, 0);
+for(const sx of [-1,1]) for(const sz of [-1,1])
+  put(bench, 0.06, BENCH_H - 0.10, 0.06, matBench, sx*(BENCH_W/2 - 0.09), (BENCH_H - 0.10)/2, sz*(BENCH_D/2 - 0.09));
+put(bench, BENCH_W - 0.30, 0.035, BENCH_D - 0.30, matBench, 0, 0.18, 0);   // lower shelf
+root.add(bench);
+
+// --- teach pendant + control box under the bench (part of the machine, not decoration) ---
+const ctrl = new THREE.Group();
+put(ctrl, 0.46, 0.30, 0.36, matDark, -0.42, 0.36, -0.10);
+put(ctrl, 0.40, 0.02, 0.03, matBand, -0.42, 0.50, 0.08);
+root.add(ctrl);
+
+// --- j1 : axis 1, vertical. Origin on the bench top. ---
+const armBase = new THREE.Group();
+armBase.position.set(-0.24, BENCH_H, 0.04);   // set back on the bench so the tool works OVER the top
+root.add(armBase);
+tube(armBase, FOOT_R, 0.018, matBand, 0, 0.009, 0, 'y', 28);        // mounting flange, Ø190 [CERT-doc]
+const j1 = new THREE.Group(); j1.position.set(0, 0.018, 0); armBase.add(j1);
+tube(j1, 0.082, 0.105, matShell, 0, 0.052, 0, 'y', 24);             // base shell
+tube(j1, 0.078, 0.016, matBand,  0, 0.112, 0, 'y', 24);             // joint band
+
+// --- j2 : axis 2 (shoulder) at the certified d1 height ---
+const j2 = new THREE.Group(); j2.position.set(0, D1 - 0.018, 0); j1.add(j2);
+tube(j2, 0.074, 0.165, matShell, 0, 0, 0, 'z', 22);                 // shoulder housing, axis Z
+tube(j2, 0.070, 0.020, matBand,  0, 0, 0.090, 'z', 22);
+// upper arm: a2 = 612.7 mm along +X
+tube(j2, 0.062, A2 - 0.10, matShell, (A2)/2, 0, 0, 'x', 20);
+put(j2, A2*0.5, 0.055, 0.135, matShell, A2*0.5, 0, 0);              // the flattened top face of the arm
+
+// --- j3 : axis 3 (elbow) ---
+const j3 = new THREE.Group(); j3.position.set(A2, 0, 0); j2.add(j3);
+tube(j3, 0.060, 0.140, matShell, 0, 0, 0, 'z', 22);
+tube(j3, 0.056, 0.018, matBand,  0, 0, 0.076, 'z', 22);
+// forearm: a3 = 571.55 mm along +X
+tube(j3, 0.050, A3 - 0.09, matShell, A3/2, 0, 0, 'x', 20);
+
+// --- j4 : wrist 1 (axis parallel to the elbow) ---
+const j4 = new THREE.Group(); j4.position.set(A3, 0, 0); j3.add(j4);
+tube(j4, 0.048, 0.120, matShell, 0, 0, 0, 'z', 20);
+tube(j4, 0.045, 0.016, matBand,  0, 0, 0.068, 'z', 20);
+
+// --- j5 : wrist 2, reached by the CERTIFIED lateral offset d4 ---
+const j5 = new THREE.Group(); j5.position.set(0, 0, D4 - 0.055); j4.add(j5);
+tube(j5, 0.046, 0.115, matShell, 0, 0, 0, 'y', 20);
+tube(j5, 0.043, 0.016, matBand,  0, 0.064, 0, 'y', 20);
+
+// --- j6 : wrist 3, reached by the CERTIFIED offset d5 (this is the term that closes the reach) ---
+const j6 = new THREE.Group(); j6.position.set(D5, 0, 0); j5.add(j6);
+tube(j6, 0.044, 0.100, matShell, 0, 0, 0, 'x', 20);
+tube(j6, 0.041, 0.014, matBand,  0.052, 0, 0, 'x', 20);
+const flange = new THREE.Group(); flange.position.set(D6 - 0.05, 0, 0); j6.add(flange);
+tube(flange, 0.0315, 0.012, matBand, 0, 0, 0, 'x', 20);            // Ø63 tool flange, ISO 9409-1-50
+
+// --- tool: a slim 2-finger electric gripper holding a part ---
+const tool = new THREE.Group(); flange.add(tool);
+put(tool, 0.055, 0.085, 0.085, matBlue, 0.034, 0, 0);
+put(tool, 0.030, 0.058, 0.110, matDark, 0.076, 0, 0);
+const fingerL = new THREE.Group(), fingerR = new THREE.Group();
+for(const [g,sz] of [[fingerL,1],[fingerR,-1]]){
+  put(g, 0.075, 0.020, 0.016, matBand, 0.128, 0, sz*0.026);
+  put(g, 0.016, 0.020, 0.030, matDark, 0.162, 0, sz*0.018);
+  tool.add(g);
+}
+const part = box(0.052, 0.052, 0.052, matPart);
+part.position.set(0.168, 0, 0); tool.add(part);
+
+scene.add(root);
+
+// ---------- forward kinematics (scene-graph FK, [Block 62] §62.8) ----------
+const rad = d => d*Math.PI/180;
+const clamp = (v,[lo,hi]) => Math.min(hi, Math.max(lo, v));
+const jointsEl = document.getElementById('joints');
+let cur = { a1:0, a2:0, a3:0, a4:0, a5:0, a6:0 };
+function setPose(p){
+  cur = { a1:clamp(p.a1,LIMITS.a1), a2:clamp(p.a2,LIMITS.a2), a3:clamp(p.a3,LIMITS.a3),
+          a4:clamp(p.a4,LIMITS.a4), a5:clamp(p.a5,LIMITS.a5), a6:clamp(p.a6,LIMITS.a6) };
+  j1.rotation.y = -rad(cur.a1);
+  j2.rotation.z =  rad(cur.a2);
+  j3.rotation.z =  rad(cur.a3);
+  j4.rotation.z =  rad(cur.a4);
+  j5.rotation.y =  rad(cur.a5);
+  j6.rotation.x =  rad(cur.a6);
+  jointsEl.innerHTML = `<b>POSE</b> ${poseName}<br>` +
+    `J1 ${cur.a1.toFixed(0)}° · J2 ${cur.a2.toFixed(0)}° · J3 ${cur.a3.toFixed(0)}°<br>` +
+    `J4 ${cur.a4.toFixed(0)}° · J5 ${cur.a5.toFixed(0)}° · J6 ${cur.a6.toFixed(0)}°`;
+}
+
+// authored joint-angle presets — no IK ([Block 62] §62.8 rule 6)
+const POSES = [
+  // Angles are chosen so the TOOL TIP clears the bench top: with the tool axis pointing down,
+  // a4 ≈ -(a2 + a3) - 90 keeps it vertical, and the wrist must sit ≥0.35 m above the top or the
+  // gripper (and the part it holds) sinks through the table.
+  { name:'READY',    a1:0,   a2:68,  a3:-104, a4:-54, a5:0,   a6:0 },
+  { name:'PICK',     a1:-30, a2:52,  a3:-95,  a4:-47, a5:0,   a6:0 },
+  { name:'HANDOVER', a1:-46, a2:54,  a3:-82,  a4:-62, a5:-22, a6:0 },
+  { name:'STOW',     a1:0,   a2:92,  a3:-150, a4:-32, a5:0,   a6:0 },
+];
+let poseIdx = 0;
+let poseName = POSES[0].name;
+setPose(POSES[0]);
+
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let target = { ...POSES[0] };
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnPose = document.getElementById('btnPose');
+btnPose.onclick = ()=>{ poseIdx = (poseIdx + 1) % POSES.length; target = { ...POSES[poseIdx] };
+  poseName = POSES[poseIdx].name; requestRender(); };
+
+const btnBench = document.getElementById('btnBench');
+btnBench.onclick = ()=>{ bench.visible = ctrl.visible = !bench.visible; btnBench.classList.toggle('on', bench.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnBox = document.getElementById('btnBox');
+btnBox.onclick = ()=>{ part.visible = !part.visible; btnBox.classList.toggle('on', part.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+let wasMoving = false;
+function animate(){
+  requestAnimationFrame(animate);
+  let moving = false, next = {};
+  for(const k of ['a1','a2','a3','a4','a5','a6']){
+    const d = target[k] - cur[k];
+    if(Math.abs(d) > 0.05){ next[k] = cur[k] + d*0.10; moving = true; } else next[k] = target[k];
+  }
+  if(moving){ setPose(next); needsRender = true; }
+  // frozen shadow map: re-bake ONCE when the motion settles, not once per frame
+  if(wasMoving && !moving){ renderer.shadowMap.needsUpdate = true; needsRender = true; }
+  wasMoving = moving;
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+// goToPose moves the animation TARGET — the public entry point. setPose is low-level and would be
+// overwritten by the next frame if an external driver called it.
+const goToPose = (p, name='CUSTOM') => { target = { ...cur, ...p }; poseName = name; requestRender(); };
+const __app = { runtime:{ scene, renderer, camera, root }, goToPose, setPose, poses:POSES, limits:LIMITS };
+globalThis.__cobotApp = __app;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

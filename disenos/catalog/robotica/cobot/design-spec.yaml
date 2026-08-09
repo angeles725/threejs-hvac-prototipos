@@ -1,0 +1,190 @@
+# DesignSpec — collaborative robot arm on a workbench (12.5 kg / 1300 mm class)
+# Dimensional evidence: [Block 62] §62.3 (research/threejs-block62.md) — Universal Robots UR10e
+# Technical Specification. This is the one machine in the family whose datasheet PRINTS its
+# kinematic chain, so the link lengths here are certified rather than inferred from a silhouette.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: cobot
+family: robotica
+track: needs-research
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  # Pre-spec 8-axis assessment (0-3 each). Sum 16 -> complex.
+  scores: {silhouette: 2, components: 2, hierarchy: 3, repetition: 1,
+           material_layers: 2, detail: 2, occlusion: 1, action_readiness: 3}
+  tier: complex
+  notes: >
+    Simpler in parts than the 6700 (tubes, not castings) but the same hierarchy weight: six nested
+    joints with two CERTIFIED offsets inside the wrist. material_layers 2 because the identity is a
+    two-material rhythm — matt dielectric shell banded by bare aluminium at every joint.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/threejs-block62.md
+  reuse_pointers:
+    joint_chain: "disenos/catalog/robotica/brazo-robotico-6ejes/ (same FK pattern, industrial variant)"
+
+references:
+  - source: "sources/datasheets/ur10e-e-series-datasheet (Universal Robots, UR10e Technical Specification, Dec 2024)"
+    evidences: >
+      Payload 12.5 kg, reach 1300 mm, 6 rotating joints, footprint Ø190 mm, weight 33.5 kg [CERT-doc];
+      every joint ±360°, base/shoulder ±120°/s, elbow and wrists ±180°/s [CERT-doc];
+      pose repeatability ±0.05 mm, IP54, <65 dB(A) [CERT-doc];
+      drawing cotes 180.7 / 612.7 / 571.55 / 174.15 / 119.85 mm = the kinematic chain [CERT-doc].
+    suitability: pass
+  - source: "research/threejs-block62.md §62.3"
+    evidences: "The cote-to-DH mapping and the reach check A2 + A3 + D5 = 1304.1 mm ≈ 1300 mm."
+    suitability: pass
+
+dimensions_real:
+  d1_base_to_shoulder_m: {value: 0.1807,  confidence: high}   # [CERT-doc]
+  a2_upper_arm_m:        {value: 0.6127,  confidence: high}   # [CERT-doc]
+  a3_forearm_m:          {value: 0.57155, confidence: high}   # [CERT-doc]
+  d4_wrist1_offset_m:    {value: 0.17415, confidence: high}   # [CERT-doc]
+  d5_wrist2_offset_m:    {value: 0.11985, confidence: high}   # [CERT-doc]
+  d6_flange_m:           {value: 0.11655, confidence: low}    # [INFER] not printed on the drawing
+  footprint_dia_m:       {value: 0.190,   confidence: high}   # [CERT-doc]
+  reach_m:               {value: 1.300,   confidence: high}   # [CERT-doc]
+  tube_dia_upper_m:      {value: 0.124,   confidence: low}    # [INFER] silhouette only, never published
+  bench_h_m:             {value: 0.90,    confidence: low}    # [INFER] context bench
+  bench_w_m:             {value: 1.60,    confidence: low}    # [INFER]
+  bench_d_m:             {value: 0.80,    confidence: low}    # [INFER]
+
+hierarchy:
+  # [Block 62] §62.8 rule 1. NOTE the honest split: the offset MAGNITUDES are certified, the
+  # assignment of each rotation to a scene axis inside the wrist is [INFER].
+  - name: root
+    children:
+      - name: bench          # context workbench + control box (togglable)
+        animation: none
+      - name: arm_base       # Ø190 mounting flange on the bench top
+        pivot: [-0.24, 0.90, 0.04]
+        children:
+          - name: j1         # axis 1 — rotation about Y
+            animation: rotate-y
+            children:
+              - name: j2     # axis 2 — shoulder, at the certified d1 height
+                pivot: [0, 0.1807, 0]
+                animation: rotate-z
+                children:
+                  - name: upper_arm
+                  - name: j3         # axis 3 — elbow, at a2
+                    pivot: [0.6127, 0, 0]
+                    animation: rotate-z
+                    children:
+                      - name: forearm
+                      - name: j4     # wrist 1, at a3
+                        pivot: [0.57155, 0, 0]
+                        animation: rotate-z
+                        children:
+                          - name: j5     # wrist 2, reached by the certified lateral offset d4
+                            pivot: [0, 0, 0.17415]
+                            animation: rotate-y
+                            children:
+                              - name: j6   # wrist 3, reached by d5 — the term that closes the reach
+                                pivot: [0.11985, 0, 0]
+                                animation: rotate-x
+                                children:
+                                  - name: tool_flange
+                                  - name: gripper      # 2-finger electric gripper + held part
+
+materials:
+  - id: shell-matt
+    family: painted-metal
+    color: "#e3e6e8"
+    metalness: 0.0             # moulded shell / painted alloy — DIELECTRIC (HANDBOOK §3.1)
+    roughness: 0.42
+    evidence: "HANDBOOK §3.1 painted/moulded 0.0-0.05"
+    confidence: 0.75
+  - id: joint-band-aluminium
+    family: bare-metal
+    color: "#b7bcc0"
+    metalness: 0.90            # the machined band at every joint IS bare aluminium
+    roughness: 0.30
+    evidence: "HANDBOOK §3.1 bare-metal 0.9-1.0; the band/shell alternation is the cobot read"
+    confidence: 0.8
+  - id: gripper-blue
+    family: painted-metal
+    color: "#2f6fb5"
+    metalness: 0.0
+    roughness: 0.45
+    evidence: "third-party end effector, anodised/painted housing [CERT-a]"
+    confidence: 0.6
+  - id: bench-steel
+    family: bare-metal
+    color: "#bfc6cb"
+    metalness: 0.85
+    roughness: 0.38
+    evidence: "stainless bench top, HANDBOOK §3.1"
+    confidence: 0.7
+  - id: control-box
+    family: painted-metal
+    color: "#22262b"
+    metalness: 0.0
+    roughness: 0.72
+    evidence: "[CERT-doc] control box, powder coated steel, 33.5 kg incl. cable"
+    confidence: 0.7
+
+critical_features:
+  - id: certified-chain
+    desc: >
+      The built arm measures the datasheet: shoulder at 180.7 mm, upper arm 612.7, forearm 571.55,
+      and the two wrist offsets 174.15 / 119.85 mm — so full extension lands on the published
+      1300 mm reach instead of a plausible-looking guess.
+    threshold: 0.85
+  - id: band-shell-rhythm
+    desc: >
+      Every joint shows a bare machined aluminium band between two matt shells. Flatten that
+      contrast and the machine stops reading as a cobot and starts reading as a plastic toy.
+    threshold: 0.78
+  - id: tool-clears-the-bench
+    desc: >
+      In every authored pose the gripper and the part it holds stay ABOVE the bench top. This is
+      exactly the failure the QA counts cannot see: an arm can render 34 clean draw calls with its
+      tool buried in the table.
+    threshold: 0.85
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 45
+    tris: 40000
+  measured:
+    draws: 34
+    tris: 1582
+    console_errors: 0
+
+camera:
+  azimuth_deg: 48.7
+  elevation_deg: 13.7
+  fov: 38
+  target_y_m: 1.15
+  radius_m: 3.3
+
+lighting: house-rig + vertical-subject fill
+  # Same documented deviation as the rest of the family: the aluminium joint bands are bare metal
+  # on near-vertical cylinders, so without something bright to reflect they read as flat grey.
+  # One fill opposite the key (0.95) and environmentIntensity 2.0; materials unchanged.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "POSE →"      # READY / PICK / HANDOVER / STOW — animated, holds needsRender while moving
+  - "BANCO"       # context bench + control box
+  - "PIEZA"       # the part held in the gripper
+
+public_api:
+  - "__cobotApp.goToPose({a1..a6}, name?)   # moves the animation target; setPose is low-level"
+
+colorTarget:
+  # MEASURED from the rendered upper-arm shell (headless SwiftShader capture at 1280x800), frozen
+  # as the regression anchor. Not the material's authored hex — the render is what ships.
+  srgb: [180, 182, 185]
+  deltaE00Max: 8
+  crop: "34x34+646+262"   # clean shell on the upper arm, READY pose, at 1280x800
