@@ -182,6 +182,18 @@ elige otra familia libre si queda, o detente.
 ```
 
 ## Auditoría de defectos — anclas obligatorias (evita falsos positivos)
+- TODO TOGGLE ES UN INTERCAMBIO, y el sustituto no debe retirar NETO geometría. Un revelado oculta N piezas y
+  muestra un grupo sustituto; si al sustituto le falta una pieza, lo que se apoyaba encima queda FLOTANDO, y el
+  gate nunca lo ve porque el estado por defecto está intacto y los conteos siguen verdes. Caso real:
+  suavizador-agua/btnCut ocultaba shell+domo pero el grupo `cut` solo reponía medio casco → cabezal flotando con
+  0.117 m de hueco. Regla: cualquier asset con CORTE, tapa desmontable o panel retirable se audita midiendo los
+  MISMOS puntos de referencia en AMBOS estados, no solo en el sospechoso. Un comentario en el código que promete
+  "no se borra geometría" NO es evidencia; la medición sí.
+- LA MEDICIÓN DE UN DEFECTO DE ESTADO DEBE DISCRIMINAR entre estados. Si tu consulta da el MISMO número en el
+  estado normal y en el sospechoso, la sonda está mal ANTES que el reporte: casi seguro tu filtro agarró la pieza
+  equivocada (una válvula en vez del casco). Un resultado idéntico no refuta el defecto, lo OCULTA — habrías
+  concluido "no lo reproduzco" y refutado algo cierto. Dos estados que DEBEN diferir dando igual es sospechoso por
+  sí mismo; re-ancla la identidad por geometry.parameters y vuelve a medir.
 - Identifica una InstancedMesh por `geometry.parameters` (width/height/depth), NUNCA por `count` ni por índice
   de traversal: varias mallas comparten conteo por casualidad (24 aisladores vs 28 MCCB) y el orden de
   traversal cambia con cualquier edición → agarras la malla de al lado y reportas un defecto que no existe.
