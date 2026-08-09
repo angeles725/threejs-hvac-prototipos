@@ -1,0 +1,508 @@
+<!doctype html>
+<!--
+  tablero-switchgear — catalog asset, family `electricos`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional vocabulary: disenos/switchgear/switchgear-voxel-v1.html (1 voxel = 0.025 m →
+  120 x 88 x 32 vx = 3.00 x 2.20 x 0.80 m), re-derived to the IEC 61439-2 modular grid.
+  Spec: ./design-spec.yaml
+  NOTE: a switchgear LINEUP, not a single cubicle — the identity of this equipment is the row of
+  sections sharing one horizontal busbar chamber. A lone cubicle is a distribution board, not switchgear.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablero switchgear BT — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.025 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Tablero switchgear BT — lineup de 5 secciones</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· chapa RAL 7035 (dieléctrico) · barra de cobre</span></div>
+  <div class="dim">3.20 × 0.90 × 2.30 m · IEC 61439-2 · acometida ACB + 4 secciones de salida</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDoor">ABRIR PUERTAS</button>
+  <button id="btnBus" class="on">TAPA DE BARRAS</button>
+  <button id="btnTrip">FALLA (ISA-101)</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml) ----------
+// IEC 61439-2 assembles on a modular grid: 2200 mm body over a 100 mm plinth is the standard
+// LV lineup height, and section widths come in 400/600/800/1000 mm steps.
+// The 800 mm incoming (ACB) section sits at the RIGHT end of the lineup. That is real practice —
+// the incomer goes at the end the supply arrives from — and it also fixes a real occlusion problem:
+// left-hinged doors each cover the section to their left, so an incomer at the left end would have
+// its breaker permanently hidden behind its own neighbour's door in every open view.
+const SEC_W   = [0.60, 0.60, 0.60, 0.60, 0.80];
+const NSEC    = SEC_W.length;
+const INC     = NSEC - 1;                          // index of the incoming section
+const TOTAL_W = SEC_W.reduce((a,b)=>a+b, 0);       // 3.20
+const DEPTH   = 0.90;                              // single-front lineup with rear cable zone
+const BASE_H  = 0.10;                              // plinth / base channel
+const BODY_H  = 2.20;                              // cabinet body
+const TOP_Y   = BASE_H + BODY_H;                   // 2.30 overall
+const BUS_H   = 0.30;                              // top horizontal busbar chamber
+const BUS_Y0  = TOP_Y - BUS_H;                     // 2.00 — bottom of the bus chamber
+const POST_W  = 0.040;                             // front frame stile
+const RAIL_H  = 0.030;                             // front frame rail between stacked doors
+const SHEET   = 0.015;                             // sheet-steel panel thickness
+const DOOR_T  = 0.020;
+const DOOR_Y0 = BASE_H + 0.06;                     // door zone bottom
+const DOOR_Y1 = BUS_Y0 - 0.04;                     // door zone top (below the bus chamber)
+const FRONT_Z = DEPTH/2;
+
+// section x boundaries: xEdge(0) = -TOTAL_W/2 ... xEdge(NSEC) = +TOTAL_W/2
+const EDGE = [-TOTAL_W/2];
+for(const w of SEC_W) EDGE.push(EDGE[EDGE.length-1] + w);
+const secCx = i => (EDGE[i] + EDGE[i+1]) / 2;
+
+// ---------- scene / renderer / camera (proven config from the 18-equipo library) ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 12, 42);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b: DPR cap
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d: frozen static-rig shadow
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 6.6, AZ = 0.73, EL = 0.21;                            // 42° azimuth / 12° elevation (spec camera)
+const TGT_Y = 1.18;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), TGT_Y + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, TGT_Y, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, TGT_Y, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// DOCUMENTED DEVIATION (see design-spec.yaml §lighting): a switchgear lineup is one large VERTICAL
+// plane. The house rig was calibrated on horizontal equipment tops, so a vertical face reflects the
+// dark lower hemisphere and reads flat. Fix = light, never material: raise the IBL and add a fill
+// aimed along the panel normal (+Z). Metalness/roughness stay per HANDBOOK §3.1.
+scene.environmentIntensity = 2.2;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4.5, 6.5, 5.0); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;   // block54 §5-d: key light ≤1024
+sun.shadow.camera.left=-4; sun.shadow.camera.right=4; sun.shadow.camera.top=4; sun.shadow.camera.bottom=-4;
+sun.shadow.camera.far = 22;
+scene.add(sun);
+const faceFill = new THREE.DirectionalLight(0xdce6f2, 0.85);    // panel-normal fill (the deviation)
+faceFill.position.set(0.8, 1.6, 6.0);
+scene.add(faceFill);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. HANDBOOK §3.1 near-binary metalness.
+//   Switchgear sheet steel is POWDER-COATED RAL 7035 → dielectric (metalness 0), NOT bare metal.
+//   Only the busbar (electrolytic copper), the gland plate and the hinges are bare metal.
+//   Copper uses the HANDBOOK §3.1 correction (#f0a67a family), not the old dark 0xc0762e.
+// ============================================================================
+const matPaint  = new THREE.MeshStandardMaterial({ color:0xcfd2cc, metalness:0.0, roughness:0.55 }); // RAL 7035
+const matPaintD = new THREE.MeshStandardMaterial({ color:0xb9bdb8, metalness:0.0, roughness:0.58 }); // shaded returns
+const matPlinth = new THREE.MeshStandardMaterial({ color:0x3b4046, metalness:0.0, roughness:0.62 }); // RAL 7022 base
+const matSteel  = new THREE.MeshStandardMaterial({ color:0xb6babc, metalness:0.92, roughness:0.42 }); // galvanised
+const matCopper = new THREE.MeshStandardMaterial({ color:0xf0a67a, metalness:1.0,  roughness:0.34 }); // §3.1 correction
+const matPlastic= new THREE.MeshStandardMaterial({ color:0x1a1d21, metalness:0.0,  roughness:0.52 }); // handles, bezels
+const matDevice = new THREE.MeshStandardMaterial({ color:0x2a2e33, metalness:0.0,  roughness:0.60 }); // MCCB/ACB body
+const matDevFace= new THREE.MeshStandardMaterial({ color:0x8d9298, metalness:0.0,  roughness:0.58 }); // device front plate
+const matGlass  = new THREE.MeshStandardMaterial({ color:0x2b3a44, metalness:0.0, roughness:0.06,
+                                                   transparent:true, opacity:0.42 });
+const matLabel  = new THREE.MeshStandardMaterial({ color:0xf2f3ef, metalness:0.0, roughness:0.70 });
+const matInsul  = new THREE.MeshStandardMaterial({ color:0x6b4d2a, metalness:0.0, roughness:0.65 }); // SMC bar support
+// ISA-101 §3.4: grey is NORMAL. Colour is reserved for the abnormal state, driven by the FALLA toggle.
+const matLampOff = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                    emissive:0x000000 });
+const matLampRun = new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                    emissive:0x0d3a2a, emissiveIntensity:1.0 });
+const matLampTrip= new THREE.MeshStandardMaterial({ color:0x5a6878, metalness:0.0, roughness:0.4,
+                                                    emissive:0xff2233, emissiveIntensity:1.6 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.
+// ============================================================================
+const root = new THREE.Group();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xforms, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xforms.length);
+  im.castShadow = im.receiveShadow = true;
+  xforms.forEach((t,i)=>{
+    _p.set(t[0], t[1], t[2]);
+    _q.setFromEuler(new THREE.Euler(t[3]||0, t[4]||0, t[5]||0));
+    _s.set(t[6]??1, t[7]??1, t[8]??1);
+    im.setMatrixAt(i, _m.compose(_p,_q,_s));
+  });
+  im.instanceMatrix.needsUpdate = true;
+  parent.add(im);
+  return im;
+}
+function box(w,h,d,mat,x,y,z,parent){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true;
+  m.position.set(x,y,z);
+  (parent||root).add(m);
+  return m;
+}
+
+// --- plinth: a recessed base channel, so the cabinet reads as sitting ON something ---
+box(TOTAL_W - 0.06, BASE_H, DEPTH - 0.06, matPlinth, 0, BASE_H/2, 0);
+
+// --- carcass: rear panel, end panels, internal division posts, top ---
+box(TOTAL_W, BODY_H, SHEET, matPaintD, 0, BASE_H + BODY_H/2, -DEPTH/2 + SHEET/2);        // rear
+box(TOTAL_W, SHEET, DEPTH, matPaint, 0, TOP_Y - SHEET/2, 0);                             // roof
+// removable roof plates: a seam per section plus a perimeter lip, so the roof is not one white slab
+for(let i=1;i<NSEC;i++) box(0.020, 0.014, DEPTH - 0.04, matPaintD, EDGE[i], TOP_Y + 0.004, 0);
+for(const dz of [-1, 1]) box(TOTAL_W, 0.026, 0.016, matPaintD, 0, TOP_Y + 0.008, dz*(DEPTH/2 - 0.012));
+box(TOTAL_W, SHEET, DEPTH, matPaintD, 0, BASE_H + SHEET/2, 0);                           // floor
+for(let i=0;i<=NSEC;i++){                                                                 // side / division panels
+  const end = (i===0 || i===NSEC);
+  const x = EDGE[i] + (i===0 ? SHEET/2 : (i===NSEC ? -SHEET/2 : 0));
+  // Internal division panels STOP at the busbar chamber floor. The horizontal bus is one continuous
+  // run over the whole lineup — that is what makes it switchgear — so a divider that reaches the
+  // roof would chop it into 5 unconnected stubs.
+  const ph = end ? BODY_H : (BUS_Y0 - BASE_H);
+  box(SHEET, ph, DEPTH, matPaintD, x, BASE_H + ph/2, 0);
+  if(!end) continue;
+  // END PANEL DETAILING. A 0.90 x 2.20 m blank plane is a quarter of every 3/4 view of this asset
+  // and a flat one kills the read. Real end panels are a formed sheet: edge returns front and rear
+  // plus pressed stiffening ribs, because unstiffened 1.5 mm sheet oil-cans at this size.
+  const sx = i===0 ? -1 : 1, xo = x + sx*0.010;
+  for(const dz of [DEPTH/2 - 0.030, -DEPTH/2 + 0.030])                        // front + rear returns
+    box(0.012, BODY_H, 0.060, matPaint, xo, BASE_H + BODY_H/2, dz);
+  for(const ry of [BASE_H + 0.55, BASE_H + 1.10, BASE_H + 1.65])              // horizontal ribs
+    box(0.010, 0.050, DEPTH - 0.10, matPaint, xo, ry, 0);
+  box(0.012, 0.040, DEPTH - 0.06, matPaint, xo, TOP_Y - 0.035, 0);            // top edge return
+}
+
+// --- front frame: vertical stiles at every section boundary + a header above the door zone ---
+for(let i=0;i<=NSEC;i++){
+  box(POST_W, BODY_H, 0.030, matPaint, EDGE[i] + (i===0? POST_W/2 : (i===NSEC? -POST_W/2 : 0)),
+      BASE_H + BODY_H/2, FRONT_Z - 0.015);
+}
+box(TOTAL_W, DOOR_Y0 - BASE_H, 0.030, matPaint, 0, (BASE_H + DOOR_Y0)/2, FRONT_Z - 0.015);  // kick rail
+
+// --- busbar chamber: 4 horizontal copper bars (L1 L2 L3 N) behind a removable bolted cover ---
+const busbars = new THREE.Group();
+// 4 bars (L1 L2 L3 N). The PITCH must exceed the bar height or the stack fuses into one solid slab
+// on screen — a 80 mm bar on a 55 mm pitch overlaps itself by 25 mm and stops reading as 4 bars.
+const BAR_W = 0.010, BAR_H = 0.045, BAR_PITCH = 0.062;
+const barY = k => BUS_Y0 + 0.050 + k*BAR_PITCH;
+for(let k=0;k<4;k++) box(TOTAL_W - 0.10, BAR_H, BAR_W, matCopper, 0, barY(k), 0.06, busbars);
+// insulator standoffs that carry the bars — real switchgear never floats a bar in air
+const stand = [];
+for(let i=0;i<=NSEC;i++) for(let k=0;k<4;k++) stand.push([EDGE[i] + (i===0?0.06:(i===NSEC?-0.06:0)),
+  barY(k), 0.02]);
+instanced(new THREE.CylinderGeometry(0.018, 0.020, 0.06, 10),
+  new THREE.MeshStandardMaterial({ color:0x6b4d2a, metalness:0.0, roughness:0.65 }),
+  stand.map(t=>[t[0], t[1], t[2], Math.PI/2, 0, 0]), busbars);
+root.add(busbars);
+
+// bolted cover over the bus chamber (togglable — this is the "cutaway")
+const busCover = new THREE.Group();
+box(TOTAL_W - 0.01, BUS_H - 0.01, DOOR_T, matPaint, 0, BUS_Y0 + BUS_H/2, FRONT_Z + 0.004, busCover);
+const bolts = [];
+for(let i=0;i<=NSEC*2;i++){
+  const x = -TOTAL_W/2 + 0.08 + i*((TOTAL_W-0.16)/(NSEC*2));
+  bolts.push([x, BUS_Y0 + 0.05, FRONT_Z + 0.016]);
+  bolts.push([x, BUS_Y0 + BUS_H - 0.05, FRONT_Z + 0.016]);
+}
+instanced(new THREE.CylinderGeometry(0.008, 0.008, 0.008, 8), matSteel,
+  bolts.map(t=>[t[0], t[1], t[2], Math.PI/2, 0, 0]), busCover);
+root.add(busCover);
+
+// --- interior: mounting plate + devices per section, only meaningful once a door swings open ---
+const interior = new THREE.Group();
+// The device mounting plate sits ~0.43 m behind the door face, NOT at the back of the 0.90 m
+// carcass: the rear third is the cable zone. Devices mounted at the rear wall leave the open
+// cubicle reading as an empty white box, which is the failure the doors-open capture caught.
+const DEV_Z    = 0.02;                     // front face of the mounting plate
+const RISER_W  = 0.13;                     // vertical distribution-bus channel, right of each section
+const plateWof = i => SEC_W[i] - 0.04 - RISER_W;
+const plateCxof= i => EDGE[i] + 0.02 + plateWof(i)/2;
+for(let i=0;i<NSEC;i++){
+  box(plateWof(i), DOOR_Y1 - DOOR_Y0, 0.012, matDevFace, plateCxof(i),
+      (DOOR_Y0 + DOOR_Y1)/2, DEV_Z, interior);
+  // 3-phase vertical riser dropping from the horizontal bus into this section's devices
+  const rx = EDGE[i+1] - 0.02 - RISER_W/2;
+  for(const dx of [-0.038, 0, 0.038])
+    box(0.055, BUS_Y0 - DOOR_Y0 - 0.02, 0.010, matCopper, rx + dx,
+        (DOOR_Y0 + BUS_Y0)/2, DEV_Z + 0.075, interior);
+  // insulated bar supports up the riser — bare copper cannot float in the cubicle
+  for(let k=0;k<4;k++)
+    box(RISER_W - 0.01, 0.030, 0.055, matInsul, rx, DOOR_Y0 + 0.25 + k*0.42, DEV_Z + 0.055, interior);
+}
+
+// ---------- doors ----------
+// Each door is a Group whose ORIGIN IS THE HINGE LINE (left stile), so the swing axis is real:
+// the panel is offset +w/2 in local X. Rotating the group about Y opens it outward (+Z).
+const doors = [];
+const REVEAL = 0.010;                      // shadow gap around every leaf — without it the lineup
+                                           // merges into one white slab and reads as lockers
+function makeDoor(x0, x1, y0, y1, kind){
+  const w = (x1 - x0) - 2*REVEAL, h = (y1 - y0) - 2*REVEAL;
+  const cy = (y0 + y1)/2, lx = REVEAL + w/2;   // leaf centre in local X (hinge stays at x0)
+  const g = new THREE.Group();
+  g.position.set(x0, 0, FRONT_Z + 0.006);
+  const leaf = box(w, h, DOOR_T, matPaint, lx, cy, 0, g);
+  leaf.userData.isLeaf = true;
+  // stiffening return around the leaf edge — a 1.5 mm door without a return reads like cardboard
+  box(w, 0.020, 0.045, matPaintD, lx, cy - h/2 + 0.010, -0.030, g);
+  box(w, 0.020, 0.045, matPaintD, lx, cy + h/2 - 0.010, -0.030, g);
+  // handle: quarter-turn escutcheon + lever, always on the free (non-hinge) edge
+  box(0.045, 0.110, 0.012, matPlastic, lx + w/2 - 0.045, cy, DOOR_T/2 + 0.006, g);
+  box(0.016, 0.070, 0.030, matPlastic, lx + w/2 - 0.045, cy - 0.02, DOOR_T/2 + 0.022, g);
+  // hinges on the pivot edge — they must sit ON the axis, otherwise the swing reads wrong
+  for(const hy of [cy - h/2 + 0.08, cy, cy + h/2 - 0.08])
+    box(0.020, 0.070, 0.026, matSteel, 0.012, hy, -0.008, g);
+  // engraved label carrier: dark plate, white text field. A plain white strip reads as a smear.
+  box(w*0.60 + 0.008, 0.036, 0.004, matPlastic, lx, cy - h/2 + 0.055, DOOR_T/2 + 0.002, g);
+  box(w*0.60, 0.022, 0.004, matLabel, lx, cy - h/2 + 0.055, DOOR_T/2 + 0.005, g);
+
+  if(kind === 'meter'){
+    // instrument door: 2 round meters + a 3-lamp column (ISA-101 grey at rest)
+    for(const dx of [-0.13, 0.13]){
+      const bez = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.016, 20), matPlastic);
+      bez.castShadow = bez.receiveShadow = true;
+      bez.rotation.x = Math.PI/2; bez.position.set(lx + dx, cy + 0.09, DOOR_T/2 + 0.008);
+      g.add(bez);
+      const dial = new THREE.Mesh(new THREE.CylinderGeometry(0.041, 0.041, 0.004, 20), matLabel);
+      dial.rotation.x = Math.PI/2; dial.position.set(lx + dx, cy + 0.09, DOOR_T/2 + 0.017);
+      g.add(dial);
+      const needle = box(0.004, 0.030, 0.003, matPlastic, lx + dx, cy + 0.10, DOOR_T/2 + 0.020, g);
+      needle.rotation.z = dx < 0 ? 0.5 : -0.7;                 // ammeter / voltmeter, not identical
+    }
+    // selector switch + 3-lamp column
+    const sel = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.018, 14), matPlastic);
+    sel.rotation.x = Math.PI/2; sel.position.set(lx, cy - 0.05, DOOR_T/2 + 0.009);
+    sel.castShadow = true; g.add(sel);
+    for(let k=0;k<3;k++){
+      const l = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.014, 12),
+        k===1 ? matLampRun : matLampOff);
+      l.rotation.x = Math.PI/2; l.position.set(lx - 0.13 + k*0.13, cy - 0.12, DOOR_T/2 + 0.007);
+      l.userData.role = k===2 ? 'trip' : (k===1 ? 'run' : 'aux');
+      g.add(l); lamps.push(l);
+    }
+  } else if(kind === 'acb'){
+    // withdrawable-ACB door: inspection window + racking aperture below it
+    box(w*0.58 + 0.03, h*0.34 + 0.03, 0.008, matPaintD, lx, cy + h*0.15, DOOR_T/2 + 0.001, g);
+    box(w*0.58, h*0.34, 0.004, matGlass, lx, cy + h*0.15, DOOR_T/2 + 0.007, g);
+    const rack = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.022, 14), matPlastic);
+    rack.rotation.x = Math.PI/2; rack.position.set(lx - 0.10, cy - h*0.24, DOOR_T/2 + 0.011);
+    rack.castShadow = true; g.add(rack);
+    box(0.030, 0.030, 0.014, matPlastic, lx + 0.10, cy - h*0.24, DOOR_T/2 + 0.008, g);  // trip reset
+    // position indicator plate (IN / TEST / OUT) — the ACB door tell
+    box(w*0.34, 0.030, 0.004, matPlastic, lx, cy - h*0.10, DOOR_T/2 + 0.003, g);
+  } else {
+    // feeder door: a RECESSED ventilation louvre bank. The recess is what makes it read as a slot
+    // bank instead of white scratches — a flat light slat on a light door has no contrast.
+    const lw = w*0.52, lh = 0.150;
+    box(lw + 0.012, lh + 0.012, 0.006, matPaintD, lx, cy + 0.04, DOOR_T/2 - 0.004, g);   // pressed frame
+    box(lw, lh, 0.004, matPlastic, lx, cy + 0.04, DOOR_T/2 - 0.002, g);                  // dark cavity
+    const slats = [];
+    for(let k=0;k<5;k++) slats.push([lx, cy + 0.04 + lh/2 - 0.018 - k*0.028, DOOR_T/2 + 0.002, -0.42, 0, 0]);
+    instanced(new THREE.BoxGeometry(lw, 0.016, 0.012), matPaint, slats, g);
+    // one pilot lamp per feeder compartment (ISA-101 grey at rest)
+    const l = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.014, 12), matLampOff);
+    l.rotation.x = Math.PI/2; l.position.set(lx - w/2 + 0.055, cy - h/2 + 0.055, DOOR_T/2 + 0.007);
+    l.userData.role = 'feeder';
+    g.add(l); lamps.push(l);
+  }
+  root.add(g);
+  doors.push(g);
+  return g;
+}
+
+const lamps = [];
+const SPLIT_Y = DOOR_Y0 + (DOOR_Y1 - DOOR_Y0) * 0.62;   // ACB door / instrument door boundary
+// incoming section: instrument door on top, ACB door below
+{
+  const x0 = EDGE[INC] + POST_W/2, x1 = EDGE[INC+1] - POST_W;
+  makeDoor(x0, x1, DOOR_Y0, SPLIT_Y - RAIL_H/2, 'acb');
+  makeDoor(x0, x1, SPLIT_Y + RAIL_H/2, DOOR_Y1, 'meter');
+  box(SEC_W[INC], RAIL_H, 0.030, matPaint, secCx(INC), SPLIT_Y, FRONT_Z - 0.015);   // frame rail
+}
+// feeder sections: stacked compartment doors. The counts ALTERNATE 3/4 on purpose — a lineup where
+// every section is subdivided identically reads as a bank of lockers, not as a fitted-out board.
+const FEEDER_DOORS = [3, 4, 3, 4, 0];
+for(let i=0;i<INC;i++){
+  const x0 = EDGE[i] + (i===0 ? POST_W : POST_W/2), x1 = EDGE[i+1] - POST_W/2;
+  const n = FEEDER_DOORS[i], span = (DOOR_Y1 - DOOR_Y0) / n;
+  for(let k=0;k<n;k++){
+    makeDoor(x0, x1, DOOR_Y0 + k*span + RAIL_H/2, DOOR_Y0 + (k+1)*span - RAIL_H/2, 'feeder');
+    if(k>0) box(SEC_W[i], RAIL_H, 0.030, matPaint, secCx(i), DOOR_Y0 + k*span, FRONT_Z - 0.015);
+  }
+}
+
+// interior devices, positioned to line up behind the doors that reveal them
+{
+  // ACB in the incoming section
+  const acbCy = (DOOR_Y0 + SPLIT_Y)/2, px = plateCxof(INC);
+  box(0.52, 0.46, 0.36, matDevice,  px, acbCy, DEV_Z + 0.19, interior);          // ACB body
+  box(0.46, 0.32, 0.02, matDevFace, px, acbCy + 0.03, DEV_Z + 0.38, interior);   // front escutcheon
+  for(const sx of [-1, 1])
+    box(0.10, 0.10, 0.03, matPlastic, px + sx*0.14, acbCy - 0.11, DEV_Z + 0.39, interior); // ON/OFF
+  box(0.30, 0.05, 0.02, matLabel, px, acbCy + 0.13, DEV_Z + 0.39, interior);     // rating plate
+  // withdrawable truck rails the breaker racks in and out on
+  for(const sx of [-1, 1])
+    box(0.03, 0.02, 0.36, matSteel, px + sx*0.27, acbCy - 0.25, DEV_Z + 0.19, interior);
+  // arcing-chamber stacks on top of the pole units — the ACB silhouette tell
+  for(const sx of [-1, 0, 1])
+    box(0.12, 0.10, 0.20, matDevice, px + sx*0.16, acbCy + 0.28, DEV_Z + 0.16, interior);
+}
+// 24 identical MCCBs across the 4 feeder sections — REAL repetition, so this is the instancing case
+// (block54 §2.3). 4 InstancedMesh instead of 120 draws; the ACB above stays a unique mesh.
+{
+  const bodies = [], faces = [], handles = [], shrouds = [];
+  for(let i=0;i<INC;i++){
+    const px = plateCxof(i), n = FEEDER_DOORS[i], span = (DOOR_Y1 - DOOR_Y0) / n;
+    for(let k=0;k<n;k++){
+      const cy = DOOR_Y0 + (k + 0.5)*span;
+      for(const dx of [-0.105, 0.105]){                                // 2 MCCBs per compartment
+        bodies.push([px + dx, cy, DEV_Z + 0.075]);
+        faces.push([px + dx, cy + 0.06, DEV_Z + 0.150]);
+        handles.push([px + dx, cy - 0.02, DEV_Z + 0.150]);
+        for(const sy of [-1, 1]) shrouds.push([px + dx, cy + sy*0.135, DEV_Z + 0.060]);
+      }
+    }
+  }
+  instanced(new THREE.BoxGeometry(0.16, 0.24, 0.13), matDevice,  bodies,  interior);
+  instanced(new THREE.BoxGeometry(0.13, 0.06, 0.02), matDevFace, faces,   interior);
+  instanced(new THREE.BoxGeometry(0.05, 0.05, 0.03), matPlastic, handles, interior);
+  instanced(new THREE.BoxGeometry(0.14, 0.03, 0.06), matPlastic, shrouds, interior);
+}
+root.add(interior);
+
+// nominate one feeder as the faulted one for the ISA-101 demo (see the FALLA handler)
+{ const feeders = lamps.filter(l=>l.userData.role === 'feeder');
+  if(feeders.length) feeders[Math.floor(feeders.length/2)].userData.role = 'faultFeeder'; }
+
+// --- gland plate + earth bar at the cable entry, and lifting eyes on the roof ---
+box(TOTAL_W - 0.20, 0.010, 0.34, matSteel, 0, BASE_H + 0.02, -DEPTH/2 + 0.24);
+box(TOTAL_W - 0.30, 0.05, 0.008, matCopper, 0, BASE_H + 0.13, -DEPTH/2 + 0.05);          // earth bar
+const eyes = [];
+for(const sx of [-1, 1]) for(const sz of [-1, 1])
+  eyes.push([sx*(TOTAL_W/2 - 0.14), TOP_Y + 0.022, sz*(DEPTH/2 - 0.14)]);
+instanced(new THREE.TorusGeometry(0.028, 0.008, 8, 16), matSteel, eyes, root);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;                          // bake the frozen shadow once
+
+// ---------- render-on-demand (block56): gate render(), keep rAF + controls.update() ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender(), and the door animation
+//          holds needsRender true only while it is actually moving.
+// ============================================================================
+const OPEN_ANGLE = -1.35;                 // negative Y rotation swings the leaf outward (+Z)
+let doorTarget = 0, doorPos = 0;
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnDoor = document.getElementById('btnDoor');
+btnDoor.onclick = ()=>{ doorTarget = doorTarget ? 0 : 1;
+  btnDoor.classList.toggle('on', !!doorTarget); requestRender(); };
+
+const btnBus = document.getElementById('btnBus');
+btnBus.onclick = ()=>{ busCover.visible = !busCover.visible;
+  btnBus.classList.toggle('on', busCover.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+
+const btnTrip = document.getElementById('btnTrip');
+let tripped = false;
+btnTrip.onclick = ()=>{
+  tripped = !tripped; btnTrip.classList.toggle('on', tripped);
+  // ISA-101 §3.4: neutral grey is the normal state; red is reserved for the actionable one.
+  // Normal = one "supply healthy" lamp lit, everything else grey. Tripped = the incoming trip lamp
+  // plus the ONE faulted feeder go red; the other 11 feeders stay grey, which is the whole point.
+  lamps.forEach(l=>{
+    const r = l.userData.role;
+    l.material = tripped
+      ? ((r === 'trip' || r === 'faultFeeder') ? matLampTrip : matLampOff)
+      : (r === 'run' ? matLampRun : matLampOff);
+  });
+  requestRender();
+};
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(Math.abs(doorPos - doorTarget) > 0.001){
+    doorPos += (doorTarget - doorPos) * 0.10;
+    if(Math.abs(doorPos - doorTarget) <= 0.001){
+      doorPos = doorTarget;
+      renderer.shadowMap.needsUpdate = true;    // re-bake once the swing settles, not every frame
+    }
+    // stagger the leaves so the row opens like a real inspection, not one rigid slab
+    doors.forEach((d,i)=>{ const lag = 1 - (i % 5) * 0.06;
+      d.rotation.y = OPEN_ANGLE * doorPos * lag; });
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__tableroSwitchgearApp = __app;
+globalThis['__tablero-switchgearApp'] = __app;      // slug-exact alias for the catalog QA probe
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
