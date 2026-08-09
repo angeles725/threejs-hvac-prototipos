@@ -205,6 +205,13 @@ elige otra familia libre si queda, o detente.
   visible debe TOCAR a su vecino (hueco <= 0) en ambos estados; "lo que se oculta" y "lo que se repone" son dos
   listas distintas y su asimetría no la ven ni el gate ni los conteos (suavizador: gapBajoCuello contra el cuello;
   medidor-flujo: huecoHastaBrida contra la brida — el mismo defecto, cazado a propósito con esta regla).
+- ENVOLVENTES CONCÉNTRICAS: una envolvente puede esconder OTRA. Cortar solo el casco externo de un tanque deja ver
+  el exterior de la vejiga interna (segunda envolvente cerrada) y el recipiente se lee MACIZO con gate verde y
+  conteos idénticos. El par entero/mitad va en TODA envolvente — pero "envolvente" es FUNCIONAL: envuelve algo que
+  el corte debe mostrar. El medio contenido (agua, carga, grano) NO es envolvente: va siempre presente y SIN par,
+  para que el corte solo ABRA envolventes y nunca CREE geometría. Cuidado: si lo enuncias como "par para toda pieza
+  del corte", alguien duplica el relleno y el corte pasa a crear geometría. (skid-hidroneumatico: casco + vejiga,
+  ambos con par, 12 uuid disjuntos; el agua sin par.)
 - LA MEDICIÓN DE UN DEFECTO DE ESTADO DEBE DISCRIMINAR entre estados. Si tu consulta da el MISMO número en el
   estado normal y en el sospechoso, la sonda está mal ANTES que el reporte: casi seguro tu filtro agarró la pieza
   equivocada (una válvula en vez del casco). Un resultado idéntico no refuta el defecto, lo OCULTA — habrías
