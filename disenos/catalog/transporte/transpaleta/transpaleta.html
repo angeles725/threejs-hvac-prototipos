@@ -1,0 +1,286 @@
+<!doctype html>
+<!--
+  transpaleta — hand pallet truck, catalog/transporte.
+  Dimensional evidence: [Block 61] §61.3 from sources/datasheets/24114_Original document_toyota mh.pdf :p.2
+  (Toyota LHM300 L-series, 3,0 t). The 85 → 200 mm lift (115 mm of stroke) IS the machine.
+  §61.3 also records the correction: b1/b2 = 520/685 are two fork-spread options on the SAME model,
+  not the "EU vs US width conflict" a web sweep reported.
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transpaleta manual — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Transpaleta manual (3,0 t)</div>
+  <div><span class="dim">l1 1,510 × b1 0,520 × h14 1,220 m · horquillas 45/175/1150</span></div>
+  <div><span class="dim">h13 85 → h23 200 mm (carrera 115) · y 1,185 · ruedas 175×60 / 85×75</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnLift">ELEVAR</button>
+  <button id="btnLoad">CARGA</button>
+  <button id="btnWide">ANCHO 685</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 8, 26);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 4.0;
+camera.position.set(R*Math.cos(0.60)*Math.cos(0.32), 0.50 + R*Math.sin(0.32), R*Math.sin(0.60)*Math.cos(0.32));
+camera.lookAt(0, 0.50, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.50, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2.6, 4.4, 2.4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left=-1.8; sun.shadow.camera.right=1.8;
+sun.shadow.camera.top=1.8; sun.shadow.camera.bottom=-1.8;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(16,16),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS
+// ============================================================================
+const matFork  = new THREE.MeshStandardMaterial({ color:0xb0b5b8, metalness:0.92, roughness:0.38 }); // BARE steel fork
+const matBody  = new THREE.MeshStandardMaterial({ color:0xc23a24, metalness:0.0,  roughness:0.46 }); // PAINTED pump housing
+const matTiller= new THREE.MeshStandardMaterial({ color:0x2c3035, metalness:0.0,  roughness:0.55 });
+const matRam   = new THREE.MeshStandardMaterial({ color:0xd6dadd, metalness:0.95, roughness:0.15 }); // chromed pump ram
+const matRoll  = new THREE.MeshStandardMaterial({ color:0x26292d, metalness:0.0,  roughness:0.7 });  // polyurethane
+const matPin   = new THREE.MeshStandardMaterial({ color:0x8b9095, metalness:0.93, roughness:0.34 });
+const matGrip  = new THREE.MeshStandardMaterial({ color:0x141619, metalness:0.0,  roughness:0.9 });
+const matWood  = new THREE.MeshStandardMaterial({ color:0xa8814f, metalness:0.0,  roughness:0.82 });
+const matBox   = new THREE.MeshStandardMaterial({ color:0xb8a184, metalness:0.0,  roughness:0.9 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Every dimension carries its VDI row — [Block 61] §61.3.
+// ============================================================================
+const L1     = 1.510;   // 4.19 overall length             [CERT-doc]
+const L2     = 0.365;   // 4.20 length to face of forks    [CERT-doc]
+const FORK_L = 1.150;   // 4.22 l                          [CERT-doc]
+const FORK_E = 0.175;   // 4.22 e (width of one fork)      [CERT-doc]
+const FORK_S = 0.045;   // 4.22 s (thickness)              [CERT-doc]
+const B_NARROW = 0.520; // 4.21/4.25 b1/b5 narrow option   [CERT-doc]
+const B_WIDE   = 0.685; // 4.21/4.25 b1/b5 wide option     [CERT-doc]
+const H13    = 0.085;   // 4.15 height lowered             [CERT-doc]
+const H23    = 0.200;   // lift height                     [CERT-doc]
+const H14    = 1.220;   // 4.9  tiller height, drive pos.  [CERT-doc]
+const Y      = 1.185;   // 1.9  wheelbase                  [CERT-doc]
+const STEER_R = 0.175/2;// 3.2  steer wheel Ø175           [CERT-doc]
+const ROLL_R  = 0.085/2;// 3.3  load roller Ø85            [CERT-doc]
+const ROLL_W  = 0.075;  // 3.3  load roller width          [CERT-doc]
+const B10     = 0.132;  // 3.6  track width front          [CERT-doc]
+const M2      = 0.040;  // 4.32 ground clearance           [CERT-doc]
+
+// x = 0 at the truck centre: fork tips at -L1/2, chassis tail at +L1/2
+const TIP_X   = -L1/2;
+const FACE_X  = TIP_X + FORK_L;          // fork face; L2 of chassis remains behind it
+const STEER_X = L1/2 - 0.16;             // [INFER] steer wheel under the pump housing
+const ROLL_X  = STEER_X - Y;             // wheelbase 1,185 exactly
+
+const root = new THREE.Group();
+
+// --- forks: the whole lifting assembly lives under one group so the 115 mm stroke is one transform
+const forkAsm = new THREE.Group();
+let spread = B_NARROW;                    // outer-to-outer over the forks (b5)
+const forkGroups = [];
+for(const s of [1,-1]){
+  const g = new THREE.Group();
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(FORK_L, FORK_S, FORK_E), matFork);
+  blade.position.set(TIP_X + FORK_L/2, H13 - FORK_S/2, 0);
+  blade.castShadow = true; blade.receiveShadow = true; g.add(blade);
+  // load roller in a tandem cradle at the fork tip end
+  const cradle = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, FORK_E - 0.03), matFork);
+  cradle.position.set(ROLL_X, H13 - FORK_S - 0.02, 0);
+  cradle.castShadow = true; g.add(cradle);
+  for(const rx of [ROLL_X - 0.05, ROLL_X + 0.05]){
+    const roller = new THREE.Mesh(new THREE.CylinderGeometry(ROLL_R, ROLL_R, ROLL_W, 14), matRoll);
+    roller.rotation.x = Math.PI/2;
+    roller.position.set(rx, ROLL_R, 0);
+    roller.castShadow = true; roller.receiveShadow = true; g.add(roller);
+  }
+  // the push rod that turns pump stroke into fork height
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, FORK_L - 0.24, 8), matPin);
+  rod.rotation.z = Math.PI/2;
+  rod.position.set(TIP_X + FORK_L/2 + 0.06, H13 - FORK_S - 0.012, 0);
+  g.add(rod);
+  g.position.z = s*(spread/2 - FORK_E/2);
+  g.userData.side = s;
+  forkAsm.add(g); forkGroups.push(g);
+}
+root.add(forkAsm);
+
+// --- chassis: pump housing + steer wheels + linkage
+const housing = new THREE.Mesh(new THREE.BoxGeometry(L2 - 0.06, 0.30, B_NARROW - 0.06), matBody);
+housing.position.set(FACE_X + (L2 - 0.06)/2, M2 + 0.15 + 0.06, 0);
+housing.castShadow = true; housing.receiveShadow = true; root.add(housing);
+
+const pumpRam = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.26, 12), matRam);
+pumpRam.position.set(FACE_X + 0.12, M2 + 0.36, 0);
+pumpRam.castShadow = true; root.add(pumpRam);
+
+for(const s of [1,-1]){
+  const wheel = new THREE.Mesh(new THREE.CylinderGeometry(STEER_R, STEER_R, 0.06, 18), matRoll);
+  wheel.rotation.x = Math.PI/2;
+  wheel.position.set(STEER_X, STEER_R, s*(B10/2));
+  wheel.castShadow = true; wheel.receiveShadow = true; root.add(wheel);
+}
+const yoke = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.18, B10 + 0.10), matTiller);
+yoke.position.set(STEER_X, STEER_R + 0.10, 0);
+yoke.castShadow = true; root.add(yoke);
+
+// --- tiller arm: reaches h14 = 1,220 in the drive position
+const tiller = new THREE.Group();
+tiller.position.set(STEER_X, STEER_R + 0.16, 0);
+const armLen = H14 - (STEER_R + 0.16);
+const arm = new THREE.Mesh(new THREE.BoxGeometry(0.055, armLen, 0.075), matTiller);
+arm.position.set(0, armLen/2, 0);
+arm.castShadow = true; arm.receiveShadow = true; tiller.add(arm);
+const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.42, 12), matGrip);
+bar.rotation.x = Math.PI/2;
+bar.position.set(0.02, armLen, 0);
+bar.castShadow = true; tiller.add(bar);
+const lever = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.035, 0.22), matBody);
+lever.position.set(0.06, armLen - 0.10, 0);
+lever.castShadow = true; tiller.add(lever);
+tiller.rotation.z = -0.20;                // leans AWAY from the forks, as a parked truck stands
+root.add(tiller);
+
+// --- load: EUR pallet entered from its 1,200 mm side, riding the forks
+const load = new THREE.Group();
+{
+  const top = new THREE.Mesh(new THREE.BoxGeometry(1.20, 0.022, 0.80), matWood);
+  top.position.set(0, 0.144 - 0.011, 0); load.add(top);
+  const bot = new THREE.Mesh(new THREE.BoxGeometry(1.20, 0.022, 0.80), matWood);
+  bot.position.set(0, 0.011, 0); load.add(bot);
+  for(const bz of [-0.34, 0, 0.34]){
+    const blk = new THREE.Mesh(new THREE.BoxGeometry(1.20, 0.078, 0.10), matWood);
+    blk.position.set(0, 0.061, bz); load.add(blk);
+  }
+  const cargo = new THREE.Mesh(new THREE.BoxGeometry(1.00, 0.50, 0.70), matBox);
+  cargo.position.set(0, 0.144 + 0.25, 0); load.add(cargo);
+  load.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+}
+load.position.set(TIP_X + 0.60, H13, 0);
+forkAsm.add(load);                        // parented to the forks: it rides the 115 mm stroke
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ============================================================================
+// ZONE 3 — UI
+// ============================================================================
+let lifted = false, wide = false;
+let lift = 0;
+const STROKE = H23 - H13;                 // 0,115 m — the entire vertical travel of this machine
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+const btnLift = document.getElementById('btnLift');
+btnLift.onclick = ()=>{ lifted = !lifted; btnLift.classList.toggle('on', lifted); requestRender(); };
+const btnLoad = document.getElementById('btnLoad');
+btnLoad.onclick = ()=>{ load.visible = !load.visible; btnLoad.classList.toggle('on', load.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+btnLoad.classList.add('on');
+// The two published widths are ONE model's two fork spreads ([Block 61] §61.3), so the asset shows
+// both rather than picking one and implying the other is a different machine.
+const btnWide = document.getElementById('btnWide');
+btnWide.onclick = ()=>{
+  wide = !wide; btnWide.classList.toggle('on', wide);
+  spread = wide ? B_WIDE : B_NARROW;
+  for(const g of forkGroups) g.position.z = g.userData.side*(spread/2 - FORK_E/2);
+  renderer.shadowMap.needsUpdate = true; requestRender();
+};
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+const _clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(_clock.getDelta(), 0.05);
+  const target = lifted ? STROKE : 0;
+  if(Math.abs(lift - target) > 1e-5){
+    lift += (target - lift)*Math.min(1, dt*3.0);
+    forkAsm.position.y = lift;
+    // The forks TRANSLATE: [Block 59] §59.4's motion class that invalidates a frozen shadow.
+    renderer.shadowMap.needsUpdate = true;
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract ----------
+globalThis.__transpaletaApp = { runtime:{ scene, renderer, camera, root } };
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

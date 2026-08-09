@@ -1,0 +1,354 @@
+<!doctype html>
+<!--
+  banda-cinta — troughed belt conveyor, catalog/transporte.
+  Dimensional evidence: [Block 60] §60.3 from sources/datasheets/BULK_HANDLING_CATALOGUE_GB_01_2019_10_ed.pdf
+  (Rulmeca bulk handling, 10th ed.): belt width 650 mm ⇒ roller Ø89 mm (Tab.16); carrying-strand station
+  pitch 1 m, RETURN strand 3 m (:p.35); trough angle λ = 20°/30°, surcharge β = 5/10/20° (:p.30-31).
+  Surface motion: texture.offset scroll under the render-on-demand gate — [Block 59].
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banda transportadora artesada — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Banda transportadora artesada (λ 30°)</div>
+  <div><span class="dim">3,00 × 0,89 × 1,01 m · banda 650 mm</span></div>
+  <div><span class="dim">rodillo Ø89 mm · estaciones 1 m carga / 3 m retorno</span></div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnRun">RUN</button>
+  <button id="btnLoad">MATERIAL</button>
+  <button id="btnPitch">ESTACIONES</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- scene / renderer / camera ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 14, 40);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // [Block 54] §5-d — never re-fired here (§59.4)
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 200);
+const R = 4.15;
+camera.position.set(R*Math.cos(0.78)*Math.cos(0.26), 0.80 + R*Math.sin(0.26), R*Math.sin(0.78)*Math.cos(0.26));
+camera.lookAt(0, 0.80, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.80, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+scene.environmentIntensity = 1.9;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(4.5, 7, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0004;
+sun.shadow.camera.left=-4.4; sun.shadow.camera.right=4.4;
+sun.shadow.camera.top=4.4; sun.shadow.camera.bottom=-4.4;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS
+// ============================================================================
+// The belt carcass is a dark rubber cover. A plain dark plane scrolling would show nothing, so the
+// texture carries the transverse weave the cover actually has — [Block 9]'s CanvasTexture technique.
+// UV ORIENTATION (the trap): on a PlaneGeometry(LEN, WIDTH) rotated into XZ, `u` runs along the
+// conveyor (X) and `v` across the belt (Z). The ribs must vary with `u` — i.e. VERTICAL stripes in
+// the canvas — and the scroll must animate offset.X. Ribs varying with `v` would run lengthwise and
+// scroll sideways: the belt would appear to drift across itself instead of along.
+function beltTexture(){
+  const c = document.createElement('canvas'); c.width = 64; c.height = 32;
+  const g = c.getContext('2d');
+  g.fillStyle = '#33373c'; g.fillRect(0,0,64,32);
+  g.fillStyle = '#3d4248'; for(let x=0;x<64;x+=8) g.fillRect(x,0,3,32);   // transverse cover ribs
+  g.fillStyle = '#25282c'; for(let x=0;x<64;x+=8) g.fillRect(x+3,0,1,32);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;      // [Block 59] §59.2 — MUST be set: the default clamps
+  t.anisotropy = 8;
+  return t;
+}
+const beltTex = beltTexture();
+beltTex.repeat.set(12, 1);                       // 12 rib groups along the 3 m run
+const matBelt   = new THREE.MeshStandardMaterial({ map: beltTex, color:0xffffff, metalness:0.0, roughness:0.72, side: THREE.DoubleSide });
+const matRoller = new THREE.MeshStandardMaterial({ color:0xb6bbbe, metalness:0.9, roughness:0.44 });
+const matFrame  = new THREE.MeshStandardMaterial({ color:0x3d4a52, metalness:0.0, roughness:0.55 });
+const matPulley = new THREE.MeshStandardMaterial({ color:0x9aa0a4, metalness:0.9, roughness:0.4 });
+const matDrive  = new THREE.MeshStandardMaterial({ color:0x1d5f7f, metalness:0.0, roughness:0.5 });  // painted gearmotor
+const matBulk   = new THREE.MeshStandardMaterial({ color:0x6e6a63, metalness:0.0, roughness:1.0 });
+const matMark   = new THREE.MeshStandardMaterial({ color:0x00d4aa, metalness:0.0, roughness:0.5,
+                                                   emissive:0x00d4aa, emissiveIntensity:0.35 });
+const matMarkR  = new THREE.MeshStandardMaterial({ color:0xd8a413, metalness:0.0, roughness:0.5,
+                                                   emissive:0xd8a413, emissiveIntensity:0.3 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY.  Dimensions: [Block 60] §60.3 unless marked [INFER].
+// ============================================================================
+const BELT_W  = 0.650;                 // [CERT-doc] ISO/DIN metric belt-width series
+const ROLL_R  = 0.089/2;               // [CERT-doc] Tab.16: 650 mm belt at <=2 m/s ⇒ Ø89
+const TROUGH  = 30*Math.PI/180;        // [CERT-doc] λ = 30° (Rulmeca tabulates 20°/30°)
+const SEG     = BELT_W/3;              // three equal idler rolls across the width
+const PITCH_C = 1.00;                  // [CERT-doc] carrying-strand station pitch
+const PITCH_R = 3.00;                  // [CERT-doc] RETURN-strand station pitch
+const LEN     = 3.00;                  // [INFER] section length — 3 carrying stations vs 1 return: the 3:1 asymmetry in one view
+const BELT_Y  = 0.900;                 // [INFER] belt surface height at the trough centre
+const RET_Y   = 0.560;                 // [INFER] return-strand height
+const PUL_R   = 0.130;                 // [INFER] head/tail pulley radius — not fixed by the preserved set
+
+const root = new THREE.Group();
+
+// ---- the two strands ------------------------------------------------------
+// Carrying strand = 3 planes (flat centre + two wings lifted to λ). Return strand = 1 flat plane.
+// All four share ONE material, so a single texture.offset scrolls the whole belt ([Block 59] §59.2).
+const zc = SEG/2;                                   // half-width of the flat centre panel
+const wingZ = zc + Math.cos(TROUGH)*SEG/2;
+const wingY = Math.sin(TROUGH)*SEG/2;
+
+// A real belt has a cover thickness; a zero-thickness plane reads as a decal on the idlers and its
+// edge disappears at grazing angles. Box keeps the same top-face UV orientation as the plane.
+const BELT_T = 0.012;                               // [INFER] cover thickness
+function beltPanel(width, len){
+  return new THREE.BoxGeometry(len, BELT_T, width);
+}
+const beltGroup = new THREE.Group();
+const centre = new THREE.Mesh(beltPanel(SEG, LEN), matBelt);
+centre.position.set(0, BELT_Y, 0);
+centre.receiveShadow = true; centre.castShadow = true;
+beltGroup.add(centre);
+for(const s of [1,-1]){
+  const wing = new THREE.Mesh(beltPanel(SEG, LEN), matBelt);
+  wing.position.set(0, BELT_Y + wingY, s*wingZ);
+  wing.rotation.x = -s*TROUGH;
+  wing.receiveShadow = true; wing.castShadow = true;
+  beltGroup.add(wing);
+}
+const ret = new THREE.Mesh(beltPanel(BELT_W, LEN), matBelt);
+ret.position.set(0, RET_Y, 0);
+ret.castShadow = true; ret.receiveShadow = true;
+beltGroup.add(ret);
+root.add(beltGroup);
+
+// ---- idler stations -------------------------------------------------------
+// Real repetition (18 carrying rolls + 2 return rolls) ⇒ InstancedMesh [Block 54] §2.3.
+const rollGeo = new THREE.CylinderGeometry(ROLL_R, ROLL_R, SEG-0.012, 16);
+rollGeo.rotateX(Math.PI/2);                          // axis baked to Z ([Block 59] §59.4 reasoning)
+const carryX = [], returnX = [];
+for(let x = -LEN/2 + PITCH_C/2; x < LEN/2; x += PITCH_C) carryX.push(+x.toFixed(4));
+for(let x = -LEN/2 + PITCH_R/2; x < LEN/2; x += PITCH_R) returnX.push(+x.toFixed(4));
+
+const idlers = new THREE.InstancedMesh(rollGeo, matRoller, carryX.length*3 + returnX.length);
+idlers.castShadow = true; idlers.receiveShadow = true;
+{
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
+  const p = new THREE.Vector3(), s = new THREE.Vector3(1,1,1);
+  let i = 0;
+  for(const x of carryX){
+    e.set(0,0,0); q.setFromEuler(e); p.set(x, BELT_Y - ROLL_R, 0);
+    idlers.setMatrixAt(i++, m.compose(p,q,s));
+    for(const sg of [1,-1]){
+      e.set(-sg*TROUGH, 0, 0); q.setFromEuler(e);
+      p.set(x, BELT_Y + wingY - ROLL_R*Math.cos(TROUGH), sg*wingZ);
+      idlers.setMatrixAt(i++, m.compose(p,q,s));
+    }
+  }
+  for(const x of returnX){
+    e.set(0,0,0); q.setFromEuler(e); p.set(x, RET_Y - ROLL_R, 0);
+    idlers.setMatrixAt(i++, m.compose(p,q,s));
+  }
+}
+root.add(idlers);
+
+// ---- station markers: the 1 m / 3 m asymmetry, made explicit ---------------
+const markGroup = new THREE.Group();
+for(const x of carryX){
+  const mk = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.03), matMark);
+  mk.position.set(x, BELT_Y + wingY + 0.09, wingZ + 0.09);
+  markGroup.add(mk);
+}
+for(const x of returnX){
+  const mk = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.03), matMarkR);
+  mk.position.set(x, RET_Y - 0.10, BELT_W/2 + 0.09);
+  markGroup.add(mk);
+}
+markGroup.visible = false;
+root.add(markGroup);
+
+// ---- head / tail pulleys + drive ------------------------------------------
+const pulGeo = new THREE.CylinderGeometry(PUL_R, PUL_R, BELT_W + 0.04, 24);
+pulGeo.rotateX(Math.PI/2);
+const pulleys = [];
+for(const s of [1,-1]){
+  const p = new THREE.Mesh(pulGeo, matPulley);
+  p.position.set(s*(LEN/2 + PUL_R*0.2), (BELT_Y + RET_Y)/2, 0);
+  p.castShadow = true; p.receiveShadow = true;
+  root.add(p); pulleys.push(p);
+}
+// gearmotor on the head pulley
+const gm = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.17, 0.15), matDrive);
+gm.position.set(LEN/2 + 0.08, (BELT_Y + RET_Y)/2 - 0.02, -(BELT_W/2 + 0.14));
+gm.castShadow = true; gm.receiveShadow = true; root.add(gm);
+const gmShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.035,0.20,10), matPulley);
+gmShaft.rotation.x = Math.PI/2;
+gmShaft.position.set(LEN/2 + 0.08, (BELT_Y + RET_Y)/2 - 0.02, -(BELT_W/2 + 0.05));
+root.add(gmShaft);
+
+// ---- frame + legs ---------------------------------------------------------
+for(const s of [1,-1]){
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(LEN + 0.2, 0.09, 0.05), matFrame);
+  rail.position.set(0, BELT_Y - 0.16, s*(BELT_W/2 + 0.12));
+  rail.castShadow = true; rail.receiveShadow = true; root.add(rail);
+}
+for(let x = -LEN/2 + 0.35; x <= LEN/2 - 0.3; x += 1.5){
+  for(const s of [1,-1]){
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, BELT_Y - 0.20, 0.06), matFrame);
+    leg.position.set(x, (BELT_Y - 0.20)/2, s*(BELT_W/2 + 0.12));
+    leg.castShadow = true; leg.receiveShadow = true; root.add(leg);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.014, 0.14), matFrame);
+    foot.position.set(x, 0.007, s*(BELT_W/2 + 0.12));
+    foot.castShadow = true; foot.receiveShadow = true; root.add(foot);
+  }
+  const brace = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, BELT_W + 0.24), matFrame);
+  brace.position.set(x, 0.30, 0);
+  brace.castShadow = true; root.add(brace);
+}
+
+// ---- bulk load: a cord of material at the surcharge angle β = 20° ----------
+// [CERT-doc] Rulmeca :p.30-31 tabulates the loaded section by trough angle λ crossed with a
+// surcharge angle β. The load is a ridge, never a flat slab — that ridge IS the read.
+const bulk = (()=>{
+  const beta  = 20*Math.PI/180;                     // [CERT-doc] surcharge angle β
+  const halfW = wingZ*0.72;                         // the load stops short of the belt edge
+  // Shape is authored in LOCAL section coordinates (x = across the belt, y = above the trough
+  // bottom); ExtrudeGeometry pushes it along +Z, and rotateY(90°) turns that into the conveyor axis.
+  const rise  = (halfW - zc)*Math.tan(TROUGH);
+  const peak  = rise + Math.tan(beta)*halfW;
+  const shape = new THREE.Shape();
+  shape.moveTo(-halfW, rise);
+  shape.lineTo(-zc, 0.01);
+  shape.lineTo(zc, 0.01);
+  shape.lineTo(halfW, rise);
+  shape.lineTo(0, peak);
+  shape.closePath();
+  const depth = LEN - 0.5;
+  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled:false, steps:1 });
+  g.rotateY(Math.PI/2);
+  const m = new THREE.Mesh(g, matBulk);
+  m.position.set(-depth/2, BELT_Y + BELT_T/2, 0);
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+})();
+root.add(bulk);
+
+// NO skirt boards: on a 650 mm belt they are ~100 mm strips hugging the belt edge, but at this
+// framing two full-length vertical panels occlude the trough and the idler stations — the two things
+// the asset exists to show. Omitted deliberately, recorded in the design-spec.
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;   // baked ONCE — the scrolling belt never invalidates it (§59.4)
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+let running = false;
+const SPEED = 1.6;                        // m/s — a bulk belt speed, well inside the catalogue's range
+
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const btnRun = document.getElementById('btnRun');
+btnRun.onclick = ()=>{ running = !running; btnRun.classList.toggle('on', running); requestRender(); };
+
+const btnLoad = document.getElementById('btnLoad');
+btnLoad.onclick = ()=>{ bulk.visible = !bulk.visible; btnLoad.classList.toggle('on', bulk.visible);
+  renderer.shadowMap.needsUpdate = true; requestRender(); };
+btnLoad.classList.add('on');
+
+const btnPitch = document.getElementById('btnPitch');
+btnPitch.onclick = ()=>{ markGroup.visible = !markGroup.visible; btnPitch.classList.toggle('on', markGroup.visible); requestRender(); };
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+// ---------- render-on-demand ([Block 56]) + the §59.5 house rule: LOADS STOPPED ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+const _clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(_clock.getDelta(), 0.05);
+  if(running){
+    // The belt SURFACE does not move — its UVs do. offset is wrapped into [0,1) per the official
+    // r160 example, so it never drifts into the float range where the scroll quantises ([Block 59]).
+    // NO shadow re-bake: with alphaTest = 0 the depth pass never samples `map` (§59.4).
+    beltTex.offset.x = (beltTex.offset.x - SPEED*dt*beltTex.repeat.x/LEN) % 1;
+    for(const p of pulleys) p.rotation.z -= (SPEED/PUL_R)*dt;   // spin about their own axis: silhouette invariant
+    needsRender = true;
+  }
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract ----------
+globalThis.__bandaCintaApp = { runtime:{ scene, renderer, camera, root } };
+globalThis['__banda-cintaApp'] = globalThis.__bandaCintaApp;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>

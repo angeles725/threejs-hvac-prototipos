@@ -1,0 +1,211 @@
+# DesignSpec — troughed belt conveyor section
+# Second asset of the catalog `transporte` family, and the one that exercises the [Block 59]
+# animation technique end to end. Dimensional evidence is [Block 60] §60.3 (research/threejs-block60.md)
+# from the preserved Rulmeca bulk-handling catalogue.
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: banda-cinta
+family: transporte
+track: needs-research        # research done first: B59 (technique) + B60 (dimensions)
+gate_passes: [materials, motion]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  scores: {silhouette: 2, components: 2, hierarchy: 1, repetition: 2,
+           material_layers: 1, detail: 2, occlusion: 2, action_readiness: 3}
+  tier: moderate
+  notes: >
+    action_readiness 3 is the highest in the family: the belt surface itself moves, which is the
+    asset's defining behaviour and the reason [Block 59] was researched before any modelling began.
+    occlusion 2 because the carrying strand hides the return strand and the idler stations from most
+    angles — the camera choice below is what makes the trough section legible at all.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    house_rules: "EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/threejs-block60.md
+    motion_evidence: research/threejs-block59.md
+  reuse_pointers:
+    palette: "research/HANDBOOK.md §3.1 — rubber cover = dielectric 0.0; idler tube = bare metal 0.9"
+    sibling_spec: "disenos/catalog/transporte/banda-rodillos/design-spec.yaml"
+    texture: "[Block 9] CanvasTexture + RepeatWrapping, extended with the [Block 59] per-frame offset"
+
+references:
+  - source: "sources/datasheets/BULK_HANDLING_CATALOGUE_GB_01_2019_10_ed.pdf :p.50 (Tab.15 + Tab.16)"
+    evidences: >
+      Roller diameter series 50/63/76/89/102/108/133/159/194 mm with their maximum rpm; Tab.16 maps
+      belt width 500/650/800/1000 mm to an advised roller Ø per speed band — 650 mm at <= 2 m/s
+      selects Ø89.
+    suitability: pass
+  - source: "sources/datasheets/BULK_HANDLING_CATALOGUE_GB_01_2019_10_ed.pdf :p.35 (Tab.6)"
+    evidences: >
+      "The trough set pitch a0 most commonly used for the upper strand of a belt conveyor is 1 metre,
+      whilst for the return strand the sets are pitched normally at 3 metres (au)"; belt deflection
+      between consecutive carrying sets must not exceed 2 % of the pitch; at loading points the pitch
+      is halved or less.
+    suitability: pass
+  - source: "sources/datasheets/BULK_HANDLING_CATALOGUE_GB_01_2019_10_ed.pdf :p.30-31"
+    evidences: >
+      Loaded-volume tables are built on trough angle λ = 20° and 30°, crossed with a surcharge angle
+      β = 5°, 10°, 20°. The load section is a ridge over the trough, not a flat slab.
+    suitability: pass
+  - source: "research/threejs-block59.md §59.2-59.4 (three.js r160)"
+    evidences: >
+      RepeatWrapping must be set explicitly (the default is ClampToEdgeWrapping); offset/repeat need
+      no needsUpdate while wrapS/wrapT do; and with alphaTest = 0 the shadow depth pass never samples
+      `map`, so the scrolling belt does not invalidate the frozen shadow.
+    suitability: pass
+
+dimensions_real:
+  belt_width_m:     {value: 0.650, confidence: high}   # [CERT-doc] ISO/DIN metric belt-width series
+  idler_dia_m:      {value: 0.089, confidence: high}   # [CERT-doc] Tab.16 for a 650 mm belt at <=2 m/s
+  trough_deg:       {value: 30,    confidence: high}   # [CERT-doc] λ = 30° (of the 20/30 tabulated pair)
+  surcharge_deg:    {value: 20,    confidence: high}   # [CERT-doc] β = 20° (of the 5/10/20 tabulated set)
+  carry_pitch_m:    {value: 1.00,  confidence: high}   # [CERT-doc] upper-strand station pitch
+  return_pitch_m:   {value: 3.00,  confidence: high}   # [CERT-doc] return-strand station pitch
+  max_sag_pct:      {value: 2.0,   confidence: high}   # [CERT-doc] deflection limit between carrying sets
+  length_m:         {value: 3.00,  confidence: low}    # [INFER] section length chosen to show 3 carry vs 1 return
+  belt_y_m:         {value: 0.900, confidence: low}    # [INFER] belt height not fixed by the preserved set
+  return_y_m:       {value: 0.560, confidence: low}    # [INFER]
+  pulley_dia_m:     {value: 0.260, confidence: low}    # [INFER] head/tail pulley Ø — B60 §60.5 honest negative
+  belt_thickness_m: {value: 0.012, confidence: low}    # [INFER] cover thickness — not in the preserved set
+  speed_ms:         {value: 1.6,   confidence: low}    # [INFER] a plausible bulk speed; the catalogue tabulates
+                                                       # maxima by lump size, not a nominal for this section
+
+hierarchy:
+  - name: root
+    children:
+      - name: beltGroup       # 3 carrying panels (flat centre + 2 wings at λ) + 1 return panel
+        pivot: [0, 0.9, 0]
+        animation: uv-scroll               # texture.offset.x — surface moves, geometry does NOT
+      - name: idlers          # 3 rolls x 3 carrying stations + 1 return roll, InstancedMesh
+        pivot: [0, 0.9, 0]
+        animation: none
+      - name: pulleys         # head + tail
+        pivot: [0, 0.73, 0]
+        animation: spin-about-own-axis     # silhouette invariant
+      - name: gearmotor       # painted drive on the head pulley
+        pivot: [0, 0.73, 0]
+        animation: none
+      - name: frame           # rails, legs, feet, cross braces
+        pivot: [0, 0, 0]
+        animation: none
+      - name: bulk            # material cord at the surcharge angle (toggle)
+        pivot: [0, 0.9, 0]
+        animation: none
+      - name: markGroup       # station markers: teal = carrying (1 m), amber = return (3 m)
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  - id: belt-rubber
+    family: rubber
+    color: "#33373c"
+    metalness: 0.0
+    roughness: 0.72
+    evidence: "rubber cover is a DIELECTRIC; HANDBOOK §3.1. Texture carries the transverse cover ribs"
+    confidence: 0.8
+  - id: idler-steel
+    family: bare-metal
+    color: "#b6bbbe"
+    metalness: 0.9
+    roughness: 0.44
+    evidence: "steel idler tube; HANDBOOK §3.1 bare metal 0.9-1.0"
+    confidence: 0.85
+  - id: frame-painted
+    family: painted-metal
+    color: "#3d4a52"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "painted structure; HANDBOOK §3.1 painted 0.0-0.05"
+    confidence: 0.85
+  - id: pulley-steel
+    family: bare-metal
+    color: "#9aa0a4"
+    metalness: 0.9
+    roughness: 0.40
+    evidence: "machined drum face; HANDBOOK §3.1"
+    confidence: 0.8
+  - id: gearmotor-painted
+    family: painted-metal
+    color: "#1d5f7f"
+    metalness: 0.0
+    roughness: 0.50
+    evidence: "painted gearmotor housing — dielectric, the same rule the rack beams follow"
+    confidence: 0.7
+  - id: bulk-material
+    family: aggregate
+    color: "#6e6a63"
+    metalness: 0.0
+    roughness: 1.0
+    evidence: "generic bulk aggregate — a scale and section cue, not a certified material"
+    confidence: 0.55
+
+critical_features:
+  - id: return-strand-is-one-third
+    desc: >
+      3 carrying stations at 1 m against 1 return station at 3 m, marked teal vs amber under
+      ESTACIONES. A belt conveyor modelled with matching top and bottom idler counts is wrong on its
+      most visible repetition, and this asset exists partly to get that right.
+    threshold: 0.80
+  - id: trough-section
+    desc: >
+      The carrying strand is a real trough: a flat centre panel plus two wings lifted to λ = 30°,
+      each backed by its own idler roll, with the material sitting as a ridge at β = 20° inside it —
+      not a flat belt with a slab on top.
+    threshold: 0.80
+  - id: scroll-not-translate
+    desc: >
+      The belt surface moves by texture.offset while the geometry stays put, so the frozen shadow is
+      never re-baked. Verified in the headless probe: after RUN, shadowMap.autoUpdate = false and
+      needsUpdate = false, with offset.x wrapped inside [-1, 1].
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 30          # measured 23
+    tris: 20000        # measured 1 094
+
+camera:
+  azimuth_deg: 44.7
+  elevation_deg: 14.9
+  fov: 38
+  target_y_m: 0.80
+  radius_m: 4.15
+  # Framing is load-bearing here, not taste: from a higher elevation the return strand (full 650 mm
+  # width) reads wider than the troughed carrying strand (400 mm projected) and dominates the image,
+  # hiding the trough the asset is about. A low three-quarter view is what makes the section legible.
+
+lighting: house-rig
+  # No deviation. The trough presents curved and angled surfaces to the key from every azimuth, so the
+  # flat-vertical-metal problem of the `puertas` family does not arise.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "RUN"          # belt scrolls + pulleys spin; NO shadow re-bake (this is the [Block 59] payoff)
+  - "MATERIAL"     # bulk load in / empty belt
+  - "ESTACIONES"   # station markers — teal 1 m carrying vs amber 3 m return
+
+omissions:
+  - id: skirt-boards
+    what: "The ~100 mm skirt boards along the loaded run are not modelled."
+    why: >
+      Two full-length vertical strips at this belt width occlude the trough and the idler stations
+      from the framing above — they hid the two features the asset exists to show. Omitted
+      deliberately rather than accepted as a silent gap.
+
+colorTarget:
+  # MEASURED from the rendered belt wing (headless SwiftShader capture at 1280x800), frozen as the
+  # regression anchor. The BELT is the target: rubber-cover-as-dielectric against bare-metal idlers is
+  # the material claim most likely to regress, and the belt is the asset's defining surface.
+  srgb: [107, 116, 126]
+  deltaE00Max: 8
+  crop: "26x7+1000+392"   # lit face of the right-hand belt wing at 1280x800
+  secondary:
+    - {id: frame-painted, srgb: [76, 96, 109], crop: "18x8+640+470"}
+    - {id: belt-shadowed, srgb: [35, 38, 45], crop: "22x6+700+430"}
