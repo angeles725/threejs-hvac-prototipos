@@ -112,6 +112,8 @@
 | web-snapshots/www.axelent.com_en_safety-solutions_protect_machinery-and-robots_machine-guardin.md | web-snapshot | https://www.axelent.com/en/safety-solutions/protect/machinery-and-robots/machine-guarding/x-guard/panels/mesh-panel | 2026-08-09T02:22:06Z | 62fac7149c2dad0ce9b962226c3353dc051f0e21779bdb9e9f78ff655f858e1b | B63 |
 | B63-automotriz-dims/volvo-bodybuilder-s7-frame.pdf | B63-automotriz-dims | https://www.volvotrucks.us/media/vtna/files/shared/body-builder/manuals/volvo-section-7-frame.pdf | 2026-08-09T02:23:00Z | cdd84a5cf01505cf8e91d0637c5031b28933fe79c30d51f9bffb432cd576b751 | B63 |
 | web-snapshots/www.ccohs.ca_oshanswers_ergonomics_conveyor_ergonomics.html.md | web-snapshot | https://www.ccohs.ca/oshanswers/ergonomics/conveyor_ergonomics.html | 2026-08-09T02:23:04Z | d679fe53b2144b423fa73f146e6fd17ed2d6fcc958692df89215e82e69593b14 | B63 |
+| B64-cantilever-dims/cogan-cantilever-spec.pdf | B64-cantilever-dims | https://www.cogan.com/Resources/specifications/Racking/Cantilever-Rack-Specifications.pdf | 2026-08-09T03:38:44Z | 575a894acd238252a9b0aa3f534954f15ec1bea8baa7a35eacc70cfc8601babc | B64 |
+| B64-cantilever-dims/ntl-cantilever-specs | B64-cantilever-dims | https://www.ntlstorage.com/cantilever-racking-specifications-arms-columns-bases | 2026-08-09T03:38:46Z | a6d52fbe45c76bc83a30977c78a3ec61742aa318fb42adf1fb6374b2d3232b6f | B64 |
 
 ## Structure
 

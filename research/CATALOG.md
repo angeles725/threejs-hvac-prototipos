@@ -2,7 +2,7 @@
 
 # Block catalog — threejs
 
-Total: **61 blocks**
+Total: **64 blocks**
 
 | Block | File | Title |
 |-------|------|-------|
@@ -67,3 +67,6 @@ Total: **61 blocks**
 | 59 | [threejs-block59.md](threejs-block59.md) | Sectional and roll-up industrial doors: the leaf is a chain of standard sections, and the box above the opening is a computed dimension |
 | 60 | [threejs-block60.md](threejs-block60.md) | Access control: the turnstile is fully published, the barrier only half is |
 | 61 | [threejs-block61.md](threejs-block61.md) | Boltless shelving and the Euro small-load carrier: a refuted premise and a modular chain that ends at the pallet |
+| 62 | [threejs-block62.md](threejs-block62.md) | ROBOTICS dimensional + joint-hierarchy reference (catalog family `robotica`) |
+| 63 | [threejs-block63.md](threejs-block63.md) | The automotive family: the four numbers a modeller cannot invent (body envelope, frame section, robot reach, guard height) |
+| 64 | [threejs-block64.md](threejs-block64.md) | Cantilever racking, and the token-check that almost rejected a good source |
