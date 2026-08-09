@@ -1,0 +1,241 @@
+<!doctype html>
+<!--
+  estanteria-industrial — catalog asset, family `almacenamiento`.
+  Built from disenos/catalog/shell-template.html (render-on-demand baked in, block56).
+  Dimensional evidence: research/threejs-block61.md  ·  Spec: ./design-spec.yaml
+  HONESTY NOTE: the boltless system (14-gauge L posts, rivet-into-keyhole joint, 350 lbs/shelf) is
+  CERTIFIED; the UNIT SIZE is not — its source returned 0 bytes and was deleted (B61 §61.3).
+-->
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estantería industrial sin tornillos — catálogo</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 voxel = 0.05 m · 1 unit = 1 m -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700}
+  #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)} #hud .warn{color:#e0a33a}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Estantería industrial sin tornillos — 5 niveles</div>
+  <div><span class="pass">PASS: MATERIALS</span> <span class="dim">· poste angular 14-gauge · 350 lb/nivel</span></div>
+  <div class="dim">unión remachada en ojal — sin pernos</div>
+  <div class="warn">tamaño de unidad [INFER]: su fuente no pudo preservarse</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnDeck" class="on">DECKS</button>
+  <button id="btnLoad" class="on">LOAD</button>
+  <button id="btnScale" class="on">SCALE 1.8 m</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- dimensions (design-spec.yaml · evidence [Block 61]) ----------
+const UH = 1.80, UW = 0.90, UD = 0.40;     // [INFER] unit envelope — source lost, see spec
+const LEVELS = 5;                          // [INFER]
+const LEG = 0.040, POST_T = 0.0019;        // [INFER] leg length · 14-gauge ≈ 1.9 mm [CERT-web]
+const BEAM_H = 0.038, BEAM_T = 0.012;      // [INFER] rivet beam section
+const DECK_T = 0.016;
+const FOOT = 0.012;
+const SLOT_PITCH = 0.038;                  // [INFER] keyhole pitch (1-1/2" is the trade convention)
+const LEVEL_Y = [0.09, 0.50, 0.91, 1.32, 1.73];
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 8, 26);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));           // block54 §5-b
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                          // block54 §5-d
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 100);
+const R = 4.4, AZ = 0.733, EL = 0.262;
+camera.position.set(R*Math.cos(AZ)*Math.cos(EL), 0.95 + R*Math.sin(EL), R*Math.sin(AZ)*Math.cos(EL));
+camera.lookAt(0, 0.95, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.95, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.9;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// DELIBERATE NON-DEVIATION: powder-coated shelving is a DIELECTRIC, so it does not depend on
+// reflecting a bright environment. The vertical-metal rescue used on the stainless/aluminium assets
+// is NOT applied here — it is not a global preset (see the spec's `lighting:` field).
+scene.environmentIntensity = 1.9;
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.5, 6, 3.5); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.bias = -0.0003;   // block54 §5-d
+sun.shadow.camera.left=-3; sun.shadow.camera.right=3; sun.shadow.camera.top=3; sun.shadow.camera.bottom=-3;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x88aaff, 0.4));
+scene.add(new THREE.DirectionalLight(0x00d4aa, 0.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ============================================================================
+// ZONE 1 — MATERIALS. Powder-coated steel = DIELECTRIC (HANDBOOK §3.1).
+// ============================================================================
+const matPost  = new THREE.MeshStandardMaterial({ color:0x7f8589, metalness:0.0, roughness:0.62 });
+const matBeam  = new THREE.MeshStandardMaterial({ color:0x8a9094, metalness:0.0, roughness:0.60 });
+const matSlot  = new THREE.MeshStandardMaterial({ color:0x3d4245, metalness:0.0, roughness:0.75 });
+const matDeck  = new THREE.MeshStandardMaterial({ color:0xb09a78, metalness:0.0, roughness:0.85 });
+const matFoot  = new THREE.MeshStandardMaterial({ color:0x24282c, metalness:0.0, roughness:0.80 });
+const matLoad  = new THREE.MeshStandardMaterial({ color:0xb8a184, metalness:0.0, roughness:0.90 });
+const matSkin  = new THREE.MeshStandardMaterial({ color:0x6f7c86, metalness:0.0, roughness:0.85 });
+
+// ============================================================================
+// ZONE 2 — GEOMETRY. Beams, keyhole slots and feet are instanced (repetition 3).
+// ============================================================================
+const root = new THREE.Group();
+const box = (w,h,d,mat)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.castShadow = m.receiveShadow = true; return m; };
+const put = (p,w,h,d,mat,x,y,z)=>{ const m = box(w,h,d,mat); m.position.set(x,y,z); p.add(m); return m; };
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+function instanced(geo, mat, xf, parent){
+  const im = new THREE.InstancedMesh(geo, mat, xf.length);
+  im.castShadow = im.receiveShadow = true;
+  xf.forEach((t,i)=>{ _p.set(t[0],t[1],t[2]); _q.setFromEuler(new THREE.Euler(0,t[3]||0,0));
+    im.setMatrixAt(i, _m.compose(_p,_q,_s)); });
+  im.instanceMatrix.needsUpdate = true; parent.add(im); return im;
+}
+
+const cx = UW/2 - LEG/2, cz = UD/2 - LEG/2;
+const corners = [[-cx,-cz],[cx,-cz],[-cx,cz],[cx,cz]];
+
+// --- posts: L-section, built as two flanges so the ANGLE profile is real, not a square tube ---
+const posts = new THREE.Group();
+for(const [x,z] of corners){
+  const sx = Math.sign(x), sz = Math.sign(z);
+  put(posts, LEG, UH, POST_T*6, matPost, x, UH/2 + FOOT, z + sz*(LEG/2 - POST_T*3));   // flange A
+  put(posts, POST_T*6, UH, LEG, matPost, x + sx*(LEG/2 - POST_T*3), UH/2 + FOOT, z);   // flange B
+  const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.030, FOOT, 10), matFoot);
+  foot.position.set(x, FOOT/2, z); foot.castShadow = true; posts.add(foot);
+}
+// keyhole slots down the visible flange — the boltless signature [CERT-web]
+const slots = [];
+for(const [x,z] of corners){
+  const sz = Math.sign(z);
+  for(let y = 0.10; y < UH; y += SLOT_PITCH)
+    slots.push([x, y + FOOT, z + sz*(LEG/2 - POST_T*3) + sz*0.002]);
+}
+instanced(new THREE.BoxGeometry(0.012, 0.016, 0.003), matSlot, slots, posts);
+root.add(posts);
+
+// --- beams: 4 per level, riveted into the posts (no bolt heads) ---
+const beams = [];
+for(const y of LEVEL_Y){
+  beams.push([0, y - BEAM_H/2, -cz, 0], [0, y - BEAM_H/2, cz, 0]);          // front / back
+}
+instanced(new THREE.BoxGeometry(UW - LEG, BEAM_H, BEAM_T), matBeam, beams, root);
+const sideBeams = [];
+for(const y of LEVEL_Y) sideBeams.push([-cx, y - BEAM_H/2, 0], [cx, y - BEAM_H/2, 0]);
+instanced(new THREE.BoxGeometry(BEAM_T, BEAM_H, UD - LEG), matBeam, sideBeams, root);
+
+// --- decks ---
+const decks = new THREE.Group();
+for(const y of LEVEL_Y) put(decks, UW - LEG - 0.004, DECK_T, UD - LEG - 0.004, matDeck, 0, y + DECK_T/2, 0);
+root.add(decks);
+
+// --- load: cartons on three levels ---
+const load = new THREE.Group();
+for(const [i, y] of LEVEL_Y.entries()){
+  if(i === 0 || i === 4) continue;
+  for(const sx of [-1, 0, 1]){
+    const h = 0.20 + (i % 2) * 0.06;
+    put(load, 0.24, h, 0.30, matLoad, sx*0.28, y + DECK_T + h/2, 0);
+  }
+}
+root.add(load);
+
+// --- 1.8 m scale figure ---
+const scaleFig = new THREE.Group();
+const fx = -1.05, fz = 0.55;
+const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.52, 6, 12), matSkin);
+torso.position.set(fx, 1.16, fz); torso.castShadow = true; scaleFig.add(torso);
+const headM = new THREE.Mesh(new THREE.SphereGeometry(0.115, 14, 12), matSkin);
+headM.position.set(fx, 1.62, fz); headM.castShadow = true; scaleFig.add(headM);
+for(const s of [-1,1]){
+  const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.62, 6, 10), matSkin);
+  leg.position.set(fx + s*0.10, 0.46, fz); leg.castShadow = true; scaleFig.add(leg);
+}
+root.add(scaleFig);
+
+scene.add(root);
+renderer.shadowMap.needsUpdate = true;
+
+// ---------- render-on-demand (block56) ----------
+let needsRender = true;
+const requestRender = ()=>{ needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+// ============================================================================
+// ZONE 3 — UI. Render is GATED: every handler calls requestRender().
+// ============================================================================
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = ()=>{ controls.autoRotate = !controls.autoRotate; btnRot.classList.toggle('on', controls.autoRotate); requestRender(); };
+
+const toggle = (btn, obj)=>{ btn.onclick = ()=>{ obj.visible = !obj.visible;
+  btn.classList.toggle('on', obj.visible); renderer.shadowMap.needsUpdate = true; requestRender(); }; };
+toggle(document.getElementById('btnDeck'), decks);
+toggle(document.getElementById('btnLoad'), load);
+toggle(document.getElementById('btnScale'), scaleFig);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); requestRender(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if(needsRender){ renderer.render(scene,camera); needsRender = false; }
+}
+animate();
+
+// ---------- QA contract (do not remove) ----------
+const __app = { runtime:{ scene, renderer, camera, root } };
+globalThis.__estanteriaIndustrialApp = __app;
+globalThis['__estanteria-industrialApp'] = __app;
+globalThis.__qaRenderInfo = ()=>renderer.info.render;
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
