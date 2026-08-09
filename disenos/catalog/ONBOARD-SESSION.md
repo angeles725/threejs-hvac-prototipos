@@ -236,6 +236,18 @@ elige otra familia libre si queda, o detente.
   debajo de +0.75 para dejar libre el HUD de 4 líneas. Si algo se sale, reencuadra moviendo la CÁMARA (R/target),
   nunca bajando el sujeto para esquivar el HUD (eso recorta por el otro lado). Es la misma familia que "los conteos
   no ven geometría", un escalón más arriba: tampoco ven el encuadre.
+  CUIDADO — el NDC puede salir VERDE midiendo lo equivocado: maximizar el RECTÁNGULO envolvente premia una DIAGONAL
+  pronunciada, porque un sujeto largo y delgado visto casi de PUNTA tiene un bbox enorme y una huella real finísima
+  (porton-corredizo: pasó con 61% de "ocupación" leyendo como una cerca alejándose al horizonte, no como un portón).
+  Cuando la relación de aspecto del sujeto está lejos de la del cuadro, RESTRINGE el azimut a casi perpendicular y
+  exige un resultado explícitamente CENTRADO; luego acepta la ocupación HONESTA (41%) en vez de la falsa. Y dos cosas
+  que ningún chequeo mecánico ve: (a) de qué LADO está la cámara — si la reja se interpone entre el ojo y el
+  contrapeso que debe verse al fondo, ninguna cifra lo detecta, solo preguntar "qué hay entre el ojo y el sujeto";
+  al mover la cámara al otro lado, mueve con ella la luz principal y el fill o el metal desnudo se va a negro.
+- UN ASSET CON CANAL DE ANIMACIÓN DEBE ARRANCAR YA EN EL ESTADO, no llegar a él por clic: el revisor ciego solo
+  conduce la página por URL en CARGA FRÍA, así que un estado que solo existe tras pulsar un botón es un estado que
+  NUNCA ve. Si la regla crítica (p.ej. el contrapeso al 50%) solo se lee en ese estado, exponlo por `?param` o como
+  estado por defecto, o el revisor no puede aceptarlo.
 - SOMBRA CONGELADA (autoUpdate=false) vs MOVIMIENTO: el criterio es la CLASE DE MOVIMIENTO, NO la convención de
   la familia. (a) Movimiento CONTINUO e indefinido (una traslación de MARCHA): la sombra congelada nunca se
   corrige mientras dure → re-hornea CADA frame DENTRO de la rama de movimiento (`if(moving){ ...needsUpdate=true }`).
