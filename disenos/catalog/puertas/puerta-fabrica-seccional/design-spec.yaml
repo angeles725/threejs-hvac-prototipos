@@ -1,0 +1,154 @@
+# DesignSpec — industrial sectional overhead door (42 mm panel chain, normal track)
+# Dimensional evidence: [Block 59] (research/threejs-block59.md), from the preserved Hörmann
+# industrial-sectional 42 mm technical manual. Sibling of puerta-cuarto-frio (Block 57).
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+
+design: puerta-fabrica-seccional
+family: puertas
+track: procedural-direct
+gate_passes: [materials]
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  scores: {silhouette: 2, components: 2, hierarchy: 2, repetition: 2,
+           material_layers: 1, detail: 2, occlusion: 1, action_readiness: 3}
+  tier: moderate
+  notes: >
+    action_readiness 3 is the defining axis and the reason this is not "a flat panel with lines".
+    The leaf is NON-RIGID: 8 sections travel along a track that is vertical at the jambs, curves
+    at the head and runs horizontal under the ceiling. Each section must be placed by ARC LENGTH
+    along that path, with its own rotation — not translated as a block.
+
+environment:
+  overlays:
+    handbook: research/HANDBOOK.md
+    shell: disenos/catalog/shell-template.html
+    dimensional_evidence: research/threejs-block59.md
+  reuse_pointers:
+    sibling_spec: "disenos/catalog/puertas/puerta-cuarto-frio/design-spec.yaml"
+
+references:
+  - source: "sources/B59-door-dims/hoermann-sectional-42mm.pdf :p.10-14, :p.8-9, :p.52-63"
+    evidences: >
+      Panel depth 42 mm, double-skinned PU-foamed hot-galvanized sections; standard section heights
+      375 / 500 / 625 / 750 mm; bottom section 750 (standard) or 1500 mm; finger trap protection on
+      all sections; polyester-primer coating; glazing infill 26 mm clear synthetic double panes (S2);
+      counterbalance by torsion springs with carrying cables on the side (>= 25,000 closing cycles);
+      track applications N/ND/NS/NK/NA/NH/GD/GS/L/LD/H/HA/HU/V/VS/VU/WS/WG/RD/RS/RK, most limited to
+      door height RM <= 5000 mm.
+    suitability: pass
+
+dimensions_real:
+  panel_depth_m:    {value: 0.042, confidence: high}   # [CERT-doc] "Depth 42 mm"
+  section_h_m:      {value: 0.500, confidence: high}   # [CERT-doc] standard section height
+  bottom_section_h_m: {value: 0.750, confidence: high} # [CERT-doc] standard bottom section
+  sections:         {value: 8,     confidence: high}   # 7 x 500 + 750 — a whole number of standard parts
+  leaf_h_m:         {value: 4.25,  confidence: high}   # derived: 7*0.500 + 0.750, exact by construction
+  leaf_w_m:         {value: 4.00,  confidence: med}    # [INFER] chosen inside the certified envelope
+  max_door_h_m:     {value: 5.00,  confidence: high}   # [CERT-doc] RM <= 5000 mm for track application N
+  glazing_pane_m:   {value: 0.026, confidence: high}   # [CERT-doc] S2 double pane
+  track_radius_m:   {value: 0.40,  confidence: low}    # [INFER] the manual names applications, not radii
+  track_profile_m:  {value: 0.055, confidence: low}    # [INFER] rail section not published in the extract
+  spring_shaft_d_m: {value: 0.032, confidence: low}    # [INFER] shaft diameter not published
+
+hierarchy:
+  - name: root
+    children:
+      - name: wall
+        pivot: [0, 0, 0]
+        animation: none
+      - name: tracks         # vertical + curved + horizontal rails, both jambs
+        pivot: [0, 0, 0]
+        animation: none
+      - name: gear           # torsion-spring shaft, springs, cable drums
+        pivot: [0, 0, 0]
+        animation: none
+      - name: leaf           # 8 sections, each placed by arc length along the track path
+        pivot: [0, 0, 0]
+        animation: travel-along-path
+        # NOT a rigid transform: each section carries its own s (arc length) and derived rotation.
+
+materials:
+  - id: panel-stucco
+    family: painted-metal
+    color: "#e2e4e0"           # RAL 9002-ish grey white, the industry default
+    metalness: 0.0             # polyester-primer coated — DIELECTRIC, not bare galvanized
+    roughness: 0.62
+    evidence: "[CERT-doc] 'Surface protection with polyester-primer coating'; HANDBOOK §3.1 painted 0.0-0.05"
+    confidence: 0.85
+  - id: track-galvanized
+    family: bare-metal
+    color: "#b6babc"
+    metalness: 0.92
+    roughness: 0.44
+    evidence: "[CERT-doc] hot-galvanized track/hardware; HANDBOOK §3.1 bare metal 0.9-1.0"
+    confidence: 0.85
+  - id: spring-steel
+    family: bare-metal
+    color: "#8d9295"
+    metalness: 0.95
+    roughness: 0.38
+    evidence: "[CERT-doc] torsion springs on a shaft above the opening"
+    confidence: 0.8
+  - id: glazing-s2
+    family: glass
+    color: "#cfe2e8"
+    metalness: 0.0
+    roughness: 0.06
+    evidence: "[CERT-doc] 'clear synthetic double panes, 26 mm (S2)'"
+    confidence: 0.85
+
+critical_features:
+  - id: section-chain
+    desc: >
+      The leaf reads as a CHAIN of equal 500 mm sections over a taller 750 mm bottom section, with a
+      horizontal joint line at every section boundary — not a single slab with painted stripes. Panels
+      are thin (42 mm), an order thinner than a cold-room leaf.
+    threshold: 0.78
+  - id: track-and-gear
+    desc: >
+      Vertical rails at both jambs, a curved transition at the head and horizontal rails running back
+      under the ceiling, plus the torsion-spring shaft with side cable drums above the opening. Without
+      the overhead half the object is just a panel.
+    threshold: 0.78
+  - id: travel-is-articulated
+    desc: >
+      When opening, sections rotate through the curve one after another and end horizontal overhead —
+      the leaf must not translate as a rigid block.
+    threshold: 0.75
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    draws: 130                  # MEASURED 113. Each section owns its panel + ribs + joint strip as
+                                # separate meshes; they could be instanced, but their transforms
+                                # change per frame during travel, so the win is not free. A budget
+                                # the build already exceeds is worse than an honest one.
+    tris: 120000                # measured 5,240
+
+camera:
+  view: interior              # camera sits at -Z, inside the building
+  azimuth_deg: 218            # looking back at the opening from inside
+  elevation_deg: 13
+  fov: 38
+  target_y_m: 2.20   # canonical view is from INSIDE (-Z): tracks + spring shaft are the identity
+  radius_m: 11.0
+
+lighting: house-rig
+  # No vertical-subject fill needed here (unlike puerta-cuarto-frio): the panel is PAINTED, a
+  # dielectric, so it does not depend on reflecting a bright environment to read correctly.
+  # That gotcha is specific to bare metal on a vertical plane.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "OPEN / CLOSE"          # travels the sections along the track path; holds needsRender while moving
+  - "GLAZING"               # vision section on/off
+  - "WALL"
+
+colorTarget:
+  # MEASURED from the rendered panel face (headless capture at 1280x800), frozen as the anchor.
+  srgb: [147, 150, 151]
+  deltaE00Max: 8
+  crop: "60x30+470+420"   # clean panel face between joints, at 1280x800
