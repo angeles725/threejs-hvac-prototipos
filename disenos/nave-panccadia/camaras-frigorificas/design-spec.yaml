@@ -1,0 +1,484 @@
+# DesignSpec — nave-panccadia: cold-room envelope, cold-room doors and CAD-placed equipment
+#
+# This design does NOT author a standalone HTML asset. It amends the plant viewer
+# that `tools/build-viewer.py` generates, and its deliverable is v21 of that page.
+# The generator is the single source of truth: regenerating it from v20's inputs
+# reproduced `nave-panccadia-3d-v20.html` byte for byte (358,836 B, empty diff,
+# verified 2026-08-09), so hand-editing the HTML would be overwritten.
+
+design: camaras-frigorificas
+track: threejs
+mode: heavy
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.1 m"
+
+# ---------------------------------------------------------------------------
+# Frame convention — the most expensive mistake this corpus ever made
+# ---------------------------------------------------------------------------
+# Every coordinate below is in the GROUND-FLOOR LOCAL CAD FRAME (origin
+# 245.51, 208.10), the same frame every extractor writes. The viewer maps
+# CAD (x, y) -> world (x, z) through mapXZ/mapZ ONCE. Blocks 8 and 9 of the
+# corpus were both mirrored plans that passed every length, area, count and
+# angle check, because reflection preserves all of them. Never author a world
+# XZ coordinate here; author CAD and let the existing mapper do the flip.
+frame: "ground-floor local CAD (origin 245.51, 208.10); viewer maps (x,y)->(x,z) via mapXZ"
+
+complexity:
+  scores: {silhouette: 2, components: 3, hierarchy: 2, repetition: 3,
+           material_layers: 2, detail: 2, occlusion: 3, action_readiness: 2}
+  tier: complex      # sum 19
+
+environment:
+  overlays:
+    handbook: /home/cristian/prototipos/three.js/research/HANDBOOK.md
+    house_rules: /home/cristian/prototipos/three.js/EQUIPOS-PENDIENTES.md
+    qa_tools: /home/cristian/prototipos/three.js/research/tools
+    design_dir_root: /home/cristian/prototipos/three.js/disenos
+    generator: /home/cristian/investigacion/nave-panccadia/tools/build-viewer.py
+    corpus: /home/cristian/investigacion/nave-panccadia/corpus
+    equipment_masters: /home/cristian/prototipos/three.js/disenos/nave-panccadia/equipos
+
+# ---------------------------------------------------------------------------
+# P1 references
+# ---------------------------------------------------------------------------
+# No photographic reference exists for this subject: it is a reconstruction of a
+# CAD drawing plus industry-standard cold-room hardware. Per GATES.md, that is
+# declared here rather than discovered at P6.
+p6_comparison: spec-only
+
+references:
+  # --- the drawing itself: [CERT] primary evidence ---
+  - source: /home/cristian/investigacion/nave-panccadia/build/rooms.json
+    evidences: "the three cold rooms as flood-filled regions with exact areas and per-row RUNS:
+                CAMARA DE REFRIGERACION 40.41 m2, CAMARA DE CONGELACION 30.31 m2, REFRIGERACION 9.72 m2"
+    marker: CERT
+  - source: /home/cristian/investigacion/nave-panccadia/build/openings.json
+    evidences: "the four doorways serving those rooms, with measured width, host-wall thickness and head height"
+    marker: CERT
+  - source: /home/cristian/investigacion/nave-panccadia/build/equipment.json
+    evidences: "labelled PDF2_* footprints: ultracongelador, LAMINADORA, LAMINADORAMESA, Amasadora x3, Batidora x2"
+    marker: CERT
+  - source: /home/cristian/investigacion/nave-panccadia/corpus/panccadia-block37.md
+    evidences: "openings derived BY ABSENCE from wall stops, calibrated 5/5; head height stated at 2.447 m"
+    marker: CERT
+
+  # --- external hardware evidence, preserved under sources/ ---
+  - source: /home/cristian/investigacion/nave-panccadia/sources/web-snapshots/surpanelcold.com_medidas-estandar-puertas-frigorificas_.md
+    evidences: "standard pivoting cold-door sizes (800x1800 .. 1200x2000); leaf thickness by temperature band:
+                +0/+5 C = 60-80 mm, -10/-18 C = 80-100 mm, -18/-25 C = 100-120 mm; useful passage is
+                100-120 mm narrower than the leaf; sliding is preferred only at >=1500 mm for pallet traffic"
+    marker: CERT-web
+    suitability: pass
+  - source: /home/cristian/investigacion/nave-panccadia/sources/web-snapshots/www.camarasfrigorificas.es_puerta-pivotante-frigorifica_.md
+    evidences: "pivoting door build: PUR foam 40-43 kg/m3 CFC-free; lacquered aluminium structural frame with
+                thermal-bridge break; flexible perimeter gaskets; lever handle; 30 W perimeter heater on freezer doors"
+    marker: CERT-web
+    suitability: pass
+  - source: /home/cristian/investigacion/nave-panccadia/sources/web-snapshots/www.panelsandwich.com_panel-frigorifico_panel-sandwich-camaras-frigorificas_.md
+    evidences: "chiller sandwich panel: nominal thickness 40-100 mm (+/-2), foam density 40 kg/m3 (+/-2),
+                USEFUL WIDTH 1000 mm (+/-2) -> this is the vertical joint pitch, tongue-and-groove with gasket"
+    marker: CERT-web
+    suitability: pass
+  - source: /home/cristian/investigacion/nave-panccadia/sources/web-snapshots/www.panelsandwich.com_panel-frigorifico_panel-sandwich-camaras-ultracongelacion_.md
+    evidences: "freezer/blast panel thickness band 120-200 mm"
+    marker: CERT-web
+    suitability: pass
+
+  # --- reusable blocks already gated in this repo ---
+  - source: /home/cristian/.claude/skills/design3d/library/INDEX.md
+    evidences: "insulated-panel-wall (panelWall: cold-room panel wall with vertical ribs),
+                prim-helpers, merge-instancing-kit, brushed-stainless-recipe, transmission-free-glass"
+    marker: CERT
+  - source: /home/cristian/prototipos/three.js/disenos/cuarto-frio/cuarto-3d.html
+    evidences: "the panelWall + doorX cold-room vocabulary in working code (lines 31683-31732);
+                NOTE its scale is decimetres, not metres - it must be re-expressed, never copied"
+    marker: CERT
+
+# ---------------------------------------------------------------------------
+# dimensions_real
+# ---------------------------------------------------------------------------
+# The rooms and the doorways are MEASURED. The hardware thicknesses are the
+# standard band the references give, SELECTED by the room's duty; that selection
+# is the only authored decision, and it is corroborated by the drawing itself:
+# the CAD host-wall thicknesses (0.10 m / 0.15 m) land exactly on the commercial
+# panel thicknesses for chiller and freezer duty.
+dimensions_real:
+  # -- rooms (CAD frame, x0/y0/x1/y1 of the flood-filled region) --
+  camara_refrigeracion_area_m2: {value: 40.41, confidence: high}
+  camara_refrigeracion_bbox:    {value: [10.40, 34.55, 22.60, 37.80], confidence: high}
+  camara_congelacion_area_m2:   {value: 30.31, confidence: high}
+  camara_congelacion_bbox:      {value: [13.55, 38.00, 22.60, 41.30], confidence: high}
+  refrigeracion_area_m2:        {value: 9.72, confidence: high}
+  refrigeracion_bbox:           {value: [10.50, 38.00, 13.35, 41.30], confidence: high}
+
+  # -- doorways: a/b endpoints in CAD, w = clear width, t = host wall, head = lintel soffit --
+  # O1 REFRIGERACION <-> CAMARA DE REFRIGERACION   (horizontal wall, y = 37.9484)
+  opening_O1: {value: {a: [12.2497, 37.9484], b: [13.5497, 37.9484], w: 1.300, t: 0.10, head: 2.447}, confidence: high}
+  # O2 CAMARA DE REFRIGERACION <-> east corridor   (vertical wall, x = 22.7234)
+  opening_O2: {value: {a: [22.7234, 35.6144], b: [22.7234, 36.8144], w: 1.200, t: 0.10, head: 2.447}, confidence: high}
+  # O3 CAMARA DE CONGELACION  <-> east corridor    (vertical wall, x = 22.7234)
+  opening_O3: {value: {a: [22.7234, 39.0659], b: [22.7234, 40.2659], w: 1.200, t: 0.10, head: 2.447}, confidence: high}
+  # O4 REFRIGERACION <-> CAMARA DE CONGELACION     (vertical wall, x = 13.5477)
+  opening_O4: {value: {a: [13.5477, 38.9154], b: [13.5477, 40.1153], w: 1.200, t: 0.15, head: 2.447}, confidence: high}
+
+  # -- hardware selected from the reference bands by duty --
+  panel_thickness_chiller_m:  {value: 0.100, confidence: high}   # CAD host wall 0.10 m == commercial 100 mm chiller panel
+  panel_thickness_freezer_m:  {value: 0.150, confidence: high}   # CAD host wall 0.15 m == commercial 150 mm freezer panel
+  panel_joint_pitch_m:        {value: 1.000, confidence: high}   # useful width 1000 mm +/- 2 -> vertical rib pitch
+  door_leaf_thickness_chiller_m: {value: 0.080, confidence: high} # +0/+5 C band = 60-80 mm
+  door_leaf_thickness_freezer_m: {value: 0.120, confidence: high} # -18/-25 C band = 100-120 mm
+  door_leaf_height_m:         {value: 2.100, confidence: med}    # DOOR_H already used by the generator; below the 2.447 head
+  door_frame_face_m:          {value: 0.090, confidence: med}    # lacquered aluminium frame visible face
+  door_leaf_overlap_m:        {value: 0.060, confidence: med}    # leaf laps the frame each side (paso util = w - 2*overlap)
+  gasket_section_m:           {value: 0.025, confidence: med}    # EPDM perimeter gasket
+  pvc_curtain_strip_w_m:      {value: 0.200, confidence: med}    # freezer-side strip curtain, 200 mm strips, 50 % overlap
+  room_clear_height_m:        {value: 2.447, confidence: high}   # = the measured head; the panel ceiling sits here
+
+  # -- equipment footprints, CAD-measured; heights are the corpus's stated assumptions --
+  # Nine footprints carry one of the five modelled labels. The build log enumerates
+  # them rather than counting them: a mapping that matches nothing reports success.
+  ultracongelador:  {value: {at: [24.163, 37.940], w: 2.180, d: 1.020, h: 2.00}, confidence: high}
+  laminadora:       {value: {at: [16.293, 46.287], w: 3.321, d: 1.057, h: 1.20}, confidence: high}
+  laminadora_mesa:  {value: {at: [18.927, 44.187], w: 1.001, d: 2.001, h: 1.20}, confidence: high}
+  # -- the pastry-room pair the operator named: mixers at x 5-8, y 40-42 --
+  amasadora_1:      {value: {at: [ 7.196, 41.716], w: 1.016, d: 1.124, h: 1.40}, confidence: high}
+  amasadora_2:      {value: {at: [ 6.501, 41.275], w: 1.016, d: 1.124, h: 1.40}, confidence: high}
+  batidora_1:       {value: {at: [ 5.806, 40.833], w: 1.016, d: 1.124, h: 1.40}, confidence: high}
+  batidora_2:       {value: {at: [ 5.110, 40.392], w: 1.016, d: 1.124, h: 1.40}, confidence: high}
+  # -- two further Amasadora footprints the drawing carries ELSEWHERE. They are
+  #    NOT in the 96.02 m2 pastry/laminating region (x 2.85-19.35): one sits at
+  #    x 25.8 on the ground floor and one is on the UPPER storey. They are built
+  #    too, because leaving a green box beside a modelled twin of the same machine
+  #    reads as a defect, not as a distinction.
+  amasadora_other:  {value: {at: [25.806, 46.782], w: 0.950, d: 0.760, h: 1.40}, confidence: high}
+  amasadora_upper:  {value: {at: [31.206, 35.968], w: 0.950, d: 0.540, h: 1.40}, confidence: high}
+
+# ---------------------------------------------------------------------------
+# hierarchy — animation-ready BEFORE geometry
+# ---------------------------------------------------------------------------
+hierarchy:
+  - name: coldRoomGroup                 # new toggleable layer in the viewer HUD
+    children:
+      - name: envelope_camara_refrigeracion
+        pivot: [0, 0, 0]
+        animation: none
+        children:
+          - name: panel_walls           # extruded from the room's RUNS outline, not its bbox
+            pivot: [0, 0, 0]
+            animation: none
+          - name: panel_ceiling
+            pivot: [0, 2.447, 0]
+            animation: none
+          - name: panel_ribs            # merged into one geometry per room (draw budget)
+            pivot: [0, 0, 0]
+            animation: none
+      - name: envelope_camara_congelacion   # same three children, freezer thickness
+        pivot: [0, 0, 0]
+        animation: none
+      - name: envelope_refrigeracion        # same three children, chiller thickness
+        pivot: [0, 0, 0]
+        animation: none
+
+      - name: coldDoor_O1
+        pivot: [12.2497, 0, 37.9484]    # hinge at the doorway endpoint a, CAD frame
+        animation: "open_hinge 0..95"   # real travel: the leaf laps the frame by LAP on the
+                                        # hinge side, so it must pass the jamb before it lies
+                                        # along the inside wall face — 95 deg, not a naive 90
+        children:
+          - name: frame                 # lacquered aluminium, thermal-bridge break
+            pivot: [0, 0, 0]
+            animation: none
+            attachment:
+              parent_socket: doorway_reveal_O1
+              local_start: [12.2497, 0.0, 37.9484]
+              local_end:   [13.5497, 2.447, 37.9484]
+              length_confidence: high
+              contact_type: embedded
+              embed_depth: 0.02         # frame sinks into the host wall reveal
+              gap_tolerance: 0.0
+          - name: leaf
+            pivot: [12.2497, 0, 37.9484]
+            animation: "open_hinge 0..100"
+          - name: gasket                # EPDM, on the leaf's frame-facing perimeter
+            pivot: [0, 0, 0]
+            animation: none
+          - name: lever_handle          # the part that says "cold room" and not "office door"
+            pivot: [0, 1.05, 0]
+            animation: none
+            attachment:
+              parent_socket: leaf_lock_stile
+              local_start: [0.0, 0.80, 0.0]
+              local_end:   [0.0, 1.30, 0.0]
+              length_confidence: med
+              contact_type: surface-contact
+              overlap: 0.012
+              gap_tolerance: 0.0
+          - name: hinges                # two barrel hinges, one system
+            pivot: [0, 0, 0]
+            animation: none
+            attachment:
+              parent_socket: frame_hinge_stile
+              local_start: [0.0, 0.35, 0.0]
+              local_end:   [0.0, 1.85, 0.0]
+              length_confidence: med
+              contact_type: hinge
+              overlap: 0.015
+              gap_tolerance: 0.0
+      - name: coldDoor_O2               # same structure, chiller leaf 0.080 m
+        pivot: [22.7234, 0, 35.6144]
+        animation: "open_hinge 0..100"
+      - name: coldDoor_O3               # FREEZER: leaf 0.120 m + strip curtain + heated frame trim
+        pivot: [22.7234, 0, 39.0659]
+        animation: "open_hinge 0..100"
+        children:
+          - name: pvc_strip_curtain     # hangs on the cold side of the freezer doorway
+            pivot: [0, 2.10, 0]
+            animation: none
+            attachment:
+              parent_socket: frame_head_O3
+              local_start: [0.0, 2.10, 0.0]
+              local_end:   [0.0, 0.05, 0.0]
+              length_confidence: med
+              contact_type: socket
+              overlap: 0.03
+              gap_tolerance: 0.0
+      - name: coldDoor_O4               # FREEZER side, host wall 0.15 m
+        pivot: [13.5477, 0, 38.9154]
+        animation: "open_hinge 0..100"
+
+  - name: equipInstancedGroup           # replaces the flat green extruded boxes
+    children:
+      - name: ultracongelador_1
+        pivot: [24.163, 0, 37.940]
+        animation: "open_hinge 0..109"  # the master's own door travel (doorPivot -1.9 rad)
+      - name: laminadora_1
+        pivot: [16.293, 0, 46.287]
+        animation: none
+      - name: laminadora_mesa_1
+        pivot: [18.927, 0, 44.187]
+        animation: none
+      - name: amasadora_rows            # 3 instances, one semantic system
+        pivot: [0, 0, 0]
+        animation: spin_y               # spiral hook
+      - name: batidora_rows             # 2 instances, one semantic system
+        pivot: [0, 0, 0]
+        animation: spin_y               # planetary whisk
+
+# ---------------------------------------------------------------------------
+materials:
+  - id: panel-face
+    family: painted-metal
+    color: "#e9ecee"                 # pre-lacquered white steel skin
+    metalness: 0.0
+    roughness: 0.45
+    evidence: "panelsandwich.com chiller panel: pre-lacquered steel skins over PUR core;
+               painted skin is dielectric, so metalness stays 0 per the near-binary rule"
+    source: table
+    confidence: 0.85
+  - id: panel-joint
+    family: painted-metal
+    color: "#d3d8dc"                 # tongue-and-groove joint reads as a shadow line
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "tongue-and-groove system with neoprene gasket, useful width 1000 mm"
+    source: table
+    confidence: 0.85
+  - id: door-frame-alu
+    family: painted-metal
+    color: "#dfe3e6"
+    metalness: 0.0
+    roughness: 0.40
+    evidence: "aluminium 6063 T5 structural profile, white lacquered, thermal-bridge break"
+    source: table
+    confidence: 0.82
+  - id: door-leaf-stainless
+    family: bare-metal
+    color: "#d2d6d8"
+    metalness: 0.90
+    roughness: 0.30
+    evidence: "OPERATOR DECISION 2026-08-09: 'que las puertas sean de metal'. The references
+               list lacquered, PVC, stainless and polyester skins as equally standard, so
+               304 stainless is within the evidenced set and matches the plant's own equipment.
+               Replaces the white lacquered leaf the first build used."
+    source: table
+    confidence: 0.85
+  - id: door-hardware
+    family: bare-metal
+    color: "#c8ccd0"
+    metalness: 0.92
+    roughness: 0.32
+    evidence: "lever latch + barrel hinges, chromed/stainless; brushed-stainless-recipe
+               (library/materials-textures) with material.envMapIntensity - NOT the inert
+               scene.environmentIntensity, which does not exist in three r160"
+    source: table
+    confidence: 0.88
+  - id: gasket-epdm
+    family: rubber
+    color: "#17191c"
+    metalness: 0.0
+    roughness: 0.88
+    evidence: "flexible EPDM perimeter gaskets rated for extreme temperature"
+    source: table
+    confidence: 0.85
+  - id: pvc-curtain
+    family: plastic
+    color: "#cfe0e4"
+    metalness: 0.0
+    roughness: 0.28
+    evidence: "transparent PVC strip curtain; transmission-free-glass recipe
+               (MeshStandardMaterial opacity ~0.45) - MeshPhysicalMaterial.transmission
+               stalls the SwiftShader shader compile"
+    source: table
+    confidence: 0.84
+  - id: equip-stainless
+    family: bare-metal
+    color: "#d2d6d8"
+    metalness: 0.90
+    roughness: 0.30
+    evidence: "brushed-stainless-recipe, gate-passed on 18/18 nave-panccadia equipment assets
+               (materials PASS 0.76-0.80); brushed CanvasTexture roughnessMap"
+    source: extracted
+    confidence: 0.90
+
+# ---------------------------------------------------------------------------
+critical_features:
+  - id: cold-door-identity
+    desc: "Each of the four doorways reads as an INDUSTRIAL COLD-ROOM DOOR, not the plant's
+           brown conventional leaf: a thick flush white leaf lapping a visible lacquered
+           aluminium frame, a dark EPDM gasket line around the reveal, two barrel hinges on
+           one stile and a chunky lever latch on the other. The old wooden leaf and its swing
+           arc must be ABSENT at these four positions - not merely covered."
+    threshold: 0.78
+  - id: insulated-panel-envelope
+    desc: "The three cold rooms are lined with sandwich panel and read as a different fabric
+           from the plant's masonry: a flush pale skin with vertical joint lines at a regular
+           1.00 m pitch, closed at 2.447 m by a panel ceiling. The envelope must be visibly
+           INSIDE the room and continuous at the corners, with the doorways left open."
+    threshold: 0.78
+  - id: freezer-vs-chiller-read
+    desc: "CAMARA DE CONGELACION is visibly the freezer and not a third chiller: thicker leaf
+           and panel, and a PVC strip curtain hanging inside its doorway. A viewer must be able
+           to tell the freezer from the two chillers by looking, without reading a label."
+    threshold: 0.75
+  - id: equipment-reads-as-machines
+    desc: "The ultracongelador, the laminadora with its table, the three amasadoras and the two
+           batidoras read as stainless machines with recognisable parts (cabinet with door and
+           handle, roller table, bowl and hook/whisk) standing on their exact CAD footprints -
+           NOT as the flat green extruded boxes v20 draws."
+    threshold: 0.75
+
+important_features:
+  - id: door-swing-clearance
+    desc: "An opened leaf swings into the room it serves and clears the panel face and the
+           nearest equipment; no leaf passes through fabric."
+  - id: envelope-joins-fabric
+    desc: "The panel lining meets the existing masonry without a visible floating gap or a
+           z-fighting shared face."
+
+# ---------------------------------------------------------------------------
+# Invariants that a picture CANNOT settle -> tests, not renders
+# (GATES.md Test-vs-render jurisdiction). These run in the page and report via
+# console.error, never console.assert: a failed assert is silent and exits 0.
+# ---------------------------------------------------------------------------
+# Operator amendments, 2026-08-09 — recorded here rather than folded silently
+# into the text above, because each one departs from what the first build did
+# and a reader has to be able to tell an instruction from a derivation.
+operator_amendments:
+  - id: ceilings-open
+    asked: "el techo esté abierto de las cámaras"
+    done: "the panel ceiling starts hidden (button 'Cold-room ceilings', ?coldceil=on).
+            A closed cold room hides everything the lining exists to show."
+  - id: machines-face-the-room
+    asked: "los que están volteando al muro, que volteen para adentro"
+    done: "clearAhead() rays the free floor ahead of and behind each machine in CAD and
+            flips it when the back has >=0.5 m more room. Measured: 5 of 8 flipped,
+            including both mixers the operator pointed at (0.78 / 0.81 m ahead vs
+            3.62 / 5.27 m behind)."
+  - id: metal-leaves
+    asked: "que las puertas sean de metal, yo las veo negras"
+    done: "TWO defects. The black was a near-black EPDM gasket built as a 1.02 x 2.08 m
+            PANEL across the whole reveal, with the leaf behind it — now a 30 mm perimeter
+            bead. And the leaf itself extended AWAY from the opening (rot vs -rot), so the
+            doorway was empty. Leaf is now 304 stainless and fills the opening."
+  - id: doors-open-inward-and-open-by-default
+    asked: "las puertas se abran por dentro / no las dejaste abiertas"
+    done: "leaf mounted and swinging into the cold room, open on load; ?colddoors=closed
+            restores the shut state."
+  - id: no-clashing-leaves
+    asked: "hay dos puertas que chocan cuando se abren"
+    done: "swing sides resolved by GEOMETRY: two leaves clash only if they share a room AND
+            their hinges are closer than the sum of their reaches. A first version counted
+            leaves per room and flagged two doorways 9 m apart. Result: 0 clashing pairs,
+            and the 9.72 m2 room keeps its floor because both its doorways open outward."
+  - id: ultracongelador-against-the-wall
+    asked: "tiene que estar pegado a la pared, con las dos puertas volteando para acá"
+    done: "measured 10.87 m clear ahead and 12.0 m behind — it was free-standing. Now listed
+            in EQ_WALL_HUGGING: long side parallel to the nearest wall, 0.06 m service gap,
+            doors facing the room. AUTHORED, not certified: the size stays measured, the
+            position moves."
+
+invariant_tests:
+  - id: envelope-inside-room
+    assert: "every panel wall segment's centreline lies inside its room's RUNS outline,
+             offset inward by exactly its own half thickness"
+  - id: doorways-left-open
+    assert: "no panel segment spans any of the four opening segments O1..O4"
+  - id: no-conventional-leaf-on-cold-doors
+    assert: "the count of conventional template leaves drawn at O1..O4 is exactly 0,
+             and the count of cold doors is exactly 4"
+  - id: nothing-floats
+    assert: "every new mesh's world-space min Y is within 1 mm of the slab, or is
+             attached to a parent whose bbox contains its attachment point"
+  - id: equipment-on-cad-footprint
+    assert: "each instanced machine's plan AABB is contained in its CAD poly grown by 0.05 m,
+             and no green placeholder box remains for a replaced item"
+
+quality_contract:
+  global_min: 0.78
+  perf_budget:
+    # Baseline MEASURED on v20 with the same instrument (probe.mjs, SwiftShader,
+    # PORT=8137, 2026-08-09): 478 draws / 22,843 tris. The budget below leaves
+    # room for the envelope, four doors and seven machines only if the ribs and
+    # panel faces are MERGED per room - which is the point of setting it here.
+    draws: 750
+    tris: 300000
+
+camera:
+  azimuth_deg: 42
+  elevation_deg: 24
+  # The gate views are DERIVED, not typed. fitView(subject, azimuth, elevation)
+  # solves the distance from the subject's bounding sphere on both screen axes and
+  # drives window.__cam; framing-probe.mjs then MEASURES the result through the
+  # page's __qaFraming hook. The first version hard-coded five eye/target pairs and
+  # the first capture put the camera inside the equipment, console clean, filename
+  # lying. Measured 2026-08-09, all six ok:true, occupancy 0.23-0.42, no HUD overlap.
+  views:
+    cold-envelope: {subject: coldGroup,        az: 40,  el: 36, occupancy: 0.42}
+    cold-door:     {subject: "O2 (chiller)",   az: 20,  el:  8, occupancy: 0.32}
+    freezer-door:  {subject: "O3 (freezer)",   az: 20,  el:  8, occupancy: 0.33}
+    laminado:      {subject: equipLaminadora,  az: 55,  el: 20, occupancy: 0.31}
+    pasteleria:    {subject: equipPasteleria,  az: 235, el: 18, occupancy: 0.23}
+    ultra:         {subject: equipUltra,       az: 300, el: 14, occupancy: 0.35}
+  hud_off: "?hud=off hides the reading panel for structural/materials captures —
+            the panel is a third of the frame and is not what those passes deliver.
+            It stays ON by default and for any pass that scores the HUD itself."
+
+lighting:
+  rig: house-rig
+  note: "the viewer's existing rig is unchanged. Bare metal on the machines uses
+         material.envMapIntensity (r160-live) - NEVER scene.environmentIntensity,
+         which silently does not exist in three r160 and made the documented
+         stainless recipe inert across the whole catalog."
+
+gate_passes: [structural, materials]
+
+ui_controls:
+  - "Cold rooms — toggle the panel envelope"
+  - "Cold doors — open/close the four leaves"
+  - "Equipment — existing toggle, now driving the instanced machines"
+
+deliverable:
+  generator: /home/cristian/investigacion/nave-panccadia/tools/build-viewer.py
+  output: /home/cristian/prototipos/three.js/disenos/nave-panccadia/nave-panccadia-3d-v21.html
+  invariant: "regenerating v20's inputs must keep reproducing v20 byte for byte until
+              the amendment lands; after it lands, v21 is the only changed artifact"
