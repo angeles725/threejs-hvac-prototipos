@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="es" data-app-ready="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unidad condensadora 2 ventiladores — nave Panccadia</title>
+<link rel="icon" href="data:,">
+<!-- SCALE: 1 unit = 1 m.
+     Housing 1.200 x 0.800 x 0.715 m, fans 2 x D457 mm — the Danfoss OPTYMA "N8"
+     two-fan housing, identical across the HGM / HRU / HGZ / LGZ families
+     [CERT-doc corpus sources/datasheets/danfoss-optyma-unidades-condensadoras].
+     The INSIDE is deliberately empty, by the operator's instruction: this is a
+     shell judged from the outside. What stops it reading hollow is that every
+     opening is BACKED — the fan bores by the coil face, the coil by a closing
+     panel — so the eye never reaches an interior that was never built. -->
+<style>
+  :root{ --bg:#06080d; --surface:rgba(10,14,22,.86); --border:rgba(0,212,170,.18);
+         --text:#c8d4dc; --text-muted:#8fa0ab; --accent:#00d4aa;
+         --font-mono:'JetBrains Mono',ui-monospace,'Courier New',monospace; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #hud{position:absolute;left:14px;top:12px;font-family:var(--font-mono);color:var(--text);
+       font-size:11px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000}
+  #hud .name{font-size:13px;color:#fff;font-weight:700} #hud .pass{color:var(--accent)} #hud .dim{color:var(--text-muted)}
+  #panel{position:absolute;right:12px;bottom:12px;font-family:var(--font-mono);font-size:11px;
+         background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+         color:var(--text);display:flex;flex-direction:column;gap:6px}
+  #panel button{font-family:inherit;font-size:11px;background:#0d1420;color:var(--text);
+         border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer}
+  #panel button.on{background:#0a2a24;border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="name">Unidad condensadora — 2 ventiladores axiales</div>
+  <div><span class="pass">MASTER</span> <span class="dim">· carcasa exterior, sin componentes internos</span></div>
+  <div class="dim">1.200 × 0.800 m · alto 0.715 m · ventiladores Ø457 mm</div>
+</div>
+<div id="panel">
+  <button id="btnRot">AUTO-ROTATE</button>
+  <button id="btnFan" class="on">FANS</button>
+  <button id="btnBracket">BRACKET</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.Fog(0x06080d, 7, 26);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.05, 200);
+camera.position.set(1.95, 1.30, 2.05);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 0.42, 0);
+controls.autoRotate = false; controls.autoRotateSpeed = 0.7;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+// NOTE: scene.environmentIntensity does NOT exist in r160 — it is a silent
+// no-op. The live knob is material.envMapIntensity, set per material below.
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(3.0, 5.5, 2.6); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.bias = -0.0003;
+sun.shadow.camera.left=-1.8; sun.shadow.camera.right=1.8;
+sun.shadow.camera.top=1.8; sun.shadow.camera.bottom=-1.2;
+scene.add(sun);
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+scene.add(new THREE.HemisphereLight(0xeaf0ff, 0x2a3038, 0.7));
+// FRONTAL fill: the house key/fill/rim lights TOPS, not camera-facing faces.
+// Without this the vertical blue panels go muddy and the metal goes black.
+const fill = new THREE.DirectionalLight(0xf4f7ff, 0.75);
+fill.position.set(1.2, 1.6, 5); scene.add(fill);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x0b0f16, roughness:1, metalness:0 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ---------------------------------------------------------------------------
+// materials
+// ---------------------------------------------------------------------------
+function brushedRoughTex(){
+  const c=document.createElement('canvas'); c.width=512; c.height=512; const g=c.getContext('2d');
+  g.fillStyle='#565656'; g.fillRect(0,0,512,512);
+  for(let i=0;i<2600;i++){ const y=Math.random()*512,len=40+Math.random()*180,x=Math.random()*512,v=120+(Math.random()*40-20);
+    g.strokeStyle=`rgba(${v},${v},${v},0.16)`; g.lineWidth=Math.random()<0.5?1:0.6;
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x+len,y+(Math.random()*2-1)); g.stroke(); }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(2,2); return t;
+}
+const roughMap = brushedRoughTex();
+
+const M = {
+  // powder-coated blue: a painted dielectric, so metalness stays 0 — the
+  // near-binary rule. Two tones so the silhouette is not one flat prism.
+  blue:  new THREE.MeshStandardMaterial({ color:0x1663ad, metalness:0.0, roughness:0.42 }),
+  blueD: new THREE.MeshStandardMaterial({ color:0x114e88, metalness:0.0, roughness:0.46 }),
+  blueL: new THREE.MeshStandardMaterial({ color:0x1d76c6, metalness:0.0, roughness:0.40 }),
+  // aluminium coil fins, seen edge-on through the side louvres
+  // Aluminium fin pack. metalness 0.35, NOT 0.85, and the reason is measured
+  // rather than aesthetic: at 0.85 the face is almost pure mirror, so its value
+  // is set by whichever patch of the IBL its normal happens to face — pointing
+  // +X into this scene that patch is black, and the coil read as a dark hole.
+  // A fin stack is thousands of edges that scatter; a low-metalness satin is
+  // both closer to that and stable under rotation.
+  fin:   new THREE.MeshStandardMaterial({ color:0xc2c9ce, metalness:0.35, roughness:0.55,
+           side:THREE.DoubleSide }),
+  coil:  new THREE.MeshStandardMaterial({ color:0x2b3238, metalness:0.55, roughness:0.72 }),
+  wire:  new THREE.MeshStandardMaterial({ color:0x15181b, metalness:0.45, roughness:0.52 }),
+  // light enough to read AGAINST the dark backing panel: a near-black rotor
+  // behind a near-black grille in front of a near-black backer is three
+  // invisible parts stacked up.
+  blade: new THREE.MeshStandardMaterial({ color:0x8d959b, metalness:0.55, roughness:0.50,
+           side:THREE.DoubleSide }),
+  hub:   new THREE.MeshStandardMaterial({ color:0x1a1e22, metalness:0.60, roughness:0.45 }),
+  galv:  new THREE.MeshStandardMaterial({ color:0x9aa1a6, metalness:0.72, roughness:0.50,
+           roughnessMap: roughMap }),
+  bolt:  new THREE.MeshStandardMaterial({ color:0x6e767c, metalness:0.80, roughness:0.42 }),
+  copper:new THREE.MeshStandardMaterial({ color:0xa9663a, metalness:0.85, roughness:0.38 }),
+  box:   new THREE.MeshStandardMaterial({ color:0xd7dbde, metalness:0.10, roughness:0.45 }),
+  label: new THREE.MeshStandardMaterial({ color:0xe8ecef, metalness:0.0, roughness:0.55 }),
+};
+for (const k of ['galv','bolt','copper','coil']) M[k].envMapIntensity = 1.7;
+M.fin.envMapIntensity = 1.0;
+
+const box=(w,h,d,mat)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+  m.castShadow=m.receiveShadow=true; return m; };
+const cyl=(rt,rb,h,mat,seg=16)=>{ const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),mat);
+  m.castShadow=m.receiveShadow=true; return m; };
+
+// ---------------------------------------------------------------------------
+// the unit
+// ---------------------------------------------------------------------------
+const W = 1.200, D = 0.800, H = 0.715;     // datasheet housing
+const FAN_R = 0.457/2;
+const unit = new THREE.Group();
+const fanSpinners = [];
+
+// --- base frame: a channel the casing sits on, with anchor ears -------------
+const baseH = 0.075;
+const base = box(W, baseH, D, M.blueD);
+base.position.y = baseH/2;
+unit.add(base);
+for (const sx of [-1,1]) for (const sz of [-1,1]) {
+  const ear = box(0.10, 0.014, 0.085, M.blueD);
+  ear.position.set(sx*(W/2 - 0.055), 0.007, sz*(D/2 + 0.035));
+  unit.add(ear);
+  const hole = cyl(0.010, 0.010, 0.02, M.hub, 10);
+  hole.position.set(sx*(W/2 - 0.055), 0.008, sz*(D/2 + 0.045));
+  unit.add(hole);
+}
+
+// --- casing: four sides + roof, built as PANELS so the corners read ---------
+const bodyY = baseH, bodyH = H - baseH;
+const skin = 0.014;
+// FRONT PANEL WITH TWO REAL BORES. A BoxGeometry cannot have a hole, so the
+// first version laid the wire guards on top of an unbroken sheet: the blades
+// were built, positioned correctly, and hidden behind opaque steel the whole
+// time. Nothing in a console or a count can report that. THREE.Shape carries
+// .holes, and ShapeGeometry triangulates them.
+const frontShape = new THREE.Shape();
+frontShape.moveTo(-W/2, -bodyH/2); frontShape.lineTo(W/2, -bodyH/2);
+frontShape.lineTo(W/2, bodyH/2);   frontShape.lineTo(-W/2, bodyH/2);
+frontShape.closePath();
+for (const sx of [-1, 1]) {
+  const hole = new THREE.Path();
+  hole.absarc(sx * W * 0.245, 0, FAN_R + 0.006, 0, Math.PI*2, true);
+  frontShape.holes.push(hole);
+}
+const front = new THREE.Mesh(
+  new THREE.ExtrudeGeometry(frontShape, { depth: skin, bevelEnabled: false }),
+  M.blue);
+front.position.set(0, bodyY + bodyH/2, D/2 - skin);
+front.castShadow = front.receiveShadow = true;
+unit.add(front);
+const back = box(W, bodyH, skin, M.blueD);
+back.position.set(0, bodyY + bodyH/2, -D/2 + skin/2);
+unit.add(back);
+// The sides are NOT panels: they are the condenser coil, and closing them with
+// blue sheet is what made the first attempt read as a painted crate. Each side
+// gets a perimeter frame and the fin pack shows through it.
+for (const sx of [-1,1]) {
+  for (const [oy, hh] of [[bodyH/2 - 0.03, 0.055], [-(bodyH/2) + 0.03, 0.055]]) {
+    const fr = box(skin, hh, D - 0.06, M.blueD);
+    fr.position.set(sx*(W/2 - skin/2), bodyY + bodyH/2 + oy, 0);
+    unit.add(fr);
+  }
+  for (const oz of [-(D/2) + 0.045, (D/2) - 0.045]) {
+    const fr = box(skin, bodyH - 0.02, 0.055, M.blueD);
+    fr.position.set(sx*(W/2 - skin/2), bodyY + bodyH/2, oz);
+    unit.add(fr);
+  }
+}
+// corner posts
+for (const sx of [-1,1]) for (const sz of [-1,1]) {
+  const post = box(0.030, bodyH, 0.030, M.blueD);
+  post.position.set(sx*(W/2 - 0.015), bodyY + bodyH/2, sz*(D/2 - 0.015));
+  unit.add(post);
+}
+// roof, with a drip lip all round
+const roof = box(W + 0.024, 0.020, D + 0.024, M.blueL);
+roof.position.y = bodyY + bodyH + 0.010;
+unit.add(roof);
+const lip = box(W + 0.030, 0.016, D + 0.030, M.blueD);
+lip.position.y = bodyY + bodyH - 0.004;
+unit.add(lip);
+
+// --- the condenser coil, read EDGE-ON through the side louvres --------------
+// The fins are what makes a condenser look like a condenser rather than a blue
+// box. They are merged into ONE geometry per side: 44 separate meshes per side
+// would be 88 draw calls for a part that is never touched individually.
+// A fin is a lamina PERPENDICULAR to the coil's length, so from outside the
+// side you see its EDGE — the close vertical striping that reads as a coil.
+// The first version rotated each fin into the ZY plane and then spaced it along
+// Z, i.e. laid every lamina flat along the direction it was supposed to be
+// stacked in; from the side that is one smear, not a fin pack.
+// Fins are 2 mm apart on a real coil. Modelled as laminae they either cost
+// hundreds of surfaces or, spaced far enough apart to be cheap, close up into a
+// solid wall the moment the camera leaves the perpendicular — which is exactly
+// what the geometric version did. A striped texture reads correctly from every
+// angle and costs one surface.
+function finTex(rep) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 16;
+  const g = c.getContext('2d');
+  g.fillStyle = '#aeb6bc'; g.fillRect(0, 0, 256, 16);
+  for (let x = 0; x < 256; x += 4) {
+    g.fillStyle = 'rgba(60,68,74,0.55)'; g.fillRect(x, 0, 1.6, 16);
+    g.fillStyle = 'rgba(255,255,255,0.30)'; g.fillRect(x + 2, 0, 1.0, 16);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, 1);
+  t.anisotropy = 8;
+  return t;
+}
+const finMap = finTex(9);
+M.fin.map = finMap;
+for (const sx of [-1,1]) {
+  const fins = new THREE.Mesh(
+    new THREE.PlaneGeometry(D - 0.10, bodyH - 0.13), M.fin);
+  fins.rotation.y = sx * Math.PI/2;
+  fins.position.set(sx*(W/2 - 0.020), bodyY + bodyH/2, 0);
+  fins.receiveShadow = true;
+  unit.add(fins);
+  // a dark cavity behind the fin face, so the coil never shows daylight through
+  const cav = box(0.05, bodyH - 0.13, D - 0.10, M.coil);
+  cav.position.set(sx*(W/2 - 0.050), bodyY + bodyH/2, 0);
+  unit.add(cav);
+  // the tube header the fins are pressed onto, with return bends
+  for (const zz of [-(D/2) + 0.12, (D/2) - 0.12]) {
+    const hdr = cyl(0.010, 0.010, bodyH - 0.14, M.copper, 10);
+    hdr.position.set(sx*(W/2 - 0.030), bodyY + bodyH/2, zz);
+    unit.add(hdr);
+  }
+  // A wire coil guard, flat against the fins — horizontal wires like the real
+  // thing. The first version used blades pitched 0.35 rad, which from any orbit
+  // read as diagonal stripes painted across the flank.
+  for (let i = 0; i < 9; i++) {
+    const wv = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.0035, 0.0035, D - 0.10, 5), M.wire);
+    wv.rotation.x = Math.PI/2;
+    wv.position.set(sx*(W/2 + 0.006),
+                    bodyY + 0.075 + i*((bodyH - 0.15)/8), 0);
+    unit.add(wv);
+  }
+  for (let i = 0; i < 5; i++) {
+    const wh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.0035, 0.0035, bodyH - 0.14, 5), M.wire);
+    wh.position.set(sx*(W/2 + 0.006), bodyY + bodyH/2,
+                    -(D/2) + 0.08 + i*((D - 0.16)/4));
+    unit.add(wh);
+  }
+}
+// the closing panel BEHIND the fan bores: this is what the eye lands on when it
+// looks through the grille, and the reason the shell never reads hollow.
+const backer = box(W - 0.10, bodyH - 0.06, 0.016, M.coil);
+backer.position.set(0, bodyY + bodyH/2, D/2 - 0.115);
+unit.add(backer);
+
+// --- two axial fans on the front face --------------------------------------
+function buildFan() {
+  const g = new THREE.Group();
+  // venturi ring (the bellmouth the fan sits in)
+  const ven = new THREE.Mesh(
+    new THREE.TorusGeometry(FAN_R + 0.012, 0.020, 10, 40), M.blueL);
+  ven.castShadow = true;
+  g.add(ven);
+  // blades: five, pitched, visible THROUGH the guard
+  const blades = new THREE.Group();
+  const nb = 5;
+  for (let i = 0; i < nb; i++) {
+    // ONE GROUP PER BLADE, and the reason is Euler order: an Object3D applies
+    // its rotation as X then Y then Z, so setting .x (pitch) and .z (angular
+    // position) on the SAME mesh pitches it about the world axis before it is
+    // swung into place — the blades come out as five differently-skewed shards
+    // instead of one rotor. Nesting makes the pitch axis RADIAL, which is what
+    // a pitch is.
+    const spoke = new THREE.Group();
+    spoke.rotation.z = (i * 2*Math.PI) / nb;
+    const bl = new THREE.Mesh(new THREE.PlaneGeometry(FAN_R*0.80, 0.150), M.blade);
+    bl.position.x = FAN_R*0.50;
+    bl.rotation.x = 0.42;                 // pitch, about the blade's own radius
+    bl.castShadow = true;
+    spoke.add(bl);
+    blades.add(spoke);
+  }
+  blades.position.z = -0.045;
+  g.add(blades);
+  fanSpinners.push(blades);
+  // motor hub + spider
+  const hub = cyl(0.052, 0.052, 0.075, M.hub, 16);
+  hub.rotation.x = Math.PI/2;
+  hub.position.z = -0.055;
+  g.add(hub);
+  const cap = cyl(0.030, 0.038, 0.02, M.hub, 14);
+  cap.rotation.x = Math.PI/2;
+  cap.position.z = -0.012;
+  g.add(cap);
+  // WIRE GUARD, the part the reference photo is all about: concentric hoops
+  // plus radial spokes, standing PROUD of the face so it reads as a cage and
+  // not as a texture painted on the panel.
+  const guard = new THREE.Group();
+  for (let i = 1; i <= 5; i++) {
+    const rr = FAN_R * (i / 5.4);
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(rr, 0.0035, 6, 40), M.wire);
+    ring.position.z = 0.020 - (i * 0.0035);   // slight dome
+    guard.add(ring);
+  }
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(FAN_R + 0.004, 0.008, 8, 44), M.wire);
+  rim.position.z = 0.016;
+  guard.add(rim);
+  const ns = 16;
+  for (let i = 0; i < ns; i++) {
+    const sp = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.0032, 0.0032, FAN_R, 5), M.wire);
+    sp.position.set(Math.cos(i*2*Math.PI/ns) * FAN_R/2,
+                    Math.sin(i*2*Math.PI/ns) * FAN_R/2, 0.011);
+    sp.rotation.z = i*2*Math.PI/ns + Math.PI/2;
+    guard.add(sp);
+  }
+  const boss = cyl(0.020, 0.020, 0.012, M.wire, 12);
+  boss.rotation.x = Math.PI/2;
+  boss.position.z = 0.020;
+  guard.add(boss);
+  g.add(guard);
+  return g;
+}
+for (const sx of [-1,1]) {
+  const f = buildFan();
+  f.position.set(sx * W * 0.245, bodyY + bodyH/2, D/2 + 0.004);
+  unit.add(f);
+}
+
+// --- the details that say "a real machine was here" -------------------------
+// electrical box on the left end
+const ebox = box(0.055, 0.24, 0.20, M.box);
+ebox.position.set(-(W/2 + 0.026), bodyY + bodyH*0.42, -0.10);
+unit.add(ebox);
+const eLid = box(0.012, 0.20, 0.165, M.label);
+eLid.position.set(-(W/2 + 0.056), bodyY + bodyH*0.42, -0.10);
+unit.add(eLid);
+// suction / liquid line stubs leaving the back
+for (const [zz, rr] of [[-0.12, 0.018], [0.06, 0.011]]) {
+  const st = cyl(rr, rr, 0.16, M.copper, 12);
+  st.rotation.x = Math.PI/2;
+  st.position.set(W*0.30 + zz*0.0, bodyY + 0.09, -(D/2 + 0.07));
+  unit.add(st);
+}
+// nameplate
+const plate = box(0.16, 0.10, 0.004, M.label);
+plate.position.set(W/2 - 0.12, bodyY + bodyH - 0.10, D/2 + 0.010);
+unit.add(plate);
+// panel fasteners along the front edges
+for (const sx of [-1,1]) for (let i = 0; i < 4; i++) {
+  const s = cyl(0.006, 0.006, 0.008, M.bolt, 8);
+  s.rotation.x = Math.PI/2;
+  s.position.set(sx*(W/2 - 0.022), bodyY + 0.08 + i*((bodyH-0.16)/3), D/2 + 0.006);
+  unit.add(s);
+}
+
+scene.add(unit);
+
+// ---------------------------------------------------------------------------
+// the wall bracket, on its own switch: this is the part that has to look like
+// it could carry 186 kg (the datasheet's net mass for this housing).
+// ---------------------------------------------------------------------------
+const bracket = new THREE.Group();
+{
+  const P = 0.060, REACH = 0.860, DROP = 0.450, armY = -0.075;
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.6, 0.17),
+    new THREE.MeshStandardMaterial({ color:0x2a2f36, roughness:0.95, metalness:0 }));
+  wall.position.set(0, armY - DROP/2 + 0.30, -(REACH + 0.085));
+  wall.receiveShadow = true;
+  bracket.add(wall);
+  for (const sx of [-1,1]) {
+    const ax = sx * 0.40;
+    const z0 = -REACH;                       // wall face, in unit coordinates
+    const post = box(P, DROP + 0.16, P, M.galv);
+    post.position.set(ax, armY - DROP/2 + 0.08, z0 + P/2);
+    bracket.add(post);
+    const arm = box(P*0.7, P, REACH, M.galv);
+    arm.position.set(ax, armY, z0 + REACH/2);
+    bracket.add(arm);
+    // strut: foot LOW at the wall, head HIGH at the arm tip. Rx(t) sends +Z to
+    // (0,-sin t,cos t), so the angle must be NEGATIVE to lift the far end.
+    const run = REACH - P, rise = DROP, len = Math.hypot(run, rise);
+    const strut = box(P*0.55, P*0.7, len, M.galv);
+    strut.position.set(ax, armY - rise/2, z0 + P + run/2);
+    strut.rotation.x = -Math.atan2(rise, run);
+    bracket.add(strut);
+    for (const py of [armY + 0.04, armY - DROP - 0.02]) {
+      const pl = box(0.16, 0.14, 0.012, M.galv);
+      pl.position.set(ax, py, z0 + 0.006);
+      bracket.add(pl);
+      for (const bx of [-1,1]) for (const by of [-1,1]) {
+        const b = cyl(0.009, 0.009, 0.03, M.bolt, 8);
+        b.rotation.z = Math.PI/2;
+        b.position.set(ax + bx*0.05, py + by*0.043, z0 + 0.018);
+        bracket.add(b);
+      }
+    }
+  }
+  for (const zz of [-0.26, 0.26]) {
+    const rail = box(1.06, 0.05, 0.045, M.galv);
+    rail.position.set(0, armY + P/2 + 0.02, zz);
+    bracket.add(rail);
+  }
+  // stand the unit on the rails when the bracket is shown
+  bracket.position.z = REACH - D/2 - 0.030;
+}
+bracket.visible = false;
+scene.add(bracket);
+
+renderer.shadowMap.needsUpdate = true;
+
+// ---------------------------------------------------------------------------
+const btnRot = document.getElementById('btnRot');
+btnRot.onclick = () => { controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate); };
+let fansOn = true;
+const btnFan = document.getElementById('btnFan');
+btnFan.onclick = () => { fansOn = !fansOn; btnFan.classList.toggle('on', fansOn); };
+const btnBr = document.getElementById('btnBracket');
+btnBr.onclick = () => {
+  bracket.visible = !bracket.visible;
+  btnBr.classList.toggle('on', bracket.visible);
+  unit.position.y = bracket.visible ? 0.95 : 0;
+  unit.position.z = bracket.visible ? bracket.position.z : 0;
+  renderer.shadowMap.needsUpdate = true;
+};
+
+addEventListener('resize', () => { camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+globalThis.__condApp = { runtime:{ scene, renderer, camera, unit, bracket } };
+globalThis.__qaRenderInfo = () => renderer.info.render;
+globalThis.__qaDims = () => ({ W, D, H, fanD: FAN_R*2 });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if (fansOn) for (const b of fanSpinners) b.rotation.z += 0.14;
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+requestAnimationFrame(()=>document.documentElement.setAttribute('data-app-ready','true'));
+</script>
+</body>
+</html>
