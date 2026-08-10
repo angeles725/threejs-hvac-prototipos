@@ -51,6 +51,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x06080d);
@@ -169,6 +170,7 @@ const cyl=(rt,rb,h,mat,seg=16)=>{ const m=new THREE.Mesh(new THREE.CylinderGeome
 const W = 1.200, D = 0.800, H = 0.715;     // datasheet housing
 const FAN_R = 0.457/2;
 const unit = new THREE.Group();
+unit.name = 'unit';
 const fanSpinners = [];
 
 // --- base frame: a channel the casing sits on, with anchor ears -------------
@@ -447,7 +449,11 @@ scene.add(unit);
 // the wall bracket, on its own switch: this is the part that has to look like
 // it could carry 186 kg (the datasheet's net mass for this housing).
 // ---------------------------------------------------------------------------
+// Mounting height for the wall-bracket state. ONE constant, read by both the bracket group and
+// the unit's toggle — they were independent numbers and only one of them was ever set.
+const MOUNT_Y = 0.95;
 const bracket = new THREE.Group();
+bracket.name = 'bracket';
 {
   const P = 0.060, REACH = 0.860, DROP = 0.450, armY = -0.075;
   const wall = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.6, 0.17),
@@ -488,11 +494,80 @@ const bracket = new THREE.Group();
     rail.position.set(0, armY + P/2 + 0.02, zz);
     bracket.add(rail);
   }
-  // stand the unit on the rails when the bracket is shown
+  // stand the unit on the rails when the bracket is shown.
+  //
+  // The Y was MISSING and nothing caught it: the toggle lifted the unit to MOUNT_Y while the bracket
+  // stayed at floor level, so the rails sat at y = -0.025 — under the ground plane — and the unit
+  // floated a metre above a bracket nobody could see. Every gate stayed green, because the default
+  // capture never presses this button. An articulated asset has to be captured in EVERY state.
+  //
+  // The rail is 0.05 tall centred at armY + P/2 + 0.02, so its TOP is exactly at the group origin:
+  // putting the group at MOUNT_Y lands the rail top on the unit's underside with no gap and no
+  // interpenetration. Both the unit and the bracket now read the same constant.
   bracket.position.z = REACH - D/2 - 0.030;
+  bracket.position.y = MOUNT_Y;
 }
 bracket.visible = false;
 scene.add(bracket);
+
+// ---------------------------------------------------------------------------
+// DRAW-CALL FLATTENING — one draw per material, for the STATIC geometry only.
+//
+// Measured before this existed: 138 draw calls for 12,154 triangles, zero
+// instancing. That is not a heavy model, it is an unbatched one — 74 of those
+// meshes were the two wire guards, every one of them the same material. Every
+// other master in this family lives under 40 draws, and the four-unit
+// installation in the viewer costs 46 for all four because it flattens per
+// material. The master was the only version paying full price.
+//
+// The blades are EXCLUDED: they spin, so they need their own transform. Merging
+// them would freeze the fans.
+//
+// ?flat=0 KEEPS THE GRANULAR MESHES. Flattening collapses many small boxes into
+// one big one, which blinds __qaBoxes — the z-fighting sweep would see a single
+// enormous box per material instead of the surfaces it needs to compare. The
+// audit path and the delivery path must both exist, or optimising the model
+// silently removes the ability to check it.
+const FLAT = new URLSearchParams(location.search).get('flat') !== '0';
+
+function flattenStatic(root, skipRoots) {
+  root.updateMatrixWorld(true);
+  const toRoot = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const byMaterial = new Map();
+  const consumed = [];
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    for (let p = o; p && p !== root; p = p.parent) if (skipRoots.has(p)) return;
+    const g = o.geometry.clone().toNonIndexed();   // mixed indexed/non-indexed cannot merge
+    g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(toRoot, o.matrixWorld));
+    for (const attr of Object.keys(g.attributes)) {
+      if (attr !== 'position' && attr !== 'normal' && attr !== 'uv') g.deleteAttribute(attr);
+    }
+    if (!g.attributes.uv) {
+      g.setAttribute('uv', new THREE.BufferAttribute(
+        new Float32Array((g.attributes.position.count) * 2), 2));
+    }
+    if (!byMaterial.has(o.material)) byMaterial.set(o.material, []);
+    byMaterial.get(o.material).push(g);
+    consumed.push(o);
+  });
+  for (const o of consumed) o.parent.remove(o);
+  for (const [material, geometries] of byMaterial) {
+    const merged = geometries.length === 1 ? geometries[0] : mergeGeometries(geometries, false);
+    if (!merged) continue;                      // never silently drop geometry
+    const mesh = new THREE.Mesh(merged, material);
+    mesh.name = `${root.name}-flat-${material.color.getHexString()}`;
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    root.add(mesh);
+  }
+  for (const g of consumed) g.geometry.dispose?.();
+}
+
+if (FLAT) {
+  const spinning = new Set(fanSpinners);
+  flattenStatic(unit, spinning);
+  flattenStatic(bracket, spinning);
+}
 
 renderer.shadowMap.needsUpdate = true;
 
@@ -507,7 +582,7 @@ const btnBr = document.getElementById('btnBracket');
 btnBr.onclick = () => {
   bracket.visible = !bracket.visible;
   btnBr.classList.toggle('on', bracket.visible);
-  unit.position.y = bracket.visible ? 0.95 : 0;
+  unit.position.y = bracket.visible ? MOUNT_Y : 0;
   unit.position.z = bracket.visible ? bracket.position.z : 0;
   renderer.shadowMap.needsUpdate = true;
 };
@@ -515,9 +590,54 @@ btnBr.onclick = () => {
 addEventListener('resize', () => { camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
-globalThis.__condApp = { runtime:{ scene, renderer, camera, unit, bracket } };
+globalThis.__condApp = { runtime:{ scene, renderer, camera, controls, unit, bracket } };
 globalThis.__qaRenderInfo = () => renderer.info.render;
 globalThis.__qaDims = () => ({ W, D, H, fanD: FAN_R*2 });
+
+// RAW GEOMETRY ONLY, both hooks. The page exports what it built and the numerics run outside, in
+// research/tools/*, against the design3d kit's geom-verify. A design that grades its own framing or
+// its own coplanarity certifies its own bugs.
+globalThis.__qaFraming = () => {
+  camera.updateMatrixWorld();
+  camera.updateProjectionMatrix();
+  const mvp = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  // The SUBJECT is the unit — the bracket is scenery for it and is hidden by default.
+  const b = new THREE.Box3().setFromObject(unit, true);
+  const corners = [];
+  for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) {
+    corners.push([x, y, z]);
+  }
+  const hudEl = document.getElementById('panel');
+  const r = hudEl ? hudEl.getBoundingClientRect() : null;
+  return {
+    mvpElements: Array.from(mvp.elements),
+    corners, W: innerWidth, H: innerHeight,
+    hud: r ? { left:r.left, right:r.right, top:r.top, bottom:r.bottom } : null,
+  };
+};
+// Z-fighting input: the world box of every VISIBLE mesh, named by its nearest named ancestors.
+// Run it once PER TOGGLE STATE — showing the bracket moves the unit and exposes different faces.
+globalThis.__qaBoxes = () => {
+  const label = (o) => {
+    let p = o, parts = [];
+    while (p && parts.length < 3) { if (p.name) parts.unshift(p.name); p = p.parent; }
+    return parts.length ? parts.join('/') : o.type;
+  };
+  const items = [];
+  scene.updateMatrixWorld(true);
+  scene.traverse((o) => {
+    if (!o.isMesh) return;
+    let p = o, vis = true;
+    while (p) { if (!p.visible) { vis = false; break; } p = p.parent; }
+    if (!vis) return;
+    const bb = new THREE.Box3().setFromObject(o);
+    if (!isFinite(bb.min.x) || bb.isEmpty()) return;
+    items.push({ name: label(o),
+      box: { min:{ x:bb.min.x, y:bb.min.y, z:bb.min.z },
+             max:{ x:bb.max.x, y:bb.max.y, z:bb.max.z } } });
+  });
+  return items;
+};
 
 function animate(){
   requestAnimationFrame(animate);

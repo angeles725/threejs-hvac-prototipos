@@ -1,0 +1,200 @@
+# DesignSpec — unidad condensadora (air-cooled condensing unit)
+#
+# WRITTEN AFTER THE MASTER, and it says so. The unit was built first, rejected by the operator in
+# its integrated form, then rebuilt as a standalone master; the spec that should have preceded it is
+# recorded here from the model's OWN measured values and its cited datasheet, so the pass has a
+# contract to be scored against. Nothing below is aspirational: every number is either in the
+# datasheet or in condensadora.html.
+design: condensadora
+track: threejs
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  scores: {silhouette: 2, components: 3, hierarchy: 2, repetition: 3,
+           material_layers: 3, detail: 3, occlusion: 2, action_readiness: 1}
+  tier: complex          # sum 19; the kit's scale is 0-6 simple / 7-14 moderate / 15-24 complex
+  notes: >
+    A painted blue box is not a condensing unit. The identity is carried by what BREAKS the box:
+    two axial fans behind wire guards on the front face, a finned condenser coil read edge-on through
+    the side louvres, and the base channel with anchor ears it is bolted down by. The repetition
+    score is driven by the fin pack (laminae at the coil pitch) and the guard spirals.
+
+environment:
+  overlays:
+    handbook: /home/cristian/prototipos/three.js/research/HANDBOOK.md
+    house_rules: "/home/cristian/prototipos/three.js/EQUIPOS-PENDIENTES.md §REGLAS DE CASA"
+    qa_tools: /home/cristian/prototipos/three.js/research/tools
+    design_dir_root: /home/cristian/prototipos/three.js/disenos
+  reuse_pointers:
+    axial_fan: "library/parts/aero-fan-kit.mjs — real blades, not flat paddles"
+    coplanar_check: "library/harness/geom-verify.mjs — coplanarPairs/checkCoplanar"
+
+references:
+  - source: "corpus sources/datasheets/danfoss-optyma-unidades-condensadoras (extracted text in sources/extracted/)"
+    evidences: >
+      housing code N8: 1200 mm long x 800 mm deep x 715 mm high, 2 x D457 mm fans. The same housing
+      is shared across the HGM / HRU / HGZ / LGZ families, so the shell is family-independent.
+      [CERT-doc]
+    suitability: pass
+  - source: "corpus/panccadia-block45.md §45 — the condensing units, the master and the draw budget"
+    evidences: "the housing derivation and the four-unit installation on wall brackets [CERT]"
+    suitability: pass
+
+dimensions_real:
+  length_m: {value: 1.200, confidence: high}   # datasheet N8
+  depth_m:  {value: 0.800, confidence: high}   # datasheet N8
+  height_m: {value: 0.715, confidence: high}   # datasheet N8
+  fan_diameter_m: {value: 0.457, confidence: high}
+  fan_count: {value: 2, confidence: high}
+
+hierarchy:
+  - name: unit
+    children:
+      - name: base_channel      # with anchor ears + bolt holes
+        animation: none
+      - name: casing            # front (two real bores) + back + roof + lip + corner posts
+        animation: none
+      - name: coil_pack         # fin laminae + headers + side louvre frames
+        animation: none
+      - name: fans              # 2 x axial rotor behind a wire guard
+        animation: spin         # toggled by the FANS control
+      - name: bracket           # the wall bracket the unit is carried on
+        animation: none
+
+materials:
+  # Values are READ OFF the master, not proposed. Each carries the reason it is not the obvious value.
+  - id: casing-blue
+    family: painted-metal
+    color: "#1a5f92"
+    metalness: 0.0
+    roughness: 0.36
+    extra: {clearcoat: 0.9, clearcoatRoughness: 0.12, envMapIntensity: 1.4}
+    evidence: >
+      PAINT IS A DIELECTRIC WITH A CLEAR SPECULAR LAYER. metalness 0.35 bought the highlight by
+      spending a third of the diffuse and every large face went dark (top deck luminance 162 -> 84);
+      the clearcoat form keeps both (135, spread 82.6). clearcoat compiles under SwiftShader —
+      it is transmission that stalls it.
+    source: measured
+    confidence: 0.9
+  - id: fin-aluminium
+    family: bare-metal
+    color: "#c2c9ce"
+    metalness: 0.35
+    roughness: 0.55
+    evidence: >
+      NOT 0.85. A fin stack is thousands of scattering edges; a low-metalness satin is what a fin
+      pack actually returns, and a high-metalness fin pack mirrors the environment as one dark sheet.
+    source: measured
+    confidence: 0.85
+  - id: coil-body
+    family: bare-metal
+    color: "#2b3238"
+    metalness: 0.55
+    roughness: 0.72
+    evidence: "coil block seen edge-on behind the louvres"
+    source: measured
+    confidence: 0.8
+  - id: fan-blade
+    family: bare-metal
+    color: "#8d959b"
+    metalness: 0.55
+    roughness: 0.50
+    evidence: "real pitched axial blades, not flat paddles (commit b941811)"
+    source: measured
+    confidence: 0.85
+  - id: guard-wire
+    family: bare-metal
+    color: "#15181b"
+    metalness: 0.45
+    roughness: 0.52
+    evidence: "wire finger guard over each bore"
+    source: measured
+    confidence: 0.8
+  - id: bracket-galv
+    family: bare-metal
+    color: "#9aa1a6"
+    metalness: 0.72
+    roughness: 0.50
+    extra: {roughnessMap: brushed}
+    evidence: "galvanised wall bracket"
+    source: measured
+    confidence: 0.8
+  - id: copper-line
+    family: bare-metal
+    color: "#a9663a"
+    metalness: 0.85
+    roughness: 0.38
+    evidence: "refrigerant line stubs"
+    source: measured
+    confidence: 0.8
+
+critical_features:
+  - id: fans-behind-guards
+    desc: >
+      Two axial fans with REAL pitched blades sit behind wire guards in two REAL bores in the front
+      panel. A box with a circle painted on it fails this: the bore must be an opening, and it must
+      be backed by the coil face so the eye never reaches an interior that was never built.
+    threshold: 0.75
+  - id: coil-reads-finned
+    desc: >
+      The side louvres show a FINNED coil edge-on — the feature that separates a condensing unit from
+      a blue equipment box. Laminae perpendicular to the coil length, at coil pitch.
+    threshold: 0.75
+  - id: painted-sheet-not-plastic
+    desc: >
+      The casing reads as painted sheet steel: pigment plus a clear specular layer, keeping BOTH the
+      diffuse value of the large faces and a broad highlight. Never bought by raising metalness.
+    threshold: 0.72
+  - id: mounted-not-floating
+    desc: >
+      The base channel with anchor ears and the wall bracket carry the unit; no part floats and the
+      unit is bolted to something.
+    threshold: 0.72
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:
+    # DERIVED, not guessed. The first version of this file said 60 draws on no evidence and the
+    # master measured 138. The ceiling below is the highest budget any master in this family carries
+    # (horno-rotativo, also tier complex); nothing here justifies costing more than the most complex
+    # asset beside it. Measured after flattening: 22 draws / 12,154 tris.
+    draws: 40
+    tris: 160000
+  coplanar:
+    # Z-fighting leads from the kit's coplanarPairs. LEADS, not defects — confirm against geometry.
+    max_confirmed: 0
+
+camera:
+  azimuth_deg: 38
+  elevation_deg: 18
+  fov: 40
+
+lighting: house-rig-plus-frontal-fill
+# The house rig lights TOPS. This subject is a VERTICAL painted panel with vertical metal beside it,
+# so it carries the recipe's frontal fill at (1.2, 1.6, 5); without it the blue goes muddy and the
+# metal goes black. Recorded because the nave-panccadia viewer OMITS this fill and its vertical
+# stainless reads dark as a direct result.
+
+ui_controls:
+  - "AUTO-ROTATE"
+  - "FANS"
+
+colorTarget:
+  # The target is the RENDERED value under this rig, not the authored hex — the same convention the
+  # sibling specs use ("canonical satin-304 RENDERED value under the house rig"). The first version
+  # of this file put the authored #1a5f92 here and measured dE00 22.5, which compared two different
+  # quantities: the render adds the IBL, the frontal fill, ACES tonemapping and exposure 1.15.
+  #
+  # What this anchor IS: a regression detector. It catches the casing going dark or changing material
+  # later. What it is NOT: proof of fidelity to the manufacturer's blue — that lives in the authored
+  # value below, which is the citable datum.
+  #
+  # The crop is anchored by PROJECTED GEOMETRY (world point 0,0.716,0.16 on the roof deck through the
+  # page's own MVP), never picked by eye: a hue-picked crop once sampled a wooden pallet and reported
+  # a perfect zero deviation. Measured stddev 4 over the crop, i.e. one flat lit surface, no background.
+  srgb: [52, 154, 202]       # MEASURED on the roof deck, identical before and after the draw flatten
+  authored_srgb: [26, 95, 146]   # #1a5f92, the citable manufacturer blue set in the material
+  deltaE00Max: 8
+  crop: "200x200+1680+934"   # at capture.mjs --dpr 3 (3840x2880); viewport 1280x900

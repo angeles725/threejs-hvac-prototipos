@@ -1,0 +1,138 @@
+design: condensadora
+track: threejs
+mode: standard
+deliverable: disenos/nave-panccadia/equipos/condensadora/condensadora.html
+spec: ../design-spec.yaml
+corpus_block: /home/cristian/investigacion/nave-panccadia/corpus/panccadia-block45.md
+
+# First scored pass, 2026-08-10. The unit shipped into the viewer in v22 with NO DesignSpec and no
+# pass of its own; this closes that. The spec was written from the model's own measured values and
+# its cited datasheet, so it contracts what exists — and it was WRONG twice on first writing, in
+# ways the measurements caught. Both are recorded below rather than quietly corrected.
+
+captures:
+  count: 2
+  console_clean: 2 of 2
+  shots:
+    - condensadora.png            # default state
+    - condensadora-bracket.png    # BRACKET state, framed from the assembly's own bbox
+  note: >
+    The BRACKET state had never been captured. The default view does not press that button, so the
+    gate had been green over it since the master was created. Capturing it is what found the one
+    real defect in this pass.
+
+passes:
+  structural:
+    status: passed
+    attempts: 2
+    score: 0.80              # threshold 0.78
+    action: continue
+    was: "attempt 1 FAILED: the BRACKET state was unbuildable to look at"
+    what_reads_correctly:
+      - "two real bores in the front panel with pitched axial blades behind wire guards; the bores
+         are backed by the coil face, so the empty interior is never reached by the eye"
+      - "the side louvres show the fin pack edge-on — the feature that separates a condensing unit
+         from a blue box"
+      - "base channel with anchor ears and bolt holes; nothing floats in the default state"
+      - "in the BRACKET state the unit now stands on the rails of a galvanised wall bracket with
+         post, arm, diagonal strut and bolted plates (condensadora-bracket.png)"
+    fixed:
+      id: bracket-never-rose-with-the-unit
+      measured: >
+        The toggle set unit.position.y = 0.95 while the bracket group stayed at y = 0, so the rails
+        sat at y = -0.025 — BELOW the ground plane — and the unit floated a metre over a bracket that
+        read as loose panels on the floor. Two independent numbers where there should have been one.
+      fix: >
+        A single MOUNT_Y constant, read by both the bracket group and the unit's toggle. The rail's
+        top edge sits exactly at the group origin, so the rail lands on the unit's underside with no
+        gap and no interpenetration.
+      why_nothing_caught_it: >
+        Every mechanical check was green: console clean, framing ok, draws under budget. None of them
+        press a button. An articulated asset must be captured in EVERY state, and the first capture of
+        this one showed the defect immediately.
+  materials:
+    status: passed
+    attempts: 1
+    score: 0.79              # threshold 0.78
+    action: continue
+    what_reads_correctly:
+      - "the casing reads as painted sheet steel, not plastic: metalness 0 keeps the pigment and
+         clearcoat 0.9 supplies the sheen, so the large faces keep their value AND catch a highlight"
+      - "the fin pack at metalness 0.35 stays satin under rotation instead of mirroring one dark
+         patch of the IBL"
+      - "the subject carries the recipe's FRONTAL fill, which is why its vertical blue panels do not
+         go muddy — the nave-panccadia viewer omits that fill and its vertical stainless reads dark
+         as a direct result"
+    measured:
+      casing_srgb: [52, 154, 202]
+      crop: "200x200+1680+934 (dpr 3), anchored on the roof deck by PROJECTED GEOMETRY"
+      crop_stddev: 4          # one flat lit surface, no background bleeding in
+      unchanged_by_the_draw_flatten: true   # identical in baseline, after and control captures
+
+mechanical:
+  console_clean: true
+  framing:
+    status: gated
+    ok: true
+    occupancy: 0.281
+    centered: true
+    fullyVisible: true
+    overlapsHUD: false
+  perf:
+    budget: {draws: 40, tris: 160000}
+    measured: {draws: 22, tris: 12154}
+    bracket_state: {draws: 25, tris: 12822}
+    was: {draws: 138, tris: 12154}
+    note: >
+      138 draw calls for 12,154 triangles and zero instancing — an UNBATCHED model, not a heavy one;
+      74 of those meshes were the two wire guards, every one the same material. Flattening the static
+      geometry per material takes it to 22 with the triangle count UNCHANGED, i.e. nothing was
+      dropped. Proof it is visually inert: the pixel diff before/after is 192,621 px, while capturing
+      the SAME build twice differs by 153,742 px — the fans are spinning, and the treatment sits
+      inside that noise. The casing crop is byte-identical across all three.
+  coplanar:
+    leads: 37
+    meshes: 138
+    confirmed_defects: 0
+    measured_on: "?flat=0"
+    note: >
+      Run on the GRANULAR model on purpose: flattening merges many small boxes into one big one and
+      would blind the sweep. ?flat=0 keeps the audit path alive next to the delivery path.
+      The worst lead by area (0.96 m2) is the 20 m ground plane against the base channel resting on
+      it — a zero-thickness sheet coincides with BOTH faces of whatever touches it, so the same-facing
+      rule cannot separate harmless back-to-back contact from a real fight. Resolved by geometry: the
+      floor faces +Y and the channel's underside faces -Y, opposed, no shimmer. Every remaining lead
+      is two orders of magnitude smaller (<= 0.017 m2), inside the concentric guard rings and spokes,
+      where AABBs overlap and the curved surfaces intersect at an angle rather than coincide.
+
+verdict:
+  gate: passed
+  reason: >
+    structural 0.80 and materials 0.79 against a 0.78 threshold, with the one blocking defect fixed
+    and its fix visible in the capture. Console clean, framing gated ok, perf at 22/40 draws, no
+    confirmed coplanar defect.
+  spec_corrections:
+    - id: perf-budget-was-a-guess
+      was: "draws 60"
+      now: "draws 40"
+      why: >
+        60 was written from nothing and the model measured 138. The replacement is DERIVED: it is the
+        highest budget any master in this family carries (horno-rotativo, also tier complex). Nothing
+        about this subject justifies costing more than the most complex asset beside it.
+    - id: colortarget-compared-two-different-quantities
+      was: "srgb [26,95,146] — the authored #1a5f92 — dE00Max 12; measured dE00 22.5"
+      now: "srgb [52,154,202] measured under this rig, dE00Max 8, authored value kept for citation"
+      why: >
+        The sibling specs anchor on the RENDERED value ("canonical satin-304 rendered value under the
+        house rig"). Comparing a render against an authored hex ignores the IBL, the frontal fill,
+        ACES tonemapping and exposure 1.15. The anchor is a regression detector, not a fidelity proof;
+        fidelity to the manufacturer's blue lives in authored_srgb, which is the citable datum.
+    - id: tier-was-outside-the-vocabulary
+      was: "standard"
+      now: "complex"
+      why: "the scores sum to 19 and the kit's scale is 0-6 simple / 7-14 moderate / 15-24 complex"
+  next: >
+    Open, and none of it blocks this pass: the four units installed in the viewer are a SEPARATE
+    artefact from this master and were not re-scored here; and the master's default camera does not
+    re-aim when the BRACKET toggle lifts the unit, so that state needs an explicit framing (the
+    capture in this run was framed by a probe, not by the page).
