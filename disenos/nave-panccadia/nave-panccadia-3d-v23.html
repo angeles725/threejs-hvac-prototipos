@@ -3768,9 +3768,13 @@ if (OPEN) {
       // geometry is built. The first version ran the hinge through mapZ() at this
       // point, which shifted it by D - 2y metres and stood a leaf in open floor
       // between the work benches. The opening it was blamed on was innocent.
+      // Each hang carries its OWN opening normal `n` now, not the one shared
+      // outer `n`: a drawn swing overrides it below with the side the plan
+      // actually shows, and a per-hang normal is the only place that override
+      // can land without leaking into the conventional doors.
       let hangs = nl === 2
-        ? [[[ax, az], u, sign], [[bx, bz], [-u[0], -u[1]], -sign]]
-        : [[[ax, az], u, sign]];
+        ? [[[ax, az], u, n, sign], [[bx, bz], [-u[0], -u[1]], n, -sign]]
+        : [[[ax, az], u, n, sign]];
       const drawn = SWINGS && SWINGS.matched.find(sw =>
         Math.hypot(sw.opening_mid[0] - (o.mid ? o.mid[0] : 0),
                    sw.opening_mid[1] - (o.mid ? o.mid[1] : 0)) < 1e-3);
@@ -3793,7 +3797,19 @@ if (OPEN) {
         const par1 = Math.abs(d1[0] * u[0] + d1[1] * u[1]);
         const closed = par0 >= par1 ? d0 : d1;
         const open = par0 >= par1 ? d1 : d0;
-        hangs = [[[hx, hz], closed, open]];
+        // THE OPENING SIDE THE DRAWING SHOWS. Until now this recovered `open`
+        // reached the overlay but never the geometry: the leaf below was hung
+        // with the conventional `n` (open toward the room centroid), so four of
+        // the five drawn doors — every one the plan swings AWAY from the
+        // centroid — were mirrored back to the wrong side. Feed the template a
+        // normal built from the drawn arc: the true perpendicular to the closed
+        // leaf, on the side the arc actually sweeps to. `sSign` is the same
+        // choice as a scalar, for the pre-template fallback path.
+        const perp = [-closed[1], closed[0]];
+        const nDrawn = (perp[0] * open[0] + perp[1] * open[1]) >= 0
+          ? perp : [-perp[0], -perp[1]];
+        const sSign = (closed[0] * nDrawn[1] - closed[1] * nDrawn[0]) >= 0 ? 1 : -1;
+        hangs = [[[hx, hz], closed, nDrawn, sSign]];
         drawnSwings++;
         if (openFit.length) {
           const F = openFit[openFit.length - 1];
@@ -3804,15 +3820,15 @@ if (OPEN) {
                      len: +(run / nl).toFixed(3) };
         }
       }
-      for (const [org, ud, swing] of hangs) {
+      for (const [org, ud, nn, swing] of hangs) {
         if (openFit.length && !openFit[openFit.length - 1].leaf) {
           openFit[openFit.length - 1].leaf =
             { hinge: [+org[0].toFixed(3), +org[1].toFixed(3)],
               closed: [+ud[0].toFixed(4), +ud[1].toFixed(4)],
-              open: [+n[0].toFixed(4), +n[1].toFixed(4)],
+              open: [+nn[0].toFixed(4), +nn[1].toFixed(4)],
               len: +(run / nl).toFixed(3) };
         }
-        if (DOOR_TMPL) placeTemplateLeaf(org, ud, n, run / nl);
+        if (DOOR_TMPL) placeTemplateLeaf(org, ud, nn, run / nl);
         else placeFallbackLeaf(org, ud, swing, run / nl);
       }
     }
