@@ -39,6 +39,7 @@ import { makeSweptTube } from '../showcase-rounded/lib/rmf-frames.mjs';
 import { makeSuperquadric } from '../showcase-rounded/lib/superquadric.mjs';
 import { makeProceduralMetalRough } from '../showcase-rounded/lib/procedural-pbr-canvas.mjs';
 import { makeRoundEdgeNormalMap } from '../showcase-rounded/lib/round-edge-normal.mjs';
+import { gap3D } from '../showcase-rounded/lib/geom-verify.mjs';
 
 // ---------------------------------------------------------------- scene / renderer
 const scene = new THREE.Scene();
@@ -251,9 +252,15 @@ machine.add(rotorStub);
 const suction = new THREE.Mesh(new THREE.TorusGeometry(0.10, 0.02, 12, 24), steelMat);
 suction.rotation.y = Math.PI / 2; suction.position.set(-0.09, AIR_Y, AIR_Z); suction.castShadow = true;
 machine.add(suction);
-// coupling guard between airend and motor
-const coupling = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.09, 20), darkMat);
-coupling.rotation.z = Math.PI / 2; coupling.position.set(0.52, AIR_Y, AIR_Z); coupling.castShadow = true;
+// coupling guard between airend and motor — extended to BRIDGE the maleRotor +X end (x≈0.44) to the
+// motor -X face (x≈0.60); the old 0.09 m length left two ~0.035 m gaps in the driveline.
+const ROTOR_END_X = 0.18 + 0.52 / 2;                       // maleRotor +X end ≈ 0.44
+const MOTOR_FACE_X = 0.75 - 0.30 / 2;                      // motor -X face ≈ 0.60
+const COUP_LEN = MOTOR_FACE_X - ROTOR_END_X;               // ≈ 0.16 m — spans the full gap
+const coupling = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, COUP_LEN, 20), darkMat);
+coupling.rotation.z = Math.PI / 2;
+coupling.position.set((ROTOR_END_X + MOTOR_FACE_X) / 2, AIR_Y, AIR_Z);   // midpoint ≈ 0.52
+coupling.castShadow = true;
 machine.add(coupling);
 // MOTOR barrel (TEFC) at +X
 const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.30, 28), motorMat);
@@ -319,6 +326,23 @@ globalThis.__qaFraming = () => {
   const hudEl = document.querySelector('#hud');
   const hud = hudEl ? (r => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }))(hudEl.getBoundingClientRect()) : null;
   return { mvpElements: Array.from(mvp.elements), corners, W: innerWidth, H: innerHeight, hud };
+};
+
+// raw-data junction measurements for the gate (design does NOT mark its own homework — expose numbers,
+// emit NO verdict). Boxes each mesh with Box3.setFromObject(mesh, true) and runs the pure gap3D.
+globalThis.__qaJunctions = () => {
+  const boxOf = (m) => {
+    const b = new THREE.Box3().setFromObject(m, true);
+    return { min: { x: b.min.x, y: b.min.y, z: b.min.z }, max: { x: b.max.x, y: b.max.y, z: b.max.z } };
+  };
+  const measure = (label, a, c) => {
+    const g = gap3D(boxOf(a), boxOf(c));
+    return { label, gap: g.gap, sep: g.sep, touching: g.touching, overlapping: g.overlapping };
+  };
+  return [
+    measure('rotor->coupling', maleRotor, coupling),
+    measure('coupling->motor', coupling, motor),
+  ];
 };
 
 // ---------------------------------------------------------------- render loop (starts after the build)
