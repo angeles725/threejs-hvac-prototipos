@@ -38,6 +38,9 @@ import { makeLatheBody } from '../showcase-rounded/lib/lathe-body.mjs';
 import { makeSweptTube } from '../showcase-rounded/lib/rmf-frames.mjs';
 import { makeSuperquadric } from '../showcase-rounded/lib/superquadric.mjs';
 import { makeProceduralMetalRough } from '../showcase-rounded/lib/procedural-pbr-canvas.mjs';
+import { makeEndCap } from '../showcase-rounded/lib/end-cap.mjs';
+import { makeFlange } from '../showcase-rounded/lib/flange.mjs';
+import { gap3D } from '../showcase-rounded/lib/geom-verify.mjs';
 
 // ---------------------------------------------------------------- scene / renderer
 const scene = new THREE.Scene();
@@ -73,7 +76,7 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 pmrem.dispose();
 // NOTE r160: scene.environmentIntensity is INERT here. Push bare metal per-material with
-// material.envMapIntensity (set to ~1.4 below).
+// material.envMapIntensity (set to ~1.0 below — de-glossed).
 
 const sun = new THREE.DirectionalLight(0xffffff, 1.5);
 sun.position.set(5, 8, 4); sun.castShadow = true;
@@ -101,13 +104,13 @@ ground.receiveShadow = true;
 scene.add(ground);
 
 // ---------------------------------------------------------------- materials
-const steelTex = await makeProceduralMetalRough({ roughnessBase: 0.30, metalness: 0.85 });
+const steelTex = await makeProceduralMetalRough({ roughnessBase: 0.50, metalness: 0.85 });
 // roughness/metalness are MULTIPLIERS over the packed map (three multiplies), so keep them at 1 and
-// let the map's painted values (roughnessBase 0.30, metalness 0.85) drive — else 0.30*0.30 reads too glossy.
+// let the map's painted values (roughnessBase 0.50, metalness 0.85) drive — else 0.50*0.50 reads too glossy.
 const steelMat = new THREE.MeshStandardMaterial({ color: 0xd0d4d8, metalness: 1, roughness: 1 });
 steelMat.roughnessMap = steelTex;                   // packed: roughness from GREEN
 steelMat.metalnessMap = steelTex;                   // packed: metalness from BLUE
-steelMat.envMapIntensity = 1.4;
+steelMat.envMapIntensity = 1.0;
 
 // boiler shell — PAINTED ENAMEL (deep boiler-blue, matching original BODY 0x24507c). Enamel reads as
 // a soft dielectric-ish coat: low metalness, medium roughness, NO packed map (it is paint, not bare steel).
@@ -118,20 +121,20 @@ boilerMat.envMapIntensity = 1.0;
 const burnerMat = new THREE.MeshStandardMaterial({ color: 0x3d4450, metalness: 1, roughness: 1 });
 burnerMat.roughnessMap = steelTex;
 burnerMat.metalnessMap = steelTex;
-burnerMat.envMapIntensity = 1.3;
+burnerMat.envMapIntensity = 1.0;
 
 const pipeMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ab, metalness: 0.85, roughness: 0.34 });
-pipeMat.envMapIntensity = 1.4;
+pipeMat.envMapIntensity = 1.0;
 const gasMat  = new THREE.MeshStandardMaterial({ color: 0xdfaf28, metalness: 0.4, roughness: 0.5 });   // gas train (yellow)
-gasMat.envMapIntensity = 1.1;
+gasMat.envMapIntensity = 1.0;
 const hotMat  = new THREE.MeshStandardMaterial({ color: 0xb03a16, metalness: 0.5, roughness: 0.42 });  // hot-water (rust)
-hotMat.envMapIntensity = 1.2;
+hotMat.envMapIntensity = 1.0;
 const recMat  = new THREE.MeshStandardMaterial({ color: 0xcf7a3a, metalness: 0.5, roughness: 0.42 });  // recirculation (amber)
-recMat.envMapIntensity = 1.2;
+recMat.envMapIntensity = 1.0;
 
 const bandMat  = new THREE.MeshStandardMaterial({ color: 0xd96a26, metalness: 0.2, roughness: 0.6 });  // tank color bands
 const brassMat = new THREE.MeshStandardMaterial({ color: 0xb8952e, metalness: 0.9, roughness: 0.35 });
-brassMat.envMapIntensity = 1.3;
+brassMat.envMapIntensity = 1.0;
 const darkMat  = new THREE.MeshStandardMaterial({ color: 0x22262e, metalness: 0.55, roughness: 0.5 });
 darkMat.envMapIntensity = 1.1;
 const padMat   = new THREE.MeshStandardMaterial({ color: 0x2c3138, metalness: 0.02, roughness: 0.95 });
@@ -270,6 +273,13 @@ plant.add(tpOut);
 const skirt = new THREE.Mesh(new THREE.CylinderGeometry(T_R + 0.02, T_R + 0.02, 0.12, 32, 1, true), darkMat);
 skirt.position.set(T_X, T_BASE + 0.02, T_Z); skirt.receiveShadow = true;
 plant.add(skirt);
+// cap the skirt's OPEN top rim (openEnded cylinder → floating ring over the tank wall). Annulus from the
+// tank wall (T_R) out to the skirt radius (T_R+0.02), centered on the skirt top; bottom sits on the pad.
+const skirtCap = await makeEndCap(
+  { innerRadius: T_R, outerRadius: T_R + 0.02, segments: 32,
+    center: { x: T_X, y: T_BASE + 0.02 + 0.06, z: T_Z }, axis: { x: 0, y: 1, z: 0 } },
+  darkMat);
+plant.add(skirtCap);
 
 // ============================================================================================
 // 5) FLUE / STACK — rear smokebox (original x57..63,y3..31,z12..28) + vertical chimney (SX=59,SZ=20,
@@ -330,10 +340,24 @@ const hotPipe = await makeSweptTube(
   { radius: 0.032, targetEdgeLength: 0.04 }, hotMat);
 hotPipe.receiveShadow = true; plant.add(hotPipe);
 // Recirculation (amber): tank bottom -> pump -> back into the boiler body (original [24,4,41]..[24,8,31]).
+// The entry endpoint was buried INSIDE the shell (r≈0.528 < B_R=0.65); project it radially from the
+// shell axis (y=B_Y, z=B_Z, running along X) onto the wall so the pipe ends ON the surface, not inside.
+const _recDy = 0.58 - B_Y, _recDz = 1.48 - B_Z;            // pre-projection offset from the shell axis
+const _recR  = Math.hypot(_recDy, _recDz);                 // ≈0.528 — inside the shell → buried
+const REC_EY = B_Y + (_recDy / _recR) * B_R;               // ≈0.5292 — on the shell surface (r = B_R)
+const REC_EZ = B_Z + (_recDz / _recR) * B_R;               // ≈1.5909
 const recPipe = await makeSweptTube(
-  [[T_X, 0.35, 2.12], [P_X, 0.28, 2.02], [P_X, 0.30, 1.90], [P_X, 0.42, 1.58], [P_X, 0.58, 1.48]],
+  [[T_X, 0.35, 2.12], [P_X, 0.28, 2.02], [P_X, 0.30, 1.90], [P_X, 0.42, 1.58], [P_X, REC_EY, REC_EZ]],
   { radius: 0.030, targetEdgeLength: 0.04 }, recMat);
 recPipe.receiveShadow = true; plant.add(recPipe);
+// wall-penetration boss where the recirc line meets the shell: a short collar around the bore, axis =
+// the shell's outward surface normal at the entry (radial direction from the axis to the surface point).
+const recBoss = await makeFlange(
+  { innerRadius: 0.030, outerRadius: 0.060, height: 0.03, segments: 24,
+    center: { x: P_X, y: REC_EY, z: REC_EZ },
+    axis: { x: 0, y: _recDy / _recR, z: _recDz / _recR }, style: 'collar' },
+  recMat);
+plant.add(recBoss);
 
 // inline gate valve on the hot-water riser (dark body + red handwheel)
 const gvBody = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.12, 20), darkMat);
@@ -385,6 +409,23 @@ globalThis.__qaFraming = () => {
   const hudEl = document.querySelector('#hud');
   const hud = hudEl ? (r => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }))(hudEl.getBoundingClientRect()) : null;
   return { mvpElements: Array.from(mvp.elements), corners, W: innerWidth, H: innerHeight, hud };
+};
+
+// raw-data junction measurements for the gate (design does NOT mark its own homework — expose numbers,
+// emit NO verdict). Boxes each mesh with Box3.setFromObject(mesh, true) and runs the pure gap3D.
+globalThis.__qaJunctions = () => {
+  const boxOf = (m) => {
+    const b = new THREE.Box3().setFromObject(m, true);
+    return { min: { x: b.min.x, y: b.min.y, z: b.min.z }, max: { x: b.max.x, y: b.max.y, z: b.max.z } };
+  };
+  const measure = (label, a, c) => {
+    const g = gap3D(boxOf(a), boxOf(c));
+    return { label, gap: g.gap, sep: g.sep, touching: g.touching, overlapping: g.overlapping };
+  };
+  return [
+    measure('recirc-pipe->shell', recPipe, boilerShell),
+    measure('recirc-motor->volute', pumpMotor, pumpVolute),
+  ];
 };
 
 // ---------------------------------------------------------------- render loop (starts after the build)
