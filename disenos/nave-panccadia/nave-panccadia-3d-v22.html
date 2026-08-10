@@ -3769,14 +3769,13 @@ const VIEW_SUBJECT = {
 };
 // RAW geometry only — the page must not grade its own framing, or a framing bug
 // certifies itself. research/tools/framing-probe.mjs runs the numerics.
-// Coplanarity probe: find pairs of VISIBLE meshes whose world boxes are flush on
-// one axis and genuinely overlap on the other two — the geometry that shimmers as
-// the camera moves. Reported here rather than inferred from a still, because a
-// z-fight is invisible in a single frame: it renders, it is not an error, and no
-// console, count or framing check can see it.
-window.__qaCoplanar = (tol) => {
-  const EPS = tol === undefined ? 0.0015 : tol;   // 1.5 mm
-  // Name a mesh by the nearest NAMED ancestor, so a finding can be acted on.
+// Coplanarity input: the world box of every VISIBLE mesh, named by its nearest
+// named ancestors. RAW GEOMETRY, same rule as framing above — the page publishes
+// what it built and the numerics run outside, in the design3d kit's
+// geom-verify coplanarPairs(), where they are unit-tested. A z-fight is invisible
+// to console, count, framing and still-capture checks; it only shows in motion,
+// which is why the boxes have to leave the page at all.
+window.__qaBoxes = () => {
   const label = (o) => {
     let p = o, parts = [];
     while (p && parts.length < 3) { if (p.name) parts.unshift(p.name); p = p.parent; }
@@ -3791,45 +3790,11 @@ window.__qaCoplanar = (tol) => {
     if (!vis) return;
     const b = new THREE.Box3().setFromObject(o);
     if (!isFinite(b.min.x) || b.isEmpty()) return;
-    items.push({ name: label(o), b });
+    items.push({ name: label(o),
+      box: { min: { x: b.min.x, y: b.min.y, z: b.min.z },
+             max: { x: b.max.x, y: b.max.y, z: b.max.z } } });
   });
-  const AX = ['x', 'y', 'z'];
-  const out = [];
-  for (let i = 0; i < items.length; i++) {
-    for (let j = i + 1; j < items.length; j++) {
-      const A = items[i].b, B = items[j].b;
-      for (let a = 0; a < 3; a++) {
-        const k = AX[a], u = AX[(a + 1) % 3], v = AX[(a + 2) % 3];
-        // ONLY same-facing faces can fight: two tops at one level, or two
-        // bottoms. A max meeting a min is two surfaces back to back, which is
-        // ordinary contact and never shimmers — counting those turned an
-        // 8-pair result into 550 and would have been reported as a disaster.
-        const dTop = Math.abs(A.max[k] - B.max[k]);
-        const dBot = Math.abs(A.min[k] - B.min[k]);
-        const d = Math.min(dTop, dBot);
-        if (d > EPS) continue;
-        // A face only fights if it is EXPOSED: if one box wholly contains the
-        // other on this axis, the inner face is buried.
-        const spanA = A.max[k] - A.min[k], spanB = B.max[k] - B.min[k];
-        if (Math.min(spanA, spanB) > 1e-6) {
-          const contains = (A.min[k] <= B.min[k] + EPS && A.max[k] >= B.max[k] - EPS)
-                        || (B.min[k] <= A.min[k] + EPS && B.max[k] >= A.max[k] - EPS);
-          if (contains && Math.abs(spanA - spanB) > EPS) continue;
-        }
-        const ou = Math.min(A.max[u], B.max[u]) - Math.max(A.min[u], B.min[u]);
-        const ov = Math.min(A.max[v], B.max[v]) - Math.max(A.min[v], B.min[v]);
-        if (ou < 0.05 || ov < 0.05) continue;
-        out.push({ a: items[i].name, b: items[j].name, axis: k,
-                   face: dTop <= dBot ? 'max' : 'min',
-                   at: +((dTop <= dBot ? A.max[k] : A.min[k])).toFixed(3),
-                   sep_mm: +(d * 1000).toFixed(3),
-                   overlap_m2: +(ou * ov).toFixed(3) });
-        break;
-      }
-    }
-  }
-  out.sort((x, y) => y.overlap_m2 - x.overlap_m2 || x.sep_mm - y.sep_mm);
-  return { meshes: items.length, pairs: out.length, worst: out.slice(0, 12) };
+  return items;
 };
 
 window.__qaFraming = () => {
