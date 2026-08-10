@@ -1984,8 +1984,37 @@ if (EQUIP) {
           // ASK THE ROOM instead: try all four quarter turns and keep the one whose
           // front has the most clear floor in front of it. The 180-degree flip above
           // is the two-way case of exactly this test.
+          // A MACHINE STANDING AGAINST A WALL TAKES THE WALL'S BEARING.
+          //
+          // Derived per machine, every one of these came out on its own angle: the
+          // rotary and domino ovens at 0.1 deg, the convection ovens, fryer and
+          // range at about 80, the prover at 180, the fermentation room at 270 —
+          // all of them in the same run along the same wall, each squinting a
+          // different way. A row of equipment against a wall is parallel to that
+          // wall; that is a fact about the room, not about each footprint.
+          //
+          // Applied ONLY to the imported masters, deliberately. The machines placed
+          // up to v22 were reviewed and accepted as they are, and a rule that
+          // improves the new ones is not a licence to re-aim the old ones.
+          if (build.name.startsWith('buildMaster_')) {
+            const host = nearestWall(cx, cy, 1.6);
+            if (host) {
+              // Front points along the wall normal, i.e. away from the wall and
+              // into the room. Under yaw, local +z lands on CAD (sin yaw, -cos yaw)
+              // — the world z axis is the NEGATED CAD y — so aiming the front at
+              // (nx, ny) needs atan2(nx, -ny). Getting that first sign wrong turns
+              // the machine to face the wall it is standing against, which is what
+              // the first version did.
+              yaw = Math.atan2(host.nx, -host.ny);
+              equipFacing[equipFacing.length - 1].alignedToWall = {
+                dist: +host.dist.toFixed(2),
+                wallDeg: +((host.ang * 180 / Math.PI + 360) % 360).toFixed(1),
+              };
+            }
+          }
           const sideDiff = Math.abs(mw - md);
-          if (sideDiff < 0.25 && sideDiff / Math.max(mw, md) < 0.10) {
+          if (!equipFacing[equipFacing.length - 1].alignedToWall
+              && sideDiff < 0.25 && sideDiff / Math.max(mw, md) < 0.10) {
             let bestYaw = yaw, bestClear = -Infinity, tried = [];
             for (let q = 0; q < 4; q++) {
               const a = ang + q * Math.PI / 2;
@@ -2001,6 +2030,17 @@ if (EQUIP) {
           }
         }
         g.rotation.y = yaw;
+        // The FINAL bearing, after every rule has had its say. Recorded so two
+        // machines of the same kind can be checked against each other by number
+        // instead of by eye.
+        if (equipFacing.length) {
+          const f = equipFacing[equipFacing.length - 1];
+          if (f.label === it.label) {
+            f.yawDeg = +((yaw * 180 / Math.PI + 360) % 360).toFixed(1);
+            // where the front points, in CAD bearing terms
+            f.frontCAD = [+(-Math.sin(-yaw)).toFixed(3), +(-Math.cos(-yaw)).toFixed(3)];
+          }
+        }
         const lbl = it.label.toLowerCase();
         // `equipPasteleria` is a VIEW subject, so it holds only the mixers that
         // stand in the pastry room itself (x 2.85-19.35, the 96.02 m² region).
@@ -2977,6 +3017,34 @@ scene.add(condGroup);
 // the wrong side of the insulation; this one hangs where a person can reach it.
 const panelGroup = new THREE.Group();
 panelGroup.name = 'electrical-panel';
+// Find the wall face a pick landed ON. nearestWall() deliberately SKIPS walls the
+// point is already touching (`d < 0.02` — "not a face"), which is right for a
+// machine sliding up to a wall and exactly wrong here: marking a panel's spot means
+// pointing AT the wall, so the ray stops on it and the distance is zero. This search
+// keeps those, and reports the signed distance to the face so the caller can push
+// the enclosure out of the masonry rather than leave it buried.
+function wallFaceAt(cx, cy, maxD) {
+  let best = null;
+  for (const w of GROUND_WALLS.walls) {
+    const ex = w.b[0] - w.a[0], ey = w.b[1] - w.a[1];
+    const L2 = ex * ex + ey * ey;
+    if (L2 < 1e-9) continue;
+    let t = ((cx - w.a[0]) * ex + (cy - w.a[1]) * ey) / L2;
+    t = Math.max(0, Math.min(1, t));
+    const px = w.a[0] + t * ex, py = w.a[1] + t * ey;
+    const dx = cx - px, dy = cy - py;
+    const c = Math.hypot(dx, dy);
+    const face = c - w.t / 2;          // 0 on the face, negative inside the wall
+    if (Math.abs(face) > maxD) continue;
+    if (!best || Math.abs(face) < Math.abs(best.face)) {
+      const n = c || 1;
+      best = { face, centre: c, nx: dx / n, ny: dy / n, t: w.t,
+               ang: Math.atan2(ey, ex) };
+    }
+  }
+  return best;
+}
+
 // One builder, called once per panel. The enclosure was written for a single
 // hard-coded pick; a second panel is a reason to parameterise it, not to paste it.
 function buildPanel(PICK, opts) {
@@ -3050,22 +3118,46 @@ function buildPanel(PICK, opts) {
     py = PICK[1];
     yaw = Math.PI / 2;
   } else {
-    // A NEW PICK STAYS WHERE IT WAS PICKED. Snapping it to the nearest wall face
-    // moved this one 2.1 m off the spot the operator marked, which is not placing
-    // a panel where they asked — it is placing it somewhere else and calling it
-    // the same thing. The plan position is honoured; only the FACING is derived,
-    // by the same clear-floor test the equipment uses, so the door opens into the
-    // room rather than into whatever it is standing against.
+    // TWO KINDS OF PICK, and the difference is how far the ray landed from a wall.
+    //
+    // ON A WALL FACE (the usual way to mark where a panel hangs — the ray stops on
+    // the wall you are pointing at): the enclosure is hung on that face, pushed out
+    // along the wall normal by its own half depth so it touches the wall instead of
+    // being buried in it, and turned so its door opens away from the wall. Leaving
+    // it literally at the pick would sink half the enclosure into the masonry.
+    //
+    // IN OPEN FLOOR: the plan position is honoured exactly and only the FACING is
+    // derived, by the same clear-floor test the equipment uses. Snapping a
+    // free-floor pick to the nearest wall once moved a panel 2.1 m off the marked
+    // spot, which is not placing it where it was asked for.
+    const nw = wallFaceAt(PICK[0], PICK[1], opt.faceTol || 0.30);
     px = PICK[0]; py = PICK[1];
-    let best = -Infinity;
-    yaw = opt.yaw || 0;
-    for (let q = 0; q < 8; q++) {
-      const a = q * Math.PI / 4;
-      const clear = clearAhead(px, py, -Math.sin(a), -Math.cos(a));
-      if (clear > best) { best = clear; yaw = -a; }
+    if (nw) {
+      // Sit the back of the enclosure on the face: move out along the wall normal
+      // until the centre is half a depth clear of it.
+      const out = (nw.t / 2 + PD / 2) - nw.centre;
+      px = PICK[0] + nw.nx * out;
+      py = PICK[1] + nw.ny * out;
+      // Under yaw, local +z lands on CAD (sin yaw, -cos yaw), because world z is
+      // the NEGATED CAD y. The wall normal points away from the wall towards the
+      // pick, i.e. into the room, so aiming the front at it is atan2(nx, -ny).
+      // The first version negated the wrong term and hung the enclosure facing
+      // into the masonry — its blank back to the room.
+      yaw = Math.atan2(nw.nx, -nw.ny);
+      console.log('[panel] ' + (opt.label || 'panel') + ' hangs on a wall face '
+        + nw.face.toFixed(3) + ' m from the pick, pushed out ' + out.toFixed(3)
+        + ' m, facing into the room');
+    } else {
+      let best = -Infinity;
+      yaw = opt.yaw || 0;
+      for (let q = 0; q < 8; q++) {
+        const a = q * Math.PI / 4;
+        const clear = clearAhead(px, py, -Math.sin(a), -Math.cos(a));
+        if (clear > best) { best = clear; yaw = -a; }
+      }
+      console.log('[panel] ' + (opt.label || 'panel') + ' stands in open floor, '
+        + 'facing the clearest way: ' + best.toFixed(2) + ' m ahead');
     }
-    console.log('[panel] ' + (opt.label || 'panel') + ' faces the clearest way: '
-      + best.toFixed(2) + ' m of floor ahead');
   }
   g.position.set(px, DATA.levels.slab + PICK[2] + PH / 2, mapZ(py));
   g.rotation.y = yaw;
@@ -3073,18 +3165,18 @@ function buildPanel(PICK, opts) {
   console.log('[panel] ' + (opt.label || 'panel') + ': ' + PW + ' x ' + PH + ' x '
     + PD + ' m at CAD (' + px.toFixed(3) + ', ' + py.toFixed(3) + '), sill '
     + (DATA.levels.slab + PICK[2]).toFixed(3) + ' m'
-    + (opt.wallX !== undefined ? ', on the wall face at x ' + opt.wallX
-                               : ', at the pick, facing the clearest floor'));
+    + (opt.wallX !== undefined ? ', on the wall face at x ' + opt.wallX : ''));
   return g;
 }
 // P1: the corridor side of the cold-room wall, 0.35 m south of doorway O2.
 buildPanel([22.773, 35.108, 1.026],
   { label: 'P1 cold-room corridor', wallX: 22.7234 });
-// P2: the operator's second pick. The pick itself came back at z 8.446 on the
-// ROOF — the ray went up through the building — so only its PLAN position is
-// used and the sill is set to the same reachable height as P1. A panel is
-// mounted where a person stands, and 8.4 m is not that.
-buildPanel([26.863, 23.371, 1.026], { label: 'P2 operator pick' });
+// P2: the operator's pick, corrected. The first attempt used a pick that had come
+// back at z 8.446 on the ROOF (the ray went up through the building) and the panel
+// landed over a roller door. This one lands ON A WALL FACE — 0.000 m off it — so it
+// hangs there. The pick's own z (2.597 m) is where the RAY hit the wall, not a
+// mounting height, so the sill stays at the same reachable height as P1.
+buildPanel([15.668, 16.542, 1.026], { label: 'P2 operator pick' });
 scene.add(panelGroup);
 
 // ONE material per appearance, built ONCE. Minting these inside buildColdDoor
@@ -4385,6 +4477,8 @@ const VIEW_HIDE = {
   'pasteleria':    ['roof', 'upper', 'labels', 'facade'],
   'ultra':         ['roof', 'upper', 'labels', 'facade'],
   'equipos':       ['roof', 'upper', 'labels', 'facade'],
+  'panel-1':       ['roof', 'upper', 'labels', 'facade'],
+  'panel-2':       ['roof', 'upper', 'labels', 'facade'],
 };
 function applyHide(names) {
   const layers = {
@@ -4419,6 +4513,10 @@ const VIEWS = {
   'condensers': () => fitView(condGroup, 20, 14, { pad: 1.10 }),
   'condenser-close': () => fitView(condGroup.children[1], 12, 6, { pad: 1.25 }),
   'panel': () => fitView(panelGroup, 96, 6, { pad: 1.30 }),
+  // Each panel on its own. Fitting the GROUP frames the 8 m of empty corridor
+  // between them — the same 'fit the group fits the emptiness' trap noted above.
+  'panel-1': () => fitView(panelGroup.children[0], 96, 6, { pad: 1.35 }),
+  'panel-2': () => fitView(panelGroup.children[1], 40, 8, { pad: 1.35 }),
   // O2, the chiller door off the east corridor: frame, gasket, lever, hinges
   'cold-door':     () => fitView(doorAt('22.72,36.21'), 0, 8, { pad: 1.02 }),
   // O3, the freezer door beside it: thicker leaf, heated trim, strip curtain
@@ -4440,6 +4538,8 @@ const VIEW_SUBJECT = {
   'condensers': () => condGroup,
   'condenser-close': () => condGroup.children[1],
   'panel': () => panelGroup,
+  'panel-1': () => panelGroup.children[0],
+  'panel-2': () => panelGroup.children[1],
   'cold-door':     () => coldDoorByMid.get('22.72,36.21'),
   'freezer-door':  () => coldDoorByMid.get('22.72,39.67'),
   'laminado':      () => equipLaminadora,
