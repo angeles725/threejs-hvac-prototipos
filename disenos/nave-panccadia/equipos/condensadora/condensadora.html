@@ -110,12 +110,27 @@ function brushedRoughTex(){
 }
 const roughMap = brushedRoughTex();
 
+// PAINTED SHEET STEEL, not plastic. The first version set metalness 0 on the
+// blue by the near-binary rule, which is right for MATT paint and wrong here:
+// a powder-coated industrial casing carries a specular clear layer, so it
+// returns the environment as a broad sheen. At metalness 0 it returns nothing,
+// the RoomEnvironment IBL never lands on it, and the result reads as a toy —
+// the flat-material look v16 had before v17 added the IBL at all.
+// clearcoat is a MeshPhysicalMaterial feature and is headless-safe; it is
+// TRANSMISSION that stalls the SwiftShader shader compile, not this.
+// Paint is a DIELECTRIC with a specular clear layer on top: metalness 0 keeps
+// the pigment's colour, clearcoat supplies the sheen. The intermediate value
+// tried first (0.35) is neither — it removed a third of the diffuse in a scene
+// with little to reflect, and MEASURED darker: the top deck fell from luminance
+// 160 to 85 while only the small curved parts gained. Metalness is a near-binary
+// physical fact, not a gloss slider; gloss is roughness and clearcoat.
+const paint = (hex, rough) => new THREE.MeshPhysicalMaterial({
+  color: hex, metalness: 0.0, roughness: rough,
+  clearcoat: 0.9, clearcoatRoughness: 0.12, envMapIntensity: 1.4 });
 const M = {
-  // powder-coated blue: a painted dielectric, so metalness stays 0 — the
-  // near-binary rule. Two tones so the silhouette is not one flat prism.
-  blue:  new THREE.MeshStandardMaterial({ color:0x1663ad, metalness:0.0, roughness:0.42 }),
-  blueD: new THREE.MeshStandardMaterial({ color:0x114e88, metalness:0.0, roughness:0.46 }),
-  blueL: new THREE.MeshStandardMaterial({ color:0x1d76c6, metalness:0.0, roughness:0.40 }),
+  blue:  paint(0x1a5f92, 0.36),
+  blueD: paint(0x134a73, 0.40),
+  blueL: paint(0x2378ad, 0.32),
   // aluminium coil fins, seen edge-on through the side louvres
   // Aluminium fin pack. metalness 0.35, NOT 0.85, and the reason is measured
   // rather than aesthetic: at 0.85 the face is almost pure mirror, so its value
