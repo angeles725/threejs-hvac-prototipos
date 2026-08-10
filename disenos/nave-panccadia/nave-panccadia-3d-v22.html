@@ -2434,6 +2434,11 @@ const COLD_MATS = {
     color: 0xc8ccd0, roughness: 0.32, metalness: 0.92, envMapIntensity: 1.9 }),
   heat: new THREE.MeshStandardMaterial({
     color: 0xb08a5a, roughness: 0.60, metalness: 0.30 }),
+  // Same pre-lacquered skin as the room lining, restated here because matPanel
+  // is scoped to the lining block: the make-up panel over a door is the SAME
+  // sandwich as the wall it completes, not a piece of the aluminium frame.
+  panel: new THREE.MeshStandardMaterial({
+    color: 0xe9ecee, roughness: 0.45, metalness: 0.0 }),
   // Deliberately NOT MeshPhysicalMaterial.transmission: it stalls the
   // SwiftShader shader compile the gate captures under.
   pvc: new THREE.MeshStandardMaterial({
@@ -2486,6 +2491,37 @@ function buildColdDoor(cold, an, a2, b2, rot) {
                      mapZ((az + bz) / 2));
   headB.rotation.y = rot; headB.castShadow = true;
   g.add(headB);
+  // -- the MAKE-UP PANEL between the leaf head and the frame head -------------
+  // The leaf is 2.100 m and the measured opening head is 2.447 m. A cold door
+  // taller than its leaf is made up with an insulated OVER-PANEL in the frame;
+  // it is not made up by stretching the leaf, which would leave a door no one
+  // makes. Without it the doorway stands open by a quarter of a metre with the
+  // door SHUT — the v21 P6 blind review's only blocking finding, and one that
+  // passed every console, framing and count check because an absence is not an
+  // error. It fills the whole reveal so it closes from both sides.
+  const fillH = (cold.head - FRAME_F) - H;
+  if (fillH > 0.002) {
+    const fill = new THREE.Mesh(
+      new THREE.BoxGeometry(run - 2 * FRAME_F, fillH, an.t), mats.panel);
+    fill.position.set((ax + bx) / 2, y0 + H + fillH / 2, mapZ((az + bz) / 2));
+    fill.rotation.y = rot;
+    fill.castShadow = fill.receiveShadow = true;
+    g.add(fill);
+    // a shadow line where the panel meets the leaf head, so the two read as two
+    const seam = new THREE.Mesh(
+      new THREE.BoxGeometry(run - 2 * FRAME_F, 0.012, an.t + 0.006), mats.gasket);
+    seam.position.set((ax + bx) / 2, y0 + H + 0.006, mapZ((az + bz) / 2));
+    seam.rotation.y = rot;
+    g.add(seam);
+  }
+  // The invariant, asserted rather than assumed: nothing may be left open
+  // between the top of the leaf and the soffit of the frame head. console.error,
+  // never console.assert — a failed assert is silent and exits 0.
+  if (H + Math.max(0, fillH) < cold.head - FRAME_F - 1e-6) {
+    console.error('[cold-door] the doorway is left open above the leaf: leaf top '
+      + (y0 + H).toFixed(3) + ' m, fill ' + fillH.toFixed(3)
+      + ' m, frame soffit ' + (y0 + cold.head - FRAME_F).toFixed(3) + ' m');
+  }
   // -- the EPDM gasket the leaf closes onto ----------------------------------
   // A PERIMETER, not a panel. The first version filled the whole reveal with a
   // 1.02 x 2.08 m box of near-black rubber, and since the leaf was mounted on the
