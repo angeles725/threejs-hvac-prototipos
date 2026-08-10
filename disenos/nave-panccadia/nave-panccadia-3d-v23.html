@@ -1967,6 +1967,38 @@ if (EQUIP) {
           equipFacing.push({ label: it.label, at: [+cx.toFixed(2), +cy.toFixed(2)],
                              fwd: +fwd.toFixed(2), back: +back.toFixed(2),
                              flipped: back > fwd + 0.5, hugged });
+
+          // A NEARLY SQUARE FOOTPRINT DOES NOT CARRY A BEARING.
+          //
+          // The yaw above comes from the footprint's LONGEST EDGE, which is the
+          // right answer for a bench or a sheeter, where the long side is obvious.
+          // It is meaningless for a square block: the rotary oven is drawn
+          // 2.062 x 2.050 and the domino oven 1.633 x 1.630, so "the longest edge"
+          // is decided by 12 mm and 3 mm of drafting noise — and it swings the
+          // machine through 90 degrees. That is why identical ovens ended up facing
+          // different ways while everything placed before v22 looked right: those
+          // are all clearly elongated, so their long side is unambiguous.
+          //
+          // When the two sides are within a whisker of each other, the drawing is
+          // not saying which way the machine points, so stop pretending it is and
+          // ASK THE ROOM instead: try all four quarter turns and keep the one whose
+          // front has the most clear floor in front of it. The 180-degree flip above
+          // is the two-way case of exactly this test.
+          const sideDiff = Math.abs(mw - md);
+          if (sideDiff < 0.25 && sideDiff / Math.max(mw, md) < 0.10) {
+            let bestYaw = yaw, bestClear = -Infinity, tried = [];
+            for (let q = 0; q < 4; q++) {
+              const a = ang + q * Math.PI / 2;
+              const clear = clearAhead(cx, cy, -Math.sin(a), -Math.cos(a));
+              tried.push(+clear.toFixed(2));
+              if (clear > bestClear) { bestClear = clear; bestYaw = -a; }
+            }
+            yaw = bestYaw;
+            equipFacing[equipFacing.length - 1].square = {
+              sides: [+mw.toFixed(3), +md.toFixed(3)], clearByQuarter: tried,
+              chose: +bestClear.toFixed(2),
+            };
+          }
         }
         g.rotation.y = yaw;
         const lbl = it.label.toLowerCase();
@@ -2945,9 +2977,10 @@ scene.add(condGroup);
 // the wrong side of the insulation; this one hangs where a person can reach it.
 const panelGroup = new THREE.Group();
 panelGroup.name = 'electrical-panel';
-(function buildPanel() {
+// One builder, called once per panel. The enclosure was written for a single
+// hard-coded pick; a second panel is a reason to parameterise it, not to paste it.
+function buildPanel(PICK, opts) {
   const PW = 0.800, PH = 1.000, PD = 0.250;   // enclosure, metres
-  const PICK = [22.773, 35.108, 1.026];       // CAD x, y, height of the pick
   const PM = {
     box: new THREE.MeshStandardMaterial({
       color: 0xb9c0c6, metalness: 0.45, roughness: 0.48 }),
@@ -3000,18 +3033,58 @@ panelGroup.name = 'electrical-panel';
   const gl = eBox(PW - 0.12, 0.02, PD - 0.06, PM.trim);
   gl.position.y = -PH / 2 - 0.01;
   g.add(gl);
-  // The pick is the WALL FACE; the enclosure stands off it by its own half depth
-  // so it touches the wall instead of being buried in it.
-  const WALL_X = 22.7234, HALF_T = 0.05;
-  g.position.set(WALL_X + HALF_T + PD / 2,
-                 DATA.levels.slab + PICK[2] + PH / 2,
-                 mapZ(PICK[1]));
-  g.rotation.y = Math.PI / 2;   // face east, into the corridor
+  // WHERE IT HANGS. The first panel was pinned to a wall coordinate typed by hand,
+  // which only ever describes that one wall. A pick anywhere else needs the wall
+  // FOUND, so nearestWall — the same search the wall-hugging machines use — gives
+  // the face, its bearing and how far off it the pick landed. The enclosure then
+  // stands off that face by its own half depth, touching the wall rather than
+  // being buried in it, and turns its front away from the wall into the room.
+  const opt = opts || {};
+  let px, py, yaw;
+  if (opt.wallX !== undefined) {
+    // LEGACY PLACEMENT, kept byte-for-byte for the panel that was already sited
+    // and checked. Letting nearestWall re-decide this one moved it 0.47 m along
+    // the corridor, because the nearest wall to that pick is not the wall it was
+    // meant to hang on. A verified position is not re-derived on a refactor.
+    px = opt.wallX + 0.05 + PD / 2;
+    py = PICK[1];
+    yaw = Math.PI / 2;
+  } else {
+    // A NEW PICK STAYS WHERE IT WAS PICKED. Snapping it to the nearest wall face
+    // moved this one 2.1 m off the spot the operator marked, which is not placing
+    // a panel where they asked — it is placing it somewhere else and calling it
+    // the same thing. The plan position is honoured; only the FACING is derived,
+    // by the same clear-floor test the equipment uses, so the door opens into the
+    // room rather than into whatever it is standing against.
+    px = PICK[0]; py = PICK[1];
+    let best = -Infinity;
+    yaw = opt.yaw || 0;
+    for (let q = 0; q < 8; q++) {
+      const a = q * Math.PI / 4;
+      const clear = clearAhead(px, py, -Math.sin(a), -Math.cos(a));
+      if (clear > best) { best = clear; yaw = -a; }
+    }
+    console.log('[panel] ' + (opt.label || 'panel') + ' faces the clearest way: '
+      + best.toFixed(2) + ' m of floor ahead');
+  }
+  g.position.set(px, DATA.levels.slab + PICK[2] + PH / 2, mapZ(py));
+  g.rotation.y = yaw;
   panelGroup.add(g);
-  console.log('[panel] enclosure ' + PW + ' x ' + PH + ' x ' + PD
-    + ' m at CAD (' + PICK[0] + ', ' + PICK[1] + '), sill '
-    + (DATA.levels.slab + PICK[2]).toFixed(3) + ' m, facing the corridor');
-})();
+  console.log('[panel] ' + (opt.label || 'panel') + ': ' + PW + ' x ' + PH + ' x '
+    + PD + ' m at CAD (' + px.toFixed(3) + ', ' + py.toFixed(3) + '), sill '
+    + (DATA.levels.slab + PICK[2]).toFixed(3) + ' m'
+    + (opt.wallX !== undefined ? ', on the wall face at x ' + opt.wallX
+                               : ', at the pick, facing the clearest floor'));
+  return g;
+}
+// P1: the corridor side of the cold-room wall, 0.35 m south of doorway O2.
+buildPanel([22.773, 35.108, 1.026],
+  { label: 'P1 cold-room corridor', wallX: 22.7234 });
+// P2: the operator's second pick. The pick itself came back at z 8.446 on the
+// ROOF — the ray went up through the building — so only its PLAN position is
+// used and the sill is set to the same reachable height as P1. A panel is
+// mounted where a person stands, and 8.4 m is not that.
+buildPanel([26.863, 23.371, 1.026], { label: 'P2 operator pick' });
 scene.add(panelGroup);
 
 // ONE material per appearance, built ONCE. Minting these inside buildColdDoor
