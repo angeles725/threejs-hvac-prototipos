@@ -312,6 +312,42 @@ backer.position.set(0, bodyY + bodyH/2, D/2 - 0.115);
 unit.add(backer);
 
 // --- two axial fans on the front face --------------------------------------
+// A REAL axial blade, not a rectangle on a stick. Three things separate the two
+// and all three are GEOMETRY, not shading:
+//   TWIST  — a blade meets the air at a big angle at the root and a small one at
+//            the tip, because tip speed is far higher for the same axial
+//            velocity. Constant pitch reads as a paddle, which is what the flat
+//            PlaneGeometry version was.
+//   SWEEP  — the chord line curves back around the axis (the scimitar shape).
+//            This is the single cue that says "fan" rather than "propeller toy".
+//   TAPER  — the chord widens toward the tip, then rounds off instead of ending
+//            on a cut edge.
+// Built by deforming a subdivided plane in cylindrical coordinates: u runs along
+// the radius, v across the chord. Doing it in the MESH also removes the Euler
+// trap that mangled the first version — a blade now needs one rotation, not two.
+function bladeGeometry() {
+  const rHub = 0.062, rTip = FAN_R * 0.975;
+  const chordRoot = 0.085, chordTip = 0.165;
+  const pitchRoot = 0.62, pitchTip = 0.26;      // radians: the twist
+  const sweep = 0.62;                           // radians of scimitar curve
+  const g = new THREE.PlaneGeometry(1, 1, 16, 5);
+  const pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const u = pos.getX(i) + 0.5;                // 0 at the hub, 1 at the tip
+    const v = pos.getY(i);                      // -0.5 .. 0.5 across the chord
+    const r = rHub + (rTip - rHub) * u;
+    const k = u > 0.88 ? (u - 0.88) / 0.12 : 0; // round the last 12 %
+    const round = Math.sqrt(Math.max(0, 1 - k * k));
+    const chord = (chordRoot + (chordTip - chordRoot) * u) * round;
+    const pitch = pitchRoot + (pitchTip - pitchRoot) * u;
+    const c = v * chord;
+    const theta = sweep * u * u + (c * Math.cos(pitch)) / r;
+    pos.setXYZ(i, r * Math.cos(theta), r * Math.sin(theta), c * Math.sin(pitch));
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
 function buildFan() {
   const g = new THREE.Group();
   // venturi ring (the bellmouth the fan sits in)
@@ -322,21 +358,12 @@ function buildFan() {
   // blades: five, pitched, visible THROUGH the guard
   const blades = new THREE.Group();
   const nb = 5;
+  const bladeGeo = bladeGeometry();
   for (let i = 0; i < nb; i++) {
-    // ONE GROUP PER BLADE, and the reason is Euler order: an Object3D applies
-    // its rotation as X then Y then Z, so setting .x (pitch) and .z (angular
-    // position) on the SAME mesh pitches it about the world axis before it is
-    // swung into place — the blades come out as five differently-skewed shards
-    // instead of one rotor. Nesting makes the pitch axis RADIAL, which is what
-    // a pitch is.
-    const spoke = new THREE.Group();
-    spoke.rotation.z = (i * 2*Math.PI) / nb;
-    const bl = new THREE.Mesh(new THREE.PlaneGeometry(FAN_R*0.80, 0.150), M.blade);
-    bl.position.x = FAN_R*0.50;
-    bl.rotation.x = 0.42;                 // pitch, about the blade's own radius
-    bl.castShadow = true;
-    spoke.add(bl);
-    blades.add(spoke);
+    const bl = new THREE.Mesh(bladeGeo, M.blade);
+    bl.rotation.z = (i * 2*Math.PI) / nb;     // the ONLY rotation a blade needs:
+    bl.castShadow = true;                     // twist and sweep are in the mesh
+    blades.add(bl);
   }
   blades.position.z = -0.045;
   g.add(blades);
