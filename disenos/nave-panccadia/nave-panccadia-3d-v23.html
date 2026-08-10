@@ -341,6 +341,24 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
+// THE SHADOW MAP IS STATIC, SO STOP REDRAWING IT SIXTY TIMES A SECOND.
+//
+// three.js defaults shadowMap.autoUpdate to true, which re-renders every
+// shadow-casting object into the depth map on EVERY frame. This scene animates
+// NOTHING — the render loop only calls controls.update() — so that second full
+// pass produced an identical map each time and roughly DOUBLED the per-frame draw
+// cost. The viewer was already calling `shadowMap.needsUpdate = true` at the two
+// points where visibility actually changes, which is exactly the pattern that
+// belongs with autoUpdate = false; only the flag itself was missing, so those
+// calls were redundant and the saving was never collected.
+//
+// This is why the plant felt heavier to move through as equipment was added: every
+// new machine was being drawn twice per frame, not once. The equipment masters
+// already ship with this flag set; the plant did not.
+//
+// If anything in this scene is ever animated, its shadow will freeze — set
+// needsUpdate on the frames that move, or drop this line for that object.
+renderer.shadowMap.autoUpdate = false;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 // Physically based tone mapping + image-based lighting turn the flat schematic
 // into an architectural render: ACES compresses the highlights the sun blows
@@ -1986,7 +2004,7 @@ if (EQUIP) {
       }
     }
   }
-  // ONE draw per material per view group, instead of one per machine.
+  // ONE draw per material PER SPATIAL CELL, instead of one per machine.
   //
   // mergeByMaterial above already flattens each machine on its own, which is why
   // seventeen imported machines cost about six draws each rather than forty. But
@@ -1995,17 +2013,36 @@ if (EQUIP) {
   // eleven ovens, benches and fryers made of the same stainless are one surface as
   // far as the GPU is concerned.
   //
-  // Done per VIEW GROUP, not over the whole scene, because the groups are what the
-  // named views show and hide — flattening them together would weld the mixers to
-  // the sheeter and break every view. Labels are sprites and are added afterwards,
-  // so they never enter the merge.
+  // WHY THE CELL, and not one merge per group: a merged mesh is culled as ONE
+  // object, by the bounding sphere of everything inside it. Merging a whole group
+  // produces a mesh that spans the 53 m building, so its sphere always intersects
+  // the frustum and it is drawn IN FULL no matter where the camera stands. The
+  // first version did exactly that and the operator felt it immediately — standing
+  // close, v22 drew 376 calls / 84k triangles where v23 drew 550 / 137k, because
+  // v22's small per-machine meshes could be culled and v23's could not. Fewer draw
+  // calls in the wide shot are not worth a scene that never gets cheaper as you
+  // walk into it.
+  //
+  // CELL_M is a compromise with one knob: bigger cells merge more (fewer draws,
+  // worse culling), smaller cells cull better and merge less. 8 m is roughly one
+  // room of this plant, so a close-up keeps a handful of cells and drops the rest.
+  //
+  // Done per VIEW GROUP, because the groups are what the named views show and hide
+  // — flattening them together would weld the mixers to the sheeter and break every
+  // view. Labels are sprites and are added afterwards, so they never enter the merge.
+  const CELL_M = 8;
   for (const grp of [equipGroup, equipLaminadora, equipPasteleria, equipUltra, equipMasters]) {
     grp.updateMatrixWorld(true);
     const byMat = new Map();
     const consumed = [];
+    const _c = new THREE.Vector3();
     grp.traverse((o) => {
       if (!o.isMesh || o.isInstancedMesh) return;
-      const key = o.material.uuid;
+      o.geometry.computeBoundingBox();
+      o.geometry.boundingBox.getCenter(_c);
+      o.localToWorld(_c);
+      const cell = Math.floor(_c.x / CELL_M) + ',' + Math.floor(_c.z / CELL_M);
+      const key = o.material.uuid + '@' + cell;
       if (!byMat.has(key)) byMat.set(key, { mat: o.material, geos: [] });
       const gg = o.geometry.clone().toNonIndexed();
       gg.applyMatrix4(o.matrixWorld);
@@ -2039,6 +2076,9 @@ if (EQUIP) {
   equipGroup.add(equipLabels);
 }
 scene.add(equipGroup);
+// With autoUpdate off the map is never built unless something asks for it, so the
+// first frame has to ask: without this the whole plant renders unshadowed.
+renderer.shadowMap.needsUpdate = true;
 window.__qaFacing = () => equipFacing;
 window.__qaEquipFit = () => equipFit;
 
