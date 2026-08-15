@@ -10,13 +10,42 @@
 // the whole grid. 18 shadow-casting lights would blow the draw budget and stall SwiftShader.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { luminairePositions } from '../sim/lighting.mjs';
 
-// Geometry constants from design-spec.yaml
-const HOUSING_R   = 0.175;  // diameter 0.35 m → radius 0.175 m
-const HOUSING_H   = 0.22;   // body height
-const LENS_R      = 0.155;  // slightly narrower lens disc
-const LENS_H      = 0.025;
+// Geometry constants — a UFO highbay reads as a WIDE, shallow finned aluminium disc, not a
+// plain downlight cylinder. The wider disc also reads from the top-down luminaire-plan, so the
+// 6×3 count separates from the slab instead of merging into it.
+const DISC_TOP_R  = 0.30;   // heatsink disc top radius (wide UFO silhouette)
+const DISC_BOT_R  = 0.20;   // tapers toward the lens
+const DISC_H      = 0.14;   // shallow body
+const HOUSING_H   = DISC_H; // kept name for the lens/pendant offsets below
+const LENS_R      = 0.21;   // broad lit lens on the underside
+const LENS_H      = 0.03;
+const FIN_COUNT   = 14;     // radial cooling fins
+
+/**
+ * One merged finned-disc geometry, reused by the InstancedMesh so 18 fixtures stay ~1 draw.
+ * Local origin at the disc centre (positioned to p.y by the instance matrix).
+ */
+function highbayHousingGeo() {
+  const parts = [];
+  // Heatsink body — wide shallow tapered disc
+  parts.push(new THREE.CylinderGeometry(DISC_TOP_R, DISC_BOT_R, DISC_H, 28));
+  // Driver-housing boss on top
+  const boss = new THREE.CylinderGeometry(0.09, 0.09, 0.10, 14);
+  boss.translate(0, DISC_H / 2 + 0.05, 0);
+  parts.push(boss);
+  // Radial cooling fins around the rim → the finned-disc identity
+  for (let f = 0; f < FIN_COUNT; f++) {
+    const a = (f / FIN_COUNT) * Math.PI * 2;
+    const fin = new THREE.BoxGeometry(0.13, 0.11, 0.014);
+    fin.rotateY(a);
+    fin.translate(0.25 * Math.cos(a), 0, 0.25 * Math.sin(a));
+    parts.push(fin);
+  }
+  return mergeGeometries(parts, false);
+}
 // Pendant rod: from roof truss underside y=7.85 to top of housing y=7.0+HOUSING_H/2=7.11
 const PENDANT_H   = 7.85 - (7.0 + HOUSING_H / 2); // ≈ 0.64 m
 const PENDANT_R   = 0.015;
@@ -43,8 +72,8 @@ export function buildLuminaires(mats) {
 
   const count = positions.length; // 18
 
-  // --- housing InstancedMesh ---
-  const housingGeo = new THREE.CylinderGeometry(HOUSING_R, HOUSING_R, HOUSING_H, 24);
+  // --- housing InstancedMesh (finned UFO-highbay disc, merged geometry) ---
+  const housingGeo = highbayHousingGeo();
   const housingMesh = new THREE.InstancedMesh(housingGeo, mats.luminaireHousing, count);
   housingMesh.name = 'luminaire_housings';
 
