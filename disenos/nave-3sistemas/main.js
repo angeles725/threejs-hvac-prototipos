@@ -69,23 +69,36 @@ sceneRoot.add(condParts.group);
   const figGroup = new THREE.Group();
   figGroup.name = 'scale_reference_figure';
 
-  // Body: 0.45 × 1.20 × 0.25 m torso+legs block, centre at y=0.9
-  const bodyGeo = new THREE.BoxGeometry(0.45, 1.20, 0.25);
-  const body = new THREE.Mesh(bodyGeo, mats.humanFigure);
-  body.position.set(0, 0.60, 0);
-  figGroup.add(body);
+  // Legs: two members (a person reads by its legs, not a single block)
+  const legGeo = new THREE.BoxGeometry(0.16, 0.86, 0.20);
+  for (const lx of [-0.11, 0.11]) {
+    const leg = new THREE.Mesh(legGeo, mats.humanFigure);
+    leg.position.set(lx, 0.43, 0);
+    figGroup.add(leg);
+  }
 
-  // Head: 0.22 m sphere at y=1.65 (cap at y=1.8)
-  const headGeo = new THREE.SphereGeometry(0.11, 10, 8);
+  // Torso: shoulders wider than waist — a tapered box stack reads more human than one block
+  const torsoGeo = new THREE.BoxGeometry(0.42, 0.58, 0.23);
+  const torso = new THREE.Mesh(torsoGeo, mats.humanFigure);
+  torso.position.set(0, 1.16, 0);
+  figGroup.add(torso);
+
+  // Arms hanging at the sides (not a T-pose bar)
+  const armGeo = new THREE.BoxGeometry(0.12, 0.56, 0.14);
+  for (const ax of [-0.30, 0.30]) {
+    const arm = new THREE.Mesh(armGeo, mats.humanFigure);
+    arm.position.set(ax, 1.16, 0);
+    figGroup.add(arm);
+  }
+
+  // Neck + head, crown at ~1.80 m
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.10, 8), mats.humanFigure);
+  neck.position.set(0, 1.50, 0);
+  figGroup.add(neck);
+  const headGeo = new THREE.SphereGeometry(0.115, 12, 10);
   const head = new THREE.Mesh(headGeo, mats.humanFigure);
-  head.position.set(0, 1.69, 0); // crown at 1.80 m
+  head.position.set(0, 1.67, 0);
   figGroup.add(head);
-
-  // Arms: thin box
-  const armGeo = new THREE.BoxGeometry(0.90, 0.15, 0.15);
-  const arms = new THREE.Mesh(armGeo, mats.humanFigure);
-  arms.position.set(0, 1.10, 0);
-  figGroup.add(arms);
 
   figGroup.position.set(4, 0, 2); // spec pivot
   sceneRoot.add(figGroup);
@@ -424,6 +437,10 @@ const PRESETS = {
     fov: 58,
     position: new THREE.Vector3(8, 48, 0),
     target:   new THREE.Vector3(0, 6.8, 0),
+    // Scoped overhead fill so ALL 18 highbay caps read for the count, not just the central rows
+    // (DC8). Declared on this preset only, so the house rig every other shot is judged under is
+    // untouched. Placed high and aimed at the ceiling plane.
+    fill: { position: new THREE.Vector3(4, 46, 3), intensity: 0.85, color: 0xffffff },
   },
   // Exhaust wall: square on the compressor room's +X exterior face, which carries the two
   // motorised louvers at x=19.15, y 2.4..3.6, z -7.2..-4.8.

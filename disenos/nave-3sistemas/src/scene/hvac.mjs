@@ -3,8 +3,23 @@
 // 1 unit = 1 m.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const DIFF_COUNT = 8;
+
+/**
+ * One merged SQUARE supply-diffuser geometry (stepped grille + collar), reused by the
+ * InstancedMesh. A cone read as a gizmo, not a diffuser — a stepped square face reads as a
+ * ceiling supply diffuser. Local origin at the diffuser face centre.
+ */
+function squareDiffuserGeo() {
+  const housing = new THREE.BoxGeometry(0.60, 0.06, 0.60);   // outer frame
+  const neck = new THREE.BoxGeometry(0.32, 0.12, 0.32);
+  neck.translate(0, 0.08, 0);                                // collar up into the duct
+  const face = new THREE.BoxGeometry(0.44, 0.03, 0.44);
+  face.translate(0, -0.045, 0);                              // inner grille step below the frame
+  return mergeGeometries([housing, neck, face], false);
+}
 // Diffuser x positions: evenly from x = -10 to x = +14 (24 m span / 7 intervals)
 const DIFF_STEP = 24 / 7;
 
@@ -140,15 +155,15 @@ export function buildHVAC(mats) {
   const diffuserGroup = new THREE.Group();
   diffuserGroup.name = 'diffuser_array';
 
-  // Disc-like downward diffuser: tapered cone cylinder, 0.28 m base, 0.22 m top, 0.10 m tall
-  const diffGeo = new THREE.CylinderGeometry(0.22, 0.28, 0.10, 20);
+  // Square stepped supply diffusers on the trunk underside — reads as ductwork, not gizmos
+  const diffGeo = squareDiffuserGeo();
   const diffMesh = new THREE.InstancedMesh(diffGeo, mats.diffuserWhite, DIFF_COUNT);
   diffMesh.name = 'diffuser_instances';
 
   const dummy = new THREE.Object3D();
   for (let i = 0; i < DIFF_COUNT; i++) {
     const x = -10 + i * DIFF_STEP;
-    dummy.position.set(x, 6.55, 0);
+    dummy.position.set(x, 6.30, 0); // just below the duct underside (6.325) so they hang and read
     dummy.rotation.set(0, 0, 0);
     dummy.scale.set(1, 1, 1);
     dummy.updateMatrix();
