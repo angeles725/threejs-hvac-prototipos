@@ -138,6 +138,22 @@ export function buildBay(mats) {
       web.position.set(x, TRUSS_HEIGHT / 2 + 0.175, wz);
       trussGroup.add(web);
     }
+
+    // Diagonal bracing — a zig-zag between the chords is what makes a frame read as a TRUSS
+    // rather than a row of vertical bars (the "open lattice / hollow box" the gate flagged).
+    const zbay = [-8, -4, 0, 4, 8];
+    const yBot = 0.175, yTop = TRUSS_HEIGHT + 0.125; // chord centroids
+    const dyDiag = yTop - yBot;
+    for (let p = 0; p < zbay.length - 1; p++) {
+      const za = zbay[p], zb = zbay[p + 1];
+      const dz = zb - za;
+      const L = Math.hypot(dz, dyDiag);
+      const diag = new THREE.Mesh(new THREE.BoxGeometry(0.09, L, 0.09), mats.structuralSteel);
+      diag.position.set(x, (yBot + yTop) / 2, (za + zb) / 2);
+      diag.rotation.x = (p % 2 === 0 ? 1 : -1) * Math.atan2(dz, dyDiag);
+      diag.name = `truss_diag_${p}`;
+      trussGroup.add(diag);
+    }
   }
 
   // Purlins: secondary beams spanning x, sitting on the top chord (also structural — always on)

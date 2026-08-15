@@ -32,6 +32,32 @@ function pipeBetween(A, B, radius, mat) {
   return mesh;
 }
 
+/**
+ * Add rotary-screw canopy IDENTITY to a package group: a base skid frame and a stack of
+ * ventilation louvers on the +X (key-lit) face — the two cues that separate a screw-compressor
+ * canopy from a plain box. W = cabinet width (x), D = depth (z). Local origin at the slab.
+ */
+function addCanopyDetails(grp, W, D, mats) {
+  // Base skid — a dark channel frame proud of the cabinet footprint, so the package sits ON a skid
+  const skidGeo = new THREE.BoxGeometry(W + 0.12, 0.18, D + 0.12);
+  const skid = new THREE.Mesh(skidGeo, mats.structuralSteel);
+  skid.position.set(0, 0.09, 0);
+  skid.name = 'skid_base';
+  grp.add(skid);
+
+  // Ventilation louvers on the +X face — the signature screw-compressor canopy look.
+  // A stack of tilted slats reads unmistakably as a ventilated enclosure, not a crate.
+  const slatGeo = new THREE.BoxGeometry(0.06, 0.05, D * 0.68);
+  const xFace = W / 2 + 0.005;
+  for (let i = 0; i < 8; i++) {
+    const slat = new THREE.Mesh(slatGeo, mats.louverGray);
+    slat.position.set(xFace, 0.55 + i * 0.12, 0);
+    slat.rotation.z = -0.42; // tilt so the slats read as angled intake louvers
+    slat.name = `canopy_louver_${i}`;
+    grp.add(slat);
+  }
+}
+
 // ---- main builder -----------------------------------------------------------
 
 /**
@@ -74,12 +100,37 @@ export function buildCompressorRoom(mats) {
   rightWall.name = 'enc_wall_right';
   enclosureGroup.add(rightWall);
 
-  // Front wall z=-3 (interior of bay — the "entrance" side, faces +Z into bay)
-  const frontWallGeo = new THREE.BoxGeometry(10.0, 4.0, T);
-  const frontWall = new THREE.Mesh(frontWallGeo, mats.wallCladding);
-  frontWall.position.set(14.0, 2.0, -3.0 + T / 2);
-  frontWall.name = 'enc_wall_front';
-  enclosureGroup.add(frontWall);
+  // Front wall z=-3 (interior of bay — the "entrance" side, faces +Z into bay).
+  // Split around a 2.0 m DOORWAY centred at x=14 so the enclosure unmistakably reads as a room
+  // you enter, not a sealed box — this is what made the walls-ON vs walls-OFF pair legible.
+  const DOOR_W = 2.0, DOOR_H = 2.6;
+  const frontZ = -3.0 + T / 2;
+  // Left jamb: x [9,13] → width 4, centre 11
+  const fwLeft = new THREE.Mesh(new THREE.BoxGeometry(4.0, 4.0, T), mats.wallCladding);
+  fwLeft.position.set(11.0, 2.0, frontZ);
+  fwLeft.name = 'enc_wall_front_l';
+  enclosureGroup.add(fwLeft);
+  // Right jamb: x [15,19] → width 4, centre 17
+  const fwRight = new THREE.Mesh(new THREE.BoxGeometry(4.0, 4.0, T), mats.wallCladding);
+  fwRight.position.set(17.0, 2.0, frontZ);
+  fwRight.name = 'enc_wall_front_r';
+  enclosureGroup.add(fwRight);
+  // Lintel over the doorway: x [13,15], y [DOOR_H, 4]
+  const fwLintel = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W, 4.0 - DOOR_H, T), mats.wallCladding);
+  fwLintel.position.set(14.0, DOOR_H + (4.0 - DOOR_H) / 2, frontZ);
+  fwLintel.name = 'enc_wall_front_lintel';
+  enclosureGroup.add(fwLintel);
+  // Door reveal frame — a proud jamb+head border so the opening reads as a real doorway
+  const jambGeo = new THREE.BoxGeometry(0.08, DOOR_H, T + 0.06);
+  for (const jx of [13.0, 15.0]) {
+    const jamb = new THREE.Mesh(jambGeo, mats.structuralSteel);
+    jamb.position.set(jx, DOOR_H / 2, frontZ);
+    enclosureGroup.add(jamb);
+  }
+  const headGeo = new THREE.BoxGeometry(DOOR_W + 0.16, 0.08, T + 0.06);
+  const head = new THREE.Mesh(headGeo, mats.structuralSteel);
+  head.position.set(14.0, DOOR_H, frontZ);
+  enclosureGroup.add(head);
 
   // Back wall z=-9 (near bay -Z perimeter wall)
   const backWallGeo = new THREE.BoxGeometry(10.0, 4.0, T);
@@ -258,6 +309,20 @@ export function buildCompressorRoom(mats) {
   leadCtrl.position.set(0.35, 0.44, 0.621);
   leadGroup.add(leadCtrl);
 
+  // Control-panel display — a small bright inset so the plate reads as an HMI, not a blank tab
+  const leadHmiGeo = new THREE.BoxGeometry(0.20, 0.14, 0.01);
+  const leadHmi = new THREE.Mesh(leadHmiGeo, mats.galvanizedDuct);
+  leadHmi.position.set(0.35, 0.48, 0.633);
+  leadGroup.add(leadHmi);
+
+  // Grille cross-bars over the fan disc → reads as a guarded cooling-fan grille, not a plain disc
+  for (const gy of [1.42, 1.30, 1.18]) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.02, 0.02), mats.structuralSteel);
+    bar.position.set(0, gy, 0.665);
+    leadGroup.add(bar);
+  }
+
+  addCanopyDetails(leadGroup, 2.0, 1.2, mats);
   equipmentGroup.add(leadGroup);
 
   // Lead cooling fan — world-space pivot for animation (top-mount axial fan, spin_y)
@@ -319,6 +384,20 @@ export function buildCompressorRoom(mats) {
   lagCtrl.position.set(0.30, 0.44, 0.621);
   lagGroup.add(lagCtrl);
 
+  // Control-panel display
+  const lagHmiGeo = new THREE.BoxGeometry(0.18, 0.13, 0.01);
+  const lagHmi = new THREE.Mesh(lagHmiGeo, mats.galvanizedDuct);
+  lagHmi.position.set(0.30, 0.48, 0.633);
+  lagGroup.add(lagHmi);
+
+  // Grille cross-bars over the fan disc
+  for (const gy of [1.42, 1.30, 1.18]) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.02, 0.02), mats.structuralSteel);
+    bar.position.set(0, gy, 0.665);
+    lagGroup.add(bar);
+  }
+
+  addCanopyDetails(lagGroup, 1.9, 1.2, mats);
   equipmentGroup.add(lagGroup);
 
   // Lag cooling fan — world-space pivot for animation
@@ -362,6 +441,27 @@ export function buildCompressorRoom(mats) {
   dryMesh.position.set(15.5, 0.7, -5.0); // base at y=0, centre at 0.7
   dryerGroup.add(dryMesh);
 
+  // Identity: a refrigerated dryer reads as a finned/louvered condenser face + an HMI + the two
+  // process connections on top (wet air in / dry air out), so it is not an anonymous box.
+  // Louvered condenser face on the +Z face (camera-facing)
+  const dryVentGeo = new THREE.BoxGeometry(0.62, 0.045, 0.02);
+  for (let i = 0; i < 7; i++) {
+    const v = new THREE.Mesh(dryVentGeo, mats.louverGray);
+    v.position.set(15.5, 0.42 + i * 0.11, -5.0 + 0.31);
+    v.rotation.x = 0.38;
+    dryerGroup.add(v);
+  }
+  // HMI plate near the top of the +Z face
+  const dryHmi = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.012), mats.galvanizedDuct);
+  dryHmi.position.set(15.5, 1.24, -5.0 + 0.305);
+  dryerGroup.add(dryHmi);
+  // Two process connections rising from the top (wet-in / dry-out)
+  for (const dz of [-0.16, 0.16]) {
+    const stub = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.22, 10), mats.stainlessPipe);
+    stub.position.set(15.5, 1.5, -5.0 + dz);
+    dryerGroup.add(stub);
+  }
+
   equipmentGroup.add(dryerGroup);
 
   group.add(equipmentGroup);
@@ -372,7 +472,15 @@ export function buildCompressorRoom(mats) {
   const pipingGroup = new THREE.Group();
   pipingGroup.name = 'air_header_piping';
 
-  const PIPE_R = 0.04; // 80 mm header pipe radius (design-spec: 0.08 m dia)
+  const PIPE_R = 0.06; // header pipe radius — thicker so it reads as process piping, not rod
+
+  // Elbow/joint boss so pipe runs meet at a fitting instead of a floating rod end
+  const elbowGeo = new THREE.SphereGeometry(PIPE_R * 1.35, 12, 8);
+  const addElbow = (p) => {
+    const e = new THREE.Mesh(elbowGeo, mats.stainlessPipe);
+    e.position.copy(p);
+    pipingGroup.add(e);
+  };
 
   // Air header: from lead discharge [11, 1.7, -7.5] to receiver top [15.5, 2.36, -7.5]
   const hdrA = new THREE.Vector3(11, 1.7, -7.5);
@@ -399,6 +507,18 @@ export function buildCompressorRoom(mats) {
   const lagOutB = new THREE.Vector3(11, 1.7, -7.5); // connect to lead header z
   const lagCross = pipeBetween(lagOutA, lagOutB, PIPE_R * 0.8, mats.stainlessPipe);
   if (lagCross) { lagCross.name = 'lag_cross'; pipingGroup.add(lagCross); }
+
+  // Dryer tie-in: header → dryer top connections, so the dryer is plumbed into the run
+  const dryTieA = new THREE.Vector3(15.5, 2.36, -7.5);   // receiver-top header level
+  const dryTieB = new THREE.Vector3(15.5, 1.72, -5.16);  // dryer wet-in stub top
+  const dryTie = pipeBetween(dryTieA, dryTieB, PIPE_R * 0.75, mats.stainlessPipe);
+  if (dryTie) { dryTie.name = 'dryer_tie'; pipingGroup.add(dryTie); }
+
+  // Elbow bosses at the run's bends and tie points
+  addElbow(hdrB);                                  // header meets receiver top
+  addElbow(new THREE.Vector3(15.5, 5.5, -7.5));    // riser turns into the horizontal main
+  addElbow(riserA);                                // receiver top meets riser
+  addElbow(new THREE.Vector3(11, 1.7, -7.5));      // lead/lag header junction
 
   group.add(pipingGroup);
 
