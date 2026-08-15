@@ -126,24 +126,24 @@ export function buildHVAC(mats) {
   const ductGroup = new THREE.Group();
   ductGroup.name = 'trunk_duct';
 
+  // RECTANGULAR sheet-metal supply trunk (was a round cylinder). A round duct read as
+  // indistinguishable from the round compressed-air header — the blind gate could not tell the
+  // two services apart, which defeats the "three distinct systems" thesis (DC5). A rectangular
+  // duct cross-section is unmistakably HVAC ductwork. Equivalent free area to the 0.95 m round.
   const ductLen = 16 - (-12); // 28 m
-  const ductGeo = new THREE.CylinderGeometry(0.475, 0.475, ductLen, 24);
+  const ductGeo = new THREE.BoxGeometry(ductLen, 0.74, 0.60);
   const duct = new THREE.Mesh(ductGeo, mats.galvanizedDuct);
-  duct.rotation.z = Math.PI / 2;            // lay it along x
-  duct.position.set((-12 + 16) / 2, 6.8, 0); // centre at x = 2
-  duct.name = 'trunk_cylinder';
+  duct.position.set((-12 + 16) / 2, 6.8, 0); // centre at x = 2, along x
+  duct.name = 'trunk_duct_box';
   ductGroup.add(duct);
 
-  // End caps — 2 mm inset to avoid z-fighting with the duct tube
-  const capGeo = new THREE.CylinderGeometry(0.475, 0.475, 0.02, 24);
-  const capStart = new THREE.Mesh(capGeo, mats.galvanizedDuct);
-  capStart.rotation.z = Math.PI / 2;
-  capStart.position.set(-12, 6.8, 0);
-  ductGroup.add(capStart);
-  const capEnd = new THREE.Mesh(capGeo, mats.galvanizedDuct);
-  capEnd.rotation.z = Math.PI / 2;
-  capEnd.position.set(16, 6.8, 0);
-  ductGroup.add(capEnd);
+  // Standing seams along the top — reinforces the sheet-metal-duct read vs a smooth pipe
+  const seamGeo = new THREE.BoxGeometry(0.03, 0.05, 0.62);
+  for (let sx = -10; sx <= 14; sx += 4) {
+    const seam = new THREE.Mesh(seamGeo, mats.structuralSteel);
+    seam.position.set(sx, 6.8 + 0.37, 0);
+    ductGroup.add(seam);
+  }
 
   // ----------------------------------------------------------------
   // Diffuser array  (pivot [-10, 6.55, 0], 8 diffusers, InstancedMesh)
@@ -163,7 +163,7 @@ export function buildHVAC(mats) {
   const dummy = new THREE.Object3D();
   for (let i = 0; i < DIFF_COUNT; i++) {
     const x = -10 + i * DIFF_STEP;
-    dummy.position.set(x, 6.30, 0); // just below the duct underside (6.325) so they hang and read
+    dummy.position.set(x, 6.40, 0); // hang from the rectangular duct underside (6.43), collar up into it
     dummy.rotation.set(0, 0, 0);
     dummy.scale.set(1, 1, 1);
     dummy.updateMatrix();
