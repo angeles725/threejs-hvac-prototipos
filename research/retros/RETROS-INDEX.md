@@ -1,1 +1,2 @@
 - 2026-07-12 · design3d run damper-motorizado (P0-P8, dual-track) → disenos/damper-motorizado/runs/2026-07-12-retro.md (10 kit deltas proposed, review-status: pending)
+- 2026-08-15 · research-sdd asset-sourcing kit delta (operator directive, cross-cutting) → research/retros/2026-08-15-asset-sourcing-kit-delta.md (4 kit deltas proposed, review-status: pending)
