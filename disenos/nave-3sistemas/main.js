@@ -394,9 +394,14 @@ const PRESETS = {
   // Now placed high on the +X/+Z side, which is where the key light at (28,32,22) comes from, so
   // the faces carrying the identity features are the LIT ones.
   'compressor-skid': {
-    fov: 36,
-    position: new THREE.Vector3(19.5, 5.5, 2.5),
-    target:   new THREE.Vector3(13.0, 1.1, -6.2),
+    // Tuned 2026-08-15 (DC2): fov 36 clipped the lag package and the receiver against the
+    // PORTRAIT frame's narrow horizontal fov. Pulled the camera back along its own view ray and
+    // widened fov so all four elements (lead, lag, receiver, dryer) sit inside with margin; the
+    // target is raised so the subject is vertically centred instead of hugging the lower third.
+    // Still on the +X/+Z key-light side, so DC1's readability gain is preserved.
+    fov: 44,
+    position: new THREE.Vector3(23.0, 8.0, 6.5),
+    target:   new THREE.Vector3(13.0, 2.3, -6.2),
     // Inspection fill, declared and scoped to THIS preset. machine-enamel is #54585c — deliberately
     // dark so it does not render near-white through ACES — and against a dark bay it collapses to
     // black at this distance, which is what made two judges read the grille as absent or barely
@@ -410,9 +415,13 @@ const PRESETS = {
   // foreshortens the far rows and lets the trunk duct occlude a column. A count is a fact the
   // evidence should deliver, not a pattern the judge should extrapolate.
   'luminaire-plan': {
-    fov: 50,
-    position: new THREE.Vector3(0, 15.5, 26),
-    target:   new THREE.Vector3(0, 6.6, 0),
+    // Tuned 2026-08-15 (DC3): the first placement (0,15.5,26) sat too low — a shallow oblique
+    // that foreshortened the far rows so only ~8 of 18 fixtures could be counted. Raised much
+    // higher and pulled the target to the bay centre for a STEEP near-plan angle down the short
+    // axis, so the 6×3 grid separates into countable rows instead of overlapping into the dark.
+    fov: 46,
+    position: new THREE.Vector3(0, 30, 20),
+    target:   new THREE.Vector3(0, 6.8, -1),
   },
   // Exhaust wall: square on the compressor room's +X exterior face, which carries the two
   // motorised louvers at x=19.15, y 2.4..3.6, z -7.2..-4.8.
