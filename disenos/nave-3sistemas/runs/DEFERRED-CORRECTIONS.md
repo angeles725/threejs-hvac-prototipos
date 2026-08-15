@@ -1,0 +1,14 @@
+# Deferred corrections — live ledger
+
+A correction that a pass carries forward does NOT evaporate. P6 re-scores everything, so an
+untracked deferral arrives at the final gate as a surprise with the whole build stacked on top of
+it (GATES.md). Rows leave this ledger only by being applied-and-re-gated, absorbed by the pass that
+owns them, or explicitly accepted by the user.
+
+| id | from | defect | correction | owner pass | status |
+|---|---|---|---|---|---|
+| DC1 | blockout attempt 3 panel (B, C) | The `compressor-skid` shot is too dark to read: machine-enamel #54585c is deliberately dark (a lighter albedo renders near-white through ACES) and collapses to black against the dark bay, so the fan grille needs a crop to be seen. Judge A proved the geometry is present at native resolution. | Scoped inspection fill declared on the `compressor-skid` preset only — ALREADY WRITTEN in `main.js`, not yet gate-evidenced. Verify it on a capture at the lighting-camera pass. | lighting-camera | open |
+| DC2 | blockout attempt 3 panel (C) | The `compressor-skid` reframe pushed the receiver and dryer out of frame, so the shot could not evidence the spec's promise of packages "alongside a vertical receiver and a dryer". | Preset re-placed at (19.5, 5.5, 2.5) fov 36 on the key-light side, framing all four skid elements — ALREADY WRITTEN, not yet gate-evidenced. | lighting-camera | open |
+| DC3 | blockout attempt 3 panel (A, B, C — unanimous) | The 18 luminaires cannot be COUNTED from any capture; all three judges enumerated 15–17 and inferred the rest from regularity. A count is a fact the evidence should deliver, not a pattern the judge should extrapolate. | New `luminaire-plan` preset down the short axis — ALREADY WRITTEN and registered in the view vocabulary, not yet in the shot contract. Add it to the contract at the lighting-camera pass. | lighting-camera | open |
+| DC4 | blockout attempt 3 panel (C) | The 8 diffusers on the trunk-duct underside are not distinguishable as individual outlets in any capture; only the green flow arrows read. Judge C could not confirm whether they are too small or absent. | Verify the `diffuser_array` geometry exists and is sized to read; enlarge or add a per-diffuser flow cone. Check FIRST whether it is a presence or a scale problem — do not add geometry before measuring. | structural | open |
+| DC5 | blockout attempt 3 panel (C) | The compressed-air distribution main (0.08 m over a 29.5 m run) is visually dominated by the 0.95 m HVAC trunk duct and cannot be told apart in any interior view. | Give it the stainless-pipe material and its own flow markers so the two services read as different systems. | materials | open |
