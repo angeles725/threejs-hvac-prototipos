@@ -415,13 +415,15 @@ const PRESETS = {
   // foreshortens the far rows and lets the trunk duct occlude a column. A count is a fact the
   // evidence should deliver, not a pattern the judge should extrapolate.
   'luminaire-plan': {
-    // Tuned 2026-08-15 (DC3): the first placement (0,15.5,26) sat too low — a shallow oblique
-    // that foreshortened the far rows so only ~8 of 18 fixtures could be counted. Raised much
-    // higher and pulled the target to the bay centre for a STEEP near-plan angle down the short
-    // axis, so the 6×3 grid separates into countable rows instead of overlapping into the dark.
-    fov: 46,
-    position: new THREE.Vector3(0, 30, 20),
-    target:   new THREE.Vector3(0, 6.8, -1),
+    // Tuned 2026-08-15 (DC3, second pass): a near-NADIR plan. In the PORTRAIT canvas the 40 m
+    // long axis (6 fixture columns) must map to the TALL screen axis or the far rows fall into
+    // the dark. OrbitControls fixes its orbit axis to +Y at construction, so changing camera.up
+    // does nothing — instead the camera↑target horizontal offset decides the screen roll. Placing
+    // the camera almost straight above with a small +X offset makes world +X map to the screen
+    // vertical, so the 6×3 grid arrays as 6 rows down × 3 across and all 18 fixtures are countable.
+    fov: 58,
+    position: new THREE.Vector3(8, 48, 0),
+    target:   new THREE.Vector3(0, 6.8, 0),
   },
   // Exhaust wall: square on the compressor room's +X exterior face, which carries the two
   // motorised louvers at x=19.15, y 2.4..3.6, z -7.2..-4.8.
