@@ -1,0 +1,215 @@
+# DesignSpec — homelab asset #1: 19" RACK CABINET (42U class)
+# Authored at P2 (spec-only). See design3d/references/DESIGNSPEC.md for authoring rules.
+# Evidence: disenos/homelab/P1-INTAKE.md §2 (site photos) + disenos/server-rack (real dims) + EIA-310.
+
+design: rack-cabinet
+track: threejs
+mode: heavy                        # multi-asset homelab scene; this asset gated alone (P1-INTAKE §4)
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.1 m"  # drives // SCALE: comment at codegen
+
+complexity:                        # pre-spec assessment — sum 15 -> complex; spec must carry complex depth
+  scores: {silhouette: 2, components: 2, hierarchy: 2, repetition: 2,
+           material_layers: 2, detail: 2, occlusion: 1, action_readiness: 2}
+  tier: complex
+
+environment:                       # P0 discovery OUTPUT — paths only; not yet run, filled conservatively
+  overlays:
+    handbook: null
+    house_rules: null
+    qa_tools: research/tools       # capture.mjs / probe dir present in overlay repo
+    design_dir_root: disenos/homelab
+
+references:                        # P1 evidence — no invented dimensions
+  - source: "disenos/homelab/P1-INTAKE.md §2 (7 Panduit experience-center site photos, viewed in-session)"
+    evidences: "door variants (perforated mesh + glass with blue/white/green LED edge-strip), black lever handles, white-framed and black cabinets, ~42U tall, standing in an aisle row"
+    suitability: conditional       # photos NOT yet on disk (P1-INTAKE §2 note); descriptions are the P1 evidence until saved to references/
+  - source: "disenos/server-rack/rack-42u-realistic-v1.html (lines 271-322: HW/HD/RH, RAIL_X, U, frame/rail structure)"
+    evidences: "reconciled real 42U cabinet dimensions + 19\" rail geometry (0.60 W x 0.85 D x 2.00 H, rails at x=+/-0.232, U=0.04445, base_y=0.11)"
+  - source: "EIA-310-D 19-inch rack standard"
+    evidences: "42U usable rail = 1867 mm; full cabinet ~2000 mm tall; common width 600 mm; datacenter depth 1000-1200 mm"
+
+dimensions_real:                   # metric; 1 unit = 1 m
+  width_m:  {value: 0.60, confidence: high}   # EIA-310 common 600 mm; matches server-rack 2*HW
+  height_m: {value: 2.00, confidence: high}   # full 42U-class cabinet ~2000 mm; matches server-rack RH
+  depth_m:  {value: 1.00, confidence: med}    # RECONCILED: EIA datacenter cabinet 1000-1200 mm (hosts rear vertical PDUs + cable mgrs);
+                                              #   server-rack used 0.85 as art ref -> deepened to 1.00 for the Panduit datacenter form. low->med, P4 refine-authorized.
+  rail_span_m:      {value: 0.4826, confidence: high}   # 19" = 483 mm face; rails centered at x=+/-0.232 (server-rack RAIL_X)
+  u_height_m:       {value: 0.04445, confidence: high}  # 1U = 44.45 mm (EIA)
+  usable_rail_m:    {value: 1.867, confidence: high}    # 42U * 44.45 mm
+  base_plinth_m:    {value: 0.11, confidence: med}      # plinth/base below the rails (server-rack BASE_Y)
+  front_door_w_m:   {value: 0.58, confidence: med}      # swing door ~ full frame width minus posts
+  front_door_h_m:   {value: 1.85, confidence: med}      # door spans the usable stack
+
+hierarchy:                         # animation-ready BEFORE geometry — doors swing on named hinge pivots
+  - name: root
+    children:
+      - name: cabinet_frame        # base plinth + top cap + 4 corner posts
+        pivot: [0, 0, 0]
+        animation: none
+      - name: side_back_panels     # closed L/R side panels + rear panel + roof/floor
+        pivot: [0, 0, 0]
+        animation: none
+      - name: rails_19in           # SEMANTIC SYSTEM: front+rear 19" mounting rails w/ 42U hole pattern (not rail_1/2/3/4)
+        pivot: [0, 0, 0]
+        animation: none
+      - name: front_mesh_door      # VARIANT A — perforated-mesh swing door (hinge on left post)
+        pivot: [-0.29, 1.0, 0.50]  # hinge axis: left edge, mid-height, at the front plane (z=+D/2)
+        animation: "open_hinge 0..2.09"   # real travel ~120 deg = 2.09 rad; aisle clearance limits full 180
+        attachment:
+          parent_socket: front_left_post_hinge
+          local_start: [-0.29, 0.13, 0.50]   # hinge line root (bottom)
+          local_end:   [-0.29, 1.98, 0.50]   # hinge line tip (top) — mesh spans root->tip along the post
+          length_confidence: med
+          contact_type: hinge
+          embed_depth: 0.008         # hinge knuckle seats into the post
+          gap_tolerance: 0.0
+        children:
+          - name: lever_handle_mesh  # black lever handle on the mesh door (leading/right edge)
+            pivot: [0.24, 1.0, 0.52]
+            animation: none
+            attachment:
+              parent_socket: mesh_door_face_right
+              local_start: [0.24, 0.95, 0.512]  # seats on the outer door skin
+              local_end:   [0.24, 1.05, 0.545]  # protrudes outward (+z) — root->tip
+              length_confidence: med
+              contact_type: surface-contact
+              overlap: 0.006
+              gap_tolerance: 0.0
+      - name: front_glass_door      # VARIANT B — tempered-glass swing door with LED edge-strip (toggle vs mesh door)
+        pivot: [-0.29, 1.0, 0.50]
+        animation: "open_hinge 0..2.09"
+        attachment:
+          parent_socket: front_left_post_hinge
+          local_start: [-0.29, 0.13, 0.50]
+          local_end:   [-0.29, 1.98, 0.50]
+          length_confidence: med
+          contact_type: hinge
+          embed_depth: 0.008
+          gap_tolerance: 0.0
+        children:
+          - name: led_edge_strip     # EMISSIVE feature — blue/white/green light-line inset in the glass door frame
+            pivot: [0.0, 1.0, 0.505]
+            animation: "custom:emissive-cycle blue/white/green (materials+lighting pass)"
+            attachment:
+              parent_socket: glass_door_frame_inner_edge
+              local_start: [-0.27, 0.15, 0.505]  # runs the inner frame perimeter; root at bottom-left
+              local_end:   [ 0.27, 1.95, 0.505]  # tip at top-right (perimeter strip)
+              length_confidence: med
+              contact_type: surface-contact
+              overlap: 0.004
+              gap_tolerance: 0.0
+          - name: lever_handle_glass # black lever handle on the glass door
+            pivot: [0.24, 1.0, 0.52]
+            animation: none
+            attachment:
+              parent_socket: glass_door_face_right
+              local_start: [0.24, 0.95, 0.512]
+              local_end:   [0.24, 1.05, 0.545]
+              length_confidence: med
+              contact_type: surface-contact
+              overlap: 0.006
+              gap_tolerance: 0.0
+      - name: casters_levelers       # 4 casters + 4 levelers under the plinth
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:                          # near-binary metalness; every entry: evidence + source + confidence (cap 0.86 image-derived)
+  - id: frame_white
+    family: painted-metal           # white-framed cabinet variant (P1 §2)
+    color: "#e9e9e6"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "P1-INTAKE §2 white-framed cabinets; server-rack painted-metal band rough 0.5-0.6"
+    source: estimated
+    confidence: 0.72                 # image-derived; assumption: matte white powder-coat
+  - id: frame_black
+    family: painted-metal           # black cabinet variant (P1 §2)
+    color: "#1b1b20"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "P1-INTAKE §2 dark/black cabinets; server-rack M.FRAME_D #232330 rough 0.6"
+    source: table
+    confidence: 0.82
+  - id: mesh_door
+    family: painted-metal           # perforated swing door; perforation via alphaMap, NOT drilled geometry (tri budget)
+    color: "#202024"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "P1-INTAKE §2 perforated hex/round-perf mesh door; perforation is an alpha texture over a painted skin"
+    source: estimated
+    confidence: 0.72                 # assumption: ~50% open-area perforation, dark powder-coat
+  - id: glass_door
+    family: glass                    # tempered smoked glass, transmissive
+    color: "#aeb8bf"
+    metalness: 0.0
+    roughness: 0.05
+    evidence: "P1-INTAKE §2 glass doors; dielectric glass metalness 0, low roughness"
+    source: table
+    confidence: 0.8
+  - id: led_edge
+    family: plastic                  # EMISSIVE diffuser strip — RGB cycle blue/white/green (materials+lighting passes own the emissive tuning)
+    color: "#0a0a10"                 # unlit body; emissive color set per state (blue #2f6bff / white #f0f4ff / green #35d07a)
+    metalness: 0.0
+    roughness: 0.4
+    evidence: "P1-INTAKE §2 LED edge-strip glowing blue/white/green under the door frame"
+    source: estimated
+    confidence: 0.72                 # assumption: acrylic light-guide diffuser; emissiveIntensity tuned at lighting pass
+  - id: lever_handle
+    family: plastic                  # black coated lever handle (dielectric, not chrome)
+    color: "#141418"
+    metalness: 0.0
+    roughness: 0.4
+    evidence: "P1-INTAKE §2 black lever handles"
+    source: estimated
+    confidence: 0.72
+  - id: rails_metal
+    family: bare-metal               # galvanized/zinc 19" mounting rails
+    color: "#8a8f96"
+    metalness: 0.9
+    roughness: 0.45
+    evidence: "EIA-310 rails are zinc-plated steel; bare-metal near-1 metalness"
+    source: table
+    confidence: 0.8
+
+critical_features:                   # 4 gates — each fails a pass ALONE; thresholds ~0.70 (task)
+  - id: rack-42u-19in-rails
+    desc: "Reads as a 19\"/42U cabinet: ~0.60x2.00 m aspect, symmetric front+rear vertical mounting rails at x=+/-0.232 with a visible ~42-hole U-pattern spanning ~1.867 m. A lazy model omits the rails or wrong-counts the U's."
+    threshold: 0.72
+  - id: perforated-mesh-front-door
+    desc: "Variant-A front door reads as a dark perforated-mesh swing door — visible regular hex/round perforation open-area over a painted skin, NOT a solid flat panel."
+    threshold: 0.70
+  - id: glass-door-led-edgestrip
+    desc: "Variant-B front door reads as tempered smoked GLASS (see-through to the rails) with an EMISSIVE LED edge-strip glowing along the frame in blue/white/green — the single most identity-defining Panduit-aisle cue."
+    threshold: 0.72
+  - id: black-lever-handle
+    desc: "A distinct black lever handle protrudes from the leading edge of the front door face (both variants) — reads as a graspable lever, not a painted decal."
+    threshold: 0.70
+
+important_features:                  # optional, max 3 — reviewed AVERAGE >= 0.65
+  - id: aisle-tall-silhouette
+    desc: "Freestanding tall cabinet on casters/levelers, correct floor-standing aisle-facing silhouette (not squat, not floating), plinth + top cap present."
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:                       # single rack — perforation is texture not geometry, so tri count stays modest
+    draws: 250
+    tris: 400000
+
+# p6_comparison: SPEC-ONLY (no reference-match view). Site photos are NOT on disk yet (P1-INTAKE §2 note);
+#   per design3d GATES.md, do NOT fake a reference-match. Gate this asset spec-only until photos are saved
+#   to disenos/homelab/references/ at the same viewpoint, then P6 can add the reference-match view.
+p6_comparison: spec-only
+
+camera:
+  azimuth_deg: 42                    # diagonal grammar
+  elevation_deg: 18                  # tall subject — lower elevation keeps the 2 m cabinet fully framed
+  fov: 40                            # equipment hero
+
+lighting: house-rig                  # note: vertical metal + emissive LED strip; lighting pass calibrates the edge-strip glow
+
+ui_controls:                         # threejs spec-panel toggles
+  - "DOOR TYPE MESH-GLASS"           # swap variant-A mesh door <-> variant-B glass+LED door
+  - "OPEN DOOR"                      # swing the front door on its hinge (0..120 deg)
+  - "LED COLOR BLUE-WHITE-GREEN"     # cycle the emissive edge-strip color
+  - "AUTO-ROTATE"

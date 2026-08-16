@@ -1,0 +1,340 @@
+# DesignSpec — homelab asset #2: PANDUIT EL2P VERTICAL RACK PDU (0U, monitored/intelligent)
+# Authored at P2 (spec-only). See design3d/references/DESIGNSPEC.md for authoring rules.
+# Evidence: disenos/homelab/P1-DATASHEETS.md §1 (EL2P datasheet research) + P1-INTAKE.md §2 (site photos).
+
+design: pdu-panduit
+track: threejs
+mode: heavy                        # multi-asset homelab scene; this asset gated alone (P1-INTAKE §4)
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.1 m"  # drives // SCALE: comment at codegen
+
+complexity:                        # pre-spec assessment — sum 13 -> moderate
+  scores: {silhouette: 1, components: 2, hierarchy: 1, repetition: 3,
+           material_layers: 2, detail: 2, occlusion: 1, action_readiness: 1}
+  tier: moderate
+  # note: repetition scores 3 (42-48 identical outlets -> instancing mandatory); silhouette scores low
+  #   because the massing is a single slender bar — the IDENTITY lives in the outlet column + head module,
+  #   which is why both are critical_features rather than detail work.
+
+environment:                       # P0 discovery OUTPUT — paths only
+  overlays:
+    handbook: null
+    house_rules: null
+    qa_tools: research/tools       # capture.mjs / probe dir present in overlay repo
+    design_dir_root: disenos/homelab
+
+references:                        # P1 evidence — no invented dimensions
+  - source: "disenos/homelab/P1-DATASHEETS.md §1 (Panduit EL2P research, this session)"
+    evidences: "0U vertical form factor; 42/48 outlet tiers ((21) C13/C15 + (21) 4-in-1 C13/C15/C19/C21); hot-swap controller head with color LCD, dual 1GbE RJ-45, Wi-Fi/BT, USB firmware port, accelerometer auto-rotate; IEC 60309 inlet with 360-degree swivel cord; red/blue/black bodies marketed for A/B feed identification"
+  - source: "https://www.cdwg.com/product/panduit-el2p-mspo-pdu-60-amp-3-ph-42-outlets/8555341 (E42G20L listing) [CERT-a]"
+    evidences: "overall envelope 70 x 2 x 3 in -> 1778 x 50.8 x 76.2 mm"
+    suitability: conditional       # CONFLICT: P1-DATASHEETS §1 records width as 58 mm while the imperial
+                                   #   figure converts to 50.8 mm. Distributor imperial is rounded to whole
+                                   #   inches, so BOTH are low-precision. width_m carries confidence: low.
+  - source: "https://www.panduit.com/en/products/featured-products/el2p-intelligent-power-distribution-unit.html [CERT-web]"
+    evidences: "hot-swappable controller module at the head end; accelerometer auto-rotates the display for top-fed or bottom-fed installs; dual 1 GbE daisy-chain"
+  - source: "disenos/homelab/P1-INTAKE.md §2 (7 Panduit experience-center site photos, viewed in-session)"
+    evidences: "vertical strips at the REAR rack posts in black / red / blue; red+blue pair is the A/B dual feed; visible outlet columns, a QR code, a USB port and a small local display on the head"
+    suitability: conditional       # photos NOT yet on disk (P1-INTAKE §2 note); descriptions are the P1 evidence
+
+dimensions_real:                   # metric; 1 unit = 1 m
+  length_m: {value: 1.778, confidence: high}   # 70 in overall strip length (vertical when installed)
+  width_m:  {value: 0.054, confidence: low}    # CONFLICT 50.8 vs 58 mm (see references[1]); midpoint taken.
+                                               #   low -> PRE-AUTHORIZED for P4 refine-spec once a Panduit
+                                               #   drawing or an on-disk photo with scale resolves it.
+  depth_m:  {value: 0.076, confidence: med}    # 3 in body depth off the mounting plane
+  outlet_count: {value: 42, confidence: high}  # E42G20L tier: (21) C13/C15 + (21) 4-in-1 C13/C15/C19/C21
+  outlet_field_m: {value: 1.45, confidence: low}   # DERIVED: strip length minus head module minus inlet
+                                                   #   entry (1.778 - 0.22 - 0.11). Not a datasheet value.
+  outlet_pitch_m: {value: 0.0345, confidence: low} # DERIVED: outlet_field_m / 42. Sanity: a C13 aperture is
+                                                   #   ~24 x 20 mm, so 34.5 mm single-column pitch clears.
+  head_module_m:  {value: 0.22, confidence: low}   # controller head length; hosts LCD + RJ45 pair + USB + QR
+  lcd_w_m: {value: 0.040, confidence: low}         # display diagonal is UNDOCUMENTED (P1-DATASHEETS §1 gap):
+  lcd_h_m: {value: 0.032, confidence: low}         #   sized to fit inside the 54 mm strip width. Photo-refine at P4.
+  mount_button_pitch_m: {value: 0.40, confidence: low}  # tool-less keyhole buttons up the rear face
+
+hierarchy:                         # animation-ready BEFORE geometry
+  - name: root
+    children:
+      - name: strip_body           # the extruded 0U chassis: slender bar, length_m tall, rounded front bezel
+        pivot: [0, 0, 0]
+        animation: none
+      - name: outlet_column        # SEMANTIC SYSTEM: all 42 receptacles as one instanced system (not outlet_1..42)
+        pivot: [0, 0, 0]
+        animation: none
+        # build note: InstancedMesh over outlet_pitch_m; alternating C13/C15 and 4-in-1 apertures.
+        # Each outlet is a RECESSED aperture in the bezel + 3 pin slots — never a painted decal (critical feature).
+      # REMOVED (P5a materials, 2026-08-15): `outlet_leds`. A green status LED beside every
+      # receptacle was INVENTED during blockout — it never had a source. Targeted research
+      # returned INCONCLUSIVE: no source states the EL2P has per-outlet LEDs, and none
+      # states it does not. What the sources DO show points away from it — the only LED a
+      # distributor enumerates for an MSPO unit is a single "On/Off LED", and Panduit's own
+      # outlet differentiation is by COLOURED SOCKET HOUSING (now modelled as the three
+      # outlet_bank_* materials). The per-outlet LEDs on the older E36G18L are a different
+      # product and do not transfer. Unevidenced geometry does not ship; if the EL2P user
+      # manual PDF ever parses and confirms them, restore this node with the citation.
+      - name: head_module          # hot-swap controller at the head end (top for top-fed install)
+        pivot: [0, 0.779, 0]       # head center: +length/2 - head/2 = 0.889 - 0.11
+        animation: "custom:hot-swap slide_out 0..0.18 (service pose; not a runtime animation)"
+        children:
+          - name: head_lcd         # EMISSIVE color LCD touchscreen, accelerometer auto-rotated
+            pivot: [0, 0.840, 0.038]
+            animation: "custom:emissive-onoff (?head=on URL state)"
+            attachment:
+              parent_socket: head_front_bezel
+              local_start: [0, 0.824, 0.0375]   # seats flush in the bezel cutout
+              local_end:   [0, 0.856, 0.0395]   # glass face protrudes ~2 mm — root->tip
+              length_confidence: low
+              contact_type: surface-contact
+              overlap: 0.003
+              gap_tolerance: 0.0
+          - name: head_net_ports   # dual 1 GbE RJ-45 (daisy-chain) + USB firmware port
+            pivot: [0, 0.760, 0.038]
+            animation: none
+            attachment:
+              parent_socket: head_front_bezel
+              local_start: [0, 0.748, 0.030]    # recessed INTO the bezel (jack cavity)
+              local_end:   [0, 0.772, 0.0385]
+              length_confidence: low
+              contact_type: embedded
+              embed_depth: 0.008
+              gap_tolerance: 0.0
+          - name: head_qr_label    # QR asset label on the head face (P1-INTAKE §2 photo cue)
+            pivot: [0, 0.712, 0.038]
+            animation: none
+            attachment:
+              parent_socket: head_front_bezel
+              local_start: [0, 0.700, 0.0380]
+              local_end:   [0, 0.724, 0.0382]   # printed label, ~0.2 mm proud
+              length_confidence: low
+              contact_type: surface-contact
+              overlap: 0.0002
+              gap_tolerance: 0.0
+      - name: inlet_cord           # APPENDAGE: IEC 60309 input cord, 360-degree swivel connector at the tail end
+        pivot: [0, -0.889, 0]      # = local_start (root at the strip tail)
+        animation: none
+        attachment:
+          parent_socket: strip_tail_inlet
+          local_start: [0, -0.889, 0.0]    # root: exits the strip tail — build root->tip, never centered
+          local_end:   [0.06, -1.10, 0.14] # tip: swivels away toward the rack cable path
+          length_confidence: low
+          contact_type: socket
+          embed_depth: 0.020               # connector body seats INTO the tail housing
+          gap_tolerance: 0.0
+      - name: mount_buttons        # SEMANTIC SYSTEM: tool-less keyhole mounting buttons on the rear face
+        pivot: [0, 0, -0.038]
+        animation: none
+        attachment:
+          parent_socket: strip_rear_face
+          local_start: [0, -0.80, -0.038]  # lowest button
+          local_end:   [0, 0.80, -0.052]   # highest button; buttons protrude rearward toward the rack post
+          length_confidence: low
+          contact_type: surface-contact
+          overlap: 0.004
+          gap_tolerance: 0.0
+
+materials:                         # near-binary metalness; every entry: evidence + source + confidence
+  - id: body_red
+    family: painted-metal          # A-feed strip
+    color: "#a8231c"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "P1-INTAKE §2 red vertical PDU of the A/B pair; P1-DATASHEETS §1 Panduit markets body colors for A/B identification. Powder-coated extrusion -> dielectric."
+    source: estimated
+    confidence: 0.72               # image-derived; assumption: matte red powder-coat over aluminum extrusion
+  - id: body_blue
+    family: painted-metal          # B-feed strip
+    color: "#1d4a8f"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "P1-INTAKE §2 blue vertical PDU of the A/B pair"
+    source: estimated
+    confidence: 0.72               # assumption: same powder-coat finish as the red body
+  - id: body_black
+    family: painted-metal          # non-redundant / single-feed variant also present in the aisle
+    color: "#1b1b20"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "P1-INTAKE §2 black vertical PDUs alongside the red/blue pair"
+    source: estimated
+    confidence: 0.72
+  # AMENDMENT (P5a materials, 2026-08-15): `outlet_body` replaced by three CIRCUIT-BANK
+  # colours. Panduit differentiates EL2P outlets by coloured socket housing — aqua, grey
+  # and white circuit banks — NOT by per-outlet indicator lights. Modelling one uniform
+  # housing colour missed a real, evidenced identity cue of this product.
+  #   colours: [CERT-web] panduit.com EL2P product page + PRNewswire EL2P release
+  #   grouping: [INFER] three contiguous banks of 14, one per phase on a 3-phase 42-outlet
+  #     unit (E42G20L is 60 A 3-ph). The three named colours and three phases agree; the
+  #     exact bank boundaries are NOT published. Marked inferred, not measured.
+  #   hex values: [INFER] the sources NAME the colours but publish no hex.
+  - id: outlet_bank_aqua
+    family: plastic                # circuit bank A housing
+    color: "#3fa8b4"
+    metalness: 0.0
+    roughness: 0.45
+    evidence: "Panduit EL2P outlet differentiation via coloured socket housings (aqua/grey/white circuit banks) — panduit.com EL2P page; PRNewswire EL2P release"
+    source: estimated
+    confidence: 0.7                # assumption: mid-saturation aqua thermoplastic; hex not published
+  - id: outlet_bank_grey
+    family: plastic                # circuit bank B housing
+    color: "#9a9a96"
+    metalness: 0.0
+    roughness: 0.45
+    evidence: "same source — grey circuit bank"
+    source: estimated
+    confidence: 0.7                # assumption: neutral mid-grey thermoplastic; hex not published
+  - id: outlet_bank_white
+    family: plastic                # circuit bank C housing
+    color: "#e4e4df"
+    metalness: 0.0
+    roughness: 0.45
+    evidence: "same source — white circuit bank"
+    source: estimated
+    confidence: 0.7                # assumption: off-white thermoplastic; hex not published
+  - id: outlet_cavity
+    family: plastic                # the recessed aperture interior + pin slots — reads dark, gives outlets depth
+    color: "#111114"
+    metalness: 0.0
+    roughness: 0.7
+    evidence: "receptacle cavities read near-black; this is what separates a real outlet from a painted decal (critical feature outlet-column-42)"
+    source: estimated
+    confidence: 0.75               # assumption: unlit cavity, high roughness, no specular
+  - id: lcd_emissive
+    family: plastic                # EMISSIVE color LCD; emissiveIntensity tuned at the lighting pass
+    color: "#0a0c12"               # unlit body; emissive set per state (on: cyan-white #cfe6ff)
+    metalness: 0.0
+    roughness: 0.15
+    evidence: "P1-DATASHEETS §1 color LCD touchscreen on the hot-swap controller; P1-INTAKE §2 small local display"
+    source: estimated
+    confidence: 0.72               # assumption: glossy glass-fronted TFT; exact diagonal undocumented
+  - id: port_metal
+    family: bare-metal             # RJ-45 jack shielding + USB shell
+    color: "#9aa0a8"
+    metalness: 0.9
+    roughness: 0.4
+    evidence: "shielded RJ-45/USB jacks are nickel-plated steel shells — bare metal, near-1 metalness"
+    source: table
+    confidence: 0.82
+  - id: cord_rubber
+    family: rubber                 # input cord jacket
+    color: "#141416"
+    metalness: 0.0
+    roughness: 0.85
+    evidence: "IEC 60309 power cord jacket; rubber dielectric, high roughness"
+    source: table
+    confidence: 0.85
+  - id: label_print
+    family: plastic                # QR / rating label print, incl. the head nameplate (CanvasTexture)
+    color: "#efefe9"
+    metalness: 0.0
+    roughness: 0.6
+    evidence: "P1-INTAKE §2 visible QR code on the strip head; every rack PDU carries a rating plate. Nameplate TEXT is drawn from P1-DATASHEETS §1 (model E42G20L, 60 A 3-ph, 17.3 kVA, 42 outlets, IEC 60309 3P+E 9h) — voltage is deliberately omitted, no source states it."
+    source: estimated
+    confidence: 0.7                # assumption: matte white printed polyester label
+  # ADDED (P5a surface, 2026-08-15): silkscreen legend on the bezel rail.
+  #   An MSPO unit is SWITCHED PER OUTLET, so outlet identification is functional, not
+  #   decorative — you cannot address outlet 17 without a 17 printed beside it. The legend
+  #   ARTWORK is [INFER] (no source shows it); the need for it follows from the tier.
+  #   Bank legends L1/L2/L3 carry the same inference as the three-bank colour grouping and
+  #   add no new claim. Transparent map so the powder-coat reads through at any body colour.
+  - id: silkscreen_print
+    family: plastic
+    color: "#eeeee8"
+    metalness: 0.0
+    roughness: 0.6
+    evidence: "outlet numbering is required to operate a switched-per-outlet (MSPO) PDU — tier confirmed for E42G20L/E48G01L/E42G03L [CERT-a]; artwork itself is inferred"
+    source: estimated
+    confidence: 0.7                # assumption: light silkscreen ink on powder-coat
+
+critical_features:                 # 4 gates — each fails a pass ALONE
+  - id: slender-0u-vertical-strip
+    desc: "Reads as a 0U VERTICAL strip: an extreme ~33:1 aspect bar (1.778 m long x ~0.054 m wide x ~0.076 m deep) standing on its long axis at the rack's rear post. A lazy model produces a fat box or a horizontal 1U-style chassis — either is a fail."
+    threshold: 0.72
+  - id: outlet-column-42
+    desc: "A continuous single column of ~42 DISCRETE receptacles runs the strip: each is a RECESSED aperture with a visibly dark cavity and pin slots, at a regular ~34 mm pitch. A lazy model paints a flat stripe or spaces a dozen shallow squares — the count, the regular pitch and the recess depth must all read."
+    threshold: 0.72
+  - id: ab-feed-red-blue-pair
+    desc: "Two strips in saturated contrasting RED and BLUE mount side by side at the rear posts, reading unmistakably as a redundant A/B dual power feed — not one lone strip and not two same-colored strips."
+    threshold: 0.70
+  - id: monitored-head-module
+    desc: "The head end carries a distinct hot-swap controller module set apart from the outlet field: an EMISSIVE color LCD, a pair of RJ-45 jacks, a USB port and a printed QR label. This is what separates an intelligent PDU from a dumb power strip."
+    threshold: 0.72
+
+important_features:                # optional, max 3 — reviewed AVERAGE >= 0.65
+  - id: swivel-inlet-cord
+    desc: "A thick IEC 60309 input cord leaves the strip's tail through a swivel connector and routes away toward the rack cable path — attached at the tail, never floating."
+  - id: rear-mount-buttons
+    desc: "Tool-less keyhole mounting buttons run up the rear face, explaining how the strip hangs on the post instead of levitating beside it."
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:                     # 42 outlets x 2 strips -> InstancedMesh is mandatory, keeps draws low
+    draws: 200
+    tris: 350000
+
+# p6_comparison: SPEC-ONLY (no reference-match view). Site photos are NOT on disk yet (P1-INTAKE §2 note);
+#   per design3d GATES.md, do NOT fake a reference-match. Gate spec-only until photos land in
+#   disenos/homelab/references/, then P6 can add the reference-match view.
+p6_comparison: spec-only
+
+# colorTarget — objective material-read anchor for the CIEDE2000 probe.
+# DECIDED 2026-08-15: intentionally NOT ACTIVATED, ratified at the end of the build ladder.
+# The material read passed inline on every pass, so the anti-drift lock adds little to a
+# finished asset, and activating it would cost a capture at a special resolution. This is a
+# closed decision, not pending work. Everything below is kept so the lock is one measured
+# number away if it is ever wanted.
+#
+# Why it was never filled in from here: DESIGNSPEC.md requires `srgb` to be the RENDERED value, which
+# differs from the albedo hex after ACES tonemapping and depends on the light reaching the
+# surface. That can only be MEASURED. The crop below is computed rigorously and anchored by
+# PROJECTED GEOMETRY, never by hue — a hue-picked sample once scored a perfect zero against
+# a wooden pallet.
+#
+# *** THE CROP AND THE VIEW ARE ONE UNIT — DO NOT MIX THEM. ***
+# The lighting pass measured the rig analytically: the FRONT face receives 1.696 of diffuse
+# irradiance and the REAR face 0.832. The same powder-coat therefore renders roughly TWICE
+# as dark on the rear. A target measured on one face and later probed on the other would
+# report a huge deltaE00 for a material that never changed. Whichever is chosen, the
+# colorTarget must record its view alongside the crop.
+#
+#   OPTION A — FRONT view (hero read, what the judge actually sees). Region: feedA's TAIL
+#   zone, below the outlet field (y > -0.779 is outlets) and above the swivel connector
+#   (tops out at y = -0.869) — pure body powder-coat, no outlets, label or cord. Front
+#   surface there is the slab face at z = 0.028; the +x bezel rail shadows 10*tan(34deg) =
+#   6.7 mm of channel floor, already excluded by the x bounds.
+#     world x [-0.092, -0.058], y [-0.862, -0.782], z 0.028
+#       @1600x900   crop "5x28+771+704"      (140 px — thin; the strip is only ~23 px wide)
+#       @2400x1350  crop "9x43+1156+1055"    (387 px)
+#       @3200x1800  crop "13x59+1541+1406"   (767 px)   <- preferred if capture can go 4K-ish
+#
+#   OPTION B — REAR view (?cam=rear, mounts off). One flat slab of body material, so the
+#   sample is ~30x larger at the same resolution, but it is the DIMMER face.
+#       @1600x900   crop "11x456+807+180"    (5016 px)
+#       @2400x1350  crop "18x686+1210+269"   (12348 px)
+#
+# TO ACTIVATE: run material-color-probe on the CHOSEN shot, send the measured mean sRGB,
+# and uncomment with that value plus the matching crop. Seed deltaE00Max ~6.
+# colorTarget:
+#   srgb: [R, G, B]          # MEASURED on the view named below, not the albedo hex
+#   deltaE00Max: 6
+#   crop: "13x59+1541+1406"  # front view @3200x1800  (or the Option B pair)
+#   view: front              # MUST match the shot the srgb was measured on
+
+camera:
+  azimuth_deg: 34                  # LONG-THIN SUBJECT: pulled off the 40-45 diagonal grammar toward
+                                   #   near-perpendicular. Maximising the NDC bbox on a 33:1 bar rewards a
+                                   #   steep diagonal that foreshortens the outlet column into a smear —
+                                   #   the outlet pitch must stay resolvable.
+  elevation_deg: 8                 # low: a 1.78 m vertical bar needs a near-level eye to stay uncropped
+  fov: 34                          # equipment hero, long end — reduces vertical perspective divergence
+
+lighting: house-rig                # note: vertical subject with a colored dielectric body + emissive LCD.
+                                   #   The house rig was calibrated on horizontal equipment; the lighting
+                                   #   pass must fix any flat read with LIGHT, never by raising metalness
+                                   #   (the body is powder-coat: metalness stays 0.0).
+
+ui_controls:                       # threejs spec-panel toggles; each mirrors a URL state for capture
+  - "FEED A-B"                     # ?feed=a|b — highlight/solo the red A strip or the blue B strip
+  - "HEAD DISPLAY ON-OFF"          # ?head=on — LCD emissive on/off
+  - "SHOW MOUNT BUTTONS"           # rear-face keyhole buttons
+  - "AUTO-ROTATE"

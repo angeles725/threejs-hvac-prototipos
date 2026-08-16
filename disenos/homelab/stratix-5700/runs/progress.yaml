@@ -1,0 +1,708 @@
+# progress.yaml — stratix-5700. Churns per pass; design-spec.yaml stays stable.
+#
+# `passes` is a MAP keyed by pass name (gate-state.mjs reads it that way).
+#
+# SINGLE WRITER. This file has ONE writer — the builder session. The orchestrator sends
+# verdicts by message and they get recorded here. On the previous asset two sessions
+# edited one progress.yaml and produced a duplicate key; YAML keeps only the LAST one, so
+# the file parsed clean while reporting a judged pass as unjudged and filing another
+# pass's evidence under the wrong parent. Validate the SHAPE after editing, not just that
+# it parses: count occurrences PER KEY (`rg -o "^  [a-z][\w-]*:" | sort | uniq -d`), since
+# a total line count cannot see a repeat.
+
+design: stratix-5700
+track: threejs
+mode: heavy
+variant: "1783-BMS10CGP (10-port). Dimensions and port mix are for THIS catalogue number; the 6-port is a shallower body and the 20-port a wider one."
+
+passes:
+  spec:
+    status: PASS
+    date: 2026-08-15
+    notes: >
+      design-spec.yaml authored. Validated: 14/14 required keys, 5 critical (hard max) +
+      2 important, 13 materials, metalness near-binary with no violations, no estimated
+      material below confidence 0.7, no duplicate keys, and no entry lost to parsing.
+    key_derivation: >
+      CORRECTED AN IMPOSSIBLE READING OF MY OWN P1. P1-DATASHEETS §3 records "8 RJ45 on
+      the left, 2 combo on the right". Taken literally as ONE row that cannot exist: a
+      standard RJ45 outline is 15.9 mm, so eight in a row is 127.2 mm inside a 91.4 mm
+      body. Industrial switches pack density with 2-HIGH GANGED modules, so the layout is
+      5 columns x 2 rows — columns 1-4 the eight RJ45, column 5 the two combo ports.
+      CROSS-CHECK, independent: the 20-port body is 127.0 mm wide with 16 RJ45, and eight
+      ganged modules = 127.2 mm. The same hypothesis predicts the OTHER variant's width to
+      0.2 mm. Recorded as a reasoned derivation at confidence low, not as fact.
+    flagged:
+      - "assumptions were first written as YAML COMMENTS, which vanish on parse and are
+         invisible to any machine reading the spec. Promoted to a real `assumption:` field
+         on all 8 estimated materials."
+      - "while promoting them, an unclosed quote made the file SWALLOW the port_housing
+         entry whole — 13 materials in the text, 12 after parsing, and it still parsed
+         'clean'. Caught by comparing raw-text ids against parsed ids, not by 'does it
+         parse'. Same failure mode as the previous asset's progress.yaml, in a new dress."
+
+  gate:
+    status: PASS
+    date: 2026-08-15
+    gated_by: orchestrator session
+    notes: >
+      Spec approved. Camera az 42 / el 24 / fov 38 approved as authored — the STANDARD
+      diagonal grammar, which is the opposite call from the previous asset and correct for
+      the opposite reason: that subject was a 33:1 bar that foreshortens into a smear,
+      this one is near-cubic (130x91x136) so one diagonal shot reveals the front face, the
+      TOP terminal blocks and a flank together, and three of the five criticals live on
+      those two planes.
+
+  blockout:
+    status: passed
+    attempts: 1
+    score: 0.81
+    action: continue
+    review: runs/blockout-attempt1.review.json
+    judged_by: "orchestrator session three-js-46, inline (not marginal, no blind sub-judge)"
+    date: 2026-08-15
+    artifacts:
+      - index.html
+      - main.js
+      - src/scene/{runtime,lighting,materials,dims,stratix}.mjs
+      - vendor/ (three r0.160.0, offline)
+    capture_states:
+      - "default                 -> front, LEDs off, rail off"
+      - "?leds=on                -> system + per-port LED banks energised"
+      - "?rail=on                -> EN 50022 context rail (scenery, NOT the product)"
+      - "?cam=rear               -> proves the DIN clip"
+      - "?cam=port-detail        -> close on the jack block and the LED column"
+      - "?pass=<NAME>            -> override the HUD pass label"
+    hooks:
+      - "window.__qaFraming — MVP + subject AABB corners + every DOM panel rect (raw data, no verdicts)"
+      - "window.__qaState   — toggles, rail visibility, camera position, solved radii, and BOTH the intended pass and the text actually in the DOM"
+
+    verified:                    # headless scene math; no server, no capture
+      housing_envelope_m: "0.0914 x 0.1295 x 0.1358 — matches the spec exactly"
+      subject_box_m: "0.0914 x 0.1399 x 0.1456 — appendages add 10.4 mm of height over the declared envelope"
+      port_block: "9 module walls (6 vertical + 3 horizontal) · 10 shields · 10 keyways · 10 per-port LEDs"
+      jack_recess_mm: 3.3        # module face to shield face — a real throat, not a painted grid
+      system_leds: "6 lenses at x -0.0377, on the LEFT of the face as sourced"
+      terminals_proud_mm: 10.4   # blocks stand off the TOP face
+      terminal_screws: 12        # 3 + 3 + 6, matching the pin counts
+      din_clip: "reaches z -0.0771 behind the -0.0679 rear wall"
+      no_rack_ears: "widest non-prop part reaches x 0.0457 = exactly the half-width; nothing projects sideways"
+      rail_prop_default: "OFF — it is scenery and must never be mistaken for the product"
+      leds_toggle: "off = #000000 @ 0 · on = #3ee07a @ 1.3 · returns to true black"
+      draws: 38                  # budget 150
+      tris: 1604                 # budget 200000
+      geometries: "25 unique, cache 25 — nothing bypasses the shared-geometry cache"
+      framing: "front / rear / port-detail all fullyVisible with no HUD or controls overlap at 16:9 and 16:10"
+      port_pitch_px: "59 on the hero view, 117 on the detail view @1600x900"
+
+    corrections_during_build:
+      - "SPEC SELF-CONTRADICTION: express_setup and sd_slot were pivoted at y 0.062 / 0.048,
+         which lands them in the LIVERY band while the spec's own zone description puts
+         them in the MID band beside the LED column. Both are confidence: low layout
+         inferences, so the amendment is pre-authorised under DESIGNSPEC refine-spec.
+         Moved to the mid band's right-hand side and recorded in the spec."
+      - "DETAIL VIEW BURIED THE SUBJECT UNDER A PANEL. At 1280x800 the port-detail shot
+         pushed the jack block under the bottom-right controls panel — the exact
+         false-green this project has been bitten by before. Fixed by giving that view its
+         own ndc margin (0.72 instead of 0.94) rather than letting a detail shot fill the
+         frame blindly. Keyway still reads at 26 px."
+
+    guards:
+      - "dims.verifyDims() — band heights must tile the face, the port block must FIT the
+         body, a jack may not exceed its own pitch. The fit assertion is the one that
+         would have caught the impossible single-row reading (8 x 15.9 = 127.2 in a 91.4
+         body); a negative-control test confirms it fires on that input."
+      - "verifyAttachments() — every appendage must OVERLAP the housing by >= 0.1 mm, not
+         merely touch it (coincident faces are a Float32 knife edge); the port block must
+         span its declared field; and NOTHING may project sideways past the enclosure,
+         which is the geometric form of the din-rail-body critical feature."
+      - "both use console.error, NOT console.assert — assert is invisible to the QA gate"
+
+
+  structural:
+    status: passed
+    attempts: 2
+    score: 0.84
+    action: continue
+    review: runs/structural-attempt2.review.json
+    superseded: "runs/structural-attempt1.review.json (0.82) — attempt2 adds the SFP cages"
+    judged_by: "orchestrator session three-js-46, inline"
+    date: 2026-08-15
+    judge_note: >
+      The SFP distinction reads subtle at the flat-charcoal blockout exposure. Geometry and
+      guard are in place; the plated collar sharpens it at the materials/surface passes —
+      which is a material property, not a massing defect.
+
+    tracked_item_resolution:                # the review left one item to my judgement
+      raised: >
+        The blockout entry earmarked "SFP cage on the 2 combo ports + ventilation louvre
+        profiles" for structural; neither appeared. Non-blocking, neither is a critical or
+        important feature, and the review passed without them.
+      sfp_cages: >
+        DONE, and I do not think this one was optional. The critical feature port-block-10
+        names the distinction explicitly — "eight RJ45 in the left four columns and two
+        combo RJ45/SFP in the fifth" — and column 5 was pixel-identical to the other four.
+        The block was satisfying the COUNT and the RECESS while saying nothing about the
+        MIX, which is a feature half-met rather than met. An SFP cage differs from an RJ45
+        in three visible ways and all three are now modelled: a wider, flatter opening, a
+        plated collar at its mouth, and NO tab slot. Keyways dropped from 10 to 8 for the
+        same reason — an SFP has no tab. Asserted in the build: keyways must stop before
+        the SFP column, so the two port types can never quietly converge again.
+      louvre_profiles: >
+        DEFERRED to surface, deliberately. The vents are already real depressions rather
+        than stripes; what is missing is the angled blade of a true louvre, which is a
+        surface-relief question and appears in no feature. Recording the decision so it is
+        a choice rather than a silent gap.
+    scope: >
+      The two corrections the blockout review asked for. No dimensions, materials, camera
+      angles or URL states changed. The third note (livery CanvasTexture) is explicitly a
+      SURFACE item and was left alone.
+
+    correction_1_zfight:
+      asked: "give the shield / module-wall pair an explicit depth separation to kill the shimmer"
+      found: >
+        MEASURED BEFORE FIXING, and the dominant offender was NOT that pair. A sweep for
+        coincident visible planes over shared footprints found three:
+          housing_body / port_module_walls  FRONT planes both at z=0.06790 over 2805 mm2
+          housing_body / sd_lip             FRONT planes both at z=0.06790 over   46 mm2
+          port_module_walls / port_shields  REAR planes  both at z=0.06340 over 1912 mm2
+        The pair the review named is real but its coincidence is on the REAR faces, hidden
+        inside the throat. What actually shimmered in the default and detail captures was
+        the module block face sitting exactly flush with the housing face over 28 cm2.
+      fixed: >
+        The port block now stands 0.6 mm PROUD of the housing face. That is the physical
+        answer as well as the rendering one — a ganged connector bezel does stand a little
+        proud of the panel it is fitted through — so it is a shape decision rather than an
+        arbitrary epsilon. The shield got its own 0.4 mm standoff from the cavity floor and
+        the SD lip was recessed 0.5 mm. Re-measured: ZERO coincident visible planes.
+      guard_added: >
+        verifyNoCoincidentPlanes() now runs on every build. Overlapping VOLUMES are fine
+        and often required — seated parts are meant to interpenetrate — so it flags only
+        two VISIBLE surfaces at the same depth over a shared footprint. A human noticing
+        shimmer in a render is a slow and unreliable detector; this is a fast and certain
+        one.
+
+    correction_2_din_latch:
+      asked: "sculpt the spring latch as a real leaf/hook, not a protruding tab"
+      built: >
+        A latch is not a tab: it is a fixed hook that catches the rail's upper lip and a
+        LEAF SPRING that snaps over the lower one, with a pull tab for a screwdriver. Both
+        are now extruded PROFILES — the hook returns forward on itself (that return is what
+        makes it a hook rather than a shelf), and the leaf is a spine of five points offset
+        to a constant 1.2 mm thickness so it keeps its section through the curl and reads
+        as sheet metal, not a wedge.
+      measured:
+        hook: "0.0260 x 0.0080 x 0.0080 m"
+        leaf: "0.0220 x 0.0294 x 0.0099 m — sweeps 9.9 mm in depth and drops 29.4 mm"
+        clip_reach: "z -0.0753, behind the -0.0679 rear wall"
+      axis_guard: >
+        ExtrudeGeometry runs along local +Z and these are rotated to lay that along world
+        X. A mis-rotated extrude does not throw — it lays the part along the wrong axis and
+        still renders something plausible, which has bitten this project before. The build
+        now asserts each extruded part is wider in X than in Z, and the checks additionally
+        require the leaf to have real depth and drop so a flat plate cannot pass as a spring.
+
+    verified:                    # headless; no server, no capture
+      coincident_planes: 0
+      draws: 41                  # budget 150 (38 at blockout, 39 after the latch, 41 with SFP cages)
+      tris: 1744                 # budget 200000
+      port_differentiation: "8 keyways (RJ45 only) · 8 SFP cage bars · 2 SFP slots; keyways span x[-0.0340,0.0180] and cages x[0.0262,0.0378], so they cannot overlap"
+      geometries: "27 unique, cache 25 — the 2 extruded profiles bypass the cache BY DESIGN:
+        each is a one-off shape built once, so caching them would gain nothing. A later
+        optimization pass should not treat that gap as duplication to remove."
+      framing: "front / rear / port-detail all still fullyVisible, no HUD or controls overlap at 16:9 and 16:10"
+      regression: "geometry, framing and coincident-plane suites all pass; guard error count 0"
+
+    deferred_confirmed:
+      - "livery CanvasTexture (AB logo, STRATIX 5700 wordmark, catalogue number, 6 LED
+         labels) stays a SURFACE item as the review said. Text discipline will apply:
+         only facts P1 carries, and no invented electrical ratings."
+
+  materials:
+    status: passed
+    attempts: 1
+    score: 0.80
+    action: continue
+    review: runs/materials-attempt1.review.json
+    judged_by: "orchestrator session three-js-46, inline"
+    date: 2026-08-15
+    tracked_to_surface: >
+      The SFP collar still reads WEAK in the port-detail capture despite the 39x luma
+      separation. The material assignment is correct; the problem is prominence — a thin
+      rim occludes itself at that angle. Carried into surface: make the SFP mouth read
+      without measuring.
+    scope: >
+      PBR palette verified against spec.materials[], one real gap closed, and the z-fight
+      guard rebuilt to measure occupancy instead of object bounds. No dimensions, camera
+      angles or URL states changed.
+
+    traceability:
+      result: "13/13 spec materials map 1:1 to a live THREE material — colour, metalness and roughness all match"
+      contract_drift: "none — no material exists in code that the spec does not declare"
+      metalness: "near-binary throughout; no intermediate values"
+      envmap: >
+        Lifted only where it is physical: port_shield 1.30 and terminal_screw 1.20 and
+        din_clip_steel 1.15 are the bare metals, the only surfaces that should mirror the
+        room. port_cavity is dropped to 0.30 because a jack throat is an occluded cavity —
+        letting it take full room light is what flattens the recess. Every dielectric
+        stays at 1.0.
+
+    gap_closed_led_amber:
+      found: >
+        The traceability check caught what a render never would: led_amber was DECLARED in
+        the spec and NEVER INSTANTIATED. Every per-port lens was wired to green, so the
+        model could not reach a state its own contract declares — and the spec's evidence
+        for amber is the manual's per-port state table, not a guess.
+      fixed: >
+        The per-port row is now split: 8 green (link) and 2 amber (disabled or faulted).
+        A managed switch with all ten ports in an identical state is also the less honest
+        picture. This is an ILLUSTRATIVE state, not a measurement — it makes no claim about
+        which ports are disabled on any real unit, the same discipline the sibling asset's
+        display follows by showing structure without fabricating numbers.
+      asserted: "the build now requires exactly 2 amber lenses, so led_amber cannot silently fall out of the render again"
+
+    zfight_guard_rebuilt:
+      why: >
+        Splitting the LED row made the guard fire on the two halves — correctly by its own
+        rule and WRONG in substance. It compared object BOUNDING BOXES, and an
+        InstancedMesh's box is the hull of every instance, so two interleaved instanced
+        parts look like they share a footprint when their individual lenses never touch.
+        A guard that reports a correct model as broken pushes you into a fake fix.
+      fix_1: >
+        It now expands every instanced object into its PER-INSTANCE boxes and compares
+        those. Occupancy, not hulls.
+      fix_2: >
+        That precision immediately surfaced a second false positive: the vertical and
+        horizontal walls of one module grid cross each other by construction and share a
+        front plane at the junction. They also share a MATERIAL — and z-fighting is only
+        visible when the two surfaces differ in appearance; whichever of two identical +z
+        faces wins the depth test, the pixel is the same. Same-material pairs are now
+        skipped, with the reason recorded. Noise that trains people to ignore a guard is
+        worse than no guard.
+      negative_control: >
+        Re-verified that the guard still catches the defect it was written for: pushing the
+        port block back flush with the housing reproduces the coincident-plane condition
+        between two DIFFERENT materials, which is exactly what it flags.
+
+    verified:                    # headless; no server, no capture
+      spec_to_code: "13/13, no drift, no unrendered declarations"
+      led_states: "off = all three at 0 · on = #3ee07a / #ffb020 / #ff3b30 at 1.3, three distinct colours"
+      sfp_collar_contrast: "port_shield luma 0.348 against port_housing 0.009 — a 39x separation, so the plated collar can carry the RJ45/SFP distinction the judge found subtle at blockout exposure"
+      coincident_planes: 0
+      draws: 42                  # budget 150
+      tris: 1744                 # budget 200000
+      regression: "geometry, framing, coincident-plane and materials suites all pass"
+
+  surface:
+    status: passed
+    attempts: 1
+    score: 0.82
+    action: continue
+    review: runs/surface-attempt1.review.json
+    judged_by: "orchestrator session three-js-46, inline"
+    date: 2026-08-15
+    must_fix_before_p6: "a thin red thread in the hero — RESOLVED, see passes.surface-touchup" 
+    scope: >
+      The three items carried here: the SFP mouth the review found weak, the vent louvre
+      blades deferred from structural, and the CanvasTexture livery. Fully offline — every
+      pixel drawn with the 2D canvas API, no image files and no webfonts.
+
+    sfp_mouth:
+      raised: "the plated collar still read WEAK in port-detail despite a 39x luma separation"
+      diagnosis: "the material was right; a 0.9 mm rim occludes itself at an oblique angle"
+      fixed: >
+        Widened from a rim into a real SLEEVE — which is also what an SFP cage physically
+        is: a plated metal tube lining the whole opening, not a picture frame around it.
+        The physical answer and the legibility answer agree again. Metal share of the
+        mouth went 37% -> 74%, sleeve depth 2.4 -> 3.4 mm, and the bar reads 16.2 px at
+        ?cam=port-detail instead of 6.6 px.
+
+    louvre_blades:
+      built: >
+        The vent recesses were already real depressions; what was missing is the ANGLED
+        BLADE that throws the hard shadow line down a vented flank. 14 blades, one per
+        recess, tilted 0.55 rad.
+      formed_inward: >
+        The first version stood them 1.7 mm PROUD and the no-rack-ears guard fired. The
+        guard was right and so was the physics it encodes: a stamped louvre is pressed OUT
+        OF the panel, so the blade lives inside the opening and nothing projects past the
+        enclosure. Re-seated inward; the shadow comes from the tilt, not from protrusion.
+
+    livery:
+      built: "one textured slab replaces the three placeholder mass blocks — the red Allen-Bradley block, the Stratix 5700 product name and the catalogue number now READ"
+      led_labels: >
+        One textured strip for all six diagnostic labels instead of six blank plates. It
+        spans exactly the lens column, so row i sits over lens i BY CONSTRUCTION and a
+        label cannot drift off its lamp. Names are the manual's own state-table labels.
+      text_discipline: >
+        Everything printed is sourced from P1-DATASHEETS §3: Allen-Bradley, Stratix 5700,
+        1783-BMS10CGP, and the six LED names. NO ELECTRICAL RATINGS — P1 carries no
+        voltage, current or power figure for this device, only dimensions, port mix and
+        mounting. The check asserts the ABSENCE, not just the presence. No port numbering
+        either: nothing establishes how Rockwell numbers these, and unlike the PDU there is
+        no functional argument forcing it.
+
+    corrections_during_build:
+      - "THE LIVERY PLATE WAS FLOATING. I used PlaneGeometry for the texture, and a
+         zero-thickness plane 0.3 mm off the face is attached to nothing — the attachment
+         guard caught it. Replaced with a 0.8 mm slab straddling the face, which satisfies
+         both guards at once: it overlaps the housing AND its front sits 0.4 mm proud, so
+         no coincident plane either. The blockout used boxes here and passed; switching to
+         a plane for the texture is what introduced it."
+      - "Louvres: see formed_inward above. Two rounds — 1.7 mm proud, then 0.22 mm proud
+         from the tilted box's own diagonal, then seated properly at -0.3 mm."
+
+    verified:                    # headless, with a canvas stub so the artwork rasterises
+      text: "no electrical rating asserted; 6 LED labels match the manual names"
+      sfp: "74% metal share, 3.4 mm sleeve depth, 16.2 px bar at port-detail"
+      louvres: "14 blades, reaching x 0.0454 inside the 0.0457 half-width"
+      livery_legibility: "product name 22.3 px and brand 15.2 px on the HERO view — readable without the detail shot"
+      led_label_legibility: "11.9 px on the hero, fine print by design; port-detail is where they read"
+      artwork_cached: "livery and labels rasterise exactly once each"
+      draws: 36                  # budget 150 — DOWN from 42: six placeholder mass blocks became two textured slabs
+      tris: 1828                 # budget 200000
+      guards: "0 errors; coincident planes 0; framing unchanged on all three views"
+
+  surface-touchup:
+    status: passed
+    date: 2026-08-15
+    confirmed_by: >
+      Orchestrator re-captured the hero at dpr4 and measured with a control: the band that
+      held 284 saturated red pixels now holds 0, while the Allen-Bradley logo still holds
+      22135 in its own region — so the thread is gone and the artwork it came from is
+      intact. surface-attempt1.review.json updated, global 0.82 -> 0.83.
+    scope: "the red-thread must-fix, plus two defects it exposed. No dimensions, angles or URL states changed."
+
+    red_thread:
+      reported: "a ~7 x 120 px vertical thread at x~1506/3840, colour rgb(165,71,77), isolated on the charcoal face beside the livery slab"
+      how_it_was_pinned: >
+        I could NOT match the reported coordinates to a specific edge — my camera solve
+        differs from the capture's, and all four candidate edges projected near it but none
+        onto it. So I pinned it by ELIMINATION instead, which turned out to be decisive:
+        after the surface pass there is NO RED GEOMETRY ANYWHERE in this model. Every red
+        mass block was replaced by artwork, so the only red that exists lives inside the
+        livery CanvasTexture. A red artefact could therefore only ever be that texture
+        appearing on a surface it was never meant to reach.
+      cause: >
+        A BoxGeometry has six material groups, and a single mapped material paints the
+        artwork onto ALL of them — including the 0.8 mm side edges, where the red block
+        shows as a smeared sliver. Both textured slabs had this. Confirmed by inspection:
+        1 material across 6 groups on each.
+      fixed: >
+        Both slabs now take a six-material array with the map ONLY on group 4 (+z, the
+        front); the other five faces take the HOUSING material. That is also the physically
+        right answer — this livery is silkscreen printed on the panel, so it has no label
+        stock to show a cut edge. Verified the mapped face index is exactly [4] on both.
+      guard_added: >
+        verifyNoWrapAroundTextures() fails the build if any mapped material is applied to a
+        multi-group geometry. This artefact shipped in a delivered hero; it is now checked
+        rather than remembered.
+      confirm: "needs a hero re-capture to confirm the thread is gone — I cannot capture"
+
+    two_defects_this_exposed:
+      livery_red_unrendered: >
+        MY OWN REGRESSION, introduced in the surface pass: replacing the red logo block
+        with a texture left livery_red declared in the spec with nothing rendering it. The
+        spec now records realised_as — the colour is still governed by that entry, it is
+        simply delivered as printed artwork rather than as a surface, which is what a
+        silkscreened logo actually is.
+      my_check_printed_it_and_passed: >
+        Worse than the regression: the materials sweep had ALREADY reported
+        "declared but not rendered: livery_red" and still exited 0, because that line was a
+        console.log and never an assertion. A sweep that names a defect and passes anyway
+        is not a check. It now FAILS on any unrendered declaration unless the spec entry
+        carries realised_as.
+      and_that_assertion_found_its_own_blind_spot: >
+        Turned on, it immediately flagged livery_print as unrendered too — a false
+        positive, because the sweep collected usage via o.material.name, which is undefined
+        for the material ARRAYS the fix had just introduced. Fixed to iterate arrays. Three
+        layers deep, and each one only became visible once the layer above it was made
+        strict.
+
+    verified:
+      mapped_faces: "livery_plate and sys_led_label_strip both map exactly face index [4] (+z front)"
+      no_red_geometry: "no mesh in the model has a red base colour — the red exists only as artwork"
+      traceability: "13/13, livery_red excused by realised_as, everything else rendered"
+      draws: 36
+      tris: 1828
+      regression: "build, framing, coincident-plane, materials and surface suites all pass"
+
+  lighting-camera:
+    status: passed
+    attempts: 1
+    score: 0.83
+    action: continue
+    review: runs/lighting-camera-attempt1.review.json
+    judged_by: "orchestrator session three-js-46, inline"
+    date: 2026-08-15
+    sfp_final_call: >
+      The review authorised ONE more attempt at the SFP mouth and instructed me to stop
+      regardless of the result. Done: port_shield envMapIntensity 1.30 -> 1.70. Stated
+      plainly rather than buried — this scene has NO ambient occlusion of any kind, so
+      three.js already gives a sleeve at the bottom of a 3.4 mm throat the FULL
+      environment, more than it would physically receive. 1.30 was already generous on
+      those grounds, so this is a rendering dial turned past physical, not occlusion
+      compensation. It fabricates no claim about the product, and it is the LAST turn: if
+      the mouth still does not read, the honest conclusion is the one the review already
+      reached — the RJ45/SFP distinction is genuinely subtle at real scale.
+    scope: "the rig re-aimed for THIS subject, and the under-lit SFP throats the surface review flagged. No geometry, materials, camera angles or URL states changed."
+
+    the_inherited_rig_had_the_wrong_answer_baked_in: >
+      src/scene/lighting.mjs arrived as a VERBATIM COPY of the previous asset's rig. That
+      subject was a 1.78 m vertical bar whose whole identity sat on one plane, so its key
+      had been deliberately pulled DOWN to stop up-facing light out-shining the front. This
+      subject is a compact box with a critical feature ON THE TOP FACE — the screw terminal
+      blocks — and an approved 42/24 hero chosen precisely to show front and top together.
+      Carrying that rig over unexamined would have darkened a critical to solve a problem
+      this subject does not have. Same house rig, opposite correct answer.
+
+    measured:                    # analytic irradiance per surface normal, inherited -> re-aimed
+      front_+z: "1.696 -> 1.742   (port block, LED column, livery — 3 criticals)"
+      top_+y:   "1.293 -> 1.500   (+16%; terminal blocks — 1 critical)"
+      rear_-z:  "0.832 unchanged  (DIN latch, seen at ?cam=rear)"
+      side_+x:  "1.045 -> 1.005"
+      side_-x:  "0.565 unchanged"
+      ratios:   "front/top 1.31 -> 1.16 · rear/front 0.48 · side spread 1.78 · front/side 1.63 -> 1.73"
+
+    sfp_throats:
+      raised: "the review found the SFP mouth still not standing out — sub-illuminated throats"
+      lever: >
+        Frontal fill 0.30 -> 0.45. A throat is an occluded cavity, so the only lamp whose
+        rays enter it is one pointing down its axis. Not higher, because the counter-risk
+        is real: a frontal light strong enough to fill a throat is also strong enough to
+        flatten it by reaching the cavity floor as directly as the rim. At 0.45 the
+        front/side contrast measured 1.63 -> 1.73, so the recess reading did not degrade.
+      honest_limit: >
+        This model computes light DIRECTION, not occlusion. It can prove a lamp points into
+        the throat; it cannot say how much light survives the trip. The capture is the
+        arbiter of that, and if the mouth still reads flat the next lever is the sleeve's
+        envMapIntensity — it is bare metal, so it answers to the environment more than to
+        any directional lamp.
+
+    criteria_asserted:           # the check fails the build if any of these break
+      - "front/top between 1.05 and 1.25 — the front must lead without starving the top's own critical"
+      - "rear/front >= 0.40 — ?cam=rear is the only evidence for the DIN latch"
+      - "side spread >= 1.5 — the louvre blades need one flank lit and one shaded to throw a line"
+      - "front/side >= 1.3 — a frontal strong enough to fill a throat must not flatten the recesses"
+
+    corrections_during_build:
+      - "My own edit deleted the THREE import from lighting.mjs while replacing the header
+         block, and it reached the real file, not just the sandbox copy. Caught immediately
+         because the lighting check imports the module and threw — an argument for checks
+         that EXERCISE a module rather than only lint it. Restored."
+
+    verified:
+      regression: "build, framing, coincident-plane, materials, surface and lighting suites all pass"
+      unchanged: "geometry, materials, camera angles, URL states"
+
+  interaction-ui:
+    status: passed
+    attempts: 1
+    score: 0.84
+    action: continue
+    review: runs/interaction-ui-attempt1.review.json
+    judged_by: "orchestrator session three-js-46, inline"
+    date: 2026-08-15
+    pdu_decision: >
+      The occlusion defect I found here also exists latent in pdu-panduit. The orchestrator
+      ruled: do NOT reopen it — its judged result stands, because there every occluder IS a
+      hotspot so blockedBy worked and the symptom never appears. The gap matters only in
+      the SCENE ASSEMBLY (where a neighbouring device is a non-hotspot occluder) and in
+      library extraction, and it is recorded in
+      disenos/homelab/pdu-panduit/runs/DEFERRED-CORRECTIONS.md.
+    scope: >
+      Raycast hotspots on the MODEL plus the DOM affordances a --page capture needs. No
+      geometry, materials, lighting or camera angles changed.
+
+    hotspots:
+      list:
+        - "ports     -> click the jack block to zoom into it (?cam=port-detail)"
+        - "leds      -> click the diagnostic column to energise or darken the board"
+        - "terminals -> click the top blocks to show the DIN rail it mounts on"
+        - "latch     -> click the rear latch to swing to the rear view"
+      hover: "cursor becomes a pointer and a tooltip names the part and what the click does"
+
+    page_capture_readiness:
+      why: "this pass captures --page, so the DOM is part of the deliverable, and a still frame has no cursor to reveal a hover affordance"
+      added: "a top-right legend listing every hotspot, dimmed when one is not currently reachable, plus a last-action line"
+      qaFraming_extended: "__qaFraming now returns the hotspots panel alongside hud and controls — a probe checking only #hud would pass a subject buried under it"
+      verified_layout: "at 16:9, 16:10 and 1280x800 the subject stays fullyVisible and no panel overlaps it"
+
+    defect_found_and_fixed:
+      title: "the occlusion test could be walked straight through"
+      what_happened: >
+        The DIN latch reported CLICKABLE from the front view, where it sits entirely behind
+        the enclosure. The cause was in my own pick(): it walked the intersection list and
+        SKIPPED every hit that belonged to no hotspot, continuing until one turned up. The
+        housing belongs to no hotspot, so the ray sailed straight through a solid body and
+        found the latch behind it.
+      why_it_had_not_shown_before: >
+        On the sibling asset every occluder happened to BE a hotspot — one strip blocking
+        the other — so blockedBy worked and the bug stayed invisible. It only surfaces when
+        the thing in the way is ordinary geometry, which is the common case.
+      fix: >
+        pick() now stops at the FIRST visible surface, whatever it is. A real click cannot
+        pass through a solid body, so neither may this; if the nearest surface is not a
+        hotspot, the click lands on nothing. blockedBy now names the occluder — a probe
+        told only "not clickable" cannot tell an occluded hotspot from a missing one.
+      sibling_asset_note: >
+        pdu-panduit carries the same original logic and is already COMPLETE through P6. Not
+        reopening it unilaterally — flagged to the orchestrator to decide, since there the
+        occluders are hotspots and the symptom does not appear.
+
+    verified:                    # headless, with a minimal DOM stub
+      hotspots_resolve: "4/4 point at nodes that exist; pointer events wired"
+      occlusion_discriminates: >
+        FRONT: ports, leds and terminals clickable; the latch reports clickable=false with
+        blockedBy=housing_body. REAR: the latch and terminals become clickable while ports
+        and leds report blockedBy=housing_body. The test now answers differently depending
+        on where the camera is, which is the whole point of having it.
+      interactions_drive_real_state: "the LED hotspot lights the board (emissiveIntensity > 0), the terminal hotspot reveals the rail, an unknown id returns ok:false"
+      regression: "all 6 prior suites still pass"
+
+  optimization:
+    status: passed
+    attempts: 1
+    score: 0.84
+    action: continue
+    review: runs/optimization-attempt1.review.json
+    judged_by: "orchestrator session three-js-46, inline"
+    date: 2026-08-15
+    scope: "re-probe against budget, right-size resources against how they are actually used, change nothing a previous pass was judged on"
+
+    budget:
+      draws: "36 / 150  (24%)"
+      tris:  "1828 / 200000  (0.9%)"
+
+    what_I_did_NOT_do:
+      no_merging: >
+        Same call as the sibling asset and for the same reason: at 24% of the draw budget,
+        merging the housing's twelve charcoal meshes would buy draws nobody needs while
+        destroying the named parts that verifyAttachments, the 14-part assertion and the
+        four raycast hotspots all resolve by name. Optimising a budget you are not near is
+        how a later pass loses its ability to prove anything.
+      extrusions_left_outside_the_cache: >
+        Confirmed as instructed: exactly 2 geometries bypass the cache, and they are the
+        latch's extruded profiles. Each is a one-off shape built once, so caching would
+        gain nothing. The check now asserts the gap is exactly 2, so neither a future pass
+        that "fixes" it nor one that quietly adds a third goes unnoticed.
+      livery_texture_left_alone: >
+        Measured and deliberately not touched. It appears only in the hero, where a dpr3
+        capture renders it 630 px against a 512 px canvas — a 1.23x upscale, inside
+        resampling tolerance. Doubling it would cost another megabyte for a difference
+        nobody could see.
+
+    what_I_did:
+      label_canvas_RAISED: >
+        THE OPTIMIZATION PASS MOVED A NUMBER UP, because right-sizing is a measurement in
+        both directions and the measurement said this one was under-resourced. The
+        system-LED label strip appears in BOTH the hero and ?cam=port-detail, and at dpr3
+        the detail shot rendered it 516 px wide against a 256 px canvas — a 2.0x upscale on
+        the very text that shot exists to make legible. Canvas 256x336 -> 512x672, which
+        brings it to 1.01x. Cost is honest and stated: 336 KB -> 1344 KB.
+
+    verified:                    # headless, with a canvas stub so the artwork rasterises
+      budget: "within on both axes with a wide margin"
+      geometry_sharing: "36 meshes over 26 unique geometries; 6 serve more than one mesh; cache holds 24 and the 2 outside it are the extrusions"
+      no_duplicate_materials: "compared by full signature (name + colour + metalness + roughness + map + transparency), not by name — two entries may share a spec id legitimately when they differ"
+      artwork_cached: "livery and labels rasterise exactly once each"
+      texture_sampling: "label strip 1.01x at dpr3 port-detail (was 2.02x); livery 1.23x at dpr3 hero, left as is"
+      named_parts_preserved: "14/14, and all four hotspot groups intact"
+      offline: "no http(s) URL, fetch, XHR, WebSocket or Image() anywhere in main.js / index.html / src; the importmap resolves only to vendor/"
+      console: "one console.log, a success line on a clean build — no errors, no warnings"
+      regression: "all 7 prior suites still pass"
+
+  p6-final:
+    status: passed
+    score: 0.85
+    review: runs/p6-final-attempt1.review.json
+    judged_by: "orchestrator session three-js-46, inline"
+    date: 2026-08-15
+    asset_state: "COMPLETE — 9 passes, all PASS. 0.81 / 0.84 / 0.80 / 0.82 / 0.83 / 0.84 / 0.84 / 0.85"
+    ladder_note: >
+      Nearly every pass surfaced a latent defect in my own work rather than in the model,
+      and each was hardened into a permanent guard: a z-fight guard comparing InstancedMesh
+      HULLS instead of occupancy; artwork wrapping onto BoxGeometry edges; led_amber
+      declared and never instantiated; a console.log posing as an assertion; an occlusion
+      test a ray could walk straight through; and an import deleted by my own edit, caught
+      only because a check IMPORTS the module rather than linting it.
+    capture_notes:
+      mode: "--page (hero + thumbnail)"
+      comparison: "SPEC-ONLY. No site photo of this switch exists on disk — the inventory lists it, the photographs are of the Panduit aisle. Do NOT fabricate a reference-match."
+      states: "default · ?leds=on · ?cam=port-detail · ?cam=rear · ?rail=on"
+      sfp: "at its accepted honest limit; nothing left to touch"
+
+    self_check:                  # run headless before handing over
+      envelope_vs_spec: >
+        0.0914 x 0.1295 x 0.1358 m — IDENTICAL to the spec after seven build passes. Not
+        one dimension moved.
+      critical_features: "5/5 have named geometry backing them; every mapped part present"
+      important_features: "2/2 present (recessed setup button, SD slot)"
+      materials: "13 declared, 0 drifted from the spec"
+      port_layout: "5 x 2 = 10, as declared"
+      livery_text: "'Allen-Bradley Stratix 5700 1783-BMS10CGP' — still no electrical rating, asserted"
+      p6_comparison: "spec-only in the spec, and the references directory is empty, so spec-only is the correct and honest setting"
+      guard_errors: 0
+
+    mass_drift_blockout_to_final:
+      x: "0.00 mm"
+      y: "0.00 mm"
+      z: "1.80 mm"
+      attribution: >
+        The z figure is NOT unexplained slack — it is 100% the DIN latch, and it moved the
+        right way. The blockout's crude protruding tab reached z -0.0771; the structural
+        pass replaced it with a sculpted leaf spring that reaches -0.0753. The model got
+        1.8 mm SHALLOWER because a real leaf spring hugs the body where a stuck-on tab
+        sticks out. Verified by finding the rearmost mesh in the whole model and measuring
+        it: din_leaf_spring at -0.0753, exactly 1.80 mm of the 1.80 mm total. Nothing else
+        in the model moved in any axis.
+
+deferred_to_later_passes:
+  - "DONE in surface: vent louvre blades, the CanvasTexture livery, and the SFP sleeve."
+  - "surface: CanvasTexture livery — the Allen-Bradley logo, STRATIX 5700 wordmark, the
+     catalogue number, and the six system-LED labels. TEXT DISCIPLINE APPLIES: only facts
+     P1 actually carries, and no invented electrical ratings."
+  - "lighting: re-aim the rig for THIS subject. Its identity is split between a FRONT
+     plane and a TOP plane, so both must be lit — the opposite balance from the previous
+     asset, where up-facing light was wasted on a vertical bar."
+
+open_items:                      # unsourced values, mirrored from design-spec.yaml
+  - "PORT LAYOUT (5 cols x 2 rows) is derived, not published. A Rockwell drawing would retire it."
+  - "FRONT-FACE VERTICAL ZONES are a layout inference; only 'LEDs at the left' and 'terminals on top' are sourced."
+  - "SD SLOT and ALLEN-BRADLEY LOGO positions: P1 records both as 'sin datasheet — usar aproximacion de foto'."
+  - "HOUSING COLOUR: 'dark grey / charcoal' is sourced, the hex is not. No RAL or Pantone published."
+  - "TERMINAL BLOCK COLOUR: entirely unsourced. P1 confirms the blocks and what they carry, not their colour."
+  - "ALLEN-BRADLEY RED: the logo is sourced as red; the exact red is not published in any P1 source."
+
+# ── RESUMING THIS ASSET IN A NEW SESSION ─────────────────────────────────────
+resume:
+  state: "blockout BUILT and on disk, awaiting capture + judge. Nothing needs rebuilding."
+  first_action: >
+    Capture the existing blockout and judge it. Do NOT re-launch a modeler to build it —
+    index.html, main.js and src/scene/*.mjs are complete and verified headless.
+  capture_states:
+    - "default            (front, LEDs off, rail off)"
+    - "?leds=on           (system + per-port LED banks energised)"
+    - "?cam=port-detail   (jack block close-up)"
+    - "?cam=rear          (proves the DIN clip)"
+    - "?rail=on           (EN 50022 context rail — SCENERY, not the product)"
+  framing_caveat: >
+    ?cam=port-detail deliberately uses its OWN ndc margin of 0.72 instead of the default
+    0.94, because at 16:10 the standard margin pushed the jack block under the controls
+    panel. Do NOT fail it against the standard framing rule — it is framed to a tighter
+    margin on purpose, and __qaState reports the solved radius for every view so this is
+    checkable rather than a claim.
+
+  # HOW TO REACH THE BUILDER SESSION. HANDOFF.md says SendMessage to "ayudante". That is
+  # correct as far as this session knows — it was renamed to `ayudante` at startup — BUT
+  # the builder cannot verify it: ListAgents does not list the calling session itself, so
+  # it cannot see the name peers address it by. If "ayudante" does not resolve, fall back
+  # to ListAgents and pick the session working on this asset, or just proceed: everything
+  # needed to capture, judge and record is already on disk and needs no live session.
+  contacting_the_builder:
+    primary: 'SendMessage to: "ayudante"'
+    fallback: "ListAgents, then message the session working on stratix-5700"
+    if_unreachable: >
+      Nothing blocks. The asset is self-contained; the verdict can be written to
+      runs/stratix-blockout-attempt1.review.json and this progress.yaml updated by
+      whoever takes over sole-writer duty. Record the takeover here if that happens.

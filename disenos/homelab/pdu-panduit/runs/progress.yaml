@@ -1,0 +1,604 @@
+# progress.yaml — pdu-panduit. Churns per pass; design-spec.yaml stays stable.
+#
+# NOTE: `passes` is a MAP keyed by pass name (gate-state.mjs reads it that way).
+# It was authored as a list at attempt 1 and reconciled here — content unchanged.
+#
+# SINGLE WRITER (agreed 2026-08-15). This file has ONE writer; the orchestrator sends
+# verdicts and they get recorded here. Two sessions editing it produced a duplicate
+# `materials:` key, and YAML silently keeps only the LAST one — the file parsed clean
+# while reporting a judged pass as unjudged and filing the structural pass's evidence
+# under the wrong parent. Validate the SHAPE after editing, not just that it parses:
+# count occurrences PER KEY, since a total line count cannot see a repeat.
+
+design: pdu-panduit
+track: threejs
+mode: heavy
+
+passes:
+  spec:
+    status: PASS
+    date: 2026-08-15
+    notes: >
+      design-spec.yaml authored. Validated with PyYAML: parses, 14/14 required keys,
+      4 critical + 2 important features, 9 materials, metalness near-binary with no
+      violations, no estimated material below confidence 0.7.
+    flagged:
+      - "width_m CONFLICT: CDW lists 2 in (50.8 mm) while P1-DATASHEETS §1 records 58 mm.
+         Midpoint 0.054 taken at confidence low — pre-authorized for P4 refine-spec."
+      - "outlet_field_m / outlet_pitch_m / head_module_m / lcd_* are DERIVED, not datasheet.
+         Each carries its derivation in a comment and confidence low."
+
+  gate:
+    status: PASS
+    date: 2026-08-15
+    gated_by: orchestrator session
+    notes: >
+      Spec approved. Camera approved as authored (az 34 / el 8 / fov 34) — deliberately
+      off the 40-45 diagonal grammar because a 33:1 subject foreshortens into a smear on
+      a steep diagonal and the outlet pitch must stay resolvable.
+
+  blockout:
+    status: passed
+    attempts: 2
+    score: 0.77
+    action: continue
+    screenshot: runs/blockout-attempt2.png
+    review: runs/blockout-attempt2.review.json
+    date: 2026-08-15
+    artifacts:
+      - index.html
+      - main.js
+      - src/scene/{runtime,materials,dims,pdu-strip}.mjs
+      - vendor/ (three r0.160.0, offline)
+
+    attempts:
+      - n: 1
+        status: failed
+        score: 0.77
+        review: runs/blockout-attempt1.review.json
+        gate_note: >
+          Blind judge 0.77. All 4 CRITICALS PASS (slender 0.85, outlet-column 0.76,
+          ab-feed 0.88, head 0.77). Blocker is important_average 0.61 < 0.65:
+          rear-mount-buttons scored 0.50 — the buttons are on the REAR face and the az34
+          front camera cannot frame them (the mounts shot is pixel-identical to default).
+          Evidence-coverage gap, NOT a geometry defect.
+      - n: 2
+        status: built
+        change: >
+          Added rear camera states. NO geometry changed; the P3-approved front pose is
+          untouched. `rear` is the exact 180 deg mirror of front (same elevation, radius
+          and target). `rear-detail` closes in on feedA's mount-button column.
+        why_two_rear_views: >
+          The azimuth flip alone is necessary but NOT sufficient, and this was measured
+          rather than assumed: at the full-subject radius one 12 mm button projects to
+          5.0 px. It would face the camera and still read as a speck, so a re-gate on
+          `rear` alone risked burning a second cycle on the same 0.50.
+
+    capture_states:
+      - "default              -> front, both strips (A red + B blue)"
+      - "?feed=a              -> solo the red A strip"
+      - "?feed=b              -> solo the blue B strip"
+      - "?head=on             -> head LCD backlight on"
+      - "?cam=rear&mounts=1   -> rear view, whole subject, mount buttons on"
+      - "?cam=rear-detail&mounts=1 -> rear close-up on feedA's button column"
+    hooks:
+      - "window.__qaFraming — MVP + subject AABB corners + HUD rect (raw data, no verdicts)"
+      - "window.__qaState   — toggles AND camera position, so two shots that differ only by
+         URL cannot render identically without the probe noticing (that is exactly how the
+         attempt-1 mounts capture went unnoticed)"
+
+    # Verified HEADLESS (pure scene math, no server, no capture — the orchestrator gates):
+    verified:
+      chassis_bbox_m: "0.0540 x 1.7780 x 0.0840"
+      aspect_h_to_w: "32.9:1"
+      outlet_instances: "42 faceplates · 43 dividers · 126 pin slots"
+      outlet_recess_mm: 6.0        # faceplate front sits 6 mm behind the bezel rail front
+      body_colors: "feedA #a8231c · feedB #1d4a8f (distinct, simultaneous)"
+      strip_gap_mm: 96
+      head_proud_mm: 6.0           # module stands off the rails, reads as separate
+      ports_recessed_mm: 2.0       # jacks sit behind the head face, not flush stickers
+      draws: 42                    # budget 200
+      tris: 8200                   # budget 350000
+      framing_front: "fullyVisible=true, overlapsHUD=false for feed=ab|a|b at 16:9 and 4:3"
+      outlet_pitch_px: 14.3        # @1600x900 — resolvable by the blind judge
+
+    # Rear-face mount-button coverage, measured per view @1600x900.
+    # "facing" = rear-face normal (0,0,-1) dotted with the camera direction.
+    mount_button_coverage:
+      front:        {facing: -0.820, buttons_in_frame: "4/4", button_px: 4.7,  usable: false, why: "hidden behind the strip body"}
+      rear:         {facing:  0.828, buttons_in_frame: "4/4", button_px: 5.0,  usable: false, why: "faces camera but reads as specks"}
+      rear-detail:  {facing:  0.829, buttons_in_frame: "3/4", button_px: 12.1, usable: true,  why: "3 buttons at 12 px reads as a series of studs"}
+      note: >
+        rear-detail deliberately frames a REGION, so a framing probe reports
+        fullyVisible=false for it. It is an evidence shot, not a framing shot — gate it
+        as such or the probe will fail it for doing its job.
+
+    corrections_during_build:
+      - "mount_buttons handle: originally cloned one group for feed A and returned only
+         feed B's, so the toggle would have moved half the pair. Now one group per strip
+         and setMountButtons() drives both."
+      - "framing check measured the WRONG SPECIMEN: the first aspect assertion boxed the
+         whole strip group including the inlet cord, reporting 20.9:1 instead of the
+         chassis's real 32.9:1. Check now boxes strip_body + outlet_column + head_module
+         and asserts the cord separately."
+      - "camera cropped the subject: r=3.6 aimed at (0,0,0) was solved from the strip's
+         own half-length and cut the inlet cord at ndc y=-1.034. Re-solved against the
+         real subject box -> target (0.0208, -0.1085, 0.0525), r=3.655."
+      - "attempt 2: rear-detail first sat at r=1.60 centred on y=0, which cropped the
+         column to 2 of 4 buttons. Dropped the target to y=-0.20 and closed to r=1.47 —
+         3 buttons at 12.1 px instead of 2 at 11.0 px."
+
+    guards:
+      - "dims.verifyDims() — positivity + fit margins on every DERIVED dimension"
+      - "verifyAttachments() — every appendage group must OVERLAP strip_slab (no floating
+         parts); outlet column must span ~outlet_field; measured regardless of visibility
+         so a default-off part cannot hide a defect"
+      - "both use console.error, NOT console.assert (assert is invisible to the QA gate)"
+
+  structural:
+    status: passed
+    attempts: 1
+    score: 0.80
+    action: continue
+    screenshot: runs/structural-attempt1.png
+    review: runs/structural-attempt1.review.json
+    date: 2026-08-15
+    scope: >
+      Parametric rebuild applying the two non-blocking notes from the blockout review.
+      Materials stay FLAT (PBR is the next pass). Camera, URL states, __qaFraming and
+      __qaState unchanged. Mount-button diameter deliberately untouched (see open_items).
+
+    changes:
+      outlet_socket: >
+        Rebuilt each outlet from a flat faceplate into a real TUB. This fixed a genuine
+        defect, not just a shallow recess: the pin slots were dark boxes sitting PROUD of
+        a solid plate, so the socket had NO cavity at all — the "dark aperture" was three
+        dark studs catching the key light. Now: dark cavity floor + four light rim walls
+        standing 5 mm proud of it + pin slots down inside. Parts renamed
+        outlet_faceplates -> outlet_cavity_floors + outlet_rims.
+      head_ports: >
+        Port band rebuilt from one recessed plate with three tabs into an apertured bezel:
+        4 solid columns (2 margins + 2 dividers), a top and bottom lintel per aperture,
+        and per port a dark throat with a metal jack recessed inside. Aperture layout is
+        parametric across the strip width via solvePortLayout() — margins absorb the slack
+        so the group stays centred.
+      seating: >
+        Every part landing on the slab front face is now sunk 0.5 mm into it instead of
+        sitting exactly on the plane. See corrections below — this was a real robustness
+        bug, not cosmetics.
+
+    verified:                      # headless scene math; no server, no capture
+      outlet_cavity_depth_mm: 5.0  # was 0.0 — required >= 4.0
+      pin_slots_below_rim_mm: 3.0  # were PROUD of the plate at blockout
+      socket_behind_bezel_mm: 3.5
+      outlet_instances: "43 dividers · 42 cavity floors · 168 rims · 126 pin slots"
+      head_port_meshes: 16
+      bezel_solid_columns: 4       # 2 margins + 2 dividers
+      jack_recess_mm: 2.5          # every jack, behind the head face
+      jack_socket_depth_mm: 3.5
+      aperture_gaps_mm: "3.0 / 3.0"
+      port_band_fits_width: true   # spans exactly x[-0.0270, 0.0270]
+      chassis_bbox_m: "0.0540 x 1.7780 x 0.0840"   # unchanged
+      aspect_h_to_w: "32.9:1"                       # unchanged
+      draws: 64                    # budget 200 (was 42)
+      tris: 12472                  # budget 350000 (was 8200)
+      framing_regression: "front feed=ab|a|b still fullyVisible at 16:9 and 4:3; rear views unchanged"
+
+    corrections_during_build:
+      - "COINCIDENT-FACE TRAP: parts landing exactly on the slab front plane (z=0.028) made
+         the attachment guard fire 'FLOATING' for outlet_column while head_module passed —
+         pure luck. Vertex positions are Float32Array, so two planes equal in float64 can
+         land microns apart once stored, and Box3.intersectsBox on a knife edge answers
+         either way. Fixed at BOTH ends: parts are now seated 0.5 mm into the slab (real
+         overlap, and it also kills z-fighting), and the guard requires >= 0.1 mm of
+         overlap depth on every axis instead of accepting a touch."
+      - "WRONG SPECIMEN, twice more. (a) The outlet recess check still measured
+         outlet_faceplates, a part this pass deleted — it crashed rather than silently
+         passing, which is the good failure mode. (b) The jack-recess check boxed the whole
+         head_net_ports group, which now owns the apertured bezel reaching the head face,
+         so it reported correctly-recessed jacks as '-0.0 mm flush'. Both now measure the
+         parts the assertion is actually about."
+
+  materials:
+    status: passed
+    attempts: 1
+    score: 0.83
+    action: continue
+    screenshot: runs/materials-attempt1.png
+    review: runs/materials-attempt1.review.json
+    date: 2026-08-15
+    spec_amendments:
+      - "APPROVED: removed unsourced per-outlet LEDs (evidence-driven, INCONCLUSIVE research + would amplify fiction into emissive glow)."
+      - "APPROVED: added sourced color-coded outlet banks aqua/grey/white ([CERT-web] colors, [INFER] grouping)."
+    scope: >
+      PBR palette authored against spec.materials[], plus the HUD pass-label fix. Two
+      evidence-driven corrections that are material rather than massing (see below).
+      Camera, URL states and hooks unchanged.
+
+    hud_pass_label:
+      defect: "HUD read 'Pase BLOCKOUT' for the whole structural pass — false evidence to a blind judge."
+      fix: >
+        The label is now written into the DOM by main.js from CURRENT_PASS, overridable
+        with ?pass=. index.html carries only a deliberately wrong-looking placeholder
+        ('Pase —') so a scripting failure is visible instead of shipping a plausible but
+        stale label. __qaState echoes BOTH the intended pass and the text actually in the
+        DOM, so a probe can catch a mislabelled capture instead of trusting pixels.
+
+    evidence_corrections:
+      outlet_leds_removed: >
+        The green per-outlet status LEDs are GONE. I invented them at blockout with no
+        source. Targeted research returned INCONCLUSIVE — no source states the EL2P has
+        per-outlet LEDs, and none states it does not — but every indirect signal points
+        away: the only LED a distributor enumerates for an MSPO unit is a single
+        "On/Off LED", and Panduit's own outlet differentiation is by coloured housing.
+        The per-outlet LEDs on the older E36G18L are a DIFFERENT product and do not
+        transfer. Same discipline as the mount-button diameter: unevidenced geometry does
+        not ship, and it was about to be given an emissive glow that would have made the
+        invention more prominent, not less.
+      circuit_bank_colours_added: >
+        The same research surfaced a REAL feature I was missing: Panduit differentiates
+        EL2P outlets by coloured socket housing — aqua / grey / white circuit banks.
+        Outlet rims are now three per-bank InstancedMeshes. Colours [CERT-web]
+        panduit.com EL2P page + EL2P press release. Bank GROUPING is [INFER]: three
+        contiguous banks of 14, one per phase on a 3-phase 42-outlet unit; the three
+        named colours and three phases agree, but the boundaries are not published.
+
+    verified:                      # headless; no server, no capture
+      spec_to_code_traceability: "11/11 spec materials map 1:1 to a live THREE material; colour, metalness and roughness all match"
+      contract_drift: "none (was: outlet_led existed in code but not in the spec)"
+      metalness_near_binary: "no intermediate values"
+      declared_but_not_rendered: "body_black — a real product colour, reachable only if a black-strip state is added (~6 lines); say the word"
+      rim_instances_by_bank: "56 / 56 / 56 = 168"
+      bank_colours: "#3fa8b4 / #9a9a96 / #e4e4df — mutually distinguishable (L1 > 0.15)"
+      lcd_toggle: "off = emissive #000000 @ 0 · on = #cfe6ff @ 1.6 · returns to off cleanly"
+      envmap_tuning: "port_metal 1.35 (only bare metal, and it sits down a 3.5 mm socket); outlet_cavity 0.35 (a shadowed throat must not pick up full room light); all other dielectrics 1.0"
+      regression: "geometry, structural, framing and rear-view suites all still pass"
+
+    colorTarget:
+      status: "documented in the spec, NOT activated"
+      why: >
+        DESIGNSPEC.md requires `srgb` to be the RENDERED value, which differs from the
+        albedo after ACES tonemapping and depends on the lighting reaching the surface.
+        That can only be MEASURED from a render, and this session does not capture.
+        Filling it with the albedo hex would either fail the probe or force a
+        deltaE00Max so loose the check proves nothing.
+      crop_computed: >
+        The half that CAN be computed rigorously is done, anchored by projected geometry
+        rather than hue. Best sample is the rear view: crop "11x456+807+180" @1600x900
+        (5016 px) on feedA's rear face, mounts off. Front-view crops are also listed in
+        the spec but the strip is only ~23 px wide there.
+      to_activate: "run the probe once, send me the measured mean sRGB, and I uncomment it with deltaE00Max ~6"
+
+  surface:
+    status: passed
+    attempts: 1
+    score: 0.85
+    action: continue
+    review: runs/surface-attempt1.review.json
+    date: 2026-08-15
+    scope: >
+      Procedural CanvasTexture detail (new module src/scene/decals.mjs), the ?body=black
+      state the orchestrator approved, and a front-detail camera view. Fully offline —
+      every pixel is drawn with the 2D canvas API, no image files and no webfonts.
+
+    added:
+      head_nameplate: >
+        Brand + rating plate on the head's lower band, 44 x 17.2 mm, canvas 512x200.
+        TEXT IS FACTUAL ONLY, drawn from P1-DATASHEETS §1: PANDUIT / E42G20L /
+        "60 A 3-PH · 17.3 kVA" / "42 OUT · IEC 60309 3P+E".
+      outlet_legend: >
+        Silkscreen legend up the left bezel rail — the real estate the removed per-outlet
+        LEDs used to occupy. One number per outlet 1..42 plus an L1/L2/L3 bank legend and
+        a rule at each bank boundary. Transparent map, so the powder-coat reads through
+        and one strip works for red, blue AND black bodies instead of three baked variants.
+      body_black_state: "?body=black turns both strips to body_black and restores cleanly; the spec material is no longer declared-but-unrendered"
+      front_detail_view: "?cam=front-detail — az 34 / el 8 / r 0.50 on feedA's head module"
+
+    text_discipline:
+      voltage_omitted: >
+        The nameplate states NO voltage. An IEC 60309 3P+E 9h inlet is typically
+        200-415 V, but no source in P1 states the EL2P's rating, and "typical for the
+        connector" is not evidence. A plausible wrong number silkscreened at 12 px is
+        worse than a missing line — the check asserts the absence, not just the presence.
+      inferred_marked: >
+        Outlet numbering is [INFER] but functionally argued: an MSPO unit is switched PER
+        OUTLET, so you cannot address outlet 17 without a 17 printed beside it. Bank
+        legends L1/L2/L3 carry the SAME inference as the three-bank colour grouping and
+        add no new claim.
+
+    verified:                      # headless; no server, no capture
+      nameplate_text: "model, current, kVA, outlet count and inlet type all present; NO voltage claim (asserted)"
+      legend_alignment: "strip spans 1.450 m = outlet_field exactly, and covers every outlet's y range"
+      legend_placement: "on the left rail at z 0.0382, just proud of the 0.0380 rail front"
+      legibility_front_detail: "brand 11.2 px · model 9.7 px · legend digit 52.9 px @1600x900"
+      legibility_default_view: "brand 1.6 px — fine print by design; this is WHY front-detail exists"
+      front_detail_framing: "head_module fullyVisible, centred at ndc x 0.015"
+      body_black: "#a8231c/#1d4a8f -> #1b1b20 both strips -> restored; material spec id follows to body_black"
+      spec_traceability: "12/12 materials map 1:1 (silkscreen_print added); no contract drift"
+      draws: 70                    # budget 200
+      tris: 11472                  # budget 350000 (down from 12472: the LED instances are gone)
+
+    corrections_during_build:
+      - "NAMEPLATE WAS UNREADABLE. The first draft packed six lines into a 30 mm plate and
+         the model line projected to 4.6 px even in the close view — text nobody can read
+         is not evidence of a nameplate. Fixed the DESIGN, not the threshold: four lines,
+         larger type, 44 mm plate, detail camera closed from r=0.58 to 0.50. The rating
+         line is still fine print on purpose — a real rating label is unreadable at 0.5 m,
+         so blowing it up would be less faithful, not more."
+      - "STALE MATRICES IN MY OWN CHECKS. Box3.setFromObject updates an object and its
+         DESCENDANTS but never its ANCESTORS, so measuring a child of feedA picked up an
+         identity parent matrix and every reading was 0.075 m off — it showed up as the
+         head module sitting off-centre in a view that was actually aimed correctly. All
+         checks now call scene.updateMatrixWorld(true) first."
+      - "FRAME-OF-REFERENCE BUG the above exposed: the port-band width assertion compared
+         WORLD x against a LOCAL half-width. It only passed before because the stale
+         matrices made the two frames coincide. Now measured relative to the strip."
+      - "Dropped an occupancy threshold from the detail-view check. The head is 54 mm wide
+         against 306 mm of vertical coverage, so it can never fill a 16:9 frame; a fill
+         threshold would only reward a wrong camera. Asserts fullyVisible + centred +
+         resolvable text instead."
+
+  lighting-camera:
+    status: passed
+    attempts: 1
+    score: 0.86
+    action: continue
+    review: runs/lighting-camera-attempt1.review.json
+    date: 2026-08-15
+    scope: >
+      House rig re-aimed for a vertical subject, LCD emissive glow given structure, and
+      the rig extracted into src/scene/lighting.mjs as a PURE factory so it can be
+      analysed without a renderer. No geometry, no camera angles and no metalness changed.
+
+    method: >
+      I cannot render, so the rig was solved ANALYTICALLY. Lambertian response to
+      directional lights is exact maths: E(N) = sum max(0, N.L) * intensity * luma(colour),
+      plus the hemisphere term three.js uses. Computing irradiance per surface normal
+      answers the one question this pass turns on — which way is the rig actually aimed —
+      without guessing at pixels.
+
+    measured_irradiance:          # per surface normal, before -> after
+      front_face_+z:  "1.429 -> 1.696"
+      up_facing_+y:   "1.606 -> 1.293"
+      rear_face_-z:   "0.306 -> 0.832   (2.71x)"
+      rim_wall_-x:    "0.501 -> 0.565"
+      rim_wall_+x:    "0.814 -> 1.045"
+      ratios_before:  "front/up 0.89 · rear/front 0.21 · wall L:R 1.62"
+      ratios_after:   "front/up 1.31 · rear/front 0.49 · wall L:R 1.85"
+
+    findings:
+      rig_was_aimed_at_the_wrong_plane: >
+        CONFIRMED BY MEASUREMENT, not assumed: on the old rig an UPWARD-facing normal
+        received MORE light than the front face (1.606 vs 1.429, front/up 0.89). The key
+        sat at y=10, so the best-lit surfaces were the ones nobody looks at, while the
+        plane carrying the entire identity — outlet column, bank colours, nameplate —
+        came second. Key dropped to y=4.5; front/up is now 1.31.
+      rear_captures_were_being_judged_in_the_dark: >
+        The rear face received 0.306 against the front's 1.429 — 21%. The ?cam=rear and
+        ?cam=rear-detail shots are the ONLY evidence for the mount-button feature, the
+        very feature that failed blockout attempt 1. They were framed correctly and lit
+        at a fifth of the subject. Added a dedicated rearFill lamp: rear is now 0.832,
+        49% of front.
+      frontal_light_kept_deliberately_weak: >
+        The head-on lamp was NOT raised. A strong frontal light reaches an outlet cavity
+        floor as directly as its rim and erases the 5 mm recess the structural pass built.
+        It exists only to keep the front face off black.
+      metalness_untouched: "0.0 on every dielectric. The flat-read lever this pass used is light direction, which is the whole point."
+
+    shadows:
+      decision: "left OFF, reasoned rather than inherited"
+      why: >
+        The outlet recess does not depend on them — the cavity floor is #111114 at
+        envMapIntensity 0.35 and reads dark from albedo, not cast shadow; a 5 mm recess at
+        ~14 px per outlet would gain almost nothing. And shadow maps under headless
+        SwiftShader are a risk I cannot discharge without capturing, so imposing them
+        blind would gamble a gate cycle for a marginal gain. Happy to enable if you want
+        to measure it.
+
+    lcd_glow:
+      change: "flat emissive rectangle -> emissiveMap with structure; intensity 1.6 -> 1.25"
+      why_lower: >
+        The map's lit pixels are already near-white, so keeping 1.6 on top of them would
+        clip a 40 mm screen to a white blob under ACES. The tint went neutral and the map
+        now supplies the screen colour.
+      no_fabricated_data: >
+        The screen shows a PANDUIT header and three L1/L2/L3 bar rows — NO NUMBERS. A
+        monitored PDU displays live current and power, and any figure drawn here would be
+        a fabricated measurement sitting at the same fidelity as the sourced nameplate
+        beside it. Bars carry the "monitoring display" read without asserting a reading.
+        Checked: the artwork is bound as an EMISSIVE map, never a base-colour map, so the
+        plate stays genuinely dark with the backlight off.
+
+    verified:                      # headless
+      lighting_assertions: "front > up-facing; rear >= 40% of front; front/wall >= 1.25; L:R wall contrast >= 1.3; front within a sane exposure band"
+      lcd: "off = #000000 @ 0 · on = #ffffff @ 1.25 · map is emissive-only · 3 rows · numeric=false"
+      regression: "geometry, structural, framing, materials, surface suites all still pass"
+      framing_unchanged: "front feed=ab|a|b fullyVisible; outlet pitch still 14.3 px @1600x900"
+      draws: 70
+      tris: 11472
+
+    corrections_during_build:
+      - "A comment in lighting.mjs claimed the old rig measured 1.90 (up) vs 1.62 (front).
+         Those were my hand-computed figures. The tool measured 1.606 vs 1.429 and the
+         comment was corrected — a wrong number in a comment is still a false claim, and
+         this one would have been quoted back later as evidence."
+      - "The rig could not be analysed at all until it was extracted from runtime.mjs:
+         ESM exports are read-only, so a renderer could not be stubbed to get at the
+         lights. Splitting it into a pure factory is what made the pass measurable."
+
+    colorTarget_for_you:
+      status: "crop computed, srgb still yours to measure"
+      WARNING: >
+        THE CROP AND THE VIEW ARE ONE UNIT. This pass measured front-face irradiance at
+        1.696 and rear-face at 0.832, so the same powder-coat renders about TWICE as dark
+        on the rear. A target measured on one face and later probed on the other reports a
+        huge deltaE00 for a material that never changed.
+      option_a_front: "hero read. @3200x1800 crop \"13x59+1541+1406\" (767 px) — preferred if the capture can go that high; @1600x900 it is only 140 px."
+      option_b_rear: "?cam=rear, mounts off. @1600x900 crop \"11x456+807+180\" (5016 px) — far bigger sample, but the DIMMER face."
+      send_back: "the measured mean sRGB plus which view you shot it on; I will declare colorTarget with deltaE00Max 6 and the matching view field."
+
+  interaction-ui:
+    status: passed
+    attempts: 1
+    score: 0.86
+    action: continue
+    review: runs/interaction-ui-attempt1.review.json
+    date: 2026-08-15
+    scope: >
+      The spec ui_controls were already DOM buttons; this pass makes the MODEL itself
+      interactive — raycast hotspots with hover feedback — and adds the DOM affordances a
+      --page capture needs. No geometry, materials, lighting or camera angles changed.
+
+    hotspots:                     # src/scene/interaction.mjs
+      list:
+        - "head_a / head_b   -> click the controller head to wake or sleep its display"
+        - "strip_a / strip_b -> click a strip to solo that feed, click again to restore both"
+        - "mounts_a          -> click the rear studs to hide them"
+      hover: "cursor becomes a pointer and a tooltip names the part and what the click does"
+
+    page_capture_readiness:
+      why_it_matters: "this pass is captured with --page, so the DOM is part of the deliverable, and a still frame has no cursor to reveal a hover affordance"
+      added: >
+        A top-right "Zonas interactivas" legend listing every hotspot, dimmed when a
+        hotspot is not currently reachable, plus a last-action line. That is the only
+        affordance visible in a still.
+      qaFraming_extended: >
+        __qaFraming now returns `panels` (hud + controls + hotspots) alongside the
+        existing `hud` field. A probe checking only #hud would have passed a subject
+        buried under the two new panels.
+      verified_layout: "at 1600x900, 1440x900 and 1280x800 every panel is on-screen and none overlaps the subject; subject stays fullyVisible"
+
+    probe_api:
+      __qaHotspots: >
+        Screen rect, a clickable centre, and a REAL occlusion test per hotspot — a ray
+        from the camera must actually land on that hotspot for clickable to be true.
+      __qaInteract: >
+        Performs a named interaction deterministically and returns the resulting state,
+        so a probe never has to do pixel arithmetic. A harness that clicks at guessed
+        coordinates is the known way to manufacture fake defects.
+      guarantee: "when clickable is true, `centre` is a point that actually hits that hotspot"
+
+    verified:                      # headless, with a minimal DOM stub
+      hotspots_resolve: "all 5 point at nodes that exist; pointermove/leave/down wired"
+      occlusion_discriminates: >
+        From the FRONT the mount studs report clickable=false, blockedBy=strip_a — they
+        are hidden AND behind the body. From the REAR with mounts on they report
+        clickable=true. A hidden strip (feed=a) reports clickable=false rather than
+        letting a click land on what nobody can see.
+      interactions_drive_real_state: "head toggles the LCD, a strip solos then restores its feed, an unknown id returns ok:false"
+      regression: "all 8 prior suites still pass"
+
+    corrections_during_build:
+      - "THE PUBLISHED CLICK POINT WAS NOT ON THE OBJECT. mount_buttons is four studs at
+         y = +/-0.2 and +/-0.6; its bbox centroid is y = 0, the GAP between them. A probe
+         told to click the centroid would sail past the studs and hit the strip body, and
+         the hotspot reported itself unreachable from a view where it is plainly visible.
+         `centre` is now defined as a point that actually hits."
+      - "The first fix was a 7x7 grid over the projected rect, which failed for the same
+         reason a blind probe would: the studs are ~5 px discs in a ~500 px column, so a
+         coarse grid lands in the gaps every time. Replaced with sampling points taken
+         FROM THE GEOMETRY — each mesh's centre and an InstancedMesh's instance
+         translations — which is targeted rather than hopeful."
+
+  optimization:
+    status: passed
+    attempts: 1
+    score: 0.86
+    action: continue
+    review: runs/optimization-attempt1.review.json
+    date: 2026-08-15
+    note: "last build pass — asset handed to P6 (final review + blockout->final mass-drift strip)" 
+    scope: >
+      Re-probe against budget, remove real duplication, and change nothing a previous
+      pass was judged on. No geometry, materials, lighting, camera or interaction
+      behaviour altered — only how many copies of identical things reach the GPU.
+
+    budget:
+      draws: "70 / 200  (35%)"
+      tris:  "11472 / 350000  (3.3%)"
+
+    what_I_did_NOT_do:
+      no_merging: >
+        DELIBERATELY did not merge meshes, and this is the main finding of the pass. The
+        head bezel is 10 boxes and the strip body 7, all on one material, so merging would
+        have cut roughly 30 draws. But we are at 35% of the draw budget — those 30 draws
+        buy nothing — and merging destroys the named parts that verifyAttachments, the
+        16-part QA assertion, and the raycast hotspots all resolve by name. That is
+        trading verifiability for headroom we already have. Optimising a budget you are
+        not near is how a later pass loses its ability to prove anything.
+
+    what_I_did:
+      geometry_sharing: >
+        70 meshes carried 70 UNIQUE geometries. The A and B strips are the same object
+        twice, and several shapes repeat within a strip (two rails, three bank rims), so
+        every one was built and uploaded separately. Added a keyed geometry cache:
+        70 -> 23 unique. Safe because nothing mutates vertex data after construction, and
+        InstancedMesh keeps its instance matrices on the mesh, not the geometry.
+      artwork_memoised: >
+        makeNameplate and makeOutletLegend were called once PER STRIP, so each strip
+        carried its own pixel-identical copy. Memoised by argument: nameplate, legend and
+        LCD each rasterise exactly once now (asserted via artworkStats, so the check
+        proves the cache is hit rather than assuming it).
+      texture_memory: "2008 KB -> 1104 KB across 3 textures (nameplate 400, legend 504, LCD 200) — a 904 KB / 45% saving"
+      decal_materials_shared: "the nameplate and legend materials were cloned per strip; now one each, cached on the shared palette so the spec traceability check is unaffected"
+      stale_log_string: "the build log still said 'blockout built' three passes later — same class of defect as the stale HUD label, fixed"
+
+    verified:                      # headless, with a canvas stub so artwork really rasterises
+      budget: "within on both axes"
+      geometry_cache: "scene uses 23 geometries and the cache holds 23 — nothing bypasses it"
+      artwork_calls: "nameplate 1, legend 1, lcd 1"
+      textures: "exactly 3 distinct, ~1104 KB"
+      no_duplicate_materials: >
+        Compared by full signature, not by name. Two instances may legitimately share a
+        spec id when they differ — the QR plate is plain label_print while the nameplate
+        is label_print carrying artwork — so a name-only test flags a design decision as
+        waste. What the check actually catches is an IDENTICAL material duplicated.
+      named_parts_preserved: "16/16 (strip_slab, rails, dividers, cavity floors, bank rims, pin slots, head bands, port floor, jack shells, nameplate, legend, cord, mount studs, LCD, QR)"
+      hotspot_groups_intact: "strip_body, head_module, mount_buttons, outlet_column, outlet_legend"
+      console: "0 errors during build"
+      offline: "no http(s) URL, fetch, XHR, WebSocket or Image().load anywhere in main.js / index.html / src; the importmap resolves only to vendor/"
+      regression: "all 9 prior suites still pass"
+
+    corrections_during_build:
+      - "The duplicate-material assertion fired on label_print, which is not a defect —
+         the QR plate and the nameplate are genuinely different materials sharing one
+         spec id by design. Narrowed the assertion to identical signatures."
+      - "That in turn failed for the opposite reason: headless there is no DOM, so both
+         materials had a null map and looked identical to the check. Gave the check a
+         canvas stub so the artwork actually rasterises — which also made the
+         texture-memory saving measurable instead of merely claimed."
+
+  p6-final:
+    status: passed
+    score: 0.86
+    review: runs/p6-final-attempt1.review.json
+    date: 2026-08-15
+    verdict: >
+      Final review against the spec. Mass drift blockout -> final: NONE. All critical
+      features pass, spec promises kept. The asset is COMPLETE: 7 build passes + P6.
+    ladder: "blockout 0.77 (2 attempts) -> structural 0.80 -> materials 0.83 -> surface 0.85 -> lighting-camera 0.86 -> interaction-ui 0.86 -> optimization 0.86 -> p6-final 0.86"
+
+deferred_to_later_passes:
+  - "lighting pass: the vertical powder-coat body and the outlet cavity contrast are a
+     LIGHT problem, not a material one — the rig was calibrated on horizontal equipment.
+     Fix any flat read with lamps, never by raising metalness off 0.0."
+
+applied_from_blockout_review:   # judge marked these non-blocking; done in structural
+  - "DONE: deepen the outlet cavity to >= 4 mm — now 5.0 mm"
+  - "DONE: subdivide the head port band into discrete RJ45 / USB sockets"
+
+open_items:
+  - "p6_comparison is spec-only until site photos land in disenos/homelab/references/."
+  - "width_m 0.054 stays confidence low until a Panduit drawing or a scaled photo resolves
+     the 50.8-vs-58 mm conflict."
+  - "LCD diagonal is undocumented; 40x32 mm is a fit-the-bezel placeholder."
+  - "colorTarget: CLOSED as documented-not-activated, ratified by the orchestrator
+     2026-08-15. Not a loose end. The material read passed inline on every pass, so the
+     anti-drift lock has marginal value on a finished asset and activating it would cost
+     a special-resolution capture. The rigorous crop stays in design-spec.yaml with its
+     view-lock warning, so the lock is one measurement away if it is ever wanted."
+  - "MOUNT BUTTON DIAMETER (12 mm) IS NOT IN THE SPEC AND NOT FROM A DATASHEET — it was
+     invented in code. It is the reason the buttons are hard to see. Enlarging it would
+     raise the score, which is exactly why it must NOT be changed without evidence: that
+     would be fitting geometry to a judge instead of to the subject. Needs a Panduit
+     drawing or a scaled photo, then a spec entry."
