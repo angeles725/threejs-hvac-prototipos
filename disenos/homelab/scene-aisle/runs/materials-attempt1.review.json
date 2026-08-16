@@ -1,0 +1,40 @@
+{
+  "pass": "materials",
+  "attempt": 1,
+  "global_score": 0.82,
+  "layer_scores": {
+    "silhouetteProportion": 0.83,
+    "componentStructure": 0.84,
+    "formDetail": 0.82,
+    "materialSurface": 0.82,
+    "lightingCamera": 0.80
+  },
+  "features": [
+    { "id": "aisle-of-racks", "score": 0.84, "threshold": 0.72, "pass": true, "note": "The black cabinet now reads as a dark OBJECT with form, not a hole — dark surfaces (stool, ceiling deck, black pendant) were rendering rgb(1..3), below the exposure floor and darker than the scene background; resolved to ~34 (still real black-plastic albedo 0.04-0.05, not a lightened design). The three whites (steel beam / plaster ceiling / glossy detector) separate by ROUGHNESS, since the solver proved they cannot separate by colour (no headroom above white)." },
+    { "id": "hero-rack-populated", "score": 0.80, "threshold": 0.72, "pass": true, "note": "No regression (hero-rack holds)." },
+    { "id": "cross-asset-scale-coherence", "score": 0.80, "threshold": 0.72, "pass": true, "note": "No regression." },
+    { "id": "dual-feed-pdu-pair", "score": 0.80, "threshold": 0.72, "pass": true, "note": "No regression (device materials NOT redeclared by the scene)." },
+    { "id": "office-corridor-context", "score": 0.83, "threshold": 0.72, "pass": true, "note": "The lounge now reads as a room: the CITY SKYLINE reads as a silhouette (two tower depths against a lighter emissive haze — a flat plane was a painted backdrop, the same failure as the mullion-less pane) through the MULLIONED glass wall (which shows what is behind it, as clean glass should), the conical pendants read amber-warm, and the bar + stools render as objects. Glass identified by its mullions/frame/grazing reflection (envMapIntensity 2.2), not by opacity." }
+  ],
+  "important_features": [
+    { "id": "figure-human-scale", "score": 0.75, "threshold": 0.65, "pass": true, "note": "No regression." },
+    { "id": "glass-led-doors", "score": 0.75, "threshold": 0.65, "pass": true, "note": "Glass-LED doors read; black + white cabinet variants both present." }
+  ],
+  "important_average": 0.75,
+  "defects": [
+    "Non-floor environment colours resolved by inverting the tone curve, but the RoomEnvironment PMREM term is non-analytic so values are verified over a SWEPT env irradiance rather than a single point — declared.",
+    "Bar/stools remain masses (correct for a scene pass); aisle length still confidence:low."
+  ],
+  "corrections": [
+    "Surface: any environment decals/signage under discipline; skyline refinement.",
+    "Interaction-ui: PDU pick() + Axis transparency (lounge glass + glass doors)."
+  ],
+  "mechanical": {
+    "console_clean": true,
+    "budget_pass": true,
+    "draws": 612,
+    "tris": 33900,
+    "notes": "0 guard failures; boot clean; negative control 9/9 (each guard fires on the value that shipped BEFORE this pass, silent on correct work); budget 612/1200 draws (51%). METHOD: values RESOLVED by inverting the tone curve (pick the pixel the photo shows, find the albedo that lands there), with the curve TRANSCRIBED from the vendored r160 bundle, not remembered — and a correction to prior understanding: it is ACES in RRT/ODT MATRIX form, NOT the Narkowicz fit (Narkowicz is brighter, so judging against it would pass genuinely-black surfaces). Also read not assumed: BRDF_Lambert = albedo/PI, _useLegacyLights=false (no PI on light intensity). FINDINGS: (1) dark surfaces were HOLES (below the floor, darker than the background); (2) three whites cannot separate by colour — the solver returned #fafaf5/#fffffc/#fffcf5 all within 3 luma against the range top, proving the request impossible, so they separate by ROUGHNESS (the specular term the diffuse solver can't reach); (3) AMBER survives by LOSING intensity — a high emissive pushes all three channels to the curve top where they converge to white (0xffd9a0 x2.0 -> rgb 243,236,221 warm-white), so saturate the colour and lower intensity (0xff9a30 x1.25 -> 243,192,90); (4) the skyline needs DEPTH (two tower rows against lighter haze), reading by contrast, on a fixed table (a reshuffling view can't be compared across captures). A suspicion that did NOT survive measurement: glass 'collapsing' with the wall — the instrument is diffuse and a roughness-0.05 pane is defined by the specular term it omits; clean glass reflecting ~4% and showing what is behind is the glass WORKING, so raise envMapIntensity, not opacity (the FIFTH time the fix was the criterion, not the design). TWO GUARDS BORN DEAD, found by the negative control: (a) NaN PASSES ALL COMPARISONS — the skyline guard got a scalar where per-channel irradiance goes, irr[k] was undefined, all NaN, and `NaN < 8` is FALSE, so it reported success on a silhouette-less skyline; worse than a normal bug because the failure direction is always favourable (any `if(bad)fail()` goes permanently green once a NaN enters), so the comparison polarity decides whether a type error shows or hides; now THROWS on non-finite irradiance. (b) the guard MODELED ANOTHER RIG (env term as total irradiance, ~30x too dark, condemning six correct materials); LIGHT_RIG is now EXPORTED AS DATA from runtime.mjs and consumed by both renderer and guards, so a guard cannot measure a rig the renderer does not use. Registered by parsed key-path, not 'it parses'." },
+  "verdict": "PASS",
+  "action": "continue",
+  "notes": "Inline orchestrator judgment. An exceptional materials pass: values resolved by inverting the ACES curve transcribed from the actual bundle (correcting Narkowicz->RRT/ODT matrix, which matters because the wrong curve would pass black surfaces), verified over a swept environment term. The findings are all sharp — dark surfaces that were holes, three whites the solver proved cannot separate by colour (so roughness does it), amber that survives by LOSING intensity because the curve top converges to white, and a skyline that needs depth to read as a silhouette. The most general is a guard finding: a NaN makes every `if(bad)fail()` comparison return the favourable answer, so a type error hid a silhouette-less skyline behind a green check — polarity decides whether the error shows. Both born-dead guards were caught by the 9/9 negative control, and the glass 'collapse' correctly turned out to be glass working. Device materials remain single-source (not redeclared). Cleared to the surface pass." }

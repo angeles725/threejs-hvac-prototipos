@@ -1,0 +1,352 @@
+# DesignSpec — homelab asset #7: SCENE ASSEMBLY (Panduit experience-centre aisle)
+# Authored at P2 (spec-only). See design3d/references/DESIGNSPEC.md for authoring rules.
+# Evidence: disenos/homelab/references/site-01..08.jpeg + MANIFEST.md [CERT] — 8 site
+#           photographs, ON DISK since 2026-08-16 and read directly for this authoring
+#           + the six completed assets and their gated design-specs.
+#
+# This spec was first authored INFERRED, from a written description in P1-INTAKE §2, because
+# the images were not on disk. They arrived, and the composition was re-authored against
+# them — correcting six things the description had not conveyed. Both states are recorded
+# rather than overwritten, because "what the words implied vs what the picture showed" is the
+# most useful part of the record.
+#
+# ── WHAT THIS ASSET IS, AND WHAT MAKES IT DIFFERENT ──────────────────────────────
+# The other six are DEVICES, each measured against a datasheet. This one is a COMPOSITION:
+# its subject is the relationship between things that already exist. So its criticals are
+# about arrangement, scale coherence and context — not about any single object's dimensions,
+# which are already gated elsewhere and must not be re-litigated here.
+#
+# ── THE BUDGET IS MEASURED, NOT ASSUMED ──────────────────────────────────────────
+# Every perf_budget in this project has been a CEILING nobody approached. The rack declared
+# 250 draws / 400000 tris and uses 48 / 1220 — a factor of 5 in draws and 328 in triangles.
+# So this spec is designed against a MEASUREMENT taken by loading all six assets headless:
+#
+#   pdu-panduit 70 draws / 2232 tris · ups-panduit 45 / 1180 · stratix-5700 36 / 596
+#   axis-camera 15 / 8048 · fmps-panduit 91 / 2248 · rack-cabinet 48 / 1220
+#   one populated rack = 305 draws / 15524 tris
+#
+#   3 racks  915 draws ·  46572 tris   comfortable
+#   5 racks 1525 draws ·  77620 tris   tight
+#   8 racks 2440 draws · 124192 tris   over
+#
+# THE SCENE IS DRAW-CALL BOUND, NOT TRIANGLE BOUND. 124k triangles is nothing; 2440 draws is
+# a problem. That single fact drives the topology below.
+
+design: scene-aisle
+asset_index: 7
+track: threejs
+mode: heavy
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"   # a 9 m corridor, not a 0.1 m device
+
+complexity:                        # pre-spec assessment — sum 16
+  scores: {silhouette: 2, components: 3, hierarchy: 3, repetition: 2,
+           material_layers: 2, detail: 1, occlusion: 2, action_readiness: 1}
+  tier: complex
+  # Calibrated against the gated specs: rack-cabinet 15 -> complex, axis-camera 14 -> complex,
+  # PDU 13 -> moderate. Sum 16 is the highest of the run and clears the >= 14 cut set at the
+  # Axis gate.
+  #   hierarchy 3 — the only asset in the run that NESTS other complete assets, each with its
+  #     own coordinate frame, guards and interaction API.
+  #   components 3 — six devices plus an environment.
+  #   detail 1 — deliberately: no new device detail is authored here. Anything that needs
+  #     more detail is a defect in the asset that owns it, not work for this pass.
+  #   occlusion 2 — equipment occluding equipment is the case that makes the PDU's latent
+  #     pick() bug manifest. See interaction below.
+
+environment:
+  overlays:
+    handbook: null
+    house_rules: null
+    qa_tools: research/tools
+    design_dir_root: disenos/homelab
+
+references:
+  - source: "disenos/homelab/P1-INTAKE.md §2 — 7 site photographs supplied by the user, viewed in-session [CERT]"
+    evidences: >
+      Panduit datacenter "experience centre" aisle inside a modern office corridor, confirmed
+      by the "1956 / 1958 Jack E. Caveney invents Pan-Duit" history graphic on the wall.
+      Several 19-inch rack cabinets, white frames plus some dark/black, standing in a ROW.
+      Doors of two kinds: perforated mesh swing doors AND glass doors with an LED edge-strip
+      glowing blue / white / green under the frame. Black lever handles. Vertical rack PDUs
+      at the rear posts in black, RED and BLUE — the red+blue pair being an A/B dual feed.
+      Environment: wood-look tile floor, glass partition walls, floor-to-ceiling windows with
+      a city skyline, black pendant lamps, lounge seating in the adjacent room, carpet tile
+      beyond. A PERSON appears in one frame, giving human scale.
+    suitability: superseded       # The photographs ARE on disk now — see the entry below.
+  - source: "disenos/homelab/references/site-01..08.jpeg + MANIFEST.md [CERT] — 8 site photographs, on disk 2026-08-16"
+    evidences: >
+      READ DIRECTLY, not via the manifest summary, and they CORRECT the inferred composition
+      on six counts. site-01 and site-05 look down the aisle: cabinets stand on BOTH SIDES,
+      not in one row, and the gap between their faces is roughly three cabinet-widths — about
+      2 m, not the 3.6 m inferred. The ceiling is an industrial deck with TRANSLUCENT DAYLIGHT
+      PANELS between white cross-beams, sitting little more than half a rack-height above the
+      2 m cabinets: about 2.7 m, not 2.9. The floor is a LIGHT grey-beige wood-look plank, not
+      the warm brown that was guessed from the words "wood-look". LED edge-strips read
+      predominantly BLUE with green on some frames. Doors are glass AND perforated mesh, and
+      in every photograph the ones being shown are OPEN. site-08 settles the PDU pair: the BLUE
+      and RED strips are mounted VERTICALLY side by side in the cabinet's interior plane,
+      visible when the front door swings open — not on opposite rear posts as inferred.
+    suitability: primary
+  - source: "the six completed design-specs in disenos/homelab/*/design-spec.yaml"
+    evidences: "every device envelope, mounting type and material contract, each already gated"
+  - source: "EIA-310 (rack standard), via rack-cabinet/design-spec.yaml"
+    evidences: "1U = 44.45 mm; 19-inch rail span 482.6 mm; 42U usable rail 1.867 m"
+
+dimensions_real:
+  # RE-AUTHORED AGAINST THE PHOTOGRAPHS. Each value now names the image that supports it, and
+  # each is derived by comparison against a KNOWN dimension in the same frame — the 600 mm
+  # cabinet width and the 2 m cabinet height — rather than estimated from a description.
+  rack_count_per_side: {value: 3,    confidence: med}   # site-01, site-05: three cabinets visible each side
+  rack_sides:          {value: 2,    confidence: high}  # site-01, site-05: BOTH sides. The inferred single row was wrong.
+  rack_pitch_m:      {value: 0.62,   confidence: med}   # cabinets touching; 600 mm body plus frame
+  aisle_length_m:    {value: 9.0,    confidence: low}   # the run to the glass door; still the weakest figure
+  aisle_width_m:     {value: 2.0,    confidence: med}   # site-05: face-to-face gap reads ~3 cabinet widths
+  ceiling_height_m:  {value: 2.7,    confidence: med}   # site-05: deck sits ~0.7 m above a 2 m cabinet
+  human_height_m:    {value: 1.72,   confidence: med}   # site-03, site-05: person against ~2 m cabinets
+
+  # These are NOT inferred — they are published standards, and they govern the mounting.
+  u_height_m:        {value: 0.04445, confidence: high} # EIA-310
+  rail_span_m:       {value: 0.4826,  confidence: high} # EIA-310
+  usable_rail_m:     {value: 1.867,   confidence: high} # 42U
+
+  # Rack-unit assignments for the hero rack. Chosen positions, real heights.
+  ups_u_height:      {value: 3,      confidence: high}  # 131.0 mm = 2.95U -> 3U, 2.4 mm slack
+  fmps_u_height:     {value: 1,      confidence: high}  # 43.0 mm = 0.97U -> 1U, 1.5 mm slack
+  ups_u_position:    {value: 8,      confidence: low}   # which U it sits at is a choice
+  fmps_u_position:   {value: 12,     confidence: low}
+
+hierarchy:
+  - name: scene_root
+    pivot: [0, 0, 0]
+    children:
+      - name: aisle_left            # three cabinets, FULL geometry, individually addressable
+        pivot: [0, 0, 0]
+        animation: none
+      - name: aisle_right           # three cabinets facing them across the aisle
+        pivot: [0, 0, 0]
+        animation: none
+      - name: hero_rack             # FULL geometry, individually addressable
+        pivot: [0, 0, 0]
+        animation: none
+        # Everything a viewer inspects lives here: named meshes, working hotspots, the
+        # visibility and containment guards. This is the rack the camera frames.
+      # INSTANCING NOT USED, by decision and by measurement.
+      # It was specced as available for background cabinets, and the orchestrator ruled
+      # against buying it before it buys anything. The numbers agree: six cabinets of which
+      # ONE carries equipment costs 6 x 48 + 257 = 545 draws against a 1200 ceiling. Every
+      # cabinet stays individually addressable, which keeps the run's no-instancing
+      # consistency and leaves all six inspectable. Revisit only if a deeper aisle is needed.
+      - name: rack_equipment        # the six devices, mounted in hero_rack
+        pivot: [0, 0, 0]
+        animation: none
+        children:
+          - name: mounted_ups       # 3U at U8
+          - name: mounted_fmps      # 1U at U12
+          - name: mounted_stratix   # DIN rail, not rack-mounted — see note
+          - name: mounted_pdu_a     # vertical 0U, interior plane, BLUE (A feed)
+          - name: mounted_pdu_b     # vertical 0U, interior plane, RED (B feed) — ADJACENT to A
+          # site-08 CORRECTS the inference: the pair is mounted SIDE BY SIDE in the cabinet's
+          # interior vertical plane and is revealed when the front door swings open. Not on
+          # opposite rear posts.
+      - name: ceiling_camera        # the Axis, mounted on the corridor ceiling
+        pivot: [0, 0, 0]
+        animation: none
+      - name: corridor              # PROCEDURAL environment — floor, partitions, lamps, windows
+        pivot: [0, 0, 0]
+        animation: none
+        # ALL BUILT, NOTHING DOWNLOADED. The external CC0/CC-BY mesh track is deferred by
+        # decision; this pass authors every prop procedurally. Note also that
+        # tools/verify-external-asset.mjs — the hard gate the catalog requires for any
+        # external mesh — DOES NOT EXIST in the repo, so the external track has no door yet.
+      - name: human_figure          # scale reference, default ON
+        pivot: [0, 0, 0]
+        animation: none
+
+materials:
+  # NO NEW DEVICE MATERIALS. Each device brings its own gated contract and this pass must not
+  # restate or override them — a scene that re-declares a device's colours is a second source
+  # of truth, and the first drift lands there. Only the ENVIRONMENT is authored here.
+  - id: floor_wood_tile
+    family: plastic
+    color: "#c5bcb2"
+    metalness: 0.0
+    roughness: 0.65
+    evidence: >
+      site-01, site-05, site-08: a LIGHT grey-beige wood-look plank, running along the aisle.
+      The inferred #8a7358 came from reading the words "wood-look" as warm brown; the
+      photographs show something far paler and greyer. Corrected against the image.
+    source: reference
+    confidence: 0.8
+  - id: glass_partition
+    family: plastic
+    color: "#c8d6dd"
+    metalness: 0.0
+    roughness: 0.05
+    opacity: 0.18
+    transparent: true
+    evidence: "P1-INTAKE §2: glass partition walls"
+    source: estimated
+    confidence: 0.6
+    assumption: >
+      NO MeshPhysicalMaterial.transmission — unavailable under the headless SwiftShader the
+      gate renders with. transparent + low opacity + low roughness, and depthWrite OFF so it
+      does not occlude the aisle behind it. That last flag is the difference between a glass
+      wall and an opaque one, learned the expensive way on the dome asset.
+  - id: wall_neutral
+    family: painted-metal
+    color: "#d9d9d6"
+    metalness: 0.0
+    roughness: 0.85
+    evidence: "office corridor walls; the history graphic wall is a surface pass concern"
+    source: estimated
+    confidence: 0.55
+  - id: pendant_lamp_black
+    family: painted-metal
+    color: "#1a1c1f"
+    metalness: 0.0
+    roughness: 0.5
+    evidence: "P1-INTAKE §2: black pendant lamps"
+    source: estimated
+    confidence: 0.6
+  - id: pendant_lamp_emissive
+    family: plastic
+    color: "#141210"
+    metalness: 0.0
+    roughness: 0.4
+    emissive: "#ffd9a0"
+    emissive_intensity: 2.0
+    evidence: "the lamps are lit in the photographs"
+    source: estimated
+    confidence: 0.55
+    assumption: >
+      Warm emissive. Intensity SEEDED at 2.0 from the FMPS measurement and NOT yet measured
+      against this scene's own rig — a borrowed number is not a measured one, and the FMPS
+      proved the two can disagree in direction AND reason. To be closed at lighting-camera
+      by measuring THROUGH the tone curve, with chroma checked as well as luminance.
+  - id: skyline_backdrop
+    family: plastic
+    color: "#7f93a8"
+    metalness: 0.0
+    roughness: 0.9
+    evidence: "P1-INTAKE §2: floor-to-ceiling windows with a city skyline"
+    source: estimated
+    confidence: 0.5
+    assumption: "a far backdrop, deliberately low-contrast so it never competes with the aisle"
+  - id: human_figure_mat
+    family: plastic
+    color: "#4a5560"
+    metalness: 0.0
+    roughness: 0.8
+    evidence: "P1-INTAKE §2: a person appears in one frame, giving human scale"
+    source: estimated
+    confidence: 0.7
+    assumption: >
+      A NEUTRAL SILHOUETTE, not a character. Its only job is scale; anything more detailed
+      invites judging a person instead of an aisle, and nothing in the evidence describes one.
+
+critical_features:                 # 5 gates (hard max)
+  - id: aisle-of-racks
+    desc: "Reads as an AISLE — three or more 19-inch cabinets standing in a row at a regular pitch, seen down its length, not as one cabinet photographed alone. A lazy assembly places a single rack in empty space and calls it a scene."
+    threshold: 0.72
+  - id: hero-rack-populated
+    desc: "The hero cabinet carries the REAL modelled equipment at correct rack positions: the 3U UPS and the 1U FMPS mounted on the 19-inch rails at whole-U positions without overlapping, plus the vertical PDU pair at the rear posts. A lazy assembly leaves the racks empty or floats equipment at arbitrary heights."
+    threshold: 0.72
+  - id: cross-asset-scale-coherence
+    desc: "All six devices share one scale and their relative sizes are right: the 3U UPS is three times the 1U FMPS in height, the whole rack is 42U tall, and the ceiling camera is a 101 mm object 2.9 m up — visibly small. A scale error in an assembly is the defect that makes every individual asset look wrong at once."
+    threshold: 0.75
+  - id: dual-feed-pdu-pair
+    desc: "The vertical PDUs read as an A/B DUAL FEED — a red strip and a blue strip at the rear posts, which is what the site photographs actually show and the single most numerous device on site. A lazy assembly uses one PDU, or two of the same colour."
+    threshold: 0.70
+  - id: office-corridor-context
+    desc: "The aisle sits inside an OFFICE CORRIDOR — wood-look tile floor, glass partitions, pendant lamps, daylight from a window wall — not in a void or a black studio. The site is an experience centre inside an office, and that context is the whole reason this scene is not a rack render."
+    threshold: 0.70
+
+important_features:                # max 3
+  - id: ceiling-camera-overlooks-the-aisle
+    desc: "The Axis mini-dome is mounted on the corridor ceiling with the aisle in its field of view, hanging bubble-down as a ceiling device must."
+  - id: human-scale-figure
+    desc: "A neutral human silhouette stands in the corridor, so a viewer can size the racks without a caption."
+
+quality_contract:
+  global_min: 0.75
+  perf_budget:                     # DERIVED FROM MEASUREMENT, not chosen
+    draws: 1200
+    tris: 200000
+  # 3 populated racks measured at 915 draws / 46572 tris. The ceiling is set at 1200 draws —
+  # roughly 30% headroom for the corridor, lamps, partitions and the figure — and 200000 tris,
+  # which is four times the measured need and still a fraction of what a scene can carry.
+  # Stated plainly because this project's budgets have never been measurements before: draws
+  # are the binding constraint here and triangles are not close to one.
+
+p6_comparison: reference-match
+# THE PHOTOGRAPHS ARE ON DISK: references/site-01..08.jpeg with a MANIFEST. The composition
+# has been re-authored against them and this is a REAL reference-match, not a fabricated one.
+# The judgeable viewpoint is site-05 / site-01: standing in the aisle, looking down its length
+# toward the glass door and the lounge beyond.
+# What the reference does NOT settle stays declared in open_items — chiefly the aisle LENGTH,
+# which no frame measures against a known dimension.
+
+camera:
+  azimuth_deg: 12
+  elevation_deg: 6
+  fov: 50
+  # WIDER AND LOWER THAN ANY DEVICE HERO, and for the opposite reason. A device hero maximises
+  # one face; an aisle hero needs DEPTH — the row receding down the corridor is the subject,
+  # so the camera looks along the aisle rather than at a cabinet. fov 50 rather than the 38-40
+  # used for equipment, because a corridor read comes from perspective convergence.
+  # RE-SOLVE the radius numerically against the BUILT scene box, per state, as always.
+
+lighting: house-rig + practicals
+  # The scene has SOURCES OF ITS OWN, which no device asset had: pendant lamps, the LED
+  # door strips on the cabinets, and daylight from a window wall. The house rig becomes a
+  # base rather than the whole answer.
+  #
+  # Judge it THROUGH THE TONE CURVE. Two defects on sibling assets were invisible in linear
+  # luminance and obvious through ACES at the renderer's exposure. This scene has more
+  # emissives than any of them, and a lit LED that renders darker than its own housing is
+  # exactly the failure that hid on the Axis.
+
+ui_controls:
+  - "DOOR STATE"                   # ?doors=closed|open — mesh doors closed vs open to reveal equipment
+  - "LED STRIP COLOUR"             # ?led=blue|white|green — the three states the photographs show
+  - "HUMAN FIGURE"                 # ?figure=on|off — scale reference toggle
+  - "AUTO-ROTATE"
+
+interaction:
+  mandatory_fix: >
+    THE PDU'S LATENT pick() BUG MUST BE FIXED HERE, and this is the pass that makes it
+    manifest. Per pdu-panduit/runs/DEFERRED-CORRECTIONS.md, the original raycast walked the
+    intersection list and SKIPPED every hit that was not a hotspot, so a ray passed THROUGH
+    solid geometry. On the standalone PDU every occluder happened to be a hotspot itself, so
+    it never misbehaved. In an aisle the rack frame, the doors and neighbouring equipment are
+    NON-hotspot occluders — the exact case that makes the ray sail through. The corrected
+    logic (stop at the first visible surface, whatever it is) is already implemented and
+    verified on stratix-5700 and is to be ported verbatim.
+  transparency_rule: >
+    Carried from the dome asset: a click passes through TRANSPARENT surfaces and stops at the
+    first OPAQUE one. This scene has glass partitions and glass cabinet doors, so the rule is
+    load-bearing — a user looking at a UPS through a glass door and finding the click blocked
+    by glass they can see through would be right to call it broken.
+
+open_items:
+  - "AISLE LENGTH remains the weakest figure at 9 m, confidence: low. No frame measures the
+     run to the glass door against a known dimension — the cabinets give width and height, but
+     nothing fixes depth down the corridor. Width, ceiling height and cabinet count ARE
+     photo-derived by comparison against the 600 mm cabinet width and the 2 m cabinet height."
+  - "ENVIRONMENT COLOURS other than the floor are still estimated. The floor was corrected
+     against the image (#8a7358 warm brown -> #c5bcb2 light grey-beige); wall neutral, skyline
+     and lamp tones have not been sampled pixel-wise, only judged by eye from the frames."
+  - "WHAT THE PHOTOGRAPHS CORRECTED, recorded because it is the useful part: cabinets on BOTH
+     sides rather than one row; aisle 2 m not 3.6; ceiling 2.7 m not 2.9; floor light grey-beige
+     not warm brown; LED strips predominantly blue; the PDU pair mounted side by side in the
+     interior plane, not on opposite rear posts. Every one of those came from a description
+     that was accurate in words and misleading in the picture it built."
+  - "U POSITIONS for the UPS (U8) and FMPS (U12) are CHOSEN. Their U HEIGHTS are not — 3U and
+     1U follow from measured device heights against the EIA-310 44.45 mm unit."
+  - "EXTERNAL PROP TRACK DEFERRED by decision: every prop here is procedural. Note separately
+     that tools/verify-external-asset.mjs, the hard gate the catalog mandates for any external
+     mesh, does not exist in the repo — so the external track has no door even if it is
+     re-opened later."
+  - "PENDANT LAMP EMISSIVE INTENSITY is SEEDED from a sibling measurement, not measured here.
+     Due at lighting-camera, through the tone curve, with chroma checked as well as luminance."
