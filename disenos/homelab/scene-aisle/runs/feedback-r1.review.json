@@ -1,0 +1,38 @@
+{
+  "pass": "feedback-r1",
+  "attempt": 1,
+  "global_score": 0.84,
+  "layer_scores": {
+    "silhouetteProportion": 0.83,
+    "componentStructure": 0.85,
+    "formDetail": 0.85,
+    "materialSurface": 0.85,
+    "lightingCamera": 0.84
+  },
+  "context": "Post-final user feedback on scene-aisle, two items: (1) the ceiling Axis camera is indistinguishable, (2) the base equipment reads too dark. User chose the DEDICATED-VIEW path for the camera over enlarging it, preserving 1:1 scale. Modeled by @ayudante; gated inline by the orchestrator from spec + pixels on :8123.",
+  "features": [
+    { "id": "camera-detail-view", "score": 0.85, "threshold": 0.72, "pass": true, "note": "New ?cam=camera-detail (azimuth 210, elevation -32, fov 40, r=0.220 m, eye (-0.09, 2.56, -0.16) INSIDE the room). The 101 mm Axis dome now reads large and centred: housing, hemispherical lens and mounting arm all legible, dome profile preserved (not collapsed to a disc). Verified by pixels in camera-detail.png. Scale stays 1:1 — the axis geometry was not touched, so cross-asset-scale-coherence does not regress. Button VISTA cycles PASILLO->RACK->CAMARA off CAMERA_VIEWS itself." },
+    { "id": "equipment-reads-in-hero", "score": 0.85, "threshold": 0.72, "pass": true, "note": "ROOT CAUSE was not lighting: the UPS was mounted POWERED DOWN. Its LCD (#ffffff) and status LEDs (#20c020) are authored emissive at emissiveIntensity 0 (asset: 'off by default; set to 1.4 when power=on'), and the scene never applied the power state its own main.js boots with — the same default-state-not-initialized pattern the run already recorded. Fixed by selecting the ASSET'S declared on-values (led 1.4 / lcd 1.15, verified identical to ups-panduit/main.js applyPowerState:116,120 — NOT invented). Before/after pixels: the LCD goes from a black slab to legible cyan PANDUIT text + status lines, and the green status LEDs light. Exposure held at 1.05, so every albedo materials resolved stays valid; no burn, no regression elsewhere." }
+  ],
+  "important_features": [
+    { "id": "no-regression-hero-rack", "score": 0.83, "threshold": 0.65, "pass": true, "note": "Rails, red/blue PDU pair, Stratix, both cabinet variants read identical to the pre-change hero capture." },
+    { "id": "solver-robustness", "score": 0.82, "threshold": 0.65, "pass": true, "note": "The new view exposed two latent solveRadius bugs, both fixed: (1) the search started at a hard-coded r=1.0 m / 20 mm step that silently assumed a rack-sized subject and never tested a radius that frames a 101 mm device — now r0/step scale with the subject diagonal; (2) 'keep the eye in the room' is now decided by MEASUREMENT (subject fits the room with margin) rather than a view-name list, and derived from the modelled floor mesh, not typed extents." }
+  ],
+  "important_average": 0.83,
+  "defects": [
+    "OPEN ITEM (declared, minor): the UPS power on-values (led 1.4 / lcd 1.15) are DUPLICATED in the scene because the UPS asset hardcodes them inside applyPowerState and exports no constant/setPower on its api. The new verifyEveryAuthoredLampIsSwitchedOn catches an authored lamp left OFF, but not magnitude DRIFT if the asset later changes its on-values. ADOPT-LATER when the UPS is reopened: export the on-values (or a power method) so the scene SELECTS them instead of copying. Logged, not patched here (reopening a closed asset is out of scope for a scene pass).",
+    "PRE-EXISTING (unchanged): aisle LENGTH confidence:low - no framing measures the run to the glass door against a known dimension.",
+    "PRE-EXISTING (closed asset, not touched): UPS rear_fan_ring 2.11 px sagitta - still in ups-panduit/runs/DEFERRED-CORRECTIONS.md."
+  ],
+  "corrections": [ "None blocking. Both feedback items resolved. Commit the scene change scoped; no push without an explicit ask." ],
+  "mechanical": {
+    "console_clean": true,
+    "budget_pass": true,
+    "draws": 523,
+    "tris": 32156,
+    "notes": "console_clean:true on BOTH captured views (camera-detail, hero-rack) - which independently corroborates 0 guard failures at boot, because every guard failure path uses console.error: verifyAll (incl. the new verifyEveryAuthoredLampIsSwitchedOn), verifyCriticalsAreVisible (now covering camera-detail->ceiling_camera by RAY), verifyBudget, and the interaction guards all would have dirtied the console. Budget unchanged (523/1200 draws, 32156/200000 tris) as expected: the change added a camera view (no geometry), an emissiveIntensity flip (no geometry), and guard code. Verified independently: floor node exists (corridor.mjs:148), UPS api returns {root, ledMat, lcdMat} (ups-panduit.mjs:574), on-values match the asset. New guard verifyEveryAuthoredLampIsSwitchedOn is the mirror of the run's emissiveIntensity>0 vacuity trap - stated as a result property (a NON-BLACK emissive at intensity 0 is a lamp built and never switched on), skips userData.intentionallyOff so the exception lives with the decision, negative control fires 2 when the UPS is forced back off. NOT touched deliberately: the light rig - ayudante measured that raising the front fill 0.40->1.60 moves the black bezel (#101115 = 0.005 linear) from luma 0 to 1 while burning the rack ears 70->110; a black albedo cannot be lit into legibility, and the lever was the power switch, not the light. Correct call, and the measurement is the argument."
+  },
+  "verdict": "PASS",
+  "action": "continue",
+  "notes": "Inline orchestrator judgment. Both feedback items resolved, and the second one the RIGHT way: the base equipment was not underlit, it was OFF - a device mounted without its boot state, exactly the default-state-not-initialized pattern the run had already named, hiding because a dark screen on a black bezel looks like a black bezel. The fix selects the asset's own declared on-values (the FRAME_VARIANTS/LED_COLORS line), holds exposure, and adds a result-property guard with a negative control that would have caught it at blockout. The camera item honoured the user's chosen path (dedicated view, not a bigger dome), keeping 1:1 scale intact, and the new view earned its keep by surfacing two real solver bugs (a size-assuming search floor, and a room constraint that should be measured not named) - both fixed with the run's own epistemics. console_clean on both views corroborates 0 guard failures. One honest open item logged (the duplicated on-values, an ADOPT-LATER for when the UPS is reopened). Cleared."
+}

@@ -2,7 +2,7 @@
 // Wires runtime + assembly + UI controls + window.__qaFraming + window.__qaState.
 
 import * as THREE from 'three';
-import { createRuntime, solveRadius, applyCameraPose, CAMERA_VIEWS } from './src/scene/runtime.mjs';
+import { createRuntime, solveRadius, applyCameraPose, CAMERA_VIEWS, roomBounds } from './src/scene/runtime.mjs';
 import { buildAisle, verifyAll, verifyCriticalsAreVisible } from './src/scene/aisle.mjs';
 import { createInteraction, verifyClickAgreesWithSight,
          verifyPickCannotReachThroughSolids } from './src/scene/interaction.mjs';
@@ -49,6 +49,14 @@ function visibleBoxOf(node) {
 }
 
 function subjectFor(viewName) {
+  // The ceiling camera at 1:1 is a 101 mm object 2.7 m up — a speck in a 9 m corridor. That is
+  // a FRAMING problem, not a scale one, and the fix is a lens rather than a bigger dome:
+  // growing the device would make the scene lie about the hardware it exists to show.
+  if (viewName === 'camera-detail') {
+    const axis = aisle.root.getObjectByName('ceiling_camera');
+    if (axis) return visibleBoxOf(axis);
+    console.error('[main] camera-detail has no ceiling_camera to frame');
+  }
   if (viewName === 'hero-rack') {
     // THE EQUIPMENT STACK, not the whole cabinet. This view exists to show the mounted
     // devices; framing the entire 2.1 m cabinet inside a 2 m corridor is geometrically
@@ -68,6 +76,7 @@ const framingSubject = () => subjectFor(state.view);
 let solved = {};
 function solveCamera() {
   scene.updateMatrixWorld(true);
+  const room = roomBounds(scene);
   const aspect = camera.aspect || 16 / 9;
   for (const [name, view] of Object.entries(CAMERA_VIEWS)) {
     // The detail view is capped so the solver cannot walk the eye out through a wall to fit
@@ -75,8 +84,13 @@ function solveCamera() {
     // A corridor is 2 m wide, so the eye has ~1 m of room off the cabinet face. Capped at
     // 2.4 m: any further and the camera stands inside the opposite cabinet, which renders
     // that cabinet's interior wall and nothing else.
-    const maxR = name === 'hero-rack' ? 2.4 : 40.0;
-    solved[name] = solveRadius(subjectFor(name), view, aspect, 0.94, maxR);
+    // camera-detail needs a SMALL cap, not a generous one: the subject is 101 mm, so any
+    // radius beyond a few tens of centimetres frames the ceiling rather than the device.
+    const maxR = name === 'hero-rack' ? 2.4 : name === 'camera-detail' ? 1.2 : 40.0;
+    // And the eye is confined to the modelled room. A radius cap alone is a crude stand-in for
+    // "stay indoors" — it works for a subject in the middle of the corridor and fails for one
+    // pressed against a surface, which is exactly what a ceiling device is.
+    solved[name] = solveRadius(subjectFor(name), view, aspect, 0.94, maxR, room);
   }
   applyView();
 }
@@ -85,7 +99,8 @@ function applyView(next) {
   if (next) state.view = next;
   applyCameraPose(camera, controls, solved[state.view], CAMERA_VIEWS[state.view]);
   if (btnView) {
-    btnView.textContent = `VISTA: ${state.view === 'aisle' ? 'PASILLO' : 'RACK'}`;
+    const LABEL = { aisle: 'PASILLO', 'hero-rack': 'RACK', 'camera-detail': 'CÁMARA' };
+    btnView.textContent = `VISTA: ${LABEL[state.view] ?? state.view.toUpperCase()}`;
     btnView.classList.toggle('active', state.view !== 'aisle');
   }
 }
@@ -188,7 +203,13 @@ btnLed.addEventListener('click', () => {
   applyLed(order[(order.indexOf(state.led) + 1) % order.length]);
 });
 btnFigure.addEventListener('click', () => applyFigure(!state.figure));
-btnView.addEventListener('click', () => applyView(state.view === 'aisle' ? 'hero-rack' : 'aisle'));
+// Three states now, driven off CAMERA_VIEWS itself rather than a hand-written chain of
+// ternaries — adding a fourth view should not require editing the button.
+const VIEW_CYCLE = Object.keys(CAMERA_VIEWS);
+btnView.addEventListener('click', () => {
+  const i = VIEW_CYCLE.indexOf(state.view);
+  applyView(VIEW_CYCLE[(i + 1) % VIEW_CYCLE.length]);
+});
 btnAutorotate.addEventListener('click', () => applyAutoRotate(!state.autoRotate));
 
 // ?doors=closed|open  ?led=blue|white|green  ?figure=on|off  ?cam=aisle|hero-rack  ?autorotate=yes|no

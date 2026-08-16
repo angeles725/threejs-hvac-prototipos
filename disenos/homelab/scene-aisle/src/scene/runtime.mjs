@@ -34,6 +34,16 @@ export const CAMERA_VIEWS = {
   // solver found no radius at all and fell back to 12 m through the far wall. A photographer
   // in a 2 m corridor reaches for a wide lens; the geometry leaves no other move.
   'hero-rack': { azimuth_deg: 270, elevation_deg: 8, fov: 75 },
+  // A 101 mm device hanging at 2.7 m is a speck in a 9 m corridor — correct at 1:1 and
+  // unreadable, which is a FRAMING problem, not a scale one. Enlarging the dome would make the
+  // scene lie about the hardware; a dedicated view costs nothing and keeps 1:1 intact.
+  //
+  // ELEVATION IS NEGATIVE: the eye sits BELOW the dome looking up, which is the only way a
+  // ceiling device reads — from above it is a disc. Not straight underneath either, or the
+  // hemisphere collapses to a circle; -32 degrees keeps the dome's profile and the body behind
+  // it both legible. FOV 40 rather than the 50/75 the other two use: a detail lens, and narrow
+  // enough that the 15 cm standoff does not distort the dome into an egg.
+  'camera-detail': { azimuth_deg: 210, elevation_deg: -32, fov: 40 },
 };
 
 /** Smallest radius keeping every corner of `box` inside ndc +/- margin. */
@@ -42,7 +52,14 @@ export const CAMERA_VIEWS = {
  * @param {number} maxRadius  a corridor has walls; a solve that walks the camera through one
  *                            produces a technically-correct framing of the outside of a wall
  */
-export function solveRadius(box, view = CAMERA_VIEW, aspect = 16 / 9, margin = 0.94, maxRadius = 40.0) {
+/**
+ * @param {THREE.Box3} [bounds]  the room. A radius cap is a crude stand-in for "stay indoors":
+ *   it happens to work for a subject near the middle of the corridor and fails for one against
+ *   a surface. The ceiling camera is the case that breaks it — it hangs AT the ceiling, so any
+ *   view looking up at it walks the eye through the slab within centimetres, at a radius no cap
+ *   would object to. Constraining the resulting EYE POSITION says what was actually meant.
+ */
+export function solveRadius(box, view = CAMERA_VIEW, aspect = 16 / 9, margin = 0.94, maxRadius = 40.0, bounds = null) {
   const target = box.getCenter(new THREE.Vector3());
   const az = (view.azimuth_deg * Math.PI) / 180;
   const el = (view.elevation_deg * Math.PI) / 180;
@@ -52,12 +69,44 @@ export function solveRadius(box, view = CAMERA_VIEW, aspect = 16 / 9, margin = 0
     [mn.x, mn.y, mn.z], [mx.x, mn.y, mn.z], [mn.x, mx.y, mn.z], [mx.x, mx.y, mn.z],
     [mn.x, mn.y, mx.z], [mx.x, mn.y, mx.z], [mn.x, mx.y, mx.z], [mx.x, mx.y, mx.z],
   ].map((c) => new THREE.Vector3(...c));
-  for (let r = 1.0; r <= maxRadius; r += 0.02) {
+  // THE SEARCH USED TO START AT 1.0 m WITH A 20 mm STEP, which silently encodes "the subject is
+  // rack-sized". A 101 mm ceiling camera needs about 0.15 m of standoff at fov 40, so the loop
+  // began an order of magnitude too far away, never tested a radius that fits, and returned the
+  // first value it ever tried. Scale the start and the step to the SUBJECT instead of assuming
+  // one — a solver with a hard-coded floor is only a solver for the size it was written against.
+  const diag = box.getSize(new THREE.Vector3()).length();
+  const r0 = Math.max(0.06, diag * 0.25);
+  const step = Math.max(0.004, diag * 0.01);
+
+  // "KEEP THE EYE INSIDE THE ROOM" IS NOT A UNIVERSAL RULE — it depends on whether the subject
+  // is an OBJECT IN the room or the room ITSELF. Confining the eye is right for the ceiling
+  // camera, which hangs at the slab and would otherwise be viewed from inside it. Applied to
+  // the aisle shot it is incoherent: that subject spans the whole 9 m corridor, and no fov
+  // between 50 and 75 finds any pose inside the room, because you cannot photograph a 9 m
+  // corridor from within its own 9 m — a real photographer backs through the doorway.
+  //
+  // So the constraint is decided by MEASUREMENT rather than by a list of view names: it applies
+  // when the subject actually fits inside the room with room to spare. A list would have to be
+  // edited every time a view is added, and would be wrong the first time someone forgot.
+  let useBounds = false;
+  if (bounds) {
+    const rs = box.getSize(new THREE.Vector3());
+    const rb = bounds.getSize(new THREE.Vector3());
+    useBounds = rs.x < rb.x * 0.6 && rs.z < rb.z * 0.6;
+    if (!useBounds) {
+      console.warn('[runtime] subject spans the room, so the eye is not confined to it — '
+        + 'a view of the room itself has to stand outside it');
+    }
+  }
+  for (let r = r0; r <= maxRadius; r += step) {
     cam.position.set(
       target.x + r * Math.cos(el) * Math.sin(az),
       target.y + r * Math.sin(el),
       target.z + r * Math.cos(el) * Math.cos(az),
     );
+    // Reject the pose before measuring the framing: a beautifully framed shot taken from
+    // inside the ceiling slab is not a candidate.
+    if (useBounds && !bounds.containsPoint(cam.position)) continue;
     cam.lookAt(target);
     cam.updateMatrixWorld();
     cam.updateProjectionMatrix();
@@ -77,7 +126,8 @@ export function solveRadius(box, view = CAMERA_VIEW, aspect = 16 / 9, margin = 0
   // visible, which is the honest failure — a partially cropped subject is a reportable defect,
   // a camera outside the building is a confusing one.
   console.error(`[runtime] no radius within ${maxRadius} m frames this subject at fov `
-    + `${view.fov ?? FOV} — clamping to the cap; the subject will be cropped`);
+    + `${view.fov ?? FOV}${useBounds ? ' while keeping the eye inside the room' : ''} — clamping to `
+    + 'the cap; the subject will be cropped');
   return { radius: maxRadius, target, cappedWithoutFitting: true };
 }
 
@@ -126,6 +176,25 @@ export const LIGHT_RIG = {
   },
   exposure: 1.05,
 };
+
+// Derived from the SAME dims the corridor is built from, so the room the solver is confined to
+// and the room that is modelled cannot drift apart.
+// DERIVED FROM THE MODELLED FLOOR, not from typed extents. The first version of this used
+// constants assembled out of dims, and they disagreed with the actual floor slab by enough to
+// reject a legitimate camera pose — a room the solver believes in that does not match the room
+// that was built is the same class of error as a rig that contradicts its practicals.
+export function roomBounds(scene, margin = 0.12) {
+  const floor = scene.getObjectByName?.('floor');
+  if (!floor) {
+    console.error('[runtime] no floor mesh — cannot derive the room the camera must stay inside');
+    return null;
+  }
+  const b = new THREE.Box3().setFromObject(floor, true);
+  b.min.y = margin;                       // eye stays above the deck
+  b.max.y = CEILING_H - 0.05;             // and below the slab
+  b.expandByVector(new THREE.Vector3(-margin, 0, -margin));
+  return b;
+}
 
 export function createRuntime(canvas) {
   const W = canvas.parentElement?.clientWidth || window.innerWidth;

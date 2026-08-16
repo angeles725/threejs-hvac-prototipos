@@ -247,6 +247,25 @@ export function buildAisle() {
 
   const ups = mountSceneAdding('mounted_ups', buildUPS);
   equipment.add(ups.holder);
+
+  // THE UPS SHIPPED INTO THIS SCENE POWERED DOWN. Its LCD and status LEDs are authored with
+  // real emissive colours (#ffffff and #20c020) but emissiveIntensity 0, and the asset's own
+  // source says so in as many words: "off by default; set to 1.4 when power=on". Standalone,
+  // its main.js starts at power:'on' and applies 1.4 / 1.15. The scene mounted the device and
+  // never threw that switch, so for every pass since blockout the hero cabinet has carried a
+  // UPS with a dead screen — which is most of why its front reads as an unreadable black
+  // slab. It is not primarily a lighting problem: a lit LCD reads on its own.
+  //
+  // The values are the ASSET'S, not invented here — the same line as FRAME_VARIANTS and
+  // LED_COLORS. Selecting a declared state is using the contract; picking a brightness that
+  // looked nice would be authoring a second one.
+  const UPS_POWER_ON = { led: 1.4, lcd: 1.15 };     // from ups-panduit/main.js applyPowerState
+  if (ups.api?.ledMat && ups.api?.lcdMat) {
+    ups.api.ledMat.emissiveIntensity = UPS_POWER_ON.led;
+    ups.api.lcdMat.emissiveIntensity = UPS_POWER_ON.lcd;
+  } else {
+    console.error('[aisle] the UPS exposes no ledMat/lcdMat — it will render powered down');
+  }
   seat(ups.holder, { bottomY: uToY(UPS_U_POS), centreX: railX, frontZ: railZ });
 
   const fmps = mountRootReturning('mounted_fmps', buildFMPS, fmpsMaterials());
@@ -468,9 +487,15 @@ export function verifyCriticalsAreVisible(scene, eyeFor) {
   //     fall outside the aisle camera's upward field of view, and the honest response is to
   //     stop asserting something the contract never asked for — not to tilt the hero shot
   //     until a non-critical fits. If they should be visible, that is a spec change first.
+  //   - THE CEILING CAMERA, which is why 'camera-detail' exists. At 1:1 it is a 101 mm device
+  //     2.7 m up: correct, and unreadable in either of the other two views. It was never a
+  //     MUST_SHOW for them and still is not — a view answers for what it exists to show. But
+  //     a view created specifically to show it must be held to exactly that, by RAY rather
+  //     than by presence, which is the lesson the FMPS taught this run at some cost.
   const MUST_SHOW = {
     aisle: ['aisle_left', 'aisle_right', 'human_figure', 'lounge'],
     'hero-rack': ['mounted_ups', 'mounted_fmps', 'mounted_pdu_pair', 'mounted_stratix'],
+    'camera-detail': ['ceiling_camera'],
   };
   let bad = 0;
   for (const [view, names] of Object.entries(MUST_SHOW)) {
@@ -511,7 +536,8 @@ export function verifyAll(scene, mats) {
     + verifySkylineReadsAsSilhouette(mats)
     + verifyLuminairesKeepTheirOwnHue(mats)
     + verifyRigAgreesWithItsPracticals(mats)
-    + verifyBudget(scene.getObjectByName('scene_root') ?? scene).failed;
+    + verifyBudget(scene.getObjectByName('scene_root') ?? scene).failed
+    + verifyEveryAuthoredLampIsSwitchedOn(scene);
   if (n === 0) console.log('[aisle] assembled · guards passed');
   return n;
 }
@@ -547,4 +573,41 @@ export function verifyBudget(root, { maxDraws = 1200, maxTris = 200000 } = {}) {
     failed += 1;
   }
   return { failed, draws, tris, hidden, hiddenTris };
+}
+
+// AN AUTHORED EMISSIVE SITTING AT INTENSITY 0 IS A LAMP SOMEBODY FORGOT TO SWITCH ON.
+//
+// This is the mirror image of the trap recorded earlier in the run: three defaults
+// emissiveIntensity to 1 over a BLACK emissive, so `emissiveIntensity > 0` is a vacuous test
+// that passes on a dead lamp. The signature that actually discriminates is the opposite pair —
+// a NON-BLACK emissive colour, which somebody deliberately authored, sitting at intensity 0.
+//
+// It caught a real one: the UPS shipped into this scene powered down for every pass since
+// blockout. Its LCD (#ffffff) and status LEDs (#20c020) were authored and left at 0, because
+// the scene mounted the device and never applied the power state its own main.js starts with.
+// Nothing noticed, because a dark screen on a black bezel looks like a black bezel.
+//
+// Stated as a property of the RESULT, not of any particular builder, so it stays true however
+// the assembly is rewritten. A lamp that is meant to be off must say so in its own userData —
+// the exception then lives next to the decision instead of in a list here that would go stale.
+export function verifyEveryAuthoredLampIsSwitchedOn(root) {
+  const dark = new Map();
+  root.traverse((m) => {
+    if (!m.isMesh) return;
+    let visible = true;
+    for (let o = m; o; o = o.parent) if (!o.visible) { visible = false; break; }
+    if (!visible) return;
+    for (const mat of (Array.isArray(m.material) ? m.material : [m.material])) {
+      const e = mat?.emissive;
+      if (!e || e.r + e.g + e.b < 0.001) continue;          // black emissive: not a lamp
+      if ((mat.emissiveIntensity ?? 1) > 0) continue;
+      if (mat.userData?.intentionallyOff) continue;          // declared where the decision is
+      dark.set(mat.name || m.name, `#${e.getHexString()}`);
+    }
+  });
+  for (const [name, hex] of dark) {
+    console.error(`[aisle] "${name}" has an authored emissive ${hex} at intensity 0 — a lamp `
+      + 'that was built and never switched on; set it, or mark userData.intentionallyOff');
+  }
+  return dark.size;
 }

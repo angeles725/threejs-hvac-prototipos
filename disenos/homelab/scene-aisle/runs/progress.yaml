@@ -649,6 +649,82 @@ passes:
       - "a budget counter that called a mesh a draw call, reported four times before it was caught"
       - "an optimisation that was real, measured, and correctly declined"
 
+  post-p6-adjustment:
+    status: built — awaiting capture + judge
+    date: 2026-08-16
+    scope: "two user-requested scene adjustments; no device geometry or material touched"
+    budget: "523 draws / 1200 (44%) · 32156 tris / 200000 (16.1%) — unchanged"
+
+    delivery_1_camera_detail_view:
+      what: "CAMERA_VIEWS['camera-detail'] — azimuth 210, elevation -32, fov 40, solving to r 0.220 m"
+      why_those_numbers: >
+        ELEVATION IS NEGATIVE because the eye must sit BELOW a ceiling device looking up; from
+        above it is a disc. Not straight underneath either, or the hemisphere collapses to a
+        circle — -32 keeps the dome profile and the body behind it both legible. fov 40 rather
+        than 50/75: a detail lens, narrow enough that 22 cm of standoff does not distort the
+        dome into an egg. Scale stays 1:1 — enlarging the dome would make the scene lie about
+        the hardware it exists to show.
+      result: "eye (-0.09, 2.56, -0.16), inside the room, subject filling 94% of the half-frame, 99% visible by ray"
+      wiring: "three-state VIEW button driven off CAMERA_VIEWS itself, not a chain of ternaries — adding a fourth view should not require editing the button"
+
+    two_real_defects_the_new_view_exposed:
+      the_solver_had_a_hard_coded_subject_size: >
+        solveRadius searched `for (r = 1.0; r <= maxRadius; r += 0.02)`. A 101 mm camera needs
+        about 0.15 m at fov 40, so the loop began an ORDER OF MAGNITUDE too far away, never
+        tested a radius that fits, and returned the first value it ever tried. Start and step
+        now scale to the subject's diagonal. A solver with a hard-coded floor is only a solver
+        for the size it was written against.
+      the_room_i_typed_was_not_the_room_that_was_built: >
+        My first roomBounds assembled extents out of dims constants and disagreed with the
+        actual floor slab by enough to reject a legitimate pose. Now derived from the modelled
+        floor mesh — same failure class as a rig contradicting its practicals.
+
+    and_a_constraint_that_is_not_universal:
+      finding: >
+        Applying "keep the eye inside the room" to ALL views broke the aisle shot: no fov
+        between 50 and 75 finds any pose inside the room, because you cannot photograph a 9 m
+        corridor from within its own 9 m. A real photographer backs through the doorway.
+      resolution: >
+        The constraint depends on whether the subject is an OBJECT IN the room or the room
+        ITSELF, so it is decided by MEASUREMENT — it applies when the subject fits inside the
+        room with room to spare. A list of view names would need editing every time a view is
+        added, and would be wrong the first time someone forgot.
+
+    delivery_2_the_base_equipment_reads:
+      the_requested_lever_could_not_have_worked: >
+        Asked to raise the front-facing fill. Measured across 0.40 -> 1.60: the UPS front bezel
+        moves from luma 0 to luma 1 and the power button from 0 to 2, while the metal rack ears
+        go 70 -> 110 and blow out. The bezel is #101115, which is 0.005 LINEAR — no reasonable
+        amount of light lifts an albedo that low. Quadrupling the fill would have burnt the
+        only part that was already reading and left the black front exactly as dark.
+      the_actual_cause: >
+        THE UPS SHIPPED INTO THIS SCENE POWERED DOWN. Its LCD (#ffffff) and status LEDs
+        (#20c020) are authored emissives sitting at emissiveIntensity 0, and the asset's own
+        source says "off by default; set to 1.4 when power=on". Standalone it starts at
+        power:'on' and applies 1.4 / 1.15. The scene mounted the device and never threw that
+        switch — so since blockout the hero cabinet has carried a UPS with a dead screen.
+      fix_and_measurement: >
+        Switched on with the ASSET'S OWN values, the same line as FRAME_VARIANTS and
+        LED_COLORS. The LCD goes from luma 0 to 232 against a bezel at 0 — 232 of contrast,
+        the maximum available — and the LEDs from 0 to 190. Exposure untouched at 1.05, so
+        every albedo the materials pass resolved stays valid.
+      rig_left_alone: "deliberately — the measurement says the fill cannot fix a 0.005 albedo and would only burn the ears"
+      swept_the_other_five: "only the UPS was affected; FMPS, Stratix, PDU and Axis all light correctly. Not a systemic integration fault."
+
+    guard_added:
+      verifyEveryAuthoredLampIsSwitchedOn: >
+        A NON-BLACK emissive colour at intensity 0 is a lamp somebody built and forgot to
+        switch on. This is the MIRROR of the trap recorded earlier in the run: three defaults
+        emissiveIntensity to 1 over a BLACK emissive, which makes `emissiveIntensity > 0`
+        vacuous. Stated as a property of the result; an intentionally dark lamp declares
+        userData.intentionallyOff, so the exception lives next to the decision instead of in a
+        list that would go stale. Negative control: forcing the UPS back off fires 2.
+
+    verified:
+      headless: "0 guard failures · boot clean · visibility (camera 99% in its own view) · framing all three views · interaction · P6 self-check 5/5"
+      negative_control: "13/13 material+lighting, the reconstructed PDU pick defect caught 4 times, and the powered-down UPS caught 2"
+      note: "no server, no captures — the orchestrator gates"
+
 
 measured_budget:
   what: >
@@ -750,6 +826,7 @@ carried_forward_from_closed_assets:
       It calls document.createElement without a hasDOM() guard, so any headless check that
       loads it needs a canvas stub. Recorded as a fact about integration, not a defect to fix
       — the asset is closed.
+
 
 
 
