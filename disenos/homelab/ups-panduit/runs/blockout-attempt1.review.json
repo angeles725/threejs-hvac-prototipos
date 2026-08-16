@@ -1,0 +1,74 @@
+{
+  "pass": "blockout",
+  "attempt": 1,
+  "global_score": 0.52,
+  "layer_scores": {
+    "silhouetteProportion": 0.55,
+    "componentStructure": 0.62,
+    "formDetail": 0.58,
+    "materialSurface": 0.55,
+    "lightingCamera": 0.30
+  },
+  "features": [
+    {
+      "id": "ups-3u-rack-chassis-ears",
+      "score": 0.60,
+      "threshold": 0.72,
+      "pass": false,
+      "note": "The chassis proportion (wide, low, deep) and the two zinc rack ears ARE built (the right ear reads clearly as a bright vertical tab on the front-right corner). BUT the camera crops the subject: the front-left corner and left ear run off the left/bottom frame edges (framing probe: fullyVisible=false, cropped=true). A critical cannot pass while the feature it names is partly out of frame. Geometry is plausible; the FRAMING fails it."
+    },
+    {
+      "id": "ups-front-panel-touchdisplay",
+      "score": 0.45,
+      "threshold": 0.75,
+      "pass": false,
+      "note": "The 3.5-inch touch display exists (dark recessed rectangle, lower-left) but is (a) cropped hard against the left frame edge, and (b) unlit and near-black in every state, so it does NOT read as the dominant panel element the critical requires — it reads as a dark slot in a shadowed corner. The top slab of the chassis, not the identity face, dominates ~60% of the frame. Fails on both framing and read."
+    },
+    {
+      "id": "ups-power-button-led-array",
+      "score": 0.55,
+      "threshold": 0.72,
+      "pass": false,
+      "note": "The round power button and the 4-LED column ARE built and, when the ON state is actually applied (?power=on explicit capture), the LEDs glow bright green — geometry and emissive are correct. BUT the DEFAULT/hero capture shows them dark despite the HUD reading 'power:on': the boot path never calls applyPowerState, so ledMat.emissiveIntensity stays at its constructed 0.0. The hero state contradicts its own HUD (pixels say off, label says on) — the exact class of false-state defect this project guards against. Also cropped low-left."
+    },
+    {
+      "id": "ups-ventilation-grilles",
+      "score": 0.55,
+      "threshold": 0.70,
+      "pass": false,
+      "note": "Horizontal vent slots read as faint lines on the lower front face, but they are in deep shadow and cropped against the bottom edge, so they barely communicate active thermal management. Present but not legible at this framing/exposure."
+    }
+  ],
+  "important_features": [
+    {
+      "id": "ups-depth-proportion",
+      "score": 0.70,
+      "threshold": 0.65,
+      "pass": true,
+      "note": "The one thing this camera DOES convey: the deep 666 mm body reads unmistakably — the long receding side/top makes it read as a deep battery-bay chassis, not a shallow 1U slab. Ironically the framing over-serves this at the expense of the front face."
+    }
+  ],
+  "important_average": 0.70,
+  "defects": [
+    "FRAMING (blocking): camera radius r=0.80 was seeded from the FRONT-FACE dims (440x131 mm) and ignores the 666 mm DEPTH. At az35/el20 the huge top face (0.44x0.666 = 5x the front-face area) dominates ~60% of the frame while the identity-bearing front face is squeezed into the bottom-left corner and cropped off the left/bottom edges. framing-probe: fullyVisible=false, cropped=true, wellFramed=false. This is a REAL failure, not a by-design tight-margin exception.",
+    "DEFAULT POWER STATE UNINITIALIZED (blocking): main.js constructs ledMat.emissiveIntensity=0.0 and only calls applyPowerState() on a click or when ?power= is present. The no-param hero capture therefore renders the LEDs OFF while the HUD/__qaState report power:on. Confirmed by the ?power=on explicit capture, where the 4 LEDs glow green as intended. The hero shot lies about its own state.",
+    "COMPOSITION: elevation 20 deg over-weights the top slab for a subject whose identity lives on the front face (3 of 4 criticals). Lowering elevation shifts frame weight onto the front panel while the long side still carries the depth read.",
+    "EXPOSURE/READ: the front panel sits in shadow at this framing — display, button, LEDs and vents are all under-lit and hard to read even before the crop."
+  ],
+  "corrections": [
+    "Solve the camera radius against the BUILT bbox (root Box3), not the spec face dims: bounding sphere R ~= 0.416 m about the device center, so vertical-fov-limited fit distance d >= R/sin(fov/2) = 0.416/sin(20) ~= 1.22 m; use ~1.36 m for margin. Re-frame so the whole subject (both ears, full front face) is inside NDC with margin at 16:9 AND 16:10.",
+    "Lower elevation to ~12-14 deg (from 20) so the front panel gets frame weight and reads as the subject, while the receding side keeps the depth read. Keep az~35.",
+    "Call applyPowerState(state.power === 'on') once at boot (after applyURLParams, or make applyURLParams fall through to it) so the default hero renders the LEDs in their true ON state and the HUD stops contradicting the pixels.",
+    "Optionally lift the front_fill light a touch so the front panel details read out of shadow at the corrected, more front-on framing — but do NOT raise metalness to compensate."
+  ],
+  "mechanical": {
+    "console_clean": true,
+    "budget_pass": true,
+    "draws": 13,
+    "tris": 208,
+    "notes": "Console clean (0/0) across default, power=off, and power=on captures. Budget trivially under (13/250 draws, 208/400k tris) — geometry cost is not the issue. The two blocking defects are FRAMING and DEFAULT-STATE-INIT, both fixable without touching dimensions or the part hierarchy."
+  },
+  "verdict": "FAIL",
+  "action": "refine-code",
+  "notes": "Inline orchestrator judgment. The blockout GEOMETRY is essentially sound (chassis proportion, ears, display, button, LED column, vents all present; ?power=on proves the emissive works; depth reads well). It fails on two non-geometry defects: a camera that crops and buries the identity front face, and a boot path that leaves the hero state's LEDs dark while the HUD claims they are on. Both are code fixes (camera solve + init call), not a geometry rebuild. Re-capture as attempt 2 after the fix."
+}

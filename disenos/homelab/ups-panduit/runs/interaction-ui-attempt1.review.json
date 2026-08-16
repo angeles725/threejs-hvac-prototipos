@@ -1,0 +1,70 @@
+{
+  "pass": "interaction-ui",
+  "attempt": 1,
+  "global_score": 0.15,
+  "layer_scores": {
+    "silhouetteProportion": 0.0,
+    "componentStructure": 0.0,
+    "formDetail": 0.0,
+    "materialSurface": 0.0,
+    "lightingCamera": 0.0
+  },
+  "features": [
+    {
+      "id": "ups-3u-rack-chassis-ears",
+      "score": 0.0,
+      "threshold": 0.72,
+      "pass": false,
+      "note": "Not evaluable — the page does not boot, so nothing renders (see mechanical)."
+    },
+    {
+      "id": "ups-front-panel-touchdisplay",
+      "score": 0.0,
+      "threshold": 0.75,
+      "pass": false,
+      "note": "Not evaluable — page dead on boot."
+    },
+    {
+      "id": "ups-power-button-led-array",
+      "score": 0.0,
+      "threshold": 0.72,
+      "pass": false,
+      "note": "Not evaluable — page dead on boot."
+    },
+    {
+      "id": "ups-ventilation-grilles",
+      "score": 0.0,
+      "threshold": 0.70,
+      "pass": false,
+      "note": "Not evaluable — page dead on boot."
+    }
+  ],
+  "important_features": [
+    {
+      "id": "ups-depth-proportion",
+      "score": 0.0,
+      "threshold": 0.65,
+      "pass": false,
+      "note": "Not evaluable."
+    }
+  ],
+  "important_average": 0.0,
+  "defects": [
+    "BLOCKING — THE PAGE DOES NOT BOOT. main.js aborts at line 197 `applyView()` with an uncaught `TypeError: Cannot read properties of undefined (reading 'target')`. Root cause is an init-ORDER regression introduced by the interaction-ui refactor: the camera solve was extracted into `solveCamera()` (which populates `let solved = {}` and then calls applyView), but solveCamera() is wired ONLY to the resize handler (main.js:203) and is NEVER called at boot. So at startup `solved` is still `{}`, `applyView()` passes `solved['front']` = undefined into `applyCameraPose(camera, controls, undefined, view)`, and runtime.mjs:98 `const t = solved.target` throws. Because the throw is at module top-level, execution never reaches `renderHotspotLegend()` (198 — hence the EMPTY legend), `animate()` (210 — hence the BLACK canvas, no render loop ever starts), or `document.documentElement.setAttribute('data-app-ready','true')` (213 — hence a headless readiness wait times out).",
+    "The delivered interaction code (hotspots, occlusion pick(), rear view, legend) may be correct in isolation — it cannot be judged because the page never renders it."
+  ],
+  "corrections": [
+    "One-line fix: call `solveCamera()` at boot before the subject is shown — e.g. replace the bare `applyView()` at main.js:197 with `solveCamera()` (which populates `solved` for every view and then applies the current one). Verify the page reaches data-app-ready and renders the subject, then re-capture --page.",
+    "SYSTEMIC (the more important correction): the 7 headless suites passed while the page does not boot, because they exercise MODULES in isolation and never boot the real page. Add a check that BOOTS index.html headless, waits for data-app-ready with a bounded timeout, and asserts (a) the subject rendered non-black and (b) the hotspot legend has its expected rows. A pass whose deliverable is a running page must be verified by running the page — the same 'exercise it, don't lint it' lesson from this asset's empty-nodes and console.log-not-assertion finds, one level up."
+  ],
+  "mechanical": {
+    "console_clean": false,
+    "budget_pass": null,
+    "draws": null,
+    "tris": null,
+    "notes": "The capture console sidecar reported console_clean:false with issues:[{type:'pageerror', text:'TypeError: Cannot read properties of undefined (reading \\'target\\')'}] — the exact throw predicted from the code. Diagnosis path: the --page capture rendered the static DOM overlay but a BLACK subject and an EMPTY 'ZONAS INTERACTIVAS' legend, in both --page and canvas-only modes, across 4 attempts, under heavy headless contention (~70 chrome procs). Rather than fail it as a broken asset OR wave it through as contention, I ran a headless EVAL (eval, not screenshot — robust under contention): it timed out waiting for data-app-ready, which pointed at a boot abort, not slow rendering. Reading main.js + runtime.mjs confirmed the init-order bug, and the captured pageerror confirmed it exactly. NOTE ON MY OWN PROCESS: my earlier bash console-checks read the wrong JSON keys (`errors`/`warnings`) when the sidecar uses `console_clean`/`issues`, so they printed a false 'clean' here; corrected to read console_clean/issues going forward. Prior passes rendered correctly (a boot-aborting pageerror cannot coexist with a rendered subject), so their green console readings stand, but the check method was vacuous and is fixed."
+  },
+  "verdict": "FAIL",
+  "action": "refine-code",
+  "notes": "Inline orchestrator judgment. FAIL: the interaction-ui page does not boot — main.js aborts on an uncaught TypeError at applyView() because the camera solve (`solveCamera()`) was wired to resize only and never called at startup, leaving `solved` empty when applyCameraPose reads `solved.target`. Nothing renders, the legend is empty, and data-app-ready never fires. This is a one-line fix (call solveCamera() at boot). The deeper correction is a page-boot check: the module suites passed while the page is dead, so the pass needs a check that actually boots index.html and asserts the subject rendered and the legend populated. Re-capture as attempt 2 after the fix."
+}

@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="es" data-app-ready="false">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ups-panduit — visor de pase</title>
+  <link rel="icon" href="data:,">
+  <!--
+    LOCAL importmap — three r0.160.0 vendored (vendor/three/).
+    OFFLINE-FIRST: no CDN dependency. Per disenos/catalog/EXTERNAL-ASSETS.md §A.
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/three.module.js",
+      "three/addons/": "./vendor/three/addons/"
+    }
+  }
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #06080d;
+      color: #d0d4da;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
+      overflow: hidden;
+    }
+    #canvas-wrap {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    /* HUD — top-left pass label; __qaFraming reads its BoundingClientRect */
+    #hud {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(6, 8, 13, 0.72);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 4px;
+      padding: 6px 12px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #hud .hud-name {
+      display: block;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: #7a8494;
+      text-transform: uppercase;
+    }
+    #hud .hud-pass {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #e0e6f0;
+      margin-top: 2px;
+    }
+    #hud .hud-state {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      color: #5a8aff;
+      margin-top: 4px;
+      white-space: nowrap;
+    }
+    /* Controls panel — bottom-right */
+    #controls {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      background: rgba(6, 8, 13, 0.80);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 6px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 180px;
+      z-index: 10;
+    }
+    #controls .ctrl-label {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      color: #7a8494;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    #controls button {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.14);
+      color: #c8d0dc;
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s;
+    }
+    #controls button:hover { background: rgba(255,255,255,0.12); }
+    #controls button.active {
+      background: rgba(47, 107, 255, 0.22);
+      border-color: #2f6bff;
+      color: #a0c4ff;
+    }
+    #controls .ctrl-divider {
+      border: none;
+      border-top: 1px solid rgba(255,255,255,0.07);
+      margin: 2px 0;
+    }
+    #controls .ctrl-hint {
+      font-size: 9px;
+      letter-spacing: 0.05em;
+      color: #3c4860;
+      text-align: center;
+      padding-top: 2px;
+    }
+      /* Interaction legend — top-right. This pass captures --page, so the DOM IS part of
+       the deliverable: the affordances must be readable in a STILL, where no cursor
+       hover exists to reveal them. */
+    #hotspots {
+      position: absolute; top: 14px; right: 16px; width: 236px;
+      background: rgba(6, 8, 13, 0.80);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 6px; padding: 10px 12px; z-index: 10;
+    }
+    #hotspots .hs-title {
+      font-size: 10px; letter-spacing: 0.08em; color: #7a8494;
+      text-transform: uppercase; margin-bottom: 6px;
+    }
+    #hotspots ul { list-style: none; }
+    #hotspots li {
+      font-size: 11px; line-height: 1.45; color: #c8d0dc;
+      display: flex; gap: 6px; align-items: baseline;
+    }
+    #hotspots li .hs-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #2f6bff; flex: none; transform: translateY(-1px);
+    }
+    #hotspots li.off .hs-dot { background: #3a4250; }
+    #hotspots li.off { color: #6d7686; }
+    #hotspots .hs-log {
+      margin-top: 8px; padding-top: 8px;
+      border-top: 1px solid rgba(255,255,255,0.10);
+      font-size: 11px; color: #a0c4ff; min-height: 1.4em;
+    }
+
+    /* Hover tooltip — only ever visible with a live cursor, which is why the legend
+       above exists for the still capture. */
+    #tooltip {
+      position: absolute; background: rgba(6, 8, 13, 0.92);
+      border: 1px solid rgba(47,107,255,0.55); border-radius: 4px;
+      padding: 4px 8px; font-size: 11px; color: #d8e2f0;
+      pointer-events: none; z-index: 20; white-space: nowrap;
+    }
+    #tooltip[hidden] { display: none; }
+  </style>
+</head>
+<body>
+<div id="canvas-wrap">
+  <!--
+    #hud — the __qaFraming hook queries this element's getBoundingClientRect()
+    to return the HUD rect. ID must remain '#hud'.
+  -->
+  <div id="hud">
+    <span class="hud-name">ups-panduit · U05N11V</span>
+    <span class="hud-pass" id="hud-pass">Pase —</span>
+    <span class="hud-state" id="hud-state">power:on · autorotate:no</span>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <!-- What on the MODEL is clickable, and what just happened. -->
+  <div id="hotspots">
+    <div class="hs-title">Zonas interactivas</div>
+    <ul id="hs-list"></ul>
+    <div class="hs-log" id="hs-log">— sin interacción —</div>
+  </div>
+
+  <div id="tooltip" hidden></div>
+
+  <!-- Controls panel -->
+  <div id="controls">
+    <span class="ctrl-label">UPS Controls</span>
+    <button id="btn-power">⏻ POWER STATE: ON</button>
+    <hr class="ctrl-divider">
+    <button id="btn-view">VISTA: FRENTE</button>
+    <button id="btn-autorotate">↻ AUTO-ROTATE: OFF</button>
+    <hr class="ctrl-divider">
+    <span class="ctrl-hint">click or use URL params</span>
+  </div>
+</div>
+
+<script type="module" src="./main.js"></script>
+</body>
+</html>

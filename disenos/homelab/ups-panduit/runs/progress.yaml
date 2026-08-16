@@ -1,0 +1,575 @@
+# progress.yaml — ups-panduit (Panduit SmartZone UPS 3U)
+#
+# SINGLE WRITER. Ownership TAKEN OVER 2026-08-15 by the builder session (@ayudante) after
+# the original modeler subagent (a0337e) died with the orchestrator session that spawned
+# it. One writer only: the orchestrator sends verdicts by message and they are recorded
+# here. Two sessions editing one progress.yaml on a sibling asset produced a duplicate key
+# that YAML silently resolved by keeping the LAST one — the file parsed clean while
+# reporting a judged pass as unjudged. Validate the SHAPE after editing, not just that it
+# parses: count occurrences PER KEY (`rg -o "^  [a-z][\w-]*:" | sort | uniq -d`), because
+# a total line count cannot see a repeat.
+
+design: ups-panduit
+asset_index: 3
+variant: "U05N11V (5 kVA / 5 kW, VRLA, 3U, 120 V). Envelope 440 x 666.5 x 131 mm [CERT-doc] SmartZone UPS Installation Manual V2.3."
+
+ownership:
+  writer: "builder session (@ayudante)"
+  taken_over: 2026-08-15
+  from: "subagent a0337e — authored P2 spec + skeleton + blockout geometry, then died with its parent session"
+  note: >
+    The inherited work was NOT rebuilt. The geometry it left is sound and was kept as-is;
+    only the two defects the blockout review named were corrected.
+
+spec:
+  status: written
+  path: disenos/homelab/ups-panduit/design-spec.yaml
+  amended: >
+    2026-08-15, orchestrator-directed after the blockout framing failure. `camera.r_m: 0.8`
+    was STRUCK rather than corrected, and the angles changed — see the blockout entry.
+
+passes:
+  blockout:
+    status: passed
+    score: 0.80
+    action: continue
+    review: runs/blockout-attempt2.review.json
+    judged_by: "orchestrator session three-js-46, inline"
+    attempts:
+      - n: 1
+        status: failed
+        score: 0.52
+        review: runs/blockout-attempt1.review.json
+        gate_note: >
+          Geometry sound (chassis, rack ears, display, button, 4-LED column, grilles; the
+          666 mm depth reads). Failed on two NON-GEOMETRY defects: a camera pose seeded
+          from the front face only, and a power state that was never initialised.
+      - n: 2
+        status: passed
+        score: 0.80
+        review: runs/blockout-attempt2.review.json
+        date: 2026-08-15
+        judge_note: >
+          All 4 criticals pass. The touch display was scored on GEOMETRY (dominant,
+          distinct, not a slot); its "glass" read is a material property and belongs to
+          the materials pass — a blockout is not penalised for a material it cannot yet
+          have. STANDING INSTRUCTION: do NOT reintroduce camera.r_m into the spec.
+
+    defect_1_framing:
+      diagnosis: >
+        The pose was hard-coded at r = 0.80 with target (0, 0.0655, 0), both derived from
+        the 440 x 131 mm FRONT FACE while the unit is 666 mm DEEP. Measured, the built
+        subject is 0.4826 x 0.1485 x 0.6805 m and its centre is (0, 0.0567, 0.0070) — the
+        hard-coded target was 11 mm off as well. framing-probe: fullyVisible=false.
+      fix: >
+        The radius and target are now SOLVED numerically against the built bounding box
+        (runtime.solveRadius), re-solved on resize. A radius is a property of the geometry,
+        never of a spec field, which is why camera.r_m was struck from the spec instead of
+        being given a better number.
+      why_not_the_sphere_formula: >
+        The review suggested d >= R/sin(fov/2) ~ 1.22 m, using the bounding SPHERE. That
+        formula treats a flat 0.48 x 0.15 x 0.68 m box as a ball and over-estimates by
+        about 25%: the corners actually fit at r = 0.814 (16:9). Taking 1.36 m would have
+        framed correctly while throwing away a quarter of the subject's pixels to
+        background. Solved over the eight corners instead.
+      angles_also_changed: >
+        MEASURED, and this went beyond what the review asked. All four critical features
+        involve the FRONT face, but at 666 mm deep the TOP face has five times its area.
+        At the declared az 35 / el 20 the top took 51% of the projected silhouette and the
+        front 25%. The review's remedy — elevation to 12-14 — is NOT sufficient on its
+        own: at az 35 / el 12 the top still leads 37% to 31%. Azimuth had to come down
+        too. Swept both and chose az 24 / el 10: front 40%, top 35%, side 25%. The
+        criticals win the frame and the side still carries the depth read.
+      verified: "fullyVisible with no HUD or controls overlap at 16:9, 16:10 and 1280x800; r 0.814 / 0.878"
+
+    defect_2_power_state:
+      diagnosis: >
+        ledMat is CONSTRUCTED with emissiveIntensity 0, and applyPowerState ran only on a
+        click or when the URL carried ?power=. The default capture — the hero — therefore
+        rendered the LEDs dark while the HUD and __qaState both reported power:on. The
+        shot contradicted its own label, which is worse than a wrong render: it is a
+        render that lies about what it is showing.
+      fix: >
+        applyPowerState(state.power === 'on') and applyAutoRotate(state.autoRotate) now run
+        unconditionally at boot, AFTER applyURLParams so an explicit ?power=off still wins.
+        Every state axis is driven on the same code path whether or not a URL param exists.
+      verified: >
+        Replayed the boot sequence headlessly: constructed 0.0 -> after boot with no URL
+        param, state.power=on and emissiveIntensity=1.4; ?power=off darkens; ?power=on
+        restores. State and lamps agree in every case.
+      guard_added: >
+        __qaState now also reports ledEmissiveIntensity, the solved radius and the camera
+        position — so a probe can catch a state/render disagreement without a human
+        eyeballing a capture. That is what would have caught this defect at attempt 1.
+
+    lighting_note: >
+      front_fill raised 0.55 -> 0.72 because the re-framed pose is markedly more frontal
+      and the panel now carries 40% of the silhouette instead of 25%. Metalness untouched:
+      the panel is a coated dielectric and a flat read is fixed with lamps, never by
+      faking metal.
+
+    untouched_as_instructed: "dimensions, part hierarchy, materials, URL states"
+
+  structural:
+    status: passed
+    attempts: 1
+    score: 0.80
+    action: continue
+    review: runs/structural-attempt1.review.json
+    judged_by: "orchestrator session three-js-46, inline"
+    date: 2026-08-15
+    scope: >
+      Massing turned into structure. Dimensions, camera and URL states untouched; the
+      chassis envelope is bit-identical to the spec.
+
+    defects_found_in_the_inherited_blockout:
+      vents_were_raised_bars: >
+        The front grille was three bars standing PROUD of the bezel. A ventilation slot is
+        an OPENING — raised bars are the exact opposite of the critical feature they serve,
+        and no amount of shading makes a bump read as a hole. Rebuilt as real recesses,
+        2.5 mm behind the bezel face, each with a louvre blade formed INWARD so nothing
+        projects past the panel (a stamped louvre is pressed out of the sheet).
+      two_declared_nodes_rendered_NOTHING: >
+        side_vents and rear_panel were groups in the hierarchy with no geometry at all —
+        a promise the model did not keep, and one a screenshot cannot reveal because you
+        cannot see what is not there. side_vents now carries 18 slots covering 396 mm of a
+        666 mm flank; rear_panel carries 3 meshes.
+      everything_sat_ON_the_bezel_plane: >
+        The LCD, the button and the LEDs each had their back face EXACTLY at the bezel
+        front — coincident pairs, decided by Float32 rounding, so the winner flips as the
+        camera moves. All now bite 0.6 mm into the bezel.
+
+    structure_added:
+      lcd: "glass RECESSED 1.2 mm behind a four-bar bezel frame, instead of a slab glued to the surface — a display is glass set behind a bezel"
+      power_button: "cap recessed 2.8 mm inside a collar, instead of a cylinder on the paint — the collar is what makes it read as a control rather than a sticker"
+      side_vents: "18 recessed slots, 9 per flank, on the two largest surfaces of a 666 mm-deep chassis"
+      rear_panel: "a recessed service panel plus an exhaust fan bore and ring"
+
+    what_I_refused_to_invent:
+      rear_receptacles: >
+        NOT BUILT. P1-DATASHEETS §2 covers this unit's form factor, dimensions, rating and
+        FRONT face and says nothing whatsoever about the rear layout. A UPS certainly has
+        output receptacles and they are certainly not on the front — but their COUNT and
+        TYPE are unsourced, and a specific receptacle array is a claim about the product.
+        Only what is functionally forced was built: a service panel (every rack device has
+        one) and a fan aperture (a 5 kVA UPS is forced-air cooled and the front grille
+        already takes air IN, so it must leave somewhere).
+
+    guards_ported:                # each caught a real defect on the sibling asset
+      - "verifyNoCoincidentPlanes — two VISIBLE surfaces at the same depth over a shared footprint; same-material pairs skipped, because whichever identical face wins the pixel is the same and flagging it is noise that trains people to ignore the guard"
+      - "verifyNoEmptyGroups — a node declared in the hierarchy that renders nothing. Written specifically because this asset shipped two of them through a PASS"
+      - "verifyVentsAreRecessed — asserts every vent throat sits BEHIND the bezel face, so a sign flip cannot bring the raised bars back"
+      - "all use console.error, not console.assert, which is invisible to the QA gate"
+
+    verified:                    # headless; no server, no capture
+      vents: "3 throats + 3 blades, deepest recess 2.5 mm, no blade past the bezel"
+      empty_groups: "side_vents 18 meshes, rear_panel 3 — none empty"
+      seating: "LCD frame, button collar and LEDs all bite into the bezel; glass 1.2 mm behind its frame; cap 2.8 mm inside its collar"
+      envelope: "0.4400 x 0.1310 x 0.6665 — identical to the spec"
+      framing: "fullyVisible at 16:9 and 16:10, r 0.814 / 0.878"
+      draws: 42
+      tris: 1144
+      guard_errors: 0
+  materials:
+    status: passed
+    attempts: 1
+    score: 0.80
+    action: continue
+    review: runs/materials-attempt1.review.json
+    judged_by: "orchestrator session three-js-46, inline"
+    date: 2026-08-15
+    scope: "the two asks from the structural review, plus a contract drift I created myself in the previous pass. No dimensions, camera or URL states changed."
+
+    drift_I_introduced_and_closed:
+      what: >
+        `vent_cavity` existed in CODE with no spec entry for a whole pass. I added the
+        material during the structural pass and shipped it without running a traceability
+        sweep — the same class of drift I had already caught twice on the sibling asset,
+        committed here by skipping the check that catches it.
+      fixed: "declared in the spec with its evidence and a stated assumption. It is the interior seen through every slot, and a slot without a dark throat is just a darker bar."
+      second_drift: >
+        The sweep also found lcd_glass at roughness 0.04 in code against 0.05 in the spec.
+        Reconciled the CODE, not the contract: 0.01 is trivial on its own and is exactly
+        how a model drifts away from its spec one harmless step at a time.
+
+    ask_1_glass_read:
+      lever: "lcd_glass envMapIntensity 1.0 -> 2.20, roughness held at the spec's 0.05"
+      why_not_transmission: >
+        The runtime forbids MeshPhysicalMaterial.transmission — it stalls shader compile
+        under headless SwiftShader and the probe returns 0 draws. Real refraction is off
+        the table. What makes a dark screen read as glass is not transparency anyway: it
+        is a MIRROR-SHARP reflection of the room on a near-black base. Roughness was
+        already there; the missing half was the environment it had to reflect.
+
+    ask_2_recess_contrast:
+      lever: "vent_cavity envMapIntensity 1.0 -> 0.28"
+      why: >
+        A slot interior is an occluded cavity, and giving it full room light is exactly
+        what flattens a recess back into a darker bar — the defect the structural pass just
+        removed. Dropping the environment is the honest lever; a blacker albedo would only
+        fake it.
+      what_actually_carries_the_contrast: >
+        MEASURED, and it is NOT throat-vs-bezel. Both are near-black on this chassis
+        (luma 0.004 vs 0.006) and no albedo choice separates them. The contrast comes from
+        the louvre BLADE catching light while the throat stays dark: 0.0124 against 0.0010
+        of reflected environment, a 12.1x separation. Asserted, so a future pass cannot
+        quietly close that gap.
+
+    verified:                    # headless; no server, no capture
+      traceability: "7/7 spec materials map 1:1 — colour, metalness and roughness all match"
+      contract_drift: "none in either direction; the sweep ASSERTS declared-but-unrendered rather than printing it, which is the fix the sibling asset taught"
+      metalness: "near-binary throughout"
+      glass: "roughness 0.05, envMapIntensity 2.20"
+      recess: "blade/throat separation 12.1x"
+      regression: "structural, framing and power-state suites all still pass"
+
+    open_items:
+      - "REAR RECEPTACLES remain unbuilt and unsourced, as the structural pass recorded. P1 says nothing about this unit's rear layout, and a specific receptacle array is a claim about the product. Holding until a source appears."
+      - "The display is glass but DARK in every state. Lighting it is a surface question — it would need screen content, and that content must not fabricate readings."
+  surface:
+    status: passed
+    attempts: 1
+    score: 0.81
+    action: continue
+    review: runs/surface-attempt1.review.json
+    judged_by: "orchestrator session three-js-46, inline"
+    date: 2026-08-15
+    independent_check_by_judge: >
+      The right flank read with letter-like shapes in the capture, so the orchestrator
+      grepped my source for panduit/wordmark/fillText/canvasTexture/logo rather than
+      assuming: zero hits. The pattern is side_vents geometry at a grazing angle, identical
+      in on and off states. No unsourced side text. Recorded because a suspicion checked
+      and cleared is worth as much as a defect found.
+    scope: "the display's on-state content and a grille that reads on its own. Offline — every pixel drawn with the 2D canvas API. Dimensions, camera and URL states untouched."
+
+    display_content:
+      the_hard_part: >
+        A UPS screen shows LIVE MEASUREMENTS. Any figure drawn on it would be a fabricated
+        reading presented at the same fidelity as the sourced geometry around it, so there
+        are NO numbers and NO units anywhere on this screen — not a voltage, not a load
+        percentage, not a runtime.
+      what_is_drawn:
+        - "PANDUIT — the manufacturer, sourced from P1-DATASHEETS §2"
+        - "INPUT / OUTPUT / BATTERY as row labels. These name the quantities a UPS monitors, which is definitional rather than a claim about this model's menu: a box that did not track input, output and battery would not be a UPS. Marked [INFER] anyway, because the specific on-screen wording is not published."
+        - "bar graphs with no scale and no numbers — they carry 'this is a monitoring display' without asserting any value"
+      variant_matched: "3.5-inch touch screen, which is what P1 records for the 5-10 kVA range this U05N11V sits in — not the 2.8-inch segmented LCD of the 1-3 kVA units"
+      wired_to_power: >
+        The screen is an EMISSIVE map — never a base-colour map, which would light the pane
+        with the unit powered down — and applyPowerState now drives it alongside the LEDs.
+        A powered UPS with a dark screen is the same class of lie as the LEDs that stayed
+        dark while the state said power:on, which is what failed this asset's first
+        blockout. __qaState reports lcdEmissiveIntensity so a probe can catch it.
+      asserted: "the check fails on any numeral or unit in the screen strings, and on the artwork being bound as a base-colour map"
+
+    grille_reads_on_its_own:
+      raised: "the review asked for front recesses that read without leaning on the side vents"
+      added: >
+        A bright stamped LIP under each slot. The blade already supplied the shadow; what a
+        real pressed vent also has is a folded metal edge that catches light and draws a
+        hard bright line. Measured in reflected environment: lip 0.3365 against throat
+        0.0010 — a 329x separation, where blade-to-throat was 12.1x. That is the element
+        that lets the grille carry ventilation from the hero on its own.
+      guard_caught_my_placement: >
+        The first placement put the lip's front face EXACTLY on the bezel plane and the
+        coincident-plane guard fired over 448 mm2. It was right, and so was the physics it
+        encodes: a folded edge sits inside the pressed opening, it does not finish flush
+        with the panel. Recessed 0.4 mm.
+
+    verified:                    # headless, with a canvas stub so the artwork rasterises
+      text: "no numeral and no unit anywhere on the screen; PANDUIT header; three rows"
+      screen_binding: "emissiveMap yes, base-colour map no; dark until a power state is applied"
+      grille: "3 throats + 3 blades + 3 lips; lip/throat 329x, blade/throat 12.1x; nothing projects past the bezel"
+      envelope: "0.4400 x 0.1310 x 0.6665 — unchanged"
+      framing: "fullyVisible at 16:9 and 16:10"
+      artwork_cached: "the screen rasterises exactly once"
+      guard_errors: 0
+
+    open_items_carried:
+      - "REAR RECEPTACLES still unbuilt and unsourced — holding until a source appears."
+  lighting-camera:
+    status: passed
+    attempts: 1
+    score: 0.82
+    action: continue
+    review: runs/lighting-camera-attempt1.review.json
+    judged_by: "orchestrator session three-js-46, inline"
+    date: 2026-08-15
+    scope: "the rig re-aimed for THIS subject, and extracted into a pure factory so it can be measured at all. No geometry, materials, camera angles or URL states changed."
+
+    third_time_the_inherited_rig_had_the_wrong_answer: >
+      For the third asset running, the house rig arrived tuned for a different problem.
+      The PDU was a vertical bar and needed its key DROPPED so up-facing light stopped
+      out-shining the front. The Stratix had a critical feature ON its top face and needed
+      it RAISED. This chassis is horizontal with a 440 x 666 mm top that is its LARGEST
+      face and carries NO feature at all — every one of its four criticals is on the front.
+      Light spent on that top is light not spent where the features are. Same house rig,
+      third different correct answer.
+
+    measured:                    # analytic irradiance per normal, inherited -> re-aimed
+      front_+z: "1.801 -> 1.999  (display, button, LED array, grille, ears — ALL 4 criticals)"
+      top_+y:   "1.328 -> 1.079  (-19%; the largest face, and featureless)"
+      side_+x:  "0.859 -> 0.900  (depth read + 9 vent slots)"
+      side_-x:  "0.381 -> 0.397  (the shaded flank, kept above the floor)"
+      rear_-z:  "0.258 -> 0.272"
+      ratios:   "front/top 1.36 -> 1.85 · front/side 2.22 · side spread 2.27 preserved"
+      levers:   "key dropped y 2.0 -> 1.4 so it rakes the panel instead of washing the top; top fill 0.40 -> 0.22; front fill 0.72 -> 0.85; left fill 0.28 -> 0.34 so the shaded flank keeps its slots"
+      why_a_stronger_frontal_is_safe_here: >
+        On the sibling switch a strong frontal would have flattened 4.5 mm jack throats.
+        These recesses are 2.5 mm and their read comes from the louvre blade and the bright
+        stamped lip (329x separation), not from starving the face of light — so the lever
+        that was dangerous there is safe here. Different geometry, different answer.
+
+    criteria_asserted:           # the check fails the build if any of these break
+      - "front/top >= 1.55 — the largest face carries no feature and must not compete"
+      - "front >= 1.7 — it carries every critical"
+      - "shaded flank >= 0.35 — below that its vent slots and the depth read disappear"
+      - "side spread >= 1.6 — the flanks must differ or the chassis loses its depth cue"
+      - "rear >= 0.15 — the service panel would vanish if ever captured"
+
+    corrections_during_build:
+      - "I measured a rig THAT DID NOT EXIST. Transcribing the lamp positions by hand into
+         a test put the key at (3.0, 2.5, 4.0) where the code has (2.5, 2.0, 3.0), so the
+         first set of numbers described my copy rather than the model. Fixed at the root by
+         extracting the rig into a pure factory the check IMPORTS — a transcription cannot
+         drift from a module it does not contain."
+      - "Slicing the old lamp block out of runtime.mjs left an orphan `const lights = {...}`
+         behind, duplicating the declaration. Caught by the syntax check on the real file."
+
+    verified:
+      regression: "structural, materials, surface, framing and power-state suites all still pass"
+      unchanged: "geometry, materials, camera angles, URL states"
+
+    open_items_carried:
+      - "REAR RECEPTACLES still unbuilt and unsourced."
+  interaction:
+    status: passed
+    attempts: 2
+    score: 0.83
+    action: continue
+    review: runs/interaction-ui-attempt2.review.json
+    judged_by: "orchestrator session three-js-46, inline"
+    date: 2026-08-15
+    attempt_1:
+      status: FAILED
+      review: runs/interaction-ui-attempt1.review.json
+      cause: >
+        THE PAGE DID NOT BOOT. Extracting the camera solve into solveCamera() left that
+        function wired ONLY to the resize handler, so at boot `solved` was still {} and
+        applyView() handed undefined to applyCameraPose, which threw on `solved.target`.
+        The throw is at module level, so nothing after it ran: no legend, no render loop,
+        no data-app-ready. Static DOM chrome over a black canvas, in every capture state.
+      my_regression: "introduced by my own refactor in this pass"
+
+    the_correction_that_matters: >
+      ALL SEVEN OF MY SUITES PASSED WHILE THE PAGE WAS DEAD. They exercise MODULES —
+      geometry, materials, lighting, framing, the interaction module in isolation — and
+      not one of them ever executed main.js. A pass whose deliverable is a page that RUNS
+      cannot be verified by testing the parts it is made of. This is the same lesson as
+      the empty declared nodes and the console.log that was never an assertion, one level
+      up: exercise the thing, do not inspect its pieces.
+
+    boot_check_added:                 # scratchpad harness, no server and no browser
+      what: >
+        Executes the REAL entry point with a minimal DOM, substituting ONLY createRuntime,
+        because that is the single function needing a GPU. solveRadius, applyCameraPose,
+        CAMERA_VIEWS and the whole of main.js are the genuine article, so the ordering
+        under test is not stubbed away.
+      asserts:
+        - "no exception during module evaluation"
+        - "data-app-ready reaches 'true' — execution got to the end of main.js"
+        - "requestAnimationFrame was called — the render loop started, so the canvas is not black"
+        - "the HUD pass label was written"
+        - "the interaction legend has rows — the exact symptom of the failed capture"
+        - "__qaHotspots and __qaState exist AND can be called without throwing"
+        - "at least one hotspot is reachable from the boot view"
+      second_defect_it_found: >
+        __qaState() THREW. The refactor turned `solved` from a single solve into a map
+        keyed by view, and the line reporting solvedRadius kept reading `solved.radius`.
+        Any probe calling __qaState would have crashed. No module suite could see it,
+        because no module suite calls the page's own API.
+      shim_discipline: >
+        One failure came from the harness, not the product: getElementById('canvas')
+        returned a generic 200x60 element, so the raycast mapped pointer coordinates into
+        a different space than the projection and every hotspot reported unreachable.
+        Fixed in the harness. "Fix the code until the harness is happy" is how a bad
+        harness rewrites good software.
+
+    sibling_verified_not_modified: >
+      Ran the same boot check against stratix-5700, which is COMPLETE. It boots clean:
+      no exception, data-app-ready true, render loop running, legend populated, hotspots
+      reachable. Its only reported failure was a UPS-specific assertion about power state
+      that does not apply there. Verified with evidence rather than assumed, and not one
+      line of that asset was touched.
+    scope: "raycast hotspots on the model plus the DOM affordances a --page capture needs, and a rear view that closes a gap the lighting pass exposed. No geometry, materials or lighting changed."
+
+    hotspots:
+      list:
+        - "power   -> the power button toggles the unit"
+        - "display -> touching the screen does the same, which is what a touch screen is for"
+        - "rear    -> the service panel returns to the front view"
+        - "chassis -> click the body to swing to the rear"
+      note: >
+        Unusually literal on this subject: the two front hotspots are the two things a
+        person actually touches on a real UPS, and both drive the same power state the
+        hardware would. No interaction was invented to fill a slot.
+
+    rear_view_added:
+      why: >
+        The lighting pass measured the rear at 0.272 and noted the service panel and fan
+        bore were BUILT with no capture state pointing at them — geometry that exists and
+        could never be judged. ?cam=rear closes that: same elevation, mirrored azimuth, so
+        the two shots are directly comparable.
+
+    occlusion_ported_with_its_fix: >
+      This module carries the corrected pick() from the sibling asset: it stops at the
+      FIRST visible surface instead of skipping non-hotspot hits and walking through solid
+      geometry. That bug only surfaces when the occluder is ORDINARY geometry, and this is
+      exactly such a case — a 666 mm chassis sits between the camera and the rear panel.
+      Verified it discriminates: from the FRONT the service panel reports
+      blockedBy=chassis; from the REAR the power button and screen report blockedBy=chassis
+      and the panel becomes clickable.
+
+    defect_found_and_fixed:
+      title: "a single-mesh hotspot was permanently unreachable"
+      what: >
+        The chassis hotspot reported clickable=false from every angle. candidatePoints()
+        returned only the bbox CENTRE for a plain mesh — and a solid's centre is inside it,
+        so the point is occluded by that mesh's own front face. Any single-mesh hotspot on
+        a solid object was dead UI by construction.
+      fix: >
+        It now also samples the six bbox FACE CENTRES, which lie on the surface, so at
+        least one faces the camera from any angle. The chassis is now reachable via a
+        sampled point while the rear panel stays correctly blocked from the front.
+      sibling_note: >
+        The same code ships in stratix-5700, but every hotspot there is a GROUP with real
+        child meshes, so candidatePoints already returned surface points and the bug never
+        bit. Not reopening a completed asset for a latent case it does not hit — recorded
+        here so whoever extracts this module to the library carries the fixed version.
+
+    verified:                    # headless, with a minimal DOM stub
+      hotspots_resolve: "4/4 point at nodes that exist; pointer events wired"
+      occlusion: "discriminates by camera in both directions, naming the occluder"
+      interactions: "the power hotspot darkens the LEDs AND the screen together; touching the display brings both back; an unknown id returns ok:false"
+      page_layout: "subject fullyVisible with no panel overlap at 16:9, 16:10 and 1280x800"
+      regression: "all 6 prior suites still pass"
+
+    open_items_carried:
+      - "REAR RECEPTACLES still unbuilt and unsourced — and now that a rear view exists, their absence is visible rather than hidden. That is the honest state: the panel is there, the receptacles are not claimed."
+  optimization:
+    status: built — awaiting capture + judge
+    date: 2026-08-15
+    scope: "measure, remove real duplication, change nothing a previous pass was judged on"
+
+    budget:
+      draws: "45 / 250  (18%)"
+      tris:  "1180 / 400000  (0.3%)"
+
+    what_I_did:
+      geometry_sharing: >
+        44 geometry OBJECTS for only 16 distinct SHAPES. The 18 side-vent slots each built
+        their own identical BoxGeometry, and so did the four LEDs, the three front throats,
+        the three lips, the three blades and both rack ears — 28 duplicate uploads. This
+        builder was inherited without a cache; the sibling assets had one from the start.
+        Now 16 objects for 16 shapes, zero duplicates. Safe because nothing mutates vertex
+        data after construction.
+
+    what_I_did_NOT_do:
+      no_instancing_of_the_vent_slots: >
+        Collapsing the 18 slots into an InstancedMesh would cut 18 draws — and this build
+        sits at 18% of its budget, so those draws buy nothing, while the collapse costs 18
+        individually named meshes. Geometry SHARING has no such cost; instancing does. Same
+        call as both sibling assets: never trade verifiability for headroom you already
+        have.
+      screen_texture_left_alone: >
+        Right-sizing measured in BOTH directions, because under-resourcing is as much a
+        sizing defect as over-resourcing — the sibling asset needed its label canvas RAISED
+        for exactly this reason. Here the 512x306 screen renders 428 px wide at dpr3
+        (0.84x) and 571 px at dpr4 (1.12x). Inside tolerance both ways, so no change.
+
+    verified:                    # headless; no server, no capture
+      budget: "within on both axes with a wide margin"
+      geometry: "45 meshes over 16 unique geometries; the cache holds exactly 16, so nothing bypasses it"
+      materials: "7 unique, no identical duplicates — compared by full signature, not by name"
+      artwork: "the screen rasterises exactly once"
+      named_parts: "14/14 preserved, and all 8 declared groups intact"
+      offline: "no http(s) URL, fetch, XHR, WebSocket or Image() in main.js / index.html / src; the importmap resolves only to vendor/"
+      boot: "the boot check still passes — the page comes alive, renders, and its __qa hooks are callable"
+      guard_errors: 0
+
+    open_items_carried:
+      - "REAR RECEPTACLES still unbuilt and unsourced."
+  p6-final:
+    status: built — awaiting capture + judge
+    date: 2026-08-16
+    scope: "verify the finished asset against its own contract; capture is the orchestrator's"
+    p6_comparison: spec-only
+    references_on_disk: none        # references/ is empty — a reference-match would be fabricated
+
+    envelope:
+      built:   "0.4400 x 0.1310 x 0.6665 m"
+      spec:    "0.44 x 0.131 x 0.6665 m"
+      verdict: "exact on all three axes"
+
+    mass_drift_explained:            # the full subject box is larger than the chassis, on purpose
+      full_subject: "0.4826 x 0.1310 x 0.6802"
+      x_plus_42.6mm: "the 19-inch rack ears — a CRITICAL feature, not drift"
+      y_plus_0mm:    "nothing exceeds the 3U height in either direction"
+      z_plus_13.7mm: "the 6 mm front bezel and the seated rear service panel, both by design"
+
+    criticals_backed_by_geometry:
+      ups-3u-rack-chassis-ears:     "3/3 parts present"
+      ups-front-panel-touchdisplay: "3/3 parts present"
+      ups-power-button-led-array:   "4/4 parts present"
+      ups-ventilation-grilles:      "5/5 parts present"
+
+    spec_promises:
+      materials: "7 declared · 0 drifted · all actually rendered"
+      screen_text: "PANDUIT / INPUT / OUTPUT / BATTERY — no numerals, no units, no fabricated readings"
+      guard_errors: 0
+
+    defect_found_and_fixed_at_p6:
+      what: >
+        The third front ventilation slot was hanging 18.7 mm BELOW the chassis floor,
+        floating in mid-air. Three 18 mm slots at a 22 mm pitch need ~66 mm of face and the
+        space under the display block is 32.5 mm, so the third one never fit. It has been
+        there since the BLOCKOUT and survived six passes and three gates.
+      why_nothing_caught_it: >
+        verifyVentsAreRecessed only measured depth in z — a slot at the right depth in the
+        wrong place is still recessed. Every framing and containment check boxed the WHOLE
+        subject without ever asking whether that box describes one object. A detached part
+        simply enlarged the box and was judged as part of the subject.
+      fix: "VENT_H 0.018 -> 0.009, VENT_PITCH 0.0105, VENT_Y_START 0.028 — three slots that fit"
+      new_guard: >
+        verifyPartsAreOnTheDevice(root) — every named part must lie inside the chassis
+        envelope. Y is absolute (a 3U unit that pokes out fouls its neighbours in a rack),
+        X allows exactly one exception (the rack ears), Z is unchecked because the bezel and
+        service panel protrude by design. A negative control confirms it fires when the
+        floating slot is reintroduced.
+
+    camera_changed_at_p6:            # FLAGGED FOR THE ORCHESTRATOR — read this before re-judging
+      change: "elevation_deg 10 -> 8 (azimuth unchanged at 24); rear view 204/10 -> 204/8"
+      cause: >
+        Not a preference. The 10 was chosen by measuring each face's projected share of the
+        silhouette, and that measurement uses the SUBJECT BOUNDING BOX — which was 18.7 mm
+        too tall because of the floating vent slot. Removing the stray part shrank the box
+        from 0.1497 to 0.1310 in y, and the same angle then reported front 38% / top 38%:
+        the featureless top face getting equal billing with the face carrying all four
+        criticals. The previously reported "front 40%" was inflated by the defect.
+      after: "front 41% · top 33% · side 26% — front leads again, side keeps the 666 mm depth read"
+      implication: >
+        Every earlier UPS framing judgement was made against a subject box that included a
+        part which should not exist. The hero angle moves by 2 degrees as a consequence.
+
+    open_items:
+      rear_receptacles: >
+        STILL UNBUILT AND UNSOURCED, deliberately. P1-DATASHEETS §2 covers this unit's form
+        factor, dimensions, rating and FRONT face and says nothing about the rear layout.
+        rear_panel renders only what is functionally forced: rear_service_panel,
+        rear_fan_bore, rear_fan_ring. A specific receptacle array would be a claim, not a
+        model.
+
+    verified:                        # headless; no server, no capture — the orchestrator gates
+      suites: "10/10 pass (struct, verify, power, materials, surface, light, interaction, opt-check, boot, p6)"
+      boot: "the real main.js still boots: data-app-ready, render loop, legend, all __qa hooks callable"
+      spec_parse: "design-spec.yaml parses clean; camera block reflects the amended elevation"
+
