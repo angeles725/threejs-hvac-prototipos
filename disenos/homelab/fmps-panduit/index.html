@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="es" data-app-ready="false">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>fmps-panduit — visor de pase</title>
+  <link rel="icon" href="data:,">
+  <!--
+    LOCAL importmap — three r0.160.0 vendored (vendor/three/).
+    OFFLINE-FIRST: no CDN dependency. Per disenos/catalog/EXTERNAL-ASSETS.md §A.
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/three.module.js",
+      "three/addons/": "./vendor/three/addons/"
+    }
+  }
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #06080d;
+      color: #d0d4da;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
+      overflow: hidden;
+    }
+    #canvas-wrap { position: relative; width: 100vw; height: 100vh; }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    /* HUD — top-left pass label; __qaFraming reads its BoundingClientRect */
+    #hud {
+      position: absolute; top: 14px; left: 14px;
+      background: rgba(6, 8, 13, 0.72);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 4px; padding: 6px 12px;
+      pointer-events: none; z-index: 10;
+    }
+    #hud .hud-name {
+      display: block; font-size: 11px; letter-spacing: 0.08em;
+      color: #7a8494; text-transform: uppercase;
+    }
+    #hud .hud-pass {
+      display: block; font-size: 13px; font-weight: 600;
+      color: #e0e6f0; margin-top: 2px;
+    }
+    #hud .hud-state {
+      display: block; font-size: 10px; letter-spacing: 0.06em;
+      color: #5a8aff; margin-top: 4px; white-space: nowrap;
+    }
+
+    /* Provenance note — top-right. THIS IS PART OF THE DELIVERABLE, not decoration.
+       The asset is a generic mini-dome standing in for an unidentified camera, and a
+       viewer who does not know that would read the dimensions as measurements of the
+       installed unit. Saying so on the page is cheaper than being misread. */
+    #provenance {
+      position: absolute; top: 14px; right: 16px; width: 250px;
+      background: rgba(6, 8, 13, 0.80);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 6px; padding: 10px 12px; z-index: 10;
+    }
+    #provenance .pv-title {
+      font-size: 10px; letter-spacing: 0.08em; color: #7a8494;
+      text-transform: uppercase; margin-bottom: 6px;
+    }
+    #provenance p {
+      font-size: 10px; line-height: 1.5; color: #98a2b2; margin-bottom: 5px;
+    }
+    #provenance .pv-flag { color: #e0a84f; }
+
+    /* Controls panel — bottom-right */
+    #controls {
+      position: absolute; bottom: 16px; right: 16px;
+      background: rgba(6, 8, 13, 0.80);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 6px; padding: 12px 14px;
+      display: flex; flex-direction: column; gap: 8px;
+      min-width: 190px; z-index: 10;
+    }
+    #controls .ctrl-label {
+      font-size: 10px; letter-spacing: 0.08em; color: #7a8494;
+      text-transform: uppercase; margin-bottom: 2px;
+    }
+    #controls button {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.14);
+      color: #c8d0dc; font-family: inherit; font-size: 11px;
+      letter-spacing: 0.05em; padding: 6px 10px; border-radius: 4px;
+      cursor: pointer; text-align: left; transition: background 0.15s;
+    }
+    #controls button:hover { background: rgba(255,255,255,0.12); }
+    #controls button.active {
+      background: rgba(47, 107, 255, 0.22);
+      border-color: #2f6bff; color: #a0c4ff;
+    }
+    #controls .ctrl-divider {
+      border: none; border-top: 1px solid rgba(255,255,255,0.07); margin: 2px 0;
+    }
+    #controls .ctrl-hint {
+      font-size: 9px; letter-spacing: 0.05em; color: #3c4860;
+      text-align: center; padding-top: 2px;
+    }
+  </style>
+</head>
+<body>
+<div id="canvas-wrap">
+  <!--
+    #hud — the __qaFraming hook queries this element's getBoundingClientRect()
+    to return the HUD rect. ID must remain '#hud'.
+  -->
+  <div id="hud">
+    <span class="hud-name">fmps-panduit · PXTC1ARA</span>
+    <span class="hud-pass" id="hud-pass">Pase —</span>
+    <span class="hud-state" id="hud-state">psu:standby · modules:all · autorotate:no</span>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <div id="provenance">
+    <div class="pv-title">Procedencia</div>
+    <p class="pv-flag">Dimensiones de distribuidor.</p>
+    <p>El PDF de instalación de Panduit no fue extraíble como texto, así que 445 x 43 x 559 mm
+       provienen de un listado de distribuidor, no del fabricante.</p>
+    <p>Ancho y altura los fija el estándar EIA-310 de 19 pulgadas; la profundidad es la única
+       cifra con incertidumbre real. El reparto de la cara frontal es una inferencia declarada:
+       los elementos están documentados, su disposición no.</p>
+  </div>
+
+  <div id="controls">
+    <span class="ctrl-label">FMPS Controls</span>
+    <button id="btn-psu">⏻ PSU: STANDBY</button>
+    <button id="btn-modules">▦ MÓDULOS: 9/9</button>
+    <hr class="ctrl-divider">
+    <button id="btn-view">VISTA: HERO</button>
+    <button id="btn-autorotate">↻ AUTO-ROTATE: OFF</button>
+    <hr class="ctrl-divider">
+    <span class="ctrl-hint">click or use URL params</span>
+  </div>
+</div>
+
+<script type="module" src="./main.js"></script>
+</body>
+</html>

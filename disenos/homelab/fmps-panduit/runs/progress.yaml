@@ -1,0 +1,636 @@
+# Ladder progress — homelab asset #6: PANDUIT FMPS TRANSMITTER CHASSIS (PXTC1ARA)
+# SINGLE WRITER. Written only by the builder session (ayudante). The orchestrator records its
+# verdicts by messaging the builder, never by editing here — two writers on one YAML is how a
+# duplicate key silently swallowed a judged pass on the PDU.
+
+design: fmps-panduit
+asset_index: 6
+variant: >
+  PXTC1ARA, the Class 4 Transmitter Chassis. 1RU 19-inch rack-mount, 445 x 43 x 559 mm body.
+  FMPS is Fault Managed Power System — Class 4 pulsed HVDC over copper to receivers up to
+  2 km — NOT an environmental sensor and NOT a SmartZone gateway, which the acronym invites.
+
+ownership:
+  writer: "ayudante (builder session)"
+  note: "orchestrator three-js-46 owns the QA server, all captures and all gates; the builder runs no server and no capture"
+
+spec:
+  status: authored — awaiting P3 gate
+  path: design-spec.yaml
+  self_check: >
+    Headless self-check PASS at authoring time. YAML parses with no key swallowed by a
+    quoting error (raw top-level ids compared against parsed ids). Dimensional invariants:
+    43 mm fits inside the 44.45 mm 1U envelope; the ear span is the published EIA-310
+    482.6 mm and leaves 18.8 mm of flange per side; 435 mm of front furniture fits in a
+    445 mm body with 10 mm of margin; bay heights fit the shell; the RJ45 fits its zone; the
+    depth is 13.0x the height, which is the silhouette claim. Contract sanity: 5 criticals,
+    2 importants, near-binary metalness, evidence+source+confidence on all 11 materials,
+    every emissive declares a COLOUR and not merely an intensity, p6_comparison spec-only,
+    and no electrical rating appears anywhere in the spec text.
+
+passes:
+  spec: {status: authored, date: 2026-08-16}
+  gate-p3:
+    status: passed
+    date: 2026-08-16
+    judged_by: "orchestrator session three-js-46, inline"
+    verdict: "spec validates clean; no duplicate keys; 11 near-binary materials with evidence/source/confidence; no emissive without a colour; 5 criticals + 2 importants; camera az26/el3; p6_comparison spec-only; zero electrical ratings in the text"
+    tier_ratified: "moderate at sum 13, unchanged — the cut set at the Axis gate (>=14 complex) applied by the builder and ratified"
+
+  blockout:
+    status: built — awaiting capture + judge
+    date: 2026-08-16
+    files: "index.html · main.js · src/scene/{dims,materials,lighting,fmps-panduit,runtime}.mjs · vendor/ (offline)"
+    envelope: "482.6 (ears) / 445 (body) x 43 x 559 mm — matches the spec on all three axes"
+    budget: "55 meshes / 200 · 1544 tris / 350000 · 12 cached geometries"
+    states: "?psu=standby|enabled · ?modules=all|partial · ?cam=hero|front-detail · ?autorotate=yes|no"
+
+    the_p2_prediction_held:
+      what: >
+        The camera was solved analytically at P2 — az 26 / el 3 — from the face areas alone.
+        Measured against the BUILT bounding box it reports FRONT 43% / top 33% / side 24%,
+        which is the P2 figure exactly. Solving it before building rather than discovering it
+        at a gate cost one calculation and saved a failed attempt.
+
+    defects_found_and_fixed:
+      the_layout_consumed_the_body_width_EXACTLY:
+        what: >
+          445 - 8 of margin - 437 of furniture = 0, and in binary that lands a hair NEGATIVE,
+          so the fit guard fired reporting an overflow "by 0.0 mm". A layout that closes to
+          the millimetre is not elegant, it is a layout with no tolerance.
+        fix: "edge margin 4.0 -> 2.5 mm, and the guard now demands 2 mm of real slack rather than a non-negative result"
+        note: "'it did not overflow' was never the property worth asserting — the same shape as the derived-dimension positivity lesson"
+      bays_were_recessed_by_1_mm_where_2_point_5_was_meant:
+        what: >
+          The faces were positioned by their CENTRE. A 3 mm plate centred at FRONT_Z-RECESS
+          has its visible surface only 1 mm behind the panel — the difference between a bay
+          and a bevel — and the recess guard measures the surface, so it fired on all 13.
+        fix: >
+          A declared Z-STACK (panel / cage / face / led / blank / cavity / throat) and an
+          atFront(front, depth) helper, so every layer is positioned by the quantity that
+          matters visually — where its front lands — and no two layers can silently share a
+          plane.
+      seventeen_coincident_front_faces:
+        what: "cavity/face pairs on all 13 bays, plus the RJ45 cage, throat and surrounding cavity all sharing one plane"
+        fix: "resolved by the same Z-stack; each layer has its own depth by construction"
+      a_pluggable_connector_read_as_out_of_bounds:
+        what: "the dry-contact terminal block protrudes past the panel, and the containment guard called that a defect"
+        fix: >
+          The guard now declares a FRONT_PROTRUSION_ALLOWANCE of 5 mm, stated rather than
+          silently generous: a pluggable connector standing proud is what makes it pluggable,
+          but anything reaching further than 5 mm is a defect and not a connector. Z-back and
+          Y stay absolute — a 1U unit that pokes out of its height fouls its neighbours.
+      my_own_framing_criterion_was_wrong_again:
+        what: >
+          The check demanded every view keep >= 15% side share for the depth read, and failed
+          `front-detail` at 10%. That is not a defect — a detail view exists to look at the
+          front closely, and demanding it also hold a flank read applies the hero's job to a
+          shot defined by not having it.
+        fix: "the depth requirement belongs to the hero alone; a detail view is asserted the opposite way, front >= 55%"
+
+    verified:                        # headless; no server, no capture — the orchestrator gates
+      struct: >
+        envelope exact; 1U height inside the 44.45 mm opening; flange span 482.6 mm; all
+        published counts built (9 slot cavities, 9 module faces, 9 LEDs, 9 blanking plates,
+        3 PSU bays, 3 PSU LEDs, RJ45 cage + throat, alarm block, livery); every bay recessed
+        2.50 mm; the RJ45 has an 8.7 mm throat behind its cage; 0 material drift; 0 guards.
+      states: >
+        the module toggle drives BOTH halves — faces + blanks always total 9, and the LED
+        count always equals the module count. The PSU toggle switches the lamp MATERIAL
+        (led_blue <-> led_green) and both lamps are asserted non-black, because
+        emissiveIntensity alone is a vacuous assertion.
+      framing: "all four states fully in frame, clear of the panels; hero FRONT 43%/top 33%/side 24%, detail FRONT 62%"
+      lighting: "front 2.187 vs lid 0.748 — ratio 2.92 against a lid 13x the area; bay floors 1.877; flank asymmetry 0.448; no metalness touched"
+      contact: "0 floating parts in BOTH module states — every part reaches chassis_body through real contacts"
+      traceability: "5/5 declared nodes exist; all published counts match; 11/11 spec materials instantiated; no part name carries a rating"
+      boot: "the real main.js boots: data-app-ready, render loop, HUD and all four button labels written, both __qa hooks callable, console clean"
+      suites: "6/6 pass (trace, struct, framing, light, boot, float)"
+
+    open_items_carried:
+      - "DIMENSIONS ARE [CERT-a] — distributor-sourced, accepted at the gate."
+      - "FRONT-FACE LAYOUT is a declared inference with no independent cross-check."
+      - "CHASSIS COLOUR entirely unsourced."
+      - "NO DISPLAY is a SOURCED absence and none was built."
+      - "EMISSIVE INTENSITY 4.0 still SEEDED from the Axis, not measured here — due at lighting."
+
+  structural:
+    status: built — awaiting capture + judge
+    date: 2026-08-16
+    scope: "give the chassis the relief that makes it serviceable, and MEASURE the legibility note"
+    added: "module_handle_0..8 · psu_handle_0..2 · bay_divider_0..7 · psu_divider_0..1 · 4 ear mounting holes"
+    budget: "81 meshes / 200 · 2128 tris / 350000 · 16 cached geometries"
+
+    the_orchestrator_note_was_MEASURED_not_assumed:
+      note: >
+        The blockout verdict reported the front furniture as reading SUBTLE — built and
+        traceable, but not countable by eye. That is a measurable claim with two independent
+        halves that a single impression cannot separate, so both were measured.
+      size: >
+        At dpr3 hero the chassis front spans 2964 px, one module face is 124 px wide and the
+        division between two bays is 16.7 px. A status LED is 20 px across. NOT a size
+        problem. The real constraint is that the whole 1U band is only 349 px tall.
+      contrast: >
+        Every adjacent pair clears the 20% Weber floor — module face vs cavity 99%, vs chassis
+        59%, PSU face vs module face 28%, RJ45 cage vs throat 100%. NOT a relative-contrast
+        problem either.
+      the_actual_cause: >
+        ABSOLUTE EXPOSURE, which is a THIRD property both of the above are blind to. Through
+        the tone curve the chassis front renders 0.042 of 1.0, the module face 0.103 and the
+        PSU face 0.074 — 3 of 4 front surfaces sit on the FLOOR of the curve, where a viewer
+        has almost no discrimination left and a capture almost no code values. Weber is a
+        RATIO: it says two surfaces differ, never that both are nearly black.
+      what_that_means_for_this_pass: >
+        The furniture is big enough and separated enough. Making parts bigger would have been
+        the wrong fix, so this pass did not attempt it — the exposure is a MATERIALS and
+        LIGHTING problem and is recorded for those passes. What structural owes is relief.
+
+    added_and_why_each_is_forced:
+      extraction_handles: >
+        A hot-swap module has to come OUT; with no grip there is no way to withdraw it. The
+        handle is what makes a bay read as a bay rather than as a rectangle drawn on a plate,
+        and it is the only relief available on a front band 349 px tall.
+      bay_dividers: >
+        The chassis wall between bays. Without them the nine slots are nine faces on one
+        continuous plate — the same distinction as a recessed cavity versus a painted
+        rectangle, one level up.
+      ear_mounting_holes: >
+        Two per ear at the EIA-310 0.625 in vertical pitch. A flange with no hole cannot take
+        a screw, and taking a screw is the entire claim the rack-ears critical makes.
+      the_line_this_does_not_cross: >
+        None of it invents a COUNT or a TYPE the evidence is silent about. That is what
+        separates it from the UPS rear receptacles, where both were unknown and nothing was
+        built at all.
+
+    the_guard_this_pass_contributes:
+      name: verifyBaysAreComplete
+      what: >
+        Every populated bay must have its face, its handle and its LED, and exactly one of
+        {module, blanking plate}. COUNTS CANNOT SEE THIS: with a handle left visible over a
+        blanking plate the count of each part is still right, and only the SET per bay is
+        wrong — a handle attached to nothing, which is the floating-part failure wearing a
+        state toggle.
+      proven: "NEGATIVE CONTROL — hiding bay 0's handle makes it fire exactly once; 0 as built, in both module states"
+
+    verified:                        # headless; no server, no capture — the orchestrator gates
+      counts: "9 handles, 3 PSU handles, 8 bay dividers, 2 PSU dividers, 4 ear holes, all present alongside the blockout inventory"
+      completeness: "0 incomplete bays in modules=all AND modules=partial; the handle follows the module, never the blanking plate"
+      contact: "0 floating parts in both module states"
+      guards: "0 failures across derivations, floating, containment, recess, completeness, coincident planes and wrap-around textures"
+      framing: "unchanged — hero FRONT 43% / top 33% / side 24%, detail FRONT 62%, all states clear of the panels"
+      lighting: "unchanged — front 2.187 vs lid 0.748"
+      boot: "the real main.js boots clean; HUD reads Pase STRUCTURAL"
+      suites: "6/6 pass (trace, struct, framing, light, boot, float)"
+
+    carried_to_materials_and_lighting:
+      - "EXPOSURE: 3 of 4 front surfaces render below 0.18 of 1.0. The chassis colour is
+         UNSOURCED (P1 records no finish), so lightening it is available; the rig can also
+         push more onto the front. Measure through the tone curve, not in linear."
+      - "PSU face vs module face is the tightest pair at 28% Weber — the two banks are the
+         thing a viewer has to tell apart to count them."
+      - "EMISSIVE INTENSITY 4.0 is still SEEDED from the Axis, not measured against THIS
+         housing."
+
+    open_items_carried:
+      - "DIMENSIONS ARE [CERT-a] — distributor-sourced, accepted at the gate."
+      - "FRONT-FACE LAYOUT is a declared inference with no independent cross-check."
+      - "CHASSIS COLOUR entirely unsourced."
+      - "NO DISPLAY is a SOURCED absence and none was built."
+
+  materials:
+    status: built — awaiting capture + judge
+    date: 2026-08-16
+    scope: "close the exposure the structural pass measured, and re-measure the borrowed emissive"
+
+    the_palette_was_SOLVED_not_picked:
+      what: >
+        The three front surfaces were derived by INVERTING the tone curve at this rig's front
+        irradiance for targets of 0.19 / 0.29 / 0.43 — not chosen by eye and checked
+        afterwards. The blockout values rendered 0.042 / 0.103 / 0.074 of 1.0, three of four
+        on the FLOOR of the curve.
+      chassis:     "#26282c -> #41454b   0.042 -> 0.189"
+      module_face: "#34373c -> #5f656e   0.103 -> 0.433"
+      psu_face:    "#2e3136 -> #4e535a   0.074 -> 0.293"
+      still_defensible: >
+        #41454b is charcoal, not black — still the "dark powder-coated" the spec describes.
+        The colour is UNSOURCED (P1 records form factor, dimensions, weight and front
+        inventory and nothing about finish), which is exactly what makes it available to
+        solve rather than a value to preserve.
+      separation_is_a_property_of_the_SET: >
+        The first candidate opened PSU-vs-module to 49% and closed PSU-vs-chassis to 8%.
+        Moving one surface to fix one pair moves it relative to every other, so the three were
+        solved together as stepped levels. Final: chassis/module 56%, chassis/psu 36%,
+        module/psu 32% — all clear, none traded for another.
+
+    the_borrowed_number_was_WRONG_here:
+      what: >
+        Emissive intensity 4.0 was SEEDED from the Axis, and re-measuring against THIS housing
+        gave a different answer. The Axis lamp sat on a WHITE collar rendering 0.879 — there
+        the lit LED was DARKER than its own bezel until intensity 4. This chassis is charcoal
+        and its bay faces land at 0.29-0.43, so the lamp clears its surround at intensity 1.
+      why_2_and_not_more: >
+        CHROMA, which luminance alone cannot see. Tone mapping is applied PER CHANNEL, so an
+        over-driven emissive saturates every channel toward 1.0 and the lamp goes WHITE.
+        Measured saturation: 87% (blue) / 92% (green) at intensity 2, falling to 72% / 82% at
+        4 and 49% / 63% at 8.
+      why_that_trade_is_one_sided_on_THIS_asset: >
+        `psu-state-colours` is a critical about HUE — blue standby versus green enabled. Buying
+        0.25x more luminance by washing the lamps toward white would spend the very thing the
+        feature exists to show. A borrowed number is not a measured one, and here the two
+        disagree in both direction and reason.
+
+    defects_found_and_fixed:
+      my_criterion_was_wrong_for_the_fourth_time:
+        what: >
+          The contact-contrast check failed slot_cavity against port_cavity at 11%. Both exist
+          to be a HOLE — a viewer never has to tell the RJ45's bore from the bay recess behind
+          it, and the jack reads by its metal cage (100% against its own throat), not by its
+          bore.
+        fix: >
+          Stated as a RULE rather than an exemption for one pair: same role-family is exempt
+          from each other, AND every cavity is still required to separate from every
+          non-cavity it touches, which is asserted separately. An exemption is where real
+          drift hides.
+      a_check_printed_a_stale_verdict:
+        what: >
+          The legibility check ended by asserting the panel was under-exposed. True when
+          written, FALSE once this pass solved the palette — and it kept printing it.
+        fix: "report the measurement and branch on it; a check that prints a fixed conclusion is worse than one that prints nothing"
+
+    verified:                        # headless; no server, no capture — the orchestrator gates
+      exposure: "0 of 5 front surfaces below the 0.18 floor (chassis 0.189, psu 0.293, module 0.433, ears 0.793, livery 0.905); the cavity stays at 0.001 BY DESIGN, because a recess must read dark"
+      contrast: "26 touching material pairs all >= 20% Weber, 1 cavity/cavity pair exempt by role, and every cavity separately confirmed against every solid"
+      hue: "led_blue 87% and led_green 92% saturation at intensity 2; the two states use distinct emissive colours"
+      spec_parity: "11/11 materials match the contract; metalness still near-binary; every emissive declares a COLOUR"
+      unchanged: "framing hero FRONT 43%/top 33%/side 24% · front 2.187 vs lid 0.748 · 0 floating parts · bays complete in both states"
+      suites: "8/8 pass (trace, struct, framing, light, materials, legibility, boot, float)"
+
+    open_items_carried:
+      - "DIMENSIONS ARE [CERT-a] — distributor-sourced, accepted at the gate."
+      - "FRONT-FACE LAYOUT is a declared inference with no independent cross-check."
+      - "CHASSIS COLOUR still unsourced — charcoal is now measured-as-necessary, not documented."
+      - "NO DISPLAY is a SOURCED absence and none was built."
+
+  surface:
+    status: built — awaiting capture + judge
+    date: 2026-08-16
+    scope: "the printed mark, and only what the evidence supports"
+    files_added: "src/scene/decals.mjs"
+
+    what_is_drawn:
+      PANDUIT: "the manufacturer, established for this catalogue number [CERT-web]"
+      PXTC1ARA: >
+        The catalogue number itself, and this is where the FMPS differs from the sibling
+        Axis: there the model was UNKNOWABLE from an OUI and printing one would have
+        fabricated an identity. Here P1 names the variant explicitly. A part number that IS
+        evidenced is exactly what a rack chassis carries on its face — the discipline is not
+        "print less", it is "print what the evidence carries".
+
+    the_distinction_this_pass_turned_on:
+      what: >
+        P1 DOES record "4.8-6 kW per chassis" for the FMPS system. So the figure exists in the
+        research, and the obvious move is to silkscreen it.
+      why_not: >
+        Because printing a rating is a claim about what the LABEL says, not about what the
+        product does — and nothing in the evidence describes this unit's label at all. That a
+        fact is TRUE of the device does not make it PRINTED on the device.
+      also_absent: >
+        Bay numbering. Nine slots invite a 1-9 silkscreen, but nothing establishes the SCHEME
+        — 1-9 or 0-8, left-to-right or right-to-left. The existence of a convention is not
+        knowledge of which convention. The sibling Stratix set this precedent for its ports.
+      guarded: "`panduit-livery-no-ratings` is a CRITICAL, so the distinction is checked at a gate rather than trusted to memory"
+
+    defect_found_and_fixed:
+      the_mark_was_printed_on_a_removable_part:
+        what: >
+          The livery plate sat straight over the third PSU bay — 30 x 4 mm of overlap with its
+          cavity, its face and its handle. A manufacturer's mark silkscreened across a hot-swap
+          module is not a livery; it is a mark on a component that gets pulled out of the
+          chassis.
+        why_nothing_saw_it: >
+          The plate was inside the envelope, attached, correctly sized and correctly coloured.
+          Every existing guard was satisfied. Being in the WRONG PLACE is not a property any
+          of them measure.
+        fix: >
+          Moved into the free band between the bays (16.5 mm) and the chassis top (21.5 mm) —
+          5 mm, which is what a 1U front actually leaves for print, of which the plate takes
+          3.5 mm with margin.
+        new_guard: "verifyLiveryIsOnTheChassis — a printed mark may not overlap any part other than the chassis body, proven by a negative control that puts the plate back and gets 3 overlaps"
+
+    right_sizing_by_measurement:
+      measured: "428 x 45 px at dpr3 hero, 571 x 60 px at dpr4"
+      chosen: "1024 x 82 canvas — 1.79x over the worst case; 512 would sit at 0.89x and interpolate the lettering upwards"
+      aspect: "the plate is 12.57:1 and the canvas 12.49:1 — 0.7% distortion, asserted so the lettering cannot stretch unnoticed"
+
+    verified:                        # headless; no server, no capture — the orchestrator gates
+      text: "PANDUIT + PXTC1ARA; ratings null; no rating-shaped string, no bay numbering, no serial, no QR anywhere in the layout"
+      artwork: "rasterises exactly once; no http(s), fetch or Image() in the factory"
+      faces: "6 materials over 6 geometry groups, 2 unique — art on group 4 (+z) only"
+      guards: "wrap-around fires 1 on a single mapped material over 6 groups and 0 as built; livery-placement fires 3 with the plate moved back and 0 as built"
+      traceability: "walks material ARRAYS and matches clones by id prefix — no hard-coded exception for the artwork material"
+      unchanged: "exposure 0/5 below the floor · 24 touching pairs >= 20% Weber · lamps 87%/92% saturation · framing · 0 floating parts"
+      suites: "9/9 pass (trace, struct, framing, light, materials, surface, legibility, boot, float)"
+
+    open_items_carried:
+      - "DIMENSIONS ARE [CERT-a] — distributor-sourced, accepted at the gate."
+      - "FRONT-FACE LAYOUT is a declared inference with no independent cross-check."
+      - "CHASSIS COLOUR still unsourced — charcoal is measured-as-necessary, not documented."
+      - "NO DISPLAY is a SOURCED absence and none was built."
+      - "LIVERY POSITION chosen to fit the free band, not measured."
+
+  lighting-camera:
+    status: built — awaiting capture + judge (REOPENED and corrected after the orchestrator's hold)
+    date: 2026-08-16
+    changes_to_the_rig: NONE
+    changes_to_the_geometry: MAJOR — see below
+
+    the_hold_was_right_and_the_evidence_was_not:
+      what_was_reported: >
+        Zero green-dominant pixels anywhere in the `enabled` capture; the brightest saturated
+        lamps in both states rgb(47,107,255); the pixels whose green rose most ending at
+        rgb(160,196,255); and a 70511-pixel diff between the two states.
+      the_three_pixel_values_are_DOM: >
+        #2f6bff is rgb(47,107,255) — `button.active` border in index.html. #a0c4ff is
+        rgb(160,196,255) — `button.active` text colour. The 70511-pixel diff is the PSU button
+        gaining `.active` and changing its label: ~190x28 CSS px at dpr4 is about 85000 px,
+        the right order. This pass captures --page, so the DOM is in frame.
+      but_the_instinct_was_correct: >
+        The zero-green finding was REAL and it exposed a defect three gates had passed.
+
+    THE_DEFECT:
+      what: >
+        chassis_body was a SOLID BOX to the front plane, and the entire front face was buried
+        inside it: nine module faces, three PSU faces, all thirteen LEDs, the RJ45 cage and
+        throat, every divider and every cavity. A ray fired from the camera hit chassis_body
+        first, in every view, every time.
+      what_had_actually_been_rendering: >
+        The only parts standing proud of the panel — the module and PSU handles, the alarm
+        block and the livery. Four things, reading convincingly enough as "a row of bays with
+        handles and dividers" to pass blockout, structural and materials.
+      why_no_guard_caught_it: >
+        verifyBaysAreRecessed measured DEPTH BEHIND THE FRONT PLANE, which is exactly what a
+        buried part does. WITHOUT AN OPENING, RECESSED IS BURIED — recess is only meaningful
+        relative to a hole, and the guard never asked whether one existed. Everything else was
+        satisfied: the parts were inside the envelope, attached, correctly sized, coloured,
+        counted and complete. Being INVISIBLE was not a property anything measured.
+      fix: >
+        The shell now stops 12.5 mm behind the front and the face is a FRAME — four bars
+        leaving the bay aperture open. And the cavity, which sat IN FRONT of the module face
+        it was meant to surround, moved behind it: a cavity is the back of a hole, not a lid
+        over it.
+      new_guard: >
+        verifyBayContentsAreVisible — every module face, PSU face, NMC face, LED and jack cage
+        must be reachable by a ray fired straight down the front axis. It SAMPLES each face
+        rather than aiming at its centre, because a part can be legitimately covered at one
+        point by something mounted ON it (the RJ45 cage sits at the middle of the NMC face).
+        NEGATIVE CONTROL: slabbing the aperture back over reports 27 parts hidden; 0 as built.
+
+    a_second_defect_I_INTRODUCED_and_the_guards_caught:
+      what: >
+        Moving the cavity to its correct depth left the blanking plates touching nothing in
+        the `partial` state, and revealed that the dividers were anchored off the cavity too —
+        sitting 3.6 mm BEHIND the faces they are supposed to separate.
+      caught_by: "verifyNothingFloats, which reported 0 in `all` and 3 in `partial`"
+      fix: "dividers reach the front; blanking plates are wider than the aperture and lap over the dividers, which is how one is actually fitted"
+
+    a_blind_spot_in_my_own_measurement:
+      what: >
+        irradiance() returns a LUMA, and the materials check multiplied each colour channel by
+        that one scalar — modelling the rig as WHITE. This rig is not: front #f2f6ff, top
+        #dce8f4, fill #c8deff, rim #80aee0 and a hemisphere sky of #d0e8f8 give b/r = 1.069.
+      fixed: >
+        Per-channel irradiance, and the lamp assertion is now about the RENDERED PIXEL rather
+        than the material: led_green renders rgb(18, 219, 142) — green-dominant — and led_blue
+        rgb(30, 188, 235). A green emissive whose tone-mapped pixel came out blue-white would
+        not satisfy a critical about HUE however green the material is, and only a per-channel
+        model can tell the difference.
+
+    the_rig_question_answered_earlier_still_holds:
+      ask: "can the rig favour the PSU lamps without raising intensity?"
+      answer: >
+        No. An emissive does not receive light: scaling the entire rig x0.5 to x2.0 moves the
+        lamp from 0.719 to 0.725. Only the SURROUND moves (0.136 -> 0.520), so the rig can
+        raise lamp contrast ONLY by darkening the panel — undoing what materials just fixed.
+        The trade exists and it is a bad one.
+
+    verified:                        # headless; no server, no capture — the orchestrator gates
+      visibility: "0 bay parts blocked from the front; negative control reports 27 when the aperture is closed"
+      lamps: "led_green rgb(18,219,142) green-dominant, led_blue rgb(30,188,235) blue-dominant, saturation 92% / 87%, both measured PER CHANNEL"
+      contact: "0 floating parts in BOTH module states"
+      panel: "chassis 0.189 · psu 0.293 · module 0.433 · ears 0.793 · livery 0.905 — none on the floor; lid 0.039"
+      camera: "hero r=0.706 FRONT 43%/top 33%/side 24%; detail FRONT 62% — the P2 prediction still exact"
+      suites: "11/11 pass (trace, struct, framing, light, materials, surface, tonemap, legibility, boot, float, ledpix)"
+
+    what_to_re_capture: >
+      Everything. The front face has never actually been rendered — three captures showed
+      four proud parts over a closed panel. hero and front-detail, standby and enabled, and
+      modules=partial.
+
+  optimization:
+    status: built — awaiting capture + judge
+    date: 2026-08-16
+    scope: "measure, remove real duplication, and ask what is DRAWN BUT NEVER SEEN"
+    budget: "85 -> 82 draws / 200 (41%) · 2176 tris / 350000 (0.6%) · 19 unique geometries, cache holds 19"
+
+    the_instrument_this_pass_adds:
+      name: "drawn but never seen"
+      what: >
+        For every visible mesh, fire rays from the ACTUAL solved camera positions of every
+        declared capture state and ask whether any of its camera-facing surface is reachable.
+        A mesh no declared state can see is cost with no benefit — and, far more often, a
+        MISTAKE rather than an optimisation opportunity.
+      why_it_belongs_here: >
+        It only became possible once the front opened at lighting-camera. Had it existed three
+        passes earlier it would have reported the entire buried front face immediately, which
+        is the strongest argument for it being part of the ladder rather than a one-off.
+
+    defects_found_and_fixed:
+      the_rj45_shield_buried_its_own_throat:
+        what: >
+          Built as a solid plate, the cage covered the bore behind it: the throat was
+          unreachable from BOTH declared views, so the jack read as a metal rectangle. The
+          critical `nmc-rj45-and-alarm` is specifically about it being "a dark cavity with a
+          visible keyway, not a printed rectangle".
+        note: "the same defect as the chassis front, one level down and at 16 mm instead of 445"
+      the_nmc_faceplate_buried_the_jack:
+        what: "a solid plate sitting 0.2 mm in front of the whole jack assembly"
+        note: "the THIRD time in this one file that a plate buried what it was meant to surround"
+      the_ear_holes_were_buried_in_the_flange:
+        what: >
+          Seated INSIDE the ear rather than proud of it. A dark disc standing in for a bore
+          only works if it is the surface the eye lands on; inside the flange it is nothing.
+
+    the_refactor_that_removes_the_CLASS:
+      what: >
+        Three frames built by hand in one file is the signal to extract one. frameBars() now
+        assembles the four bars of a rectangular aperture, and the chassis front, the RJ45
+        shield and the NMC faceplate all use it.
+      why_it_matters: >
+        Without CSG a "hole" has to be ASSEMBLED, and assembling it by hand three times is
+        three chances to build a solid plate instead. The helper does not make the mistake
+        impossible, but it makes the correct construction the easy one — and the
+        drawn-but-never-seen check catches what slips through.
+
+    verified:                        # headless; no server, no capture — the orchestrator gates
+      visibility: "0 of 82 visible meshes unreachable from both declared views; 0 front-face parts hidden"
+      duplication: "0 duplicate material signatures compared by full signature (type, colour, metalness, roughness, opacity, transparent, emissive, intensity, envMapIntensity, side, map)"
+      geometry: "19 unique, cache holds 19 — nothing bypasses it"
+      budget: "82 draws of 200, 2176 tris of 350000"
+      unchanged: "exposure · contrast · lamp hue · framing · 0 floating parts · bays complete in both states"
+      suites: "12/12 pass (trace, struct, framing, light, materials, surface, tonemap, legibility, optimization, boot, float, ledpix)"
+
+    what_I_did_NOT_do:
+      no_instancing: >
+        Twelve repeats (9 bays + 3 PSUs) at 41% of the draw budget. Collapsing them would cost
+        individually named meshes, which every containment, completeness and visibility guard
+        addresses BY NAME. Same call as all five siblings.
+      no_texture_resize: "right-sized by measurement at SURFACE — 1024x82, 1.79x the worst case"
+
+    open_items_carried:
+      - "DIMENSIONS ARE [CERT-a] — distributor-sourced, accepted at the gate."
+      - "FRONT-FACE LAYOUT is a declared inference with no independent cross-check."
+      - "CHASSIS COLOUR still unsourced."
+      - "NO DISPLAY is a SOURCED absence and none was built."
+
+  p6-final:
+    status: built — awaiting capture + judge
+    date: 2026-08-16
+    scope: "verify the finished asset against its CONTRACT; capture is the orchestrator's"
+    p6_comparison: spec-only
+    references_on_disk: none
+
+    envelope:
+      built: "482.6 (ears) x 43.0 x 559.0 mm"
+      spec:  "482.6 flange span / 445 body x 43 x 559 mm"
+      verdict: "matches on all three axes; 43.0 mm inside the 44.45 mm 1U opening; depth 13.0x the height"
+
+    containment:
+      reach: "x 241.3 against a 241.3 flange half-span · y 21.5 against a 21.5 1U half-height · z 281.5 against a 279.5 half-depth"
+      the_only_exception: >
+        A declared FRONT protrusion allowance of 5 mm for the pluggable dry-contact connector —
+        stated in the guard rather than silently generous, because a connector standing proud
+        is what makes it pluggable while anything past 5 mm is a defect.
+      y_is_absolute: "a 1U unit that pokes out of its height fouls its neighbours in the rack"
+
+    the_check_that_matters_on_THIS_asset:
+      what: >
+        Every CRITICAL is verified not just PRESENT but VISIBLE — a ray from each solved
+        camera position must reach its camera-facing surface.
+      why: >
+        This asset spent three gates with its entire front face buried in a solid box. The
+        parts were present, attached, correctly sized, coloured, counted and complete. A P6
+        that only counted geometry would have passed it. Presence is not visibility, and on
+        this asset that distinction is the whole lesson.
+      result: "5/5 criticals fully present AND fully visible in BOTH declared views (hero and front-detail)"
+
+    spec_promises:
+      materials: "11 declared · 0 drifted · all rendered"
+      printed_text: >
+        PANDUIT + PXTC1ARA only. The catalogue number IS printed because P1 names the variant;
+        no rating is, because P1's "4.8-6 kW per chassis" describes the SYSTEM and printing it
+        would be a claim about this unit's LABEL, which nothing in the evidence describes.
+      ui_controls: "4/4 have BOTH a DOM button and a URL state, so every one can be captured"
+      guard_errors: 0
+
+    state_matrix:
+      covered: "psu standby|enabled x modules all|partial — all four"
+      invariants: >
+        Bays always total 9 (modules + blanking plates), the LED count always equals the
+        module count, and the lamp material tracks the PSU state. A hide-list and a
+        restore-list written separately diverge silently and leave a bay with neither.
+
+    open_items:                      # DOCUMENTED, and verified still documented
+      dimensions_are_CERT_a: >
+        Distributor-sourced, not the manufacturer — Panduit's own installation PDF returned as
+        binary and was never readable. Accepted at the P3 gate because a 1U 19-inch chassis has
+        its width and height FORCED by EIA-310; only the depth carries real uncertainty. A
+        readable manufacturer drawing would retire it in one step.
+      front_face_layout: >
+        The ELEMENTS are sourced (nine slots, three PSUs, RJ45, alarm, LEDs); the ARRANGEMENT
+        is not. The split closes to 445 mm exactly, but several others also close and nothing
+        in the evidence chooses between them. Unlike the Stratix — where a ganged-module
+        hypothesis predicted another variant's width to 0.2 mm and so EARNED the inference —
+        there is no independent cross-check here, so it stays confidence: low.
+      chassis_colour: "entirely unsourced; charcoal is measured-as-necessary from the exposure target, not documented"
+      no_display: >
+        A SOURCED ABSENCE, not an omission: P1 records the chassis as managed via the NMC web
+        interface and SNMP. Asserted rather than claimed — the check scans the scene graph for
+        any display/screen/lcd mesh and finds none, so a later pass cannot add one for visual
+        interest without failing.
+      led_size: "3 mm is inferred; the STATES are published, the geometry is not"
+
+    verified:                        # headless; no server, no capture — the orchestrator gates
+      suites: "12/12 pass (trace, struct, framing, light, materials, surface, tonemap, legibility, optimization, p6, boot, float)"
+      boot: "the real main.js boots: data-app-ready, render loop, HUD reads Pase FINAL, both __qa hooks callable, console clean"
+      budget: "82 draws / 200 · 2176 tris / 350000 · 19 unique geometries, cache holds 19"
+      visibility: "0 of 82 visible meshes unreachable from both declared views"
+      offline: "no http(s) URL, fetch, XHR or Image() in main.js / index.html / src; the importmap resolves only to vendor/"
+
+    one_more_check_corrected_at_P6:
+      what: >
+        The p6_comparison assertion read the raw document and matched a COMMENT — "#
+        p6_comparison: SPEC-ONLY. references/ is empty..." — reporting its prose as the value.
+      fix: "anchored to a real key line (^p6_comparison:\\s*(\\S+)$), which is the same shape as the lesson about a spec that was never parsed: read the SETTING, not the document"
+
+# ── Resolved at the P3 gate ───────────────────────────────────────────────────────
+gate_questions_resolved:
+  weakest_evidence_in_the_run:
+    answer: >
+      ACCEPTED for this subject. A 1U 19-inch chassis has its WIDTH (482.6 mm EIA-310 flange
+      span, 445 mm body) and HEIGHT (43 <= 44.45 mm) FORCED by the standard — any 1U unit
+      carries them. The only figure with real uncertainty is the DEPTH, and for a rack unit
+      whose form factor fixes W and H, a distributor depth is acceptable evidence. The bar is
+      NOT higher for a standard rack chassis. Recording the unusable PDF as
+      suitability: unusable, rather than softening the provenance, was the right call.
+    what: >
+      The dimensions are [CERT-a], NOT [CERT-doc]. Panduit's own installation PDF returned as
+      BINARY and was not text-extractable, so 445 x 43 x 559 mm reaches us through a
+      distributor listing. Every other asset in this run had either a manufacturer product
+      page or an installation manual.
+    asking: >
+      Confirm that distributor-sourced dimensions are acceptable for this asset, as P1's own
+      gap table proposes ("acceptable for a 1U chassis; refine if the PDF becomes readable"),
+      or say so now if the bar is higher. I have not softened the provenance to make it look
+      stronger — the unusable PDF is recorded as a reference with suitability: unusable so
+      nobody re-cites it as though it had been read.
+  front_face_layout_is_the_weak_inference:
+    answer: >
+      ACCEPTED as a declared inference at confidence: low. The distinction that carries it:
+      the ELEMENTS are sourced (9 slots, 3 PSUs, RJ45, alarm, LEDs) and only their
+      ARRANGEMENT is inferred. Building sourced elements in a plausible arrangement marked
+      low is defensible — you cannot omit elements the evidence confirms. This is the OPPOSITE
+      case to the UPS rear receptacles, where the COUNT and TYPE were unsourced and so nothing
+      was built. Here the counts are published. Stays low, with an open item for a photograph.
+    what: >
+      SOURCED: nine module slots, three PSUs, an RJ45, an alarm connector, per-slot and
+      per-PSU LEDs. NOT SOURCED: how any of it is arranged across 445 mm, how wide a slot is,
+      or which side the PSUs sit on. The split I chose closes to 445 mm exactly, but SEVERAL
+      OTHER SPLITS ALSO CLOSE and nothing in the evidence chooses between them. Unlike the
+      Stratix — where a ganged-module hypothesis predicted the 20-port variant's width to
+      0.2 mm and so earned the inference — I have no independent cross-check here.
+    asking: "accept the layout as a declared inference with confidence: low throughout, or hold for a product photograph"
+  lowest_elevation_in_the_run:
+    answer: >
+      ACCEPTED. A 1U chassis whose lid is thirteen times its identity face NEEDS a
+      near-horizontal hero, and the projected-share maths is the same class as the UPS
+      (elevation 8 for a 5x lid) scaled correctly for 13x. Solving it BEFORE building rather
+      than rediscovering it at a gate is the right process change. The blockout will be judged
+      against that convention.
+    what: >
+      camera.elevation_deg is 3, and it was SOLVED at P2 rather than discovered at a gate.
+      Every critical is on the front face: front area 20752 mm^2 against a top area of
+      269773 mm^2 — the featureless top is THIRTEEN TIMES the face carrying the identity.
+      Projected shares: el 8 -> front 28% / top 57%; el 5 -> 35% / 45%; el 3 -> 43% / 33%
+      with the side keeping 24% for the 559 mm depth read.
+    asking: >
+      Confirm the framing convention accepts a near-horizontal hero. The sibling UPS needed
+      elevation 8 for a top face 5x its front; at 13x, 5 is not enough. I am flagging it
+      before the blockout so the angle is expected rather than read as drift.
+
+open_items_carried:
+  - "DIMENSIONS ARE [CERT-a] — a readable manufacturer drawing would retire this in one step."
+  - "FRONT-FACE LAYOUT is a declared inference with no independent cross-check."
+  - "CHASSIS COLOUR entirely unsourced — P1 records no finish at all."
+  - "NO DISPLAY is a SOURCED absence (managed via NMC web/SNMP), recorded so a later pass does
+     not add one for visual interest."
+  - "EMISSIVE INTENSITY 4.0 is SEEDED from the sibling Axis measurement, not measured here. It
+     must be re-measured through the tone curve against THIS housing at the lighting pass."

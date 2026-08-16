@@ -1,0 +1,39 @@
+{
+  "pass": "lighting-camera",
+  "attempt": 2,
+  "global_score": 0.83,
+  "layer_scores": {
+    "silhouetteProportion": 0.84,
+    "componentStructure": 0.85,
+    "formDetail": 0.84,
+    "materialSurface": 0.83,
+    "lightingCamera": 0.83
+  },
+  "features": [
+    { "id": "rack-1u-chassis-ears", "score": 0.85, "threshold": 0.72, "pass": true, "note": "No regression; ears bright metal." },
+    { "id": "nine-module-slots", "score": 0.85, "threshold": 0.72, "pass": true, "note": "NOW ACTUALLY RENDERED. The 9 module bays read as recessed FRAMED openings (four-bar face + open aperture + cavity behind), each with its handle and a green link LED — the front face that had been BURIED for three passes (see mechanical). Countable, distinct." },
+    { "id": "three-psu-bays", "score": 0.84, "threshold": 0.72, "pass": true, "note": "The 3 PSU bays render as openings with their state LED. In standby the 3 PSU LEDs read BLUE, distinct from the green module LEDs; the bank is now separable and countable." },
+    { "id": "nmc-rj45-and-alarm", "score": 0.82, "threshold": 0.72, "pass": true, "note": "RJ45 cage and alarm block render; the alarm block reads at the front-left. Now visible through the open apertures rather than buried." },
+    { "id": "panduit-livery-no-ratings", "score": 0.85, "threshold": 0.70, "pass": true, "note": "PANDUIT + PXTC1ARA reads, no ratings. No regression." }
+  ],
+  "important_features": [
+    { "id": "psu-state-colours", "score": 0.84, "threshold": 0.70, "pass": true, "note": "NOW READS VISUALLY. In standby the 3 PSU LEDs are BLUE; in enabled they turn GREEN (verified: 1986 green-dominant pixels in enabled where there were 0 before; the 3 rightmost LEDs visibly change blue->green between the two captures). The hue distinction the critical exists for is legible. The lamp assertion is now on the RENDERED PIXEL (led_green rgb(18,219,142) green-dominant, led_blue rgb(30,188,235) blue-dominant), not the material colour." },
+    { "id": "depth-proportion", "score": 0.80, "threshold": 0.65, "pass": true, "note": "No regression." }
+  ],
+  "important_average": 0.82,
+  "defects": [
+    "The buried front went undetected through blockout, structural and materials (three gates, mine included) — see the discovery below; now fixed. My earlier 'countable furniture' reads were correct about the PIXELS (the protruding handles/dividers/alarm/livery) but the bay faces, LEDs and cavities behind them were not rendering.",
+    "Chassis colour + front layout remain declared inferences (open items)."
+  ],
+  "corrections": [ "Optimization pass next, then P6." ],
+  "mechanical": {
+    "console_clean": true,
+    "budget_pass": true,
+    "draws": null,
+    "tris": 2128,
+    "notes": "11/11 suites after the fix. Console clean across 4 re-captured states. THE DISCOVERY (from holding the psu-state-colours finding): chassis_body was a SOLID BOX up to the front plane, so the entire front was BURIED inside it — 9 module faces, 3 PSU faces, 13 LEDs, RJ45 cage/throat, every divider and cavity. A camera ray hit chassis_body first in every view; the only things rendering for three passes were the 4 pieces that PROTRUDE (module+PSU handles, alarm block, livery), which read convincingly enough as 'a row of bays' to pass blockout/structural/materials. WHY NO GUARD SAW IT: verifyBaysAreRecessed measured DEPTH BEHIND THE FRONT PLANE — which is exactly what a buried piece does; WITHOUT AN OPENING, RECESSED IS BURIED, and the guard never asked whether a hole existed. Everything else was satisfied (in-envelope, attached to the box they were inside, right size/colour, counted, complete). BEING INVISIBLE was not a property anything measured. FIX: the shell ends 12.5 mm behind the front and the face is a FRAME (four bars leaving the aperture open); the cavity moved behind the face. New guard verifyBayContentsAreVisible: every module/PSU/NMC face, LED and cage must be reachable by a front-axis ray, SAMPLED per-face (a piece can be legitimately covered at one point by something mounted ON it — the RJ45 cage sits mid-face); negative control: re-closing the aperture reports 27 hidden, 0 as-built. A second self-introduced defect (dividers + blanks hanging off the moved cavity, 3.6 mm behind) was caught by verifyNothingFloats (0 in all, 3 in partial) and fixed. AND my question exposed a blind spot in his own metric: irradiance() returned a LUMA and the materials check multiplied each colour channel by that scalar, modelling the rig as WHITE (it is not: b/r = 1.069) — corrected to PER-CHANNEL irradiance with the lamp assertion on the rendered pixel. Verified: 0 bay pieces blocked from the front (27 when closed), lamps green-dominant/blue-dominant per-channel, 0 floating in both module states, panel exposures unchanged, camera P2 prediction still exact."
+  },
+  "verdict": "PASS",
+  "action": "continue",
+  "notes": "Inline orchestrator judgment. This pass is the one that made the asset REAL: holding the psu-state-colours finding (green not reading) instead of passing it uncovered that chassis_body was a solid box burying the ENTIRE front — nine faces, three PSU faces, thirteen LEDs, cage, dividers, cavities — with only four protruding pieces rendering for three prior gates, mine included. My specific pixel values were mis-attributed to the DOM (the pass captures --page), but the zero-green signal was real and pointed at a far worse defect than a lamp; had I rubber-stamped it, it reaches P6. The lesson is sharp and general: WITHOUT AN OPENING, RECESSED IS BURIED — a depth-behind-the-plane guard cannot see an invisible part, so visibility must be asserted with a ray that reaches the piece. The fix (framed face + open aperture + per-face visibility guard with a negative control) is verified, and the per-channel irradiance correction now judges lamp hue on the rendered pixel. The front finally renders, all criticals read, and the PSU state hue reads blue->green. Cleared to the optimization pass."
+}
