@@ -304,6 +304,10 @@ export function buildAisle() {
     cabinets,
     cabinetApis,
     hero,
+    // The hero's api by name, so nothing downstream has to know HOW the hero is indexed.
+    // main.js reading cabinetApis[0] and calling it "the cabinet" was already inexact — index 0
+    // is an empty cabinet on the left row — and becomes plainly false once only the hero moves.
+    heroApi,
     corridor,
     figure,
     materials: corridorMats,
@@ -382,22 +386,73 @@ export function verifyScaleCoherence(scene) {
 }
 
 /** Nothing may intersect the walkable aisle: it is a corridor people stand in. */
+// A DOOR THAT OPENS IS SUPPOSED TO REACH INTO THE AISLE. The first version of this guard
+// demanded that NOTHING cross the walkway boundary, which was a faithful reading of a scene
+// where the doors never moved — it swapped an opaque panel for a transparent one in place. The
+// moment they swing, that criterion fires six times on correct behaviour: a 120° door on a
+// 620 mm cabinet reaches 374 mm into a 2 m aisle, which is what a real cabinet door does.
+//
+// So the question splits in two, and only one half was ever really about clearance:
+//   · THE CABINET BODY must never intrude. That is a placement defect and stays a hard failure.
+//   · THE DOORS may intrude, but must leave enough width to walk through.
+// Collapsing both into one boundary test made the guard unable to tell a misplaced cabinet from
+// a working hinge.
+// MEASURED SWEEP, so the threshold is not a number picked by feel: door reach into the aisle
+// peaks at 90° (462 mm), NOT at the widest angle — past 90 the panel folds back toward the
+// cabinet side and by 180° it reaches nothing at all. Worst case across the whole arc leaves
+// 1076 mm of walkway, comfortably above this minimum.
+//
+// Which means this clearance test CANNOT FIRE with the current geometry. That is worth saying
+// plainly rather than letting it look like an active check: it is a tripwire for a future
+// change — a narrower aisle, a deeper cabinet, rows moved closer — not something guarding a
+// live risk today. Its negative control has to manufacture such a change to prove it works at
+// all, and does.
+const MIN_WALKWAY_M = 0.90;      // a service aisle a person can still pass through
+
 export function verifyAisleIsClear(scene) {
   scene.updateMatrixWorld(true);
   const half = AISLE_WIDTH / 2;
   let bad = 0;
+  let worstReach = 0;
+  let worstName = null;
+
   for (const holder of scene.getObjectByName('scene_root')?.children ?? []) {
     if (!/^aisle_(left|right)$/.test(holder.name)) continue;
     for (const cab of holder.children) {
-      const b = visibleBox(cab);
+      // Measure the body WITHOUT its doors, so a swung door cannot be mistaken for a cabinet
+      // standing in the walkway.
+      const doors = [];
+      cab.traverse((o) => { if (/^front_(mesh|glass)_door$/.test(o.name) && o.visible) doors.push(o); });
+      const wasVisible = doors.map((d) => d.visible);
+      doors.forEach((d) => { d.visible = false; });
+      scene.updateMatrixWorld(true);
+      const body = visibleBox(cab);
+      doors.forEach((d, i) => { d.visible = wasVisible[i]; });
+      scene.updateMatrixWorld(true);
+
       // A 1 mm tolerance: the cabinet is seated flush ON the boundary, and float arithmetic
       // makes "exactly on" land a hair either side.
-      const intrudes = b.min.x < half - 0.001 && b.max.x > -half + 0.001;
-      if (intrudes) {
-        console.error(`[aisle] ${cab.name} intrudes into the walkable aisle: x[${(b.min.x * 1000).toFixed(0)}, ${(b.max.x * 1000).toFixed(0)}] mm`);
+      if (body.min.x < half - 0.001 && body.max.x > -half + 0.001) {
+        console.error(`[aisle] the BODY of ${cab.name} stands in the walkable aisle: `
+          + `x[${(body.min.x * 1000).toFixed(0)}, ${(body.max.x * 1000).toFixed(0)}] mm`);
         bad += 1;
       }
+
+      // Now the doors, judged on the width they leave rather than on whether they cross a line.
+      for (const d of doors) {
+        const db = visibleBox(d);
+        const reach = holder.name === 'aisle_left' ? db.max.x + half : half - db.min.x;
+        if (reach > worstReach) { worstReach = reach; worstName = cab.name; }
+      }
     }
+  }
+
+  const free = AISLE_WIDTH - 2 * Math.max(0, worstReach);
+  if (free < MIN_WALKWAY_M) {
+    console.error(`[aisle] open doors leave only ${(free * 1000).toFixed(0)} mm of walkway `
+      + `(worst reach ${(worstReach * 1000).toFixed(0)} mm at ${worstName}); `
+      + `${(MIN_WALKWAY_M * 1000).toFixed(0)} mm is the minimum a person can pass`);
+    bad += 1;
   }
   return bad;
 }

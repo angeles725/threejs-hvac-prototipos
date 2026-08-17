@@ -1,0 +1,29 @@
+{
+  "pass": "feedback-r2",
+  "attempt": 1,
+  "verdict": "PASS",
+  "context": "Post-final user feedback: the 'doors open' state read as transparency-in-place (glass variant swap), not a door opening. User asked it to SWING like disenos/catalog/datacenter/rack-servidores/rack-servidores.html, and chose (of 3 options) that the GLASS+LED door is the one that rotates, keeping the glass front. Modeled by @ayudante; gated inline by pixels + angle readouts.",
+  "changes": [
+    "Rack standalone (disenos/homelab/main.js): instant snap -> lerp 0.10/frame to the 120 deg angle (continuous rAF, ~1.1 s). Reference-profile swing.",
+    "Scene (scene-aisle/main.js applyDoors + animate): glass door used in BOTH states, its rotation animated; closed=0, open=-2.09 rad. Mesh variant built+hidden (declared option), driven via api.glassDoor (single-source). Glass pivot was already at the hinge (-DOOR_W/2) — rack-cabinet.mjs geometry NOT touched.",
+    "Guard split (aisle.mjs): verifyAisleIsClear became obsolete once doors swing (an open door invades the aisle by design, fired 6x on correct behaviour). Split into: cabinet BODY may never invade (hard fail) vs DOOR may invade but must leave a passable gap. Clearance rule documented as a tripwire (reach peaks 462 mm at 90 deg, 0 at 180 deg, never below 1076 mm of 2000 mm — cannot fire with this geometry; negative control fabricates a narrower aisle to prove it)."
+  ],
+  "gate_evidence": {
+    "angles_via_qaState": "hero-open -2.09 (settled), hero-closed 0, aisle-open -2.09, mid-swing -0.9793 with doorSettled=false (proves it ANIMATES, not snaps), rack-open -2.09, rack-closed 0.",
+    "pixels": "Scene hero-rack + aisle + standalone rack all show the glass+LED door rotated ~120 deg aside on its hinge (blue LED edge makes the swing visible), revealing the interior — not transparent-in-place. Mid-swing frame caught the door partway. Aisle doors project into the corridor; human figure still clears.",
+    "framing": "aisle bbox grows z 3.39->3.76 m, radius 4.92->5.11 m, no crop; hero-rack unchanged (frames rack_equipment).",
+    "console_clean": true,
+    "dashboard": "scene.offline + rack.offline rebuilt and re-copied; dashboard #rack and overview re-captured — the swung glass door shows in the embedded live 3D, console clean."
+  },
+  "mechanical": {
+    "console_clean": true,
+    "notes": "@ayudante's full suite green in BOTH door states: 0 guard failures, boot clean, visibility + framing in all 3 views, interaction, P6 5/5; negative controls 9/9 materials + 4/4 lighting + 5/5 doors. Orchestrator re-verified by independent capture of the live source (:8123) across 6 door states + a driven mid-swing frame, plus a dashboard re-capture of the rebuilt offline."
+  },
+  "refinement_hero_only": {
+    "ask": "User: only the rack WITH equipment (the hero) should open, not all six.",
+    "change": "Scene applyDoors/animate now swings ONLY the hero cabinet's glass door; the other five stay at 0 (glass front visible, no animation). aisle.mjs exposes heroApi so downstream needs no index knowledge.",
+    "qastate_fix": "This surfaced a latent bug in __qaState: it read cabinetApis[0] (an EMPTY left-row cabinet), not the hero (index 3). Harmless while all six doors moved together; with only the hero swinging it would report glassDoorAngleActual=0 forever while the on-screen door is wide open — a state object contradicting pixels, the exact failure that hook exists to prevent. Fixed at the source to report the hero.",
+    "gate": "Re-captured: aisle-open shows ONE door swung (hero, -2.09) + five closed glass fronts; aisle-closed all 0; hero-rack shows the hero open revealing equipment with neighbours closed; __qaState now reads the hero (-2.09/0); console clean. scene.offline rebuilt; dashboard overview re-captured shows only the hero open. @ayudante kept the six-door hypothetical as a negative control (a guard must judge the doors it finds, not assume how many the scene opens). Suite green, door negative controls 6/6."
+  },
+  "notes": "Inline orchestrator judgment. The user's complaint was exact: the scene never swung, it swapped an opaque door for a transparent one, so 'open' only made the inside clearer. Now the glass+LED door rotates on its hinge with a lerped animation matching the catalog reference, consistent across scene + standalone rack + dashboard, and only the POPULATED cabinet opens (per the follow-up). The change stayed in the DRIVE, not the asset geometry (pivot was already correct), and it earned three good corrections: settle-on-boot so captures aren't mid-arc, splitting a boundary guard that a moving door made obsolete, and fixing a __qaState hook that had been reading the wrong (empty) cabinet all along. Cleared."
+}

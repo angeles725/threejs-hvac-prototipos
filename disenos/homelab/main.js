@@ -48,11 +48,37 @@ const state = {
 };
 
 const DOOR_OPEN_ANGLE = -2.09;  // 120° swing, clockwise from above
+const DOOR_LERP = 0.10;         // per frame, matching the catalogue reference
 
-function applyDoorState() {
-  const angle = state.doorOpen ? DOOR_OPEN_ANGLE : 0;
+// ANIMATED SWING, not a snap. The door used to jump to its final angle in one assignment,
+// which reads as a door that was ALWAYS open rather than one that opens — the movement is the
+// whole point of a hinge. Both groups already pivot correctly on the hinge edge (each sits at
+// -DOOR_W/2 and offsets its panel by +DOOR_W/2), so nothing about the geometry needed fixing;
+// only the drive.
+let doorPos = 0;        // 0 closed .. 1 open, the animated value
+let doorTarget = 0;
+
+// immediate=true SETTLES INSTEAD OF ANIMATING, and it is not a convenience: the boot path
+// applies ?open=1 before the first frame, and a capture taken right after load would otherwise
+// photograph a door frozen a few degrees into its swing. A state applied at boot has no
+// animation to show — there was no previous state to move from.
+function applyDoorState(immediate = false) {
+  doorTarget = state.doorOpen ? 1 : 0;
+  if (immediate) doorPos = doorTarget;
+  driveDoors();
+}
+
+function driveDoors() {
+  const angle = DOOR_OPEN_ANGLE * doorPos;
   meshDoor.rotation.y  = state.doorType === 'MESH'  ? angle : 0;
   glassDoor.rotation.y = state.doorType === 'GLASS' ? angle : 0;
+}
+
+function stepDoorSwing() {
+  if (doorPos === doorTarget) return;
+  doorPos += (doorTarget - doorPos) * DOOR_LERP;
+  if (Math.abs(doorTarget - doorPos) <= 0.001) doorPos = doorTarget;
+  driveDoors();
 }
 
 // ── Dynamic HUD state line ────────────────────────────────────────────────────
@@ -70,9 +96,20 @@ function updateHudState() {
 
 // ── window.__qaState — interaction gate reads this ────────────────────────────
 // Returns a plain serialisable snapshot of all interactive state axes.
+// REPORTS THE ANGLE, NOT ONLY THE FLAG. A state object saying doorOpen:true while the door is
+// three degrees into its swing is the same class of lie as a HUD reading ON over unlit
+// geometry: the label agrees with the intent and disagrees with the pixels. doorSettled tells a
+// probe whether what it is about to capture is the finished pose.
+window.__qaSettleDoors = () => { doorPos = doorTarget; driveDoors(); return doorPos; };
+
 window.__qaState = () => ({
   doorType:   state.doorType,
   doorOpen:   state.doorOpen,
+  doorPos:    Number(doorPos.toFixed(4)),
+  doorAngleRad: Number((DOOR_OPEN_ANGLE * doorPos).toFixed(4)),
+  doorSettled: doorPos === doorTarget,
+  glassDoorAngleActual: Number(glassDoor.rotation.y.toFixed(4)),
+  meshDoorAngleActual:  Number(meshDoor.rotation.y.toFixed(4)),
   ledIdx:     state.ledIdx,
   ledColor:   LED_COLORS[state.ledIdx].name,
   autoRotate: state.autoRotate,
@@ -270,7 +307,7 @@ canvas.addEventListener('click', e => {
   const open = p.get('open');
   if (open === '1' && !state.doorOpen) {
     state.doorOpen = true;
-    applyDoorState();
+    applyDoorState(true);      // settle: there is no previous state to swing from
     btnOpenDoor.textContent = 'ABRIR PUERTA: SÍ';
     btnOpenDoor.classList.add('active');
   }
@@ -291,6 +328,7 @@ canvas.addEventListener('click', e => {
 // ── Render loop ───────────────────────────────────────────────────────────────
 function animate() {
   requestAnimationFrame(animate);
+  stepDoorSwing();
   controls.update();
   renderer.render(scene, camera);
 }

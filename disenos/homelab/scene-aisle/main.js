@@ -123,13 +123,27 @@ window.__qaFraming = () => {
 const state = { doors: 'open', led: 'blue', figure: true, view: 'aisle', autoRotate: false };
 const LED_INDEX = { blue: 0, white: 1, green: 2 };
 
+// Lets a probe jump to the finished pose instead of racing the animation.
+window.__qaSettleDoors = () => { doorPos = doorTarget; driveDoors(); return doorPos; };
+
 window.__qaState = () => {
-  const first = aisle.cabinetApis[0];
+  // THE HERO, not cabinetApis[0]. Index 0 is an empty cabinet on the left row, and now that
+  // only the hero swings, reporting index 0's angle would return 0 forever while the door on
+  // screen was wide open — a state object contradicting the pixels, which is the exact failure
+  // this hook exists to make impossible.
+  const first = aisle.heroApi ?? aisle.cabinetApis[0];
   return {
     pass: bootPass,
     hudPassText: document.getElementById('hud-pass')?.textContent ?? null,
     cabinets: aisle.cabinets.length,
     doors: state.doors,
+    // THE ANGLE, NOT ONLY THE FLAG. "doors: open" while the panel sits three degrees into its
+    // arc is the same lie as a HUD reading ON over unlit geometry — the label agrees with the
+    // intent and disagrees with the pixels. doorSettled says whether a capture taken now shows
+    // the finished pose.
+    doorPos: Number(doorPos.toFixed(4)),
+    doorSettled: doorPos === doorTarget,
+    glassDoorAngleActual: Number((first?.glassDoor?.rotation.y ?? 0).toFixed(4)),
     meshDoorVisibleActual: !!first?.meshDoor?.visible,
     glassDoorVisibleActual: !!first?.glassDoor?.visible,
     led: state.led,
@@ -154,17 +168,53 @@ const btnFigure = document.getElementById('btn-figure');
 const btnView = document.getElementById('btn-view');
 const btnAutorotate = document.getElementById('btn-autorotate');
 
-function applyDoors(mode) {
-  state.doors = mode === 'closed' ? 'closed' : 'open';
-  // Drive every cabinet through ITS OWN api. The scene never reaches into a device's meshes —
-  // that would be a second source of truth for something the asset already owns.
+// THE DOOR NOW SWINGS INSTEAD OF BEING SWAPPED. Before this, "open" exchanged the opaque mesh
+// door for the transparent glass one, so opening a cabinet only made its inside look brighter —
+// nothing moved, and a still frame could not tell the two states apart at a glance. The glass
+// front with its LED edge is the reference-matched feature and it is the one that rotates: the
+// lit edge is precisely what makes the movement legible against a dark aisle.
+//
+// The mesh variant stays built and hidden. It is the asset's other declared option, and the
+// scene selecting one of them is using the contract — the same line as FRAME_VARIANTS.
+const DOOR_OPEN_ANGLE = -2.09;      // 120°, the swing the catalogue reference uses
+const DOOR_LERP = 0.10;             // per frame, same rate as the reference
+let doorPos = 0;
+let doorTarget = 0;
+
+// ONLY THE POPULATED CABINET OPENS. Swinging all six was the literal reading of "open the
+// doors" and the wrong one: five of them are empty, and an open door on an empty cabinet shows
+// an empty cabinet. The hero is the one carrying the five devices, so it is the only one with
+// anything to reveal — and a single door swinging also reads more clearly than six moving at
+// once, which registers as a mechanism rather than as a cabinet being opened.
+//
+// The other five keep their glass front (the reference-matched feature) at angle 0.
+function driveDoors() {
+  const heroApi = aisle.heroApi;
   for (const api of aisle.cabinetApis) {
-    if (api?.meshDoor) api.meshDoor.visible = state.doors === 'closed';
-    if (api?.glassDoor) api.glassDoor.visible = state.doors === 'open';
+    if (api?.meshDoor) api.meshDoor.visible = false;
+    if (!api?.glassDoor) continue;
+    api.glassDoor.visible = true;
+    api.glassDoor.rotation.y = api === heroApi ? DOOR_OPEN_ANGLE * doorPos : 0;
   }
+}
+
+// immediate=true settles rather than animates. Boot has no previous state to swing from, and a
+// capture taken right after load would otherwise catch every door a few degrees into its arc.
+function applyDoors(mode, immediate = false) {
+  state.doors = mode === 'closed' ? 'closed' : 'open';
+  doorTarget = state.doors === 'open' ? 1 : 0;
+  if (immediate) doorPos = doorTarget;
+  driveDoors();
   btnDoors.textContent = `▤ PUERTAS: ${state.doors === 'open' ? 'ABIERTAS' : 'CERRADAS'}`;
   btnDoors.classList.toggle('active', state.doors === 'closed');
   updateHudState();
+}
+
+function stepDoorSwing() {
+  if (doorPos === doorTarget) return;
+  doorPos += (doorTarget - doorPos) * DOOR_LERP;
+  if (Math.abs(doorTarget - doorPos) <= 0.001) doorPos = doorTarget;
+  driveDoors();
 }
 
 function applyLed(name) {
@@ -227,7 +277,7 @@ applyURLParams();
 // EVERY axis driven at boot, URL or not — a toggle that only runs on a click leaves the
 // default capture showing one thing while the HUD reports another.
 document.getElementById('hud-pass').textContent = `Pase ${bootPass}`;
-applyDoors(state.doors);
+applyDoors(state.doors, true);   // settle at boot: no previous pose to swing from
 applyLed(state.led);
 applyFigure(state.figure);
 applyAutoRotate(state.autoRotate);
@@ -273,6 +323,7 @@ if (verifyPickCannotReachThroughSolids(interaction, camera, aisle.root)
 
 function animate() {
   requestAnimationFrame(animate);
+  stepDoorSwing();
   controls.update();
   renderer.render(scene, camera);
 }
