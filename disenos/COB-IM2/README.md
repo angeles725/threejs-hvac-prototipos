@@ -13,10 +13,16 @@ un marco común.
 
 | Archivo | Qué es |
 |---|---|
-| `cob-im2-3d-v1.html` | Visor Three.js (v1). Abre con un server estático (ver abajo). |
+| **`cob-im2-3d.html`** | **Entregable: visor 3D offline single-file (~4.8 MB). Abre con doble clic — cero internet.** |
+| `app.mjs` | Fuente del visor (se empaca en el HTML offline). |
+| `vendor/` | Three.js 0.160.0 + OrbitControls vendorizados (para el bundle offline). |
 | `cob-im2-floor.json` | Capa de datos del piso: ductos, tomas redondas, terminales, malla, contexto. |
 | `extract-floor.py` | Extractor read-only que regenera el JSON desde los 3 DXF. |
-| `qa-render-v1.png` | Captura de QA (headless Chrome). |
+| `build.sh` | Rebuild reproducible: extrae datos → empaca con esbuild → ensambla el HTML offline. |
+| `qa-render-offline.png` | Captura de QA (headless Chrome). |
+
+> **`cob-im2-3d.html` no se edita a mano** — es el espejo construido. Edita `app.mjs` /
+> `extract-floor.py` y corre `./build.sh`.
 
 ## Qué muestra (v1)
 
@@ -41,19 +47,19 @@ un marco común.
 | Terminales + AHU (2 zonas) | 626 terminales, ~200k CFM | B9 |
 | Contexto ghosted | 256 polilíneas trazadas | B10 |
 
+## Uso
+
+Abre `cob-im2-3d.html` con doble clic (no necesita servidor ni internet). Órbita con el mouse;
+la leyenda enciende/apaga cada capa.
+
 ## Rebuild
 
 ```bash
-# 1. regenerar la capa de datos desde los DXF (read-only)
-python3 extract-floor.py /home/cristian/investigacion/COB-IM2/raw cob-im2-floor.json
-
-# 2. servir y abrir el visor
-python3 -m http.server 8177   # → http://localhost:8177/cob-im2-3d-v1.html
+./build.sh    # extrae datos de los DXF → empaca con esbuild → ensambla el HTML offline
 ```
 
-## Pendiente (v2)
+## Pendiente (v4)
 
-- Ductos como **sólidos extruidos** a su sección real (ø / W″×H″) en vez de líneas — usando
-  el emparejamiento de bordes robusto (B6 §6.4) para los centerlines rectangulares.
-- Empaquetado **offline single-file** (embeber Three.js + JSON en un solo HTML).
-- Massing del AHU en las dos zonas (central X≈90–100, este X≈164).
+- **Altura por-ducto** desde la etiqueta W″×H″ (hoy usa una altura representativa de 0.42 m);
+  requiere asociar cada etiqueta a su tramo (emparejamiento de bordes robusto, B6 §6.4).
+- Massing del AHU con footprint medido del cúmulo (hoy son cajas nominales en las 2 zonas).
