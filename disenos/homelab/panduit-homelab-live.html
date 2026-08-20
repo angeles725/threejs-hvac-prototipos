@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panduit · Homelab en vivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* ---------------------------------------------------------------------------
+   Panduit DC Ops — live homelab board
+   Visual language lifted from the approved artifact (Outfit / IBM Plex Mono,
+   #0090E8 blue, #00AE9E teal, #E82C2E critical, #FFCA38 warning, 26px cards).
+   Content is driven entirely by the local twin API; nothing here is mocked —
+   when a reading is missing the tile says so instead of showing a number.
+   Layout is fluid by construction (auto-fit grids, clamp type), so it needs no
+   breakpoint patches to work on a phone.
+--------------------------------------------------------------------------- */
+:root{
+  --bg:#06080B; --ink:#F2F6F9;
+  --blue:#0090E8; --blue-lo:#0076BE; --blue-hi:#33B4F0; --blue-pale:#9FD8F7;
+  --teal:#00AE9E; --teal-hi:#4FE0D2;
+  --crit:#E82C2E; --warn:#FFCA38;
+  --card:rgba(255,255,255,.06); --line:rgba(255,255,255,.10);
+  --muted:rgba(242,246,249,.55); --faint:rgba(242,246,249,.40);
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --sans:'Outfit',system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  min-height:100vh; background:
+    radial-gradient(760px 520px at 52% -8%,rgba(255,255,255,.20) 0%,rgba(255,255,255,0) 60%),
+    radial-gradient(1240px 800px at 70% -14%,rgba(0,144,232,.42) 0%,rgba(0,144,232,0) 62%),
+    radial-gradient(940px 720px at 8% 22%,rgba(0,174,158,.26) 0%,rgba(0,174,158,0) 64%),
+    var(--bg);
+  color:var(--ink); font-family:var(--sans); -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1560px;margin:0 auto;padding:clamp(14px,2vw,26px);display:flex;flex-direction:column;gap:clamp(12px,1.4vw,18px)}
+
+/* --- header ------------------------------------------------------------- */
+.top{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.mark{width:34px;height:34px;border-radius:11px;background:linear-gradient(150deg,var(--blue),var(--teal));
+  display:grid;place-items:center;font:600 15px/1 var(--sans);color:#04161C;box-shadow:0 8px 26px rgba(0,144,232,.45)}
+.wordmark{font:600 15px/1 var(--sans);letter-spacing:.14em}
+.kicker{font:400 12px/1 var(--sans);color:var(--muted)}
+h1{font:300 clamp(24px,3.4vw,38px)/1.05 var(--sans);letter-spacing:-.02em;margin:8px 0 0}
+h1 b{font-weight:500}
+.link{margin-left:auto;display:flex;align-items:center;gap:9px;height:38px;padding:0 15px;border-radius:999px;
+  background:var(--card);border:1px solid var(--line);font:500 11px/1 var(--mono);letter-spacing:.06em;white-space:nowrap}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--teal);box-shadow:0 0 10px var(--teal)}
+.dot.bad{background:var(--crit);box-shadow:0 0 10px var(--crit)}
+
+/* --- grids -------------------------------------------------------------- */
+.kpis{display:grid;gap:clamp(10px,1.1vw,16px);grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.cols{display:grid;gap:clamp(10px,1.1vw,16px);grid-template-columns:repeat(auto-fit,minmax(330px,1fr))}
+.card{border-radius:22px;background:linear-gradient(165deg,rgba(255,255,255,.13) 0%,rgba(255,255,255,.05) 34%,rgba(0,144,232,.09) 100%);
+  border:1px solid rgba(255,255,255,.12);padding:16px 18px;box-shadow:0 20px 50px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.10);
+  display:flex;flex-direction:column;min-width:0}
+.card h2{font:500 14.5px/1.2 var(--sans);margin:0;display:flex;align-items:center;gap:9px}
+.cap{font:500 9.5px/1 var(--mono);letter-spacing:.12em;color:var(--faint);text-transform:uppercase}
+.val{font:300 clamp(26px,3.2vw,38px)/1 var(--sans);letter-spacing:-.03em;margin-top:8px;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.val small{font:400 12px/1 var(--sans);color:var(--muted);letter-spacing:0}
+.val.txt{font-size:clamp(17px,1.9vw,23px);line-height:1.15}
+.bar{height:4px;border-radius:2px;background:rgba(255,255,255,.12);margin-top:11px;overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--blue-lo),var(--blue-hi))}
+.bar i.warn{background:linear-gradient(90deg,#C98A12,var(--warn))}
+.bar i.crit{background:linear-gradient(90deg,#8E1B1C,var(--crit))}
+.card.crit{border-color:rgba(232,44,46,.5);background:linear-gradient(165deg,rgba(232,44,46,.20),rgba(232,44,46,.06))}
+.card.warn{border-color:rgba(255,202,56,.42)}
+
+/* --- device rows -------------------------------------------------------- */
+.rows{display:flex;flex-direction:column;gap:9px;margin-top:12px}
+.row{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+.row .nm{font:500 11.5px/1.3 var(--mono);color:var(--muted);flex:0 0 92px;min-width:0}
+.row .track{flex:1 1 130px;min-width:90px;height:18px;border-radius:6px;background:rgba(255,255,255,.05);overflow:hidden}
+.row .track i{display:block;height:100%;background:linear-gradient(90deg,var(--blue-lo),var(--teal))}
+.row .amt{font:500 12px/1 var(--mono);flex:0 0 auto;margin-left:auto;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;font:500 10.5px/1 var(--mono);
+  letter-spacing:.05em;background:rgba(255,255,255,.07);border:1px solid var(--line);white-space:nowrap}
+.pill.ok{background:rgba(0,174,158,.16);border-color:rgba(0,174,158,.4);color:var(--teal-hi)}
+.pill.crit{background:rgba(232,44,46,.18);border-color:rgba(232,44,46,.45);color:#FF9C93}
+.pill.warn{background:rgba(255,202,56,.14);border-color:rgba(255,202,56,.4);color:var(--warn)}
+
+/* --- point table -------------------------------------------------------- */
+.tablewrap{overflow-x:auto;margin-top:10px}
+table{border-collapse:collapse;width:100%;min-width:460px}
+th{font:500 9.5px/1 var(--mono);letter-spacing:.1em;color:var(--faint);text-align:left;padding:0 10px 9px 0;text-transform:uppercase;white-space:nowrap}
+td{font:400 12.5px/1.4 var(--sans);padding:8px 10px 8px 0;border-top:1px solid rgba(255,255,255,.055);white-space:nowrap}
+td.n{font-family:var(--mono);font-size:12px}
+td.dim{color:var(--muted)}
+
+/* --- trend chart -------------------------------------------------------- */
+.chart{margin-top:12px;width:100%;height:150px;display:block}
+.chart-x{display:flex;justify-content:space-between;font:400 10px/1 var(--mono);color:var(--faint);margin-top:6px}
+
+/* --- gemini panel ------------------------------------------------------- */
+.advice{display:flex;flex-direction:column;gap:9px;margin-top:12px}
+.advice .item{padding:11px 13px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid var(--line)}
+.advice .item b{font:500 13px/1.35 var(--sans);display:block}
+.advice .item span{font:400 11px/1.45 var(--mono);color:var(--muted)}
+.empty{font:400 12.5px/1.5 var(--sans);color:var(--muted);margin-top:12px}
+.note{font:400 10.5px/1.45 var(--mono);color:var(--faint);margin-top:auto;padding-top:12px;border-top:1px solid rgba(255,255,255,.055)}
+.foot{font:400 11px/1.5 var(--mono);color:var(--faint);text-align:center;padding:4px 0 10px}
+.offline{border-radius:16px;border:1px solid rgba(232,44,46,.5);background:rgba(232,44,46,.14);padding:13px 16px;font:400 13px/1.5 var(--sans)}
+.offline b{font-weight:500}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <div class="brand">
+        <div class="mark">P</div>
+        <div class="wordmark">PANDUIT</div>
+        <div style="width:1px;height:14px;background:rgba(255,255,255,.16)"></div>
+        <div class="kicker">Gemelo digital · homelab · lecturas en vivo</div>
+      </div>
+      <h1>Operaciones del <b>Homelab</b></h1>
+    </div>
+    <div class="link"><span class="dot" id="linkDot"></span><span id="linkTxt">CONECTANDO…</span></div>
+  </header>
+
+  <div id="offline" hidden class="offline"></div>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="cols">
+    <div class="card" style="grid-column:span 1">
+      <h2><span class="dot" style="width:8px;height:8px"></span>Consumo por equipo</h2>
+      <div class="rows" id="loadRows"></div>
+      <div class="note" id="loadNote"></div>
+    </div>
+
+    <div class="card" id="alarmCard">
+      <h2><span class="dot" id="alarmDot" style="width:8px;height:8px"></span>Alarmas y estado</h2>
+      <div class="rows" id="alarmRows"></div>
+      <div class="note">UPS y EL2P usan AlarmSeverity (1 OK · 3 aviso · 6 crítica). El FMPS usa ModuleStatus, un enum distinto: sólo ok(2) significa que todos sus módulos operan normal.</div>
+    </div>
+
+    <div class="card">
+      <h2><span class="dot" style="width:8px;height:8px;background:var(--teal)"></span>Recomendaciones de Gemini</h2>
+      <div class="advice" id="advice"></div>
+      <div class="note">Gemini analiza estas mismas lecturas en modo <b>solo lectura</b>.
+        Lo que aparece aquí son recomendaciones para el operador: no ejecuta ninguna acción sobre los equipos.</div>
+    </div>
+  </section>
+
+  <section class="cols">
+    <div class="card">
+      <h2><span class="dot" style="width:8px;height:8px"></span>Tendencia · <span id="trendName">—</span></h2>
+      <svg class="chart" id="chart" preserveAspectRatio="none" aria-label="Tendencia de potencia"></svg>
+      <div class="chart-x"><span id="tx0">—</span><span id="tx1">—</span></div>
+      <div class="note" id="trendNote"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="dot" style="width:8px;height:8px"></span>Todos los puntos</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Equipo</th><th>Punto</th><th>Valor</th><th>Edad</th><th>Categoría</th></tr></thead>
+          <tbody id="pointRows"></tbody>
+        </table>
+      </div>
+      <div class="note" id="pointNote"></div>
+    </div>
+  </section>
+
+  <div class="foot" id="foot">—</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // Served over http(s) — including through the tunnel — the readings must come
+  // from the SAME ORIGIN via the local proxy, or a visitor's browser would
+  // resolve 127.0.0.1 to their own machine and get nothing. Opened as a plain
+  // file on the collector's host, talk to it directly.
+  var API = location.protocol === 'file:' ? 'http://127.0.0.1:8123' : '/api';
+  var REFRESH_MS = 20000;          // collector writes every 30s
+  var TREND = { device: '172.16.101.32', name: 'outputActivePower', label: 'UPS .32 · potencia de salida' };
+
+  // SNMP enums — show the meaning, never the raw number.
+  // AlarmSeverity: UPS systemStatus and EL2P alarmSeverity.
+  var SYS_STATUS = {1:'OK',2:'Info',3:'Aviso',4:'Menor',5:'Mayor',6:'Crítica'};
+  var BATT_STATE = {1:'Desconocido',2:'Normal',3:'Baja',4:'Agotada'};
+  // ModuleStatus (PANDUIT-FMPS-MIB 19536.12) is a SEPARATE enum — applying the
+  // UPS severity table to the FMPS mislabels notok(3) as a mild "Aviso".
+  // Only ok(2) means every module is operating normally.
+  var MODULE_STATUS = {1:'No presente',2:'OK',3:'No OK · falla parcial',4:'Cargando',5:'Activando'};
+  function isFmps(r) { return /^FMPS/i.test(r.label || ''); }
+  function statusText(r) {
+    return isFmps(r) ? (MODULE_STATUS[r.value] || r.value) : (SYS_STATUS[r.value] || r.value);
+  }
+  function statusOk(r) { return isFmps(r) ? r.value === 2 : r.value === 1; }
+
+  // The collector can be UP and still be serving stale readings: if SNMP (UDP)
+  // dies while HTTP stays alive, /current keeps answering 200 with values from
+  // hours ago. Measured 2026-08-20: SNMP points frozen 20-27 min, some PDU
+  // points 104 min, while the endpoint looked perfectly healthy. Age is the
+  // only honest signal, so it is computed per reading and shown.
+  var FRESH_S = 120;    // scalars are written every 30 s
+  var STALE_S = 600;    // detail sweeps run every ~5 min; beyond this it is stale
+
+  function ageOf(ts) {
+    if (!ts) return null;
+    var d = new Date(String(ts).replace(' ', 'T'));
+    if (isNaN(d)) return null;
+    // Treat a bare (zone-less) stamp as UTC, which is what the collector emits.
+    if (!/[Zz]|[+-]\d{2}:?\d{2}$/.test(String(ts))) d = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+    return (Date.now() - d.getTime()) / 1000;
+  }
+  function humanAge(sec) {
+    if (sec === null) return 'sin fecha';
+    if (sec < 90) return Math.round(sec) + ' s';
+    if (sec < 5400) return Math.round(sec / 60) + ' min';
+    return (sec / 3600).toFixed(1) + ' h';
+  }
+
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  };
+  var num = function (v, d) {
+    if (v === null || v === undefined || isNaN(v)) return '—';
+    return Number(v).toLocaleString('es-MX', { maximumFractionDigits: d === undefined ? 1 : d });
+  };
+
+  // Every request carries its own deadline: a refused or black-holed port can
+  // leave a bare fetch pending for a long time, and the board would sit on
+  // "CONECTANDO…" forever instead of admitting it lost the collector.
+  function get(path, ms) {
+    var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, ms || 6000);
+    var opts = { cache: 'no-store' };
+    if (ctl) opts.signal = ctl.signal;
+    return fetch(API + path, opts).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).finally(function () { clearTimeout(timer); });
+  }
+
+  // Readings come back either bare or wrapped; accept both.
+  function asRows(d) {
+    if (Array.isArray(d)) return d;
+    return (d && (d.data || d.current || d.rows)) || [];
+  }
+
+  function pick(rows, dev, name) {
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].device === dev && rows[i].name === name) return rows[i];
+    }
+    return null;
+  }
+  function byName(rows, name) {
+    return rows.filter(function (r) { return r.name === name; });
+  }
+
+  // A null value carrying text "sentinel" means the device reports the reading
+  // as not-applicable (a UPS on mains has no runtime left to count down).
+  function isSentinel(p) { return p && p.value === null && p.text; }
+
+  function kpi(cap, value, unit, opts) {
+    opts = opts || {};
+    var cls = 'card' + (opts.tone ? ' ' + opts.tone : '');
+    var bar = '';
+    if (opts.pct !== undefined && opts.pct !== null) {
+      var t = opts.tone === 'crit' ? ' crit' : opts.tone === 'warn' ? ' warn' : '';
+      bar = '<div class="bar"><i class="' + t.trim() + '" style="width:' +
+            Math.max(0, Math.min(100, opts.pct)) + '%"></i></div>';
+    }
+    // A worded value (a decoded enum) needs a smaller face than a figure, or it
+    // wraps to three lines and dwarfs the numeric tiles beside it.
+    var wordy = typeof value === 'string' && /[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(value) && value.length > 4;
+    return '<div class="' + cls + '">' +
+             '<div class="cap">' + esc(cap) + '</div>' +
+             '<div class="val' + (wordy ? ' txt' : '') + '">' + esc(value) +
+               (unit ? '<small>' + esc(unit) + '</small>' : '') + '</div>' +
+             bar +
+           '</div>';
+  }
+
+  function renderKpis(rows) {
+    // TWO DIFFERENT MAGNITUDES, deliberately not divided into each other:
+    //  - fleet draw  = every UPS output + every PDU total (whole homelab)
+    //  - FMPS load   = that unit's own OutputPowerUsed over TotalPowerAvailable,
+    //                  which is the capacity it offers ITS receivers only.
+    // Showing fleet-draw over FMPS-capacity mixes a fleet numerator with a
+    // single-unit denominator and reads as a capacity figure it is not.
+    var loads = byName(rows, 'outputActivePower').concat(byName(rows, 'totalWatts'));
+    var used = loads.reduce(function (a, r) { return a + (r.value || 0); }, 0);
+    var capRow = pick(rows, '172.16.101.29', 'totalPowerAvailable');
+    var fmpsRow = pick(rows, '172.16.101.29', 'outputPowerUsed');
+    var cap = capRow ? capRow.value : null;
+    var fmpsUsed = fmpsRow ? fmpsRow.value : null;
+    var fmpsPct = (cap && fmpsUsed !== null) ? (fmpsUsed / cap) * 100 : null;
+
+    var alarms = byName(rows, 'alarmCount').reduce(function (a, r) { return a + (r.value || 0); }, 0);
+    var sev = byName(rows, 'alarmSeverity').reduce(function (m, r) { return Math.max(m, r.value || 0); }, 0);
+
+    var temps = rows.filter(function (r) { return r.category === 'temperatura' && r.value !== null; });
+    var tmax = temps.reduce(function (m, r) { return r.value > m.v ? { v: r.value, l: r.label } : m; }, { v: -Infinity, l: '' });
+
+    var charge = pick(rows, '172.16.101.32', 'chargeRemaining');
+    var energy = pick(rows, '172.16.101.53', 'energy');
+
+    // A module reporting anything but ok(2) is an attention state, not green.
+    var fmpsStat = pick(rows, '172.16.101.29', 'systemStatus');
+
+    var html = '';
+    html += kpi('Consumo de la flota', num(used, 0), 'W · agregado de ' + loads.length + ' puntos');
+    html += kpi('Carga del FMPS .29', fmpsUsed !== null ? num(fmpsUsed, 0) : '—',
+                cap ? 'W de ' + num(cap, 0) + ' W disponibles' : 'sin lectura', { pct: fmpsPct });
+    if (fmpsStat) {
+      html += kpi('Estado del FMPS .29', statusText(fmpsStat), 'ModuleStatus',
+                  { tone: statusOk(fmpsStat) ? '' : 'warn' });
+    }
+    html += kpi('Alarmas activas', num(alarms, 0),
+                alarms > 0 ? (SYS_STATUS[sev] || 'activa').toLowerCase() : 'sin alarmas',
+                { tone: alarms > 0 ? (sev >= 6 ? 'crit' : 'warn') : '' });
+    html += kpi('Temperatura máx.', temps.length ? num(tmax.v, 1) : '—', temps.length ? '°C · ' + tmax.l : 'sin lectura',
+                { pct: temps.length ? (tmax.v / 45) * 100 : null, tone: tmax.v >= 40 ? 'warn' : '' });
+    html += kpi('Carga de batería', charge && charge.value !== null ? num(charge.value, 0) : '—',
+                charge && charge.value !== null ? '% · UPS .32' : 'sin lectura',
+                { pct: charge ? charge.value : null });
+    html += kpi('Energía acumulada', energy && energy.value !== null ? num(energy.value / 1000, 1) : '—',
+                energy ? 'kWh · PDU .53' : 'sin lectura');
+    $('kpis').innerHTML = html;
+  }
+
+  function renderLoads(rows) {
+    var loads = byName(rows, 'outputActivePower').concat(byName(rows, 'totalWatts'))
+      .map(function (r) { return { label: r.label, w: r.value || 0 }; })
+      .sort(function (a, b) { return b.w - a.w; });
+    var peak = loads.reduce(function (m, r) { return Math.max(m, r.w); }, 0) || 1;
+    $('loadRows').innerHTML = loads.map(function (r) {
+      return '<div class="row"><span class="nm">' + esc(r.label) + '</span>' +
+             '<span class="track"><i style="width:' + ((r.w / peak) * 100).toFixed(1) + '%"></i></span>' +
+             '<span class="amt">' + num(r.w, 0) + ' W</span></div>';
+    }).join('') || '<div class="empty">Sin puntos de potencia.</div>';
+
+    var total = loads.reduce(function (a, r) { return a + r.w; }, 0);
+    var capRow = pick(rows, '172.16.101.29', 'totalPowerAvailable');
+    $('loadNote').textContent = 'TOTAL ' + num(total, 0) + ' W' +
+      (capRow ? ' · disponible ' + num(capRow.value, 0) + ' W (FMPS .29)' : '');
+  }
+
+  function renderAlarms(rows) {
+    var out = [];
+    var seenCrit = false;
+
+    rows.filter(function (r) { return r.name === 'alarmCount'; }).forEach(function (r) {
+      var sevRow = pick(rows, r.device, 'alarmSeverity');
+      var sev = sevRow ? sevRow.value : null;
+      var n = r.value || 0;
+      if (n > 0 && sev >= 6) seenCrit = true;
+      out.push({ label: r.label, n: n, sev: sev });
+    });
+
+    var html = out.map(function (o) {
+      var cls = o.n === 0 ? 'ok' : (o.sev >= 6 ? 'crit' : 'warn');
+      var txt = o.n === 0 ? 'sin alarmas' : o.n + ' activa' + (o.n === 1 ? '' : 's') +
+                (o.sev ? ' · ' + (SYS_STATUS[o.sev] || o.sev) : '');
+      return '<div class="row"><span class="nm">' + esc(o.label) + '</span>' +
+             '<span class="amt" style="margin-left:auto"><span class="pill ' + cls + '">' + esc(txt) + '</span></span></div>';
+    }).join('');
+
+    // System status and battery health read as words, not enum numbers.
+    rows.filter(function (r) { return r.name === 'systemStatus'; }).forEach(function (r) {
+      var s = statusText(r);
+      var cls = statusOk(r) ? 'ok' : 'warn';
+      html += '<div class="row"><span class="nm">' + esc(r.label) + '</span>' +
+              '<span class="amt" style="margin-left:auto"><span class="pill ' + cls + '">estado ' + esc(s) + '</span></span></div>';
+    });
+    rows.filter(function (r) { return r.name === 'timeRemaining'; }).forEach(function (r) {
+      var v = isSentinel(r) ? 'En línea' : (r.value !== null ? num(r.value, 0) + ' min' : '—');
+      html += '<div class="row"><span class="nm">' + esc(r.label) + '</span>' +
+              '<span class="amt" style="margin-left:auto"><span class="pill">autonomía ' + esc(v) + '</span></span></div>';
+    });
+
+    $('alarmRows').innerHTML = html || '<div class="empty">Sin puntos de alarma.</div>';
+    $('alarmCard').className = 'card' + (seenCrit ? ' crit' : '');
+    $('alarmDot').className = 'dot' + (seenCrit ? ' bad' : '');
+  }
+
+  function renderPoints(rows) {
+    var order = rows.slice().sort(function (a, b) {
+      return (a.label || '').localeCompare(b.label || '') || a.name.localeCompare(b.name);
+    });
+    $('pointRows').innerHTML = order.map(function (r) {
+      var v;
+      if (isSentinel(r)) v = 'En línea';
+      else if (r.value === null) v = r.text ? esc(r.text) : '—';
+      else if (r.name === 'systemStatus') v = statusText(r);
+      else if (r.name === 'batteryState') v = (BATT_STATE[r.value] || r.value);
+      else if (r.name === 'alarmSeverity') v = (SYS_STATUS[r.value] || r.value);
+      else v = num(r.value, 1) + (r.unit && r.unit !== 'enum' && r.unit !== 'bool' ? ' ' + r.unit : '');
+      return '<tr><td class="dim">' + esc(r.label || r.device) + '</td>' +
+             '<td>' + esc(r.name) + '</td>' +
+             '<td class="n">' + v + '</td>' +
+             '<td class="n"' + (ageOf(r.ts) > STALE_S ? ' style="color:#FFCA38"' : ' class="n dim"') + '>' +
+               esc(humanAge(ageOf(r.ts))) + '</td>' +
+             '<td class="dim">' + esc(r.category || '') + '</td></tr>';
+    }).join('');
+    $('pointNote').textContent = rows.length + ' puntos · ' +
+      (new Set(rows.map(function (r) { return r.device; }))).size + ' equipos';
+  }
+
+  function renderChart(series) {
+    var svg = $('chart');
+    var pts = series.filter(function (p) { return p.value !== null; });
+    if (pts.length < 2) {
+      svg.innerHTML = '';
+      $('trendNote').textContent = 'Aún no hay suficiente historial para trazar la tendencia.';
+      return;
+    }
+    var W = 600, H = 150, pad = 6;
+    var vals = pts.map(function (p) { return p.value; });
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    if (hi === lo) { hi = lo + 1; }
+    var x = function (i) { return pad + (i / (pts.length - 1)) * (W - pad * 2); };
+    var y = function (v) { return H - pad - ((v - lo) / (hi - lo)) * (H - pad * 2); };
+    var line = pts.map(function (p, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(p.value).toFixed(1); }).join(' ');
+    var area = line + ' L' + x(pts.length - 1).toFixed(1) + ',' + (H - pad) + ' L' + x(0).toFixed(1) + ',' + (H - pad) + ' Z';
+
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.innerHTML =
+      '<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0" stop-color="#33B4F0" stop-opacity=".45"/>' +
+        '<stop offset="1" stop-color="#33B4F0" stop-opacity="0"/></linearGradient></defs>' +
+      '<path d="' + area + '" fill="url(#g)"/>' +
+      '<path d="' + line + '" fill="none" stroke="#33B4F0" stroke-width="2" ' +
+        'stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>';
+
+    var t = function (s) { var d = new Date(s); return isNaN(d) ? '—' : d.toTimeString().slice(0, 5); };
+    $('tx0').textContent = t(pts[0].ts);
+    $('tx1').textContent = t(pts[pts.length - 1].ts);
+    $('trendNote').textContent = 'mín ' + num(lo, 0) + ' W · máx ' + num(hi, 0) +
+      ' W · ' + pts.length + ' lecturas';
+  }
+
+  function renderAdvice(list) {
+    if (!list.length) {
+      $('advice').innerHTML = '<div class="empty">Gemini todavía no ha escrito recomendaciones. ' +
+        'Aparecerán aquí en cuanto analice las lecturas.</div>';
+      return;
+    }
+    $('advice').innerHTML = list.map(function (r) {
+      var when = new Date(r.ts);
+      return '<div class="item"><b>' + esc(r.summary || '(sin resumen)') + '</b>' +
+             '<span>' + esc(r.device || '') + (r.kind ? ' · ' + esc(r.kind) : '') +
+             (isNaN(when) ? '' : ' · ' + when.toLocaleString('es-MX')) + '</span></div>';
+    }).join('');
+  }
+
+  function setLink(ok, msg) {
+    $('linkDot').className = 'dot' + (ok ? '' : ' bad');
+    $('linkTxt').textContent = msg;
+  }
+
+  var everLoaded = false;
+
+  function showOffline(err) {
+    // Never leave stale numbers looking live: say the link is down instead —
+    // and only claim the figures are a previous reading when there WAS one.
+    var box = $('offline');
+    box.hidden = false;
+    box.innerHTML = '<b>Sin conexión con el colector.</b> No se pudo leer ' + esc(API) +
+      ' (' + esc(err) + '). ' + (everLoaded
+        ? 'Los valores mostrados son la última lectura recibida, no el estado actual.'
+        : 'Todavía no se ha recibido ninguna lectura, por eso el tablero está vacío.');
+    setLink(false, 'SIN CONEXIÓN');
+  }
+
+  function tick() {
+    Promise.all([
+      get('/current'),
+      get('/history?device=' + TREND.device + '&name=' + TREND.name + '&hours=24'),
+      get('/recommendations?limit=8').catch(function () { return []; })
+    ]).then(function (res) {
+      var rows = asRows(res[0]);
+      everLoaded = true;
+      $('offline').hidden = true;
+      renderKpis(rows);
+      renderLoads(rows);
+      renderAlarms(rows);
+      renderPoints(rows);
+      $('trendName').textContent = TREND.label;
+      renderChart(asRows(res[1]));
+      renderAdvice(asRows(res[2]));
+
+      // HTTP 200 only proves the collector answered — not that its readings are
+      // current. Judge freshness by the age of the data itself.
+      var ages = rows.map(function (r) { return ageOf(r.ts); }).filter(function (a) { return a !== null; });
+      var freshest = ages.length ? Math.min.apply(null, ages) : null;
+      var oldest = ages.length ? Math.max.apply(null, ages) : null;
+      var newest = rows.reduce(function (m, r) { return r.ts > m ? r.ts : m; }, '');
+      var d = new Date(newest);
+
+      if (freshest === null) {
+        setLink(false, 'SIN FECHA');
+      } else if (freshest > STALE_S) {
+        setLink(false, 'DATOS VIEJOS · ' + humanAge(freshest));
+        var box = $('offline');
+        box.hidden = false;
+        box.innerHTML = '<b>El colector responde, pero sus lecturas están detenidas.</b> ' +
+          'La más reciente tiene ' + esc(humanAge(freshest)) + ' y la más antigua ' + esc(humanAge(oldest)) +
+          ', cuando deberían actualizarse cada 30 s. Lo que ve abajo NO es el estado actual del homelab. ' +
+          'Causa típica: el transporte perdió UDP/SNMP aunque HTTP siga en pie.';
+      } else if (freshest > FRESH_S) {
+        setLink(true, 'RETRASO · ' + humanAge(freshest));
+      } else {
+        setLink(true, 'EN VIVO · ' + (isNaN(d) ? '—' : d.toTimeString().slice(0, 8)));
+      }
+
+      $('foot').textContent = 'Colector local ' + API + ' · refresco cada ' + (REFRESH_MS / 1000) +
+        ' s · lectura más reciente ' + humanAge(freshest) + ' · más antigua ' + humanAge(oldest) +
+        (isNaN(d) ? '' : ' · sello ' + d.toLocaleString('es-MX'));
+    }).catch(function (e) {
+      showOffline(e && e.message ? e.message : e);
+    });
+  }
+
+  tick();
+  setInterval(tick, REFRESH_MS);
+})();
+</script>
+</body>
+</html>
