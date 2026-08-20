@@ -453,10 +453,12 @@
 
     function hotColor(frac) {
       // teal → blue → amber → red, matching the design's own severity ramp.
-      if (frac < 0.25) return '#00AE9E';
-      if (frac < 0.55) return '#33B4F0';
-      if (frac < 0.80) return '#FFCA38';
-      return '#E82C2E';
+      // Load relative to a device's own 24 h peak says nothing about risk: a
+      // FMPS at 164 W of a 201 W peak is ordinary, and painting it red made the
+      // board look alarmed for no reason. Use the design's chart blue, and let
+      // the real alarm channels carry the warnings.
+      void frac;
+      return '#33B4F0';
     }
 
     function sparkFor(card, dev, label, name) {
@@ -516,6 +518,12 @@
           card = card.parentElement; hops++;
         }
         if (!card || hops >= 4) continue;
+        // The card must represent ONE device. On a phone the wide "Potencia
+        // medida por equipo" panel satisfies the shape test too, and a sparkline
+        // landed inside it as a full-width chart that belonged to nobody.
+        var names = (card.textContent || '').match(/\b(UPS|PDU|FMPS)\s*\.\d{2}\b/g) || [];
+        if (names.length !== 1) continue;
+        if (card.getBoundingClientRect().height > 190) continue;
         sparkFor(card, dev, t, name);
         found++;
       }
@@ -944,11 +952,24 @@
       while (host && hops < 4 && !/22px|18px|26px/.test(getComputedStyle(host).borderRadius)) {
         host = host.parentElement; hops++;
       }
-      if (!host || host.hasAttribute('data-rwai-wired')) return;
+      if (!host) return;
       host.setAttribute('data-rwai-wired', '1');
       host.style.cursor = 'pointer';
       host.title = 'Abrir el asistente Gemini';
-      host.addEventListener('click', function () { aiAsk(''); });
+      // Event DELEGATION, not a listener on the card. The design runtime clones
+      // this node when it re-renders: the attribute is copied but the listener
+      // is not, so a directly-attached handler silently stops working and the
+      // card looks wired while doing nothing.
+      if (!window.__rwAiDelegated) {
+        window.__rwAiDelegated = true;
+        document.addEventListener('click', function (e) {
+          var n = e.target;
+          while (n && n !== document) {
+            if (n.nodeType === 1 && n.hasAttribute && n.hasAttribute('data-rwai-wired')) { aiAsk(''); return; }
+            n = n.parentNode;
+          }
+        }, true);
+      }
 
       if (!host.querySelector('[data-rwaihint]')) {
         var hint = document.createElement('div');
@@ -1576,8 +1597,21 @@
     // browser backgrounds the tab or the tile scrolls away and never
     // reconnects ("se pone en blanco y ya no vuelve a cargar"). Each still is
     // its own short request, so a lost frame costs a frame, not the feed.
-    var CAM_SNAP = '/cam/snapshot?resolution=640x360';
+    var CAM_SNAP = '/cam/snapshot?resolution=640x360';   // server prefers the relay's native /snapshot
     var CAM_MS = 1000;
+
+    // The design labels this feed "AXIS P3268-LV · 4K". The EXIF of the real
+    // frames and the backend's corpus both say it is an AXIS M2025-LE (fixed
+    // lens, no physical PTZ). Correct the caption rather than ship a wrong
+    // model number to the client.
+    function fixCameraModel() {
+      var sp = document.getElementsByTagName('span'), i;
+      for (i = 0; i < sp.length; i++) {
+        var t = (sp[i].textContent || '');
+        if (sp[i].children.length) continue;
+        if (/AXIS\s*P3268-LV/i.test(t)) sp[i].textContent = t.replace(/AXIS\s*P3268-LV\s*·?\s*4K/i, 'AXIS M2025-LE');
+      }
+    }
 
     function mountCamera() {
       // Served over file:// there is no proxy to reach, so leave the mock alone.
@@ -1709,7 +1743,7 @@
     }
 
     function safeApply() {
-      try { apply(); scrollables(); fitStage(); mountCamera(); tickClock(); } catch (e) { /* never block the page */ }
+      try { apply(); scrollables(); fitStage(); mountCamera(); fixCameraModel(); tickClock(); } catch (e) { /* never block the page */ }
     }
 
     // Poll with a timer (not rAF, which engines throttle when not painting)

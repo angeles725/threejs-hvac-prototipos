@@ -34,7 +34,7 @@ const DIR = path.resolve(arg('dir', HERE));
 // Read from the environment, never from a file inside the repo, so the key
 // cannot be committed by accident.
 const GEMINI_KEY = process.env.GEMINI_API_KEY || arg('gemini-key', '');
-const GEMINI_MODEL = process.env.GEMINI_MODEL || arg('gemini-model', 'gemini-2.0-flash');
+const GEMINI_MODEL = process.env.GEMINI_MODEL || arg('gemini-model', 'gemini-3.6-flash');
 const AI_PER_MIN = Number(arg('ai-per-min', 12));
 let aiHits = [];
 const WRITER = process.env.TWIN_WRITER || arg('writer', 'http://127.0.0.1:8125').replace(/\/$/, '');
@@ -182,7 +182,10 @@ const server = http.createServer(async (req, res) => {
             headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_KEY },
             body: JSON.stringify({
               contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: { temperature: 0.2, maxOutputTokens: 700 }
+              // Generous budget on purpose: current Gemini models spend part of
+              // it on internal reasoning before emitting text, and a 700-token
+              // cap left answers cut off mid-sentence (115 chars).
+              generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }
             }) });
         clearTimeout(t);
         const j = await up.json();
@@ -216,7 +219,17 @@ const server = http.createServer(async (req, res) => {
       const ctl = new AbortController();
       const t = setTimeout(() => ctl.abort(), 8000);
       const q = url.searchParams.get('resolution') || '640x360';
-      const up = await fetch(`${CAM}/stream?resolution=${encodeURIComponent(q)}&fps=5`, { signal: ctl.signal });
+      // The relay exposes a native /snapshot (confirmed by the backend), which
+      // is cheaper than opening the multipart stream and carving a frame out.
+      // Fall back to the stream if that endpoint is missing.
+      let up = await fetch(`${CAM}/snapshot`, { signal: ctl.signal }).catch(() => null);
+      if (up && up.ok && (up.headers.get('content-type') || '').startsWith('image/')) {
+        clearTimeout(t);
+        const buf = Buffer.from(await up.arrayBuffer());
+        res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'no-store' }).end(buf);
+        return;
+      }
+      up = await fetch(`${CAM}/stream?resolution=${encodeURIComponent(q)}&fps=5`, { signal: ctl.signal });
       const reader = up.body.getReader();
       const chunks = [];
       let total = 0, jpeg = null;
