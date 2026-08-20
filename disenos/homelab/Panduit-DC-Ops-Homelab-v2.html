@@ -727,6 +727,7 @@
           return;
         }
         var pts = (r.j && r.j.points) || [];
+        window.__rwWritable = pts;      // let the analyst propose real actions
         body.innerHTML = '';
         if (!pts.length) {
           body.innerHTML = '<div style="font:400 12.5px/1.6 Outfit,sans-serif;color:rgba(242,246,249,.6)">' +
@@ -758,6 +759,7 @@
       SP_STATE.checked = true;
       spFetch('/writable').then(function (r) {
         if (!r.ok) return;                       // tunnel → 403 → no button
+        window.__rwWritable = (r.j && r.j.points) || [];
         var btn = document.createElement('button');
         btn.id = '__rwspbtn';
         btn.textContent = 'Ajustes';
@@ -795,35 +797,87 @@
         var a = ageOf(r.ts);
         if (a !== null && a > STALE_S && stale.indexOf(r.label) === -1) stale.push(r.label);
       }
+      // Port errors and link state are the network signal; without them the
+      // analyst has no basis for the RED axis it is asked to cover.
+      var netErrors = [], linksDown = 0, linksUp = 0;
+      for (i = 0; i < rows.length; i++) {
+        var q = rows[i];
+        if (!/^Switch/i.test(q.label || '')) continue;
+        if (/Errors$/.test(q.name) && q.value > 0) netErrors.push(q.name + '=' + q.value);
+        if (/operStatus$/.test(q.name)) { if (q.value === 1) linksUp++; else linksDown++; }
+      }
       return {
         equipos: byDev,
         alarmas: alarms,
         lecturas_viejas: stale,
         frescura_s: state.freshest === null ? null : Math.round(state.freshest),
-        total_puntos: rows.length
+        total_puntos: rows.length,
+        red: { puertos_arriba: linksUp, puertos_abajo: linksDown, errores: netErrors.slice(0, 10) },
+        setpoints: (window.__rwWritable || []).map(function (w) {
+          return w.label + ' [' + w.id + '] riesgo=' + w.risk;
+        })
       };
     }
 
     function aiPrompt(question) {
+      var snap = aiSnapshot();
       return [
-        'Eres un asistente de operaciones de un homelab con equipos Panduit.',
-        'Responde en español neutro, breve y concreto. No inventes lecturas:',
-        'usa SOLO los datos de abajo. Si algo no está en los datos, dilo.',
+        'ROL',
+        'Eres analista de operaciones de centro de datos. Trabajas para el operador',
+        'de un homelab Panduit y tu trabajo es leer la telemetría, encontrar lo que',
+        'merece atención y proponer acciones concretas. Hablas como un ingeniero de',
+        'planta: directo, sin adornos, en español neutro.',
         '',
-        'Datos en vivo (JSON):',
-        JSON.stringify(aiSnapshot()),
+        'CÓMO ANALIZAS',
+        '1. RIESGO primero: alarmas activas, equipos fuera de estado normal, puntos',
+        '   sin lectura reciente. Distingue una falla real de un aviso cosmético.',
+        '2. CAPACIDAD: carga contra capacidad instalada, margen disponible,',
+        '   desbalance entre equipos que deberían repartirse la carga.',
+        '3. CONTINUIDAD: autonomía de baterías, redundancia disponible, qué se cae',
+        '   si falla el elemento que hoy carga más.',
+        '4. TÉRMICO: temperaturas contra sus vecinos y contra su propio histórico.',
+        '5. RED: puertos con errores, enlaces caídos, tráfico anómalo.',
         '',
-        'Decodificación: UPS systemStatus 1=OK..6=crítica · FMPS systemStatus',
-        'es ModuleStatus, donde 2=ok y 3=notok (en este equipo el notok se debe',
-        'a slots vacíos, no a falla) · batteryState 2=normal · timeRemaining',
-        '"sentinel" significa que la UPS está en línea, sin descarga.',
+        'REGLAS DE HONESTIDAD (importan más que la elocuencia)',
+        '- Usa SOLO los datos de abajo. No inventes lecturas, equipos ni umbrales.',
+        '- Si algo no está en los datos, dilo: "no tengo ese dato".',
+        '- Distingue lo que MIDES de lo que INFIERES. Marca las inferencias.',
+        '- Si un dato es viejo, no lo presentes como estado actual.',
+        '- Un número sin contexto no es un hallazgo: di contra qué lo comparas.',
         '',
-        'Pregunta del operador: ' + question,
+        'FORMATO DE RESPUESTA',
+        '- Empieza con la conclusión en una frase.',
+        '- Después, hasta 3 hallazgos priorizados. Cada uno: qué observas (con el',
+        '  dato), por qué importa, y qué harías.',
+        '- Sé breve. Prefiere 120 palabras útiles a 400 de relleno.',
         '',
-        'Si propones un cambio de configuración (un setpoint), escríbelo al final',
-        'en una línea aparte con el formato exacto:',
+        'DATOS EN VIVO (JSON)',
+        JSON.stringify(snap),
+        '',
+        'DECODIFICACIÓN',
+        '- UPS systemStatus: 1=OK … 6=crítica. batteryState: 2=normal.',
+        '- FMPS systemStatus es ModuleStatus (enum distinto): 2=ok, 3=notok. En el',
+        '  FMPS .29 el notok se debe a SLOTS VACÍOS (transmisor 6 y PSU 2 ausentes),',
+        '  no a un módulo dañado: es completitud/redundancia, no falla.',
+        '- timeRemaining "sentinel" = la UPS está en línea, sin descarga.',
+        '- De las 11 alarmas del EL2P .45, 2 son reales (breakers B1 y B2 apagados)',
+        '  y 9 son sensores ambientales sin comunicación.',
+        '- La capacidad del FMPS (totalPowerAvailable) es para SUS receptores, no',
+        '  para toda la flota: no la uses como denominador del consumo total.',
+        '',
+        'AJUSTES QUE EL OPERADOR PUEDE APLICAR HOY',
+        (snap.setpoints && snap.setpoints.length
+          ? snap.setpoints.map(function (x) { return '- ' + x; }).join('\n')
+          : '- (no hay setpoints disponibles desde esta vista)'),
+        '',
+        'PREGUNTA DEL OPERADOR',
+        question,
+        '',
+        'SI PROPONES UN CAMBIO',
+        'Solo si hay evidencia en los datos, y preferentemente sobre un ajuste de la',
+        'lista de arriba. Escríbelo al final, en una línea aparte, con este formato:',
         'PROPUESTA: <equipo> | <parámetro> | <valor actual> -> <valor propuesto> | <motivo en una frase>',
-        'No propongas cambios si no hay evidencia en los datos.'
+        'Si no hay nada que justifique un cambio, no propongas ninguno y dilo.'
       ].join('\n');
     }
 
