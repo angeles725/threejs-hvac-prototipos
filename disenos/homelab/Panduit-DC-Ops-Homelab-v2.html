@@ -783,6 +783,64 @@
     // so proposals are recorded, never executed.
     var AI_BUSY = false;
 
+    // ---- trends for forecasting --------------------------------------------
+    // Point-in-time readings cannot support a forecast. These series carry the
+    // rate of change, which is what turns "92,232 errors" into "3,321 per hour,
+    // so it crosses X by tonight". Only a handful of series are fetched: the
+    // analyst needs slopes, not the whole 1,387-point history.
+    var TREND_KEYS = [
+      { dev: '172.16.101.32', name: 'outputActivePower', as: 'UPS .32 carga (W)' },
+      { dev: '172.16.101.34', name: 'outputActivePower', as: 'UPS .34 carga (W)' },
+      { dev: '172.16.101.29', name: 'outputPowerUsed',   as: 'FMPS .29 carga (W)' },
+      { dev: '172.16.101.29', name: 'systemTemp',        as: 'FMPS .29 temperatura (C)' },
+      { dev: '172.16.101.32', name: 'ambientTemp',       as: 'UPS .32 temperatura (C)' },
+      { dev: '172.16.101.32', name: 'batteryVoltage',    as: 'UPS .32 bateria (V)' },
+      { dev: '172.16.101.53', name: 'totalWatts',        as: 'PDU .53 carga (W)' },
+      { dev: '172.16.101.53', name: 'energy',            as: 'PDU .53 energia (Wh)' },
+      { dev: '172.16.101.33', name: 'Fa1/7_inErrors',    as: 'Switch Fa1/7 errores' }
+    ];
+    var trendCache = {}, trendAt = 0;
+
+    // Least squares over (hours, value): a single first-vs-last difference is
+    // hostage to one noisy sample at either end.
+    function slopePerHour(rows) {
+      var n = rows.length;
+      if (n < 3) return null;
+      var t0 = new Date(String(rows[0].ts).replace(' ', 'T')).getTime();
+      var sx = 0, sy = 0, sxx = 0, sxy = 0, i, x, y;
+      for (i = 0; i < n; i++) {
+        x = (new Date(String(rows[i].ts).replace(' ', 'T')).getTime() - t0) / 3600000;
+        y = rows[i].value;
+        sx += x; sy += y; sxx += x * x; sxy += x * y;
+      }
+      var den = n * sxx - sx * sx;
+      if (!den) return null;
+      return (n * sxy - sx * sy) / den;
+    }
+
+    function refreshTrends() {
+      if (Date.now() - trendAt < 180000) return;   // slopes move slowly
+      trendAt = Date.now();
+      TREND_KEYS.forEach(function (k) {
+        fetchHistory(k.dev, k.name, function (rows) {
+          if (!rows || rows.length < 3) return;
+          var v = rows.map(function (r) { return r.value; });
+          var lo = Math.min.apply(null, v), hi = Math.max.apply(null, v);
+          var slope = slopePerHour(rows);
+          var span = (new Date(String(rows[rows.length - 1].ts).replace(' ', 'T')) -
+                      new Date(String(rows[0].ts).replace(' ', 'T'))) / 3600000;
+          trendCache[k.as] = {
+            ahora: v[v.length - 1],
+            min: lo, max: hi,
+            promedio: Math.round((v.reduce(function (a, b) { return a + b; }, 0) / v.length) * 10) / 10,
+            por_hora: slope === null ? null : Math.round(slope * 100) / 100,
+            ventana_h: Math.round(span * 10) / 10,
+            lecturas: v.length
+          };
+        });
+      });
+    }
+
     function aiSnapshot() {
       // A compact, factual briefing. Sending 1,387 raw points would cost tokens
       // and bury the signal, so this is the fleet summary plus every anomaly.
@@ -813,6 +871,7 @@
         frescura_s: state.freshest === null ? null : Math.round(state.freshest),
         total_puntos: rows.length,
         red: { puertos_arriba: linksUp, puertos_abajo: linksDown, errores: netErrors.slice(0, 10) },
+        tendencias_24h: trendCache,
         setpoints: (window.__rwWritable || []).map(function (w) {
           return w.label + ' [' + w.id + '] riesgo=' + w.risk;
         })
@@ -845,11 +904,39 @@
         '- Si un dato es viejo, no lo presentes como estado actual.',
         '- Un número sin contexto no es un hallazgo: di contra qué lo comparas.',
         '',
+        'PRONÓSTICOS',
+        'Usa `tendencias_24h`: trae por serie el valor actual, mínimo, máximo,',
+        'promedio, la PENDIENTE POR HORA y la ventana medida. Con eso puedes',
+        'proyectar: "a este ritmo cruza X en Y horas". Reglas:',
+        '- Extrapola SOLO si la pendiente es consistente y la ventana es',
+        '  suficiente. Con pocas lecturas o ventana corta, dilo en vez de',
+        '  proyectar.',
+        '- Da el horizonte y el supuesto: "si el ritmo se mantiene".',
+        '- Un contador que sube sin techo (errores) se pronostica por ritmo, no',
+        '  por umbral. Una magnitud con capacidad (carga, batería) se pronostica',
+        '  contra su límite, y debes nombrar el límite.',
+        '- No proyectes lo que no tiene pendiente en los datos.',
+        '',
+        'SIMULACIONES (escenarios "qué pasa si")',
+        'Si el operador pregunta por un escenario, razónalo con los números que',
+        'tienes y expón la aritmética:',
+        '- Pérdida de un equipo: cuánta carga queda huérfana y quién debería',
+        '  absorberla; si no hay dato de la capacidad del que absorbe, dilo.',
+        '- Apagar un transmisor o una salida: qué queda sin alimentación.',
+        '- Crecimiento: cuánto margen queda contra la capacidad y cuántos equipos',
+        '  más de un consumo dado caben.',
+        'Marca toda simulación como escenario, nunca como estado observado, y',
+        'enuncia los supuestos que usaste.',
+        '',
         'FORMATO DE RESPUESTA',
         '- Empieza con la conclusión en una frase.',
         '- Después, hasta 3 hallazgos priorizados. Cada uno: qué observas (con el',
         '  dato), por qué importa, y qué harías.',
+        '- Cuando corresponda, añade PRONÓSTICO (con horizonte y supuesto) y/o',
+        '  ESCENARIO (con la aritmética a la vista).',
         '- Sé breve. Prefiere 120 palabras útiles a 400 de relleno.',
+        '- TEXTO PLANO. El panel no renderiza LaTeX ni tablas: escribe las cuentas',
+        '  como "3200 - 168 = 3032 W", nunca como $3200 \\text{W}$.',
         '',
         'DATOS EN VIVO (JSON)',
         JSON.stringify(snap),
@@ -870,8 +957,12 @@
           ? snap.setpoints.map(function (x) { return '- ' + x; }).join('\n')
           : '- (no hay setpoints disponibles desde esta vista)'),
         '',
-        'PREGUNTA DEL OPERADOR',
-        question,
+        'PREGUNTA DEL OPERADOR — RESPÓNDELA DIRECTAMENTE',
+        'Si la pregunta es concreta (un pronóstico, un escenario, un equipo en',
+        'particular), CONTÉSTALA ESO PRIMERO y con detalle. El repaso general de',
+        'hallazgos es el modo por defecto cuando no se pregunta nada específico;',
+        'no lo uses para esquivar una pregunta puntual.',
+        '>>> ' + question + ' <<<',
         '',
         'SI PROPONES UN CAMBIO',
         'Solo si hay evidencia en los datos, y preferentemente sobre un ajuste de la',
@@ -965,7 +1056,13 @@
     }
 
     function aiAsk(question) {
-      if (AI_BUSY) return;
+      // Say so instead of dropping it. A question typed while another is in
+      // flight used to vanish with no feedback at all.
+      if (AI_BUSY) {
+        var busyBox = document.getElementById('__rwaibody');
+        if (busyBox) busyBox.textContent = 'Espera: hay una consulta en curso…';
+        return;
+      }
       question = (question || '').trim();
       if (!question) question = '¿Qué es lo más importante que debo revisar ahora mismo?';
       var d = aiDialog();
@@ -1082,6 +1179,7 @@
           rebindCounters();
           rebindCharts();
           rebindSparklines();
+          refreshTrends();
           wireAssistant();
           wireSetpoints();
           banner();
