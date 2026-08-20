@@ -49,6 +49,14 @@
 
     var state = { rows: [], byKey: {}, byLabel: {}, freshest: null, oldest: null, error: null };
 
+    // Escape anything interpolated into innerHTML. Device labels and Gemini's
+    // answers are data, not markup.
+    function esc(v) {
+      return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
     function ageOf(ts) {
       if (!ts) return null;
       var d = new Date(String(ts).replace(' ', 'T'));
@@ -130,11 +138,826 @@
         var fresh = ageOf(pt.ts);
         val.textContent = (pt.value === null ? (pt.text ? 'En línea' : '—') : fmt(pt.value)) +
                           (unit ? ' ' + unit : '');
+        val.setAttribute('data-rwlast', val.textContent);
         val.title = label + ' · ' + pt.name + ' · lectura de hace ' + humanAge(fresh);
         val.style.opacity = (fresh !== null && fresh > STALE_S) ? '0.55' : '';
         touched++;
       }
       return touched;
+    }
+
+    // ---- second pass: everything that is not a power row --------------------
+    // Each remaining literal sits next to text that identifies it ("129.2V · 60
+    // Hz" is an input voltage, "54.2V · 100%" a battery). The DEVICE comes from
+    // the nearest IP or label in an ancestor, so three UPS rows that look alike
+    // still resolve to their own readings.
+    var IP_RE = /\b172\.16\.101\.(\d{1,3})\b/;
+    var LABEL_RE = /\b(UPS|PDU|FMPS|EL2P|SW)\s*\.?\s*(\d{2})\b/;
+
+    // Resolve the device by DOCUMENT PROXIMITY, not by the first match inside an
+    // ancestor's text. Climbing and regexing the whole subtree attributed the
+    // UPS .32 input voltage to the FMPS .29 and the UPS .34 runtime to the
+    // EL2P .45, because a wide container mentions every device. A misattributed
+    // reading is worse than a frozen one, so this walks backwards through the
+    // leaves and takes the nearest preceding identifier.
+    var LEAF_CACHE = null, LEAF_STAMP = 0;
+    function leaves() {
+      if (LEAF_CACHE && Date.now() - LEAF_STAMP < 900) return LEAF_CACHE;
+      LEAF_CACHE = [];
+      var all = document.querySelectorAll('span,div');
+      for (var i = 0; i < all.length; i++) if (!all[i].children.length) LEAF_CACHE.push(all[i]);
+      LEAF_STAMP = Date.now();
+      return LEAF_CACHE;
+    }
+    function deviceNear(el) {
+      var list = leaves(), at = list.indexOf(el);
+      if (at === -1) return null;
+      // Look backwards first (labels precede their readings in this design),
+      // then a short way forward, and stop at the FIRST identifier found.
+      for (var i = at; i >= 0 && at - i < 40; i--) {
+        var t = list[i].textContent || '';
+        var m = t.match(IP_RE); if (m) return '172.16.101.' + m[1];
+        var l = t.match(LABEL_RE); if (l) return '172.16.101.' + l[2];
+      }
+      for (var j = at + 1; j < list.length && j - at < 8; j++) {
+        var t2 = list[j].textContent || '';
+        var m2 = t2.match(IP_RE); if (m2) return '172.16.101.' + m2[1];
+        var l2 = t2.match(LABEL_RE); if (l2) return '172.16.101.' + l2[2];
+      }
+      return null;
+    }
+
+    // context signature -> which point to read, in priority order
+    var CTX_RULES = [
+      { re: /V\s*·\s*\d+(\.\d+)?\s*Hz/i,      name: 'inputVoltage',      dec: 1 },
+      { re: /V\s*·\s*[\d,]+\s*VA/i,           name: 'outputVoltage',     dec: 1 },
+      { re: /V\s*·\s*(sin carga|\d+\s*%|\d+\s*min)/i, name: 'batteryVoltage', dec: 1 },
+      { re: /min\s*(al|de)?\s*\d*\s*%?\s*(de carga)?/i, name: 'timeRemaining', dec: 0 },
+      { re: /%\s*\d*\s*bancos/i,              name: 'chargeRemaining',   dec: 0 },
+      { re: /Wh/i,                            name: 'systemEnergy',      dec: 0, alt: 'energy' },
+      { re: /°\s*C/i,                         name: 'ambientTemp',       dec: 0, alt: 'systemTemp' },
+      { re: /VA/i,                            name: 'totalVA',           dec: 0, alt: 'outputApparentVA' }
+    ];
+
+    function contextOf(el) {
+      var node = el.parentElement, hops = 0, own = (el.textContent || '').trim();
+      while (node && hops < 3) {
+        var t = (node.textContent || '').replace(/\s+/g, ' ').trim();
+        if (t.length > own.length) return t;
+        node = node.parentElement; hops++;
+      }
+      return own;
+    }
+
+    function rebindByContext() {
+      var nodes = document.querySelectorAll('span,div'), i, k, done = 0;
+      for (i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        if (el.children.length) continue;
+        // Skip nodes we do not own. A node WE bound is revisited: the design
+        // runtime re-renders and restores its literal while our title survives,
+        // so skipping on "has a title" froze the FMPS at its shipped 163 W.
+        if (el.hasAttribute('data-rwclock')) continue;
+        if (el.hasAttribute('title') && !el.hasAttribute('data-rwlast')) continue;
+        if (el.getAttribute('data-rwlast') === (el.textContent || '').trim()) continue;
+        var cur = (el.textContent || '').trim();
+        if (!/^[\d.,]+\s*[A-Za-z%°]{0,4}$/.test(cur) || !/\d/.test(cur)) continue;
+
+        var dev = deviceNear(el);
+        if (!dev) continue;
+        var ctx = contextOf(el);
+
+        // The node's OWN unit decides the rule whenever it has one. Matching on
+        // the shared caption alone made neighbours collide: "3.2 MWh · 3,201,722
+        // VA" fed the energy reading into the VA field, and a temperature slot
+        // rendered "5,887 °C" — the FMPS energy value.
+        var ownUnit = (cur.match(/[A-Za-z%°]+$/) || [''])[0];
+        for (k = 0; k < CTX_RULES.length; k++) {
+          var rule = CTX_RULES[k];
+          if (ownUnit) {
+            var u = ownUnit.toLowerCase();
+            var wants = u === 'v' ? /Voltage$/i
+                      : u === 'w' ? /Power(Used)?$/i
+                      : u === 'wh' || u === 'mwh' || u === 'kwh' ? /energy/i
+                      : u === 'va' ? /VA$/i
+                      : u === '%' ? /Remaining|Load/i
+                      : u === 'min' ? /timeRemaining/i
+                      : u === 'c' || u === '°c' ? /Temp$/i
+                      : null;
+            if (wants && !wants.test(rule.name) && !(rule.alt && wants.test(rule.alt))) continue;
+          }
+          if (!rule.re.test(ctx)) continue;
+          var pt = state.byKey[dev + '::' + rule.name] ||
+                   (rule.alt ? state.byKey[dev + '::' + rule.alt] : null);
+          if (!pt || pt.value === null) break;
+
+          // Preserve whatever unit the node itself displayed; the surrounding
+          // caption already carries the rest of the sentence.
+          var hadUnit = /[A-Za-z%°]/.test(cur);
+          var unit = hadUnit ? (cur.match(/[A-Za-z%°]+\s*$/) || [''])[0].trim() : '';
+          var shown = fmt(pt.value, rule.dec);
+          // Energy reads in MWh in one widget and Wh in another.
+          if (/MWh/i.test(unit)) shown = fmt(pt.value / 1e6, 2);
+          el.textContent = shown + (unit ? ' ' + unit : '');
+          el.setAttribute('data-rwlast', el.textContent);
+          el.title = (pt.label || dev) + ' · ' + pt.name + ' · lectura de hace ' + humanAge(ageOf(pt.ts));
+          done++;
+          break;
+        }
+      }
+      return done;
+    }
+
+    // ---- derived counters ---------------------------------------------------
+    // "1,387 PUNTOS", "1,152 TOMAS" and friends are counts over the feed, not
+    // single readings, so they are computed rather than looked up.
+    function rebindCounters() {
+      var rows = state.rows;
+      if (!rows.length) return 0;
+      var total = rows.length;
+      var outlets = 0, switchPts = 0, fmpsPts = 0, scalars = 0, alarms = 0;
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i], lab = r.label || '';
+        // Classify exactly as the design's own tally does. The switch label is
+        // "Switch .33" (an /^SW / test scored 0), and the FMPS bucket counts its
+        // transmitter/PSU DETAIL points, not its five scalars — otherwise the
+        // four counters do not add up to the 1,387 total shown beside them.
+        if (/^u\d+_o\d+_/.test(r.name)) outlets++;
+        else if (/^Switch/i.test(lab)) switchPts++;
+        else if (/^FMPS/i.test(lab) && /^(tx|psu|rx)/i.test(r.name)) fmpsPts++;
+        else scalars++;
+        if (r.name === 'alarmCount') alarms += r.value || 0;
+      }
+      var MAP = [
+        { re: /PUNTOS/i, v: total }, { re: /TOMAS/i, v: outlets },
+        { re: /SWITCH/i, v: switchPts }, { re: /ESCALARES/i, v: scalars },
+        { re: /FMPS$/i, v: fmpsPts }
+      ];
+      var nodes = document.querySelectorAll('span,div'), done = 0;
+      for (i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        if (el.children.length || el.hasAttribute('data-rwclock')) continue;
+        if (el.hasAttribute('title') && !el.hasAttribute('data-rwlast')) continue;
+        if (el.getAttribute('data-rwlast') === (el.textContent || '').trim()) continue;
+        var cur = (el.textContent || '').trim();
+        if (!/^[\d.,]+$/.test(cur)) continue;
+        var ctx = contextOf(el);
+        for (var k = 0; k < MAP.length; k++) {
+          if (!MAP[k].re.test(ctx.replace(cur, ''))) continue;
+          el.textContent = fmt(MAP[k].v);
+          el.setAttribute('data-rwlast', el.textContent);
+          el.title = 'derivado del feed · ' + state.rows.length + ' puntos · lectura de hace ' + humanAge(state.freshest);
+          done++;
+          break;
+        }
+      }
+      return done;
+    }
+
+    // ---- charts & analytics -------------------------------------------------
+    // The design draws its trend curves from fixed paths. They are redrawn here
+    // from /history, keeping the artwork (viewBox, gradient fill, stroke) and
+    // replacing only the geometry, so the chart still looks like the approved
+    // design but reports what actually happened.
+    var HIST_MS = 120000;              // history moves slowly; refetch sparingly
+    var histAt = 0, histCache = {};
+
+    // Which series each chart shows, chosen by the caption around it.
+    var CHART_SERIES = [
+      { re: /Energía medida/i,   dev: '172.16.101.32', name: 'outputActivePower', unit: 'W' },
+      { re: /TOTAL[\s\S]{0,14}W/i, dev: '172.16.101.29', name: 'outputPowerUsed',  unit: 'W' },
+      { re: /Carga|capacidad/i,  dev: '172.16.101.32', name: 'outputActivePower', unit: 'W' }
+    ];
+
+    function captionOf(el) {
+      var n = el.parentElement, hops = 0;
+      while (n && hops < 4) {
+        // Exclude our own analytics line: once inserted it becomes the longest
+        // text near the chart, so the caption stops matching "Energía medida"
+        // and the chart is never recognised again.
+        var t = '';
+        for (var c = 0; c < n.childNodes.length; c++) {
+          var kid = n.childNodes[c];
+          if (kid.nodeType === 1 && kid.hasAttribute && kid.hasAttribute('data-rwstats')) continue;
+          t += ' ' + (kid.textContent || '');
+        }
+        t = t.replace(/\s+/g, ' ').trim();
+        if (t.length > 10) return t;
+        n = n.parentElement; hops++;
+      }
+      return '';
+    }
+
+    function fetchHistory(dev, name, cb) {
+      var k = dev + '::' + name;
+      if (histCache[k] && Date.now() - histCache[k].at < HIST_MS) { cb(histCache[k].rows); return; }
+      var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+      var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 9000);
+      fetch(API + '/history?device=' + dev + '&name=' + name + '&hours=24',
+            ctl ? { cache: 'no-store', signal: ctl.signal } : { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (d) {
+          clearTimeout(timer);
+          var rows = (Array.isArray(d) ? d : (d && d.data) || []).filter(function (x) { return x.value !== null; });
+          histCache[k] = { at: Date.now(), rows: rows };
+          cb(rows);
+        })
+        .catch(function () { clearTimeout(timer); cb(null); });
+    }
+
+    // Rebuild the two paths of a chart: [0] area under the curve, [1] the line.
+    function drawInto(svg, rows) {
+      if (!rows || rows.length < 2) return false;
+      var vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+      var W = vb.length === 4 ? vb[2] : svg.clientWidth || 400;
+      var H = vb.length === 4 ? vb[3] : svg.clientHeight || 120;
+      var paths = svg.querySelectorAll('path');
+      if (paths.length < 2) return false;
+
+      var vals = rows.map(function (r) { return r.value; });
+      var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+      // A flat series would divide by zero; give it a band so the line centres.
+      if (hi === lo) { hi = lo + Math.max(1, Math.abs(lo) * 0.05); lo = lo - Math.max(1, Math.abs(lo) * 0.05); }
+      var pad = H * 0.12;
+      var x = function (i) { return (i / (rows.length - 1)) * W; };
+      var y = function (v) { return H - pad - ((v - lo) / (hi - lo)) * (H - pad * 2); };
+
+      var line = '';
+      for (var i = 0; i < rows.length; i++) line += (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(vals[i]).toFixed(1);
+      var area = line + 'L' + W + ',' + H + 'L0,' + H + 'Z';
+
+      // paths[0] is the filled area, paths[1] the stroked line — keep that order.
+      paths[0].setAttribute('d', area);
+      paths[1].setAttribute('d', line);
+      svg.setAttribute('data-rwchart', rows.length + ' lecturas · mín ' + fmt(lo) + ' · máx ' + fmt(hi));
+      return true;
+    }
+
+    function rebindCharts() {
+      var svgs = document.getElementsByTagName('svg'), i;
+      for (i = 0; i < svgs.length; i++) {
+        (function (svg) {
+          var r = svg.getBoundingClientRect();
+          if (r.width < 80 || svg.querySelectorAll('path').length < 2) return;
+          if (svg.getAttribute('data-rwchart-at') &&
+              Date.now() - Number(svg.getAttribute('data-rwchart-at')) < HIST_MS) return;
+          var cap = captionOf(svg);
+          for (var k = 0; k < CHART_SERIES.length; k++) {
+            if (!CHART_SERIES[k].re.test(cap)) continue;
+            fetchHistory(CHART_SERIES[k].dev, CHART_SERIES[k].name, function (rows) {
+              // Stamp only on a successful draw, so a failed fetch or a chart
+              // that was not ready yet is retried instead of being skipped.
+              if (drawInto(svg, rows)) {
+                svg.setAttribute('data-rwchart-at', String(Date.now()));
+                analytics(svg, rows, CHART_SERIES[k].unit);
+              }
+            });
+            break;
+          }
+        })(svgs[i]);
+      }
+    }
+
+    // Min / avg / max under the curve, as a caption the design has room for.
+    function analytics(svg, rows, unit) {
+      var host = svg.parentElement;
+      if (!host) return;
+      var tag = host.querySelector('[data-rwstats]');
+      if (!tag) {
+        tag = document.createElement('div');
+        tag.setAttribute('data-rwstats', '1');
+        // Must WRAP. On one nowrap line this caption is ~440px wide and, inside a
+        // grid item without min-width:0, it stretched the whole card past a
+        // 390px screen — three cards ended up 53px off-canvas.
+        tag.style.cssText = 'font:500 9.5px/1.4 "IBM Plex Mono",ui-monospace,monospace;' +
+          'letter-spacing:.06em;color:rgba(242,246,249,.45);margin-top:6px;' +
+          'white-space:normal;overflow-wrap:anywhere;min-width:0;max-width:100%';
+        host.appendChild(tag);
+      }
+      var v = rows.map(function (r) { return r.value; });
+      var lo = Math.min.apply(null, v), hi = Math.max.apply(null, v);
+      var avg = v.reduce(function (a, b) { return a + b; }, 0) / v.length;
+      var last = v[v.length - 1];
+      var trend = last > avg * 1.02 ? '▲' : last < avg * 0.98 ? '▼' : '=';
+      tag.textContent = 'MÍN ' + fmt(lo) + ' · PROM ' + fmt(avg) + ' · MÁX ' + fmt(hi) +
+        ' ' + unit + ' · AHORA ' + fmt(last) + ' ' + trend + ' · ' + v.length + ' LECTURAS 24 H';
+    }
+
+    // ---- per-device sparklines (hotspot density) ---------------------------
+    // Every device card gets its own 24 h trend drawn from /history, tinted by
+    // how hard that device is running. Series are fetched once per device and
+    // reused, because 11 devices polling on the dashboard's cadence would
+    // hammer the collector for data that changes every 30 s.
+    var SPARK_POINT = { UPS: 'outputActivePower', PDU: 'totalWatts', FMPS: 'outputPowerUsed' };
+    var sparkAt = 0;
+
+    function hotColor(frac) {
+      // teal → blue → amber → red, matching the design's own severity ramp.
+      if (frac < 0.25) return '#00AE9E';
+      if (frac < 0.55) return '#33B4F0';
+      if (frac < 0.80) return '#FFCA38';
+      return '#E82C2E';
+    }
+
+    function sparkFor(card, dev, label, name) {
+      fetchHistory(dev, name, function (rows) {
+        if (!rows || rows.length < 3) return;
+        var host = card.querySelector('[data-rwspark]');
+        if (!host) {
+          host = document.createElement('div');
+          host.setAttribute('data-rwspark', '1');
+          host.style.cssText = 'margin-top:7px;height:26px;width:100%;min-width:0;max-width:100%;pointer-events:none';
+          card.appendChild(host);
+        }
+        var v = rows.map(function (r) { return r.value; });
+        var lo = Math.min.apply(null, v), hi = Math.max.apply(null, v);
+        var span = (hi - lo) || Math.max(1, Math.abs(hi) * 0.05);
+        var W = 120, H = 26, d = '';
+        for (var i = 0; i < v.length; i++) {
+          d += (i ? 'L' : 'M') + ((i / (v.length - 1)) * W).toFixed(1) + ',' +
+               (H - 2 - ((v[i] - lo) / span) * (H - 5)).toFixed(1);
+        }
+        // Tint by current load against this device's own 24 h peak, so a card
+        // reads hot when the device is near ITS ceiling, not the fleet's.
+        var last = v[v.length - 1];
+        var col = hotColor(hi > 0 ? last / hi : 0);
+        host.innerHTML =
+          '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" ' +
+            'style="width:100%;height:100%;display:block">' +
+            '<path d="' + d + 'L' + W + ',' + H + 'L0,' + H + 'Z" fill="' + col + '" opacity=".13"/>' +
+            '<path d="' + d + '" fill="none" stroke="' + col + '" stroke-width="1.5" ' +
+              'stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
+          '</svg>';
+        host.title = label + ' · 24 h · mín ' + fmt(lo) + ' · máx ' + fmt(hi) + ' · ahora ' + fmt(last);
+      });
+    }
+
+    function rebindSparklines() {
+      // Start the cooldown only after cards were actually found. Setting it on
+      // the first pass — which runs while the design is still hydrating and no
+      // card exists yet — blocked every retry for two minutes.
+      if (Date.now() - sparkAt < HIST_MS) return;
+      var found = 0;
+      var leafs = leaves(), i;
+      for (i = 0; i < leafs.length; i++) {
+        var t = (leafs[i].textContent || '').trim();
+        var m = t.match(/^(UPS|PDU|FMPS)\s*\.(\d{2})$/);
+        if (!m) continue;
+        var dev = '172.16.101.' + m[2], name = SPARK_POINT[m[1]];
+        if (!name || !state.byKey[dev + '::' + name]) continue;
+
+        // The card is the nearest ancestor that is visibly a tile, not the row
+        // inside the bar list — a sparkline there would break that layout.
+        var card = leafs[i].parentElement, hops = 0;
+        while (card && hops < 4) {
+          var cs = getComputedStyle(card);
+          var r = card.getBoundingClientRect();
+          if (cs.borderRadius && parseFloat(cs.borderRadius) >= 8 && r.width > 120 && r.height > 44) break;
+          card = card.parentElement; hops++;
+        }
+        if (!card || hops >= 4) continue;
+        sparkFor(card, dev, t, name);
+        found++;
+      }
+      if (found) sparkAt = Date.now();
+    }
+
+    // ---- setpoints ----------------------------------------------------------
+    // Writes go to twin_writer through the server's /write/* proxy, which
+    // refuses anything arriving via the tunnel and holds the token itself. The
+    // panel therefore only appears where writing is actually possible, instead
+    // of showing controls that would fail.
+    //
+    // The two-step prepare/commit flow is the backend's guard against blind
+    // writes and is honoured literally: prepare shows CURRENT vs NEW, and
+    // nothing is sent until the operator confirms. A "medium"/"danger" point
+    // asks twice. After commit, `verified` decides what is reported — a
+    // timeout comes back verified:false and is shown as NOT confirmed, never
+    // as success.
+    var SP_STATE = { points: null, checked: false };
+
+    function spFetch(path, opts) {
+      var base = API.replace(/\/api$/, '');
+      return fetch(base + '/write' + path, opts || {}).then(function (r) {
+        return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; });
+      });
+    }
+
+    function riskChip(risk) {
+      var map = { safe: ['#00AE9E', 'SEGURO'], medium: ['#FFCA38', 'RIESGO MEDIO'], danger: ['#E82C2E', 'PELIGROSO'] };
+      var m = map[risk] || map.safe;
+      return '<span style="padding:3px 9px;border-radius:999px;font:500 8.5px/1 \'IBM Plex Mono\',monospace;' +
+        'letter-spacing:.1em;color:' + m[0] + ';border:1px solid ' + m[0] + '55;background:' + m[0] + '1f">' +
+        m[1] + '</span>';
+    }
+
+    function spDialog() {
+      var d = document.getElementById('__rwsp');
+      if (d) return d;
+      d = document.createElement('div');
+      d.id = '__rwsp';
+      d.style.cssText = 'position:fixed;inset:0;z-index:100001;display:none;align-items:center;' +
+        'justify-content:center;background:rgba(4,8,12,.74);backdrop-filter:blur(6px);padding:18px';
+      d.innerHTML =
+        '<div style="max-width:620px;width:100%;max-height:84vh;overflow:auto;border-radius:22px;' +
+          'background:linear-gradient(160deg,rgba(18,26,34,.98),rgba(10,16,22,.99));' +
+          'border:1px solid rgba(255,255,255,.16);box-shadow:0 30px 90px rgba(0,0,0,.6);padding:20px 22px">' +
+          '<div style="display:flex;align-items:center;gap:10px">' +
+            '<b style="font:500 14px/1.2 Outfit,sans-serif;color:#F2F6F9">Ajustes de equipo</b>' +
+            '<span style="font:400 9.5px/1 \'IBM Plex Mono\',monospace;color:rgba(242,246,249,.4)">' +
+              'REQUIEREN AUTORIZACIÓN</span>' +
+            '<button id="__rwspx" style="margin-left:auto;background:none;border:none;' +
+              'color:rgba(242,246,249,.6);font-size:20px;cursor:pointer;line-height:1">×</button>' +
+          '</div>' +
+          '<div id="__rwspbody" style="margin-top:14px"></div>' +
+        '</div>';
+      document.body.appendChild(d);
+      d.addEventListener('click', function (e) { if (e.target === d) d.style.display = 'none'; });
+      d.querySelector('#__rwspx').onclick = function () { d.style.display = 'none'; };
+      return d;
+    }
+
+    function renderPoint(pt) {
+      var wrap = document.createElement('div');
+      wrap.style.cssText = 'padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.05);' +
+        'border:1px solid rgba(255,255,255,.12);margin-bottom:10px';
+      var isEnum = pt.values && typeof pt.values === 'object';
+      var dom = pt.domain || {};
+      var ctrl = isEnum
+        ? '<select data-v style="padding:9px 12px;border-radius:10px;background:rgba(255,255,255,.08);' +
+            'border:1px solid rgba(255,255,255,.16);color:#F2F6F9;font:400 12.5px/1 Outfit,sans-serif">' +
+            Object.keys(pt.values).map(function (k) {
+              return '<option value="' + esc(String(pt.values[k])) + '">' + esc(k) + '</option>';
+            }).join('') + '</select>'
+        : '<input data-v type="number" ' +
+            (dom.min !== undefined ? 'min="' + dom.min + '" ' : '') +
+            (dom.max !== undefined ? 'max="' + dom.max + '" ' : '') +
+            'placeholder="nuevo valor" style="width:130px;padding:9px 12px;border-radius:10px;' +
+            'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);color:#F2F6F9;' +
+            'font:400 12.5px/1 \'IBM Plex Mono\',monospace">';
+
+      // A danger point cuts power to equipment. Say so in words next to the
+      // control, not only as a colour chip — the operator must know what the
+      // switch does before touching it.
+      var warn = pt.risk === 'danger'
+        ? '<div style="margin-top:7px;padding:8px 11px;border-radius:10px;background:rgba(232,44,46,.14);' +
+            'border:1px solid rgba(232,44,46,.45);font:400 11.5px/1.5 Outfit,sans-serif;color:#FF9C93">' +
+            'Ponerlo en <b>off</b> CORTA la corriente al equipo conectado a ' + esc(pt.label || pt.id) + '.' +
+          '</div>'
+        : '';
+      wrap.innerHTML =
+        '<div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">' +
+          '<span style="font:500 13px/1.35 Outfit,sans-serif;color:#F2F6F9">' + esc(pt.label || pt.id) + '</span>' +
+          riskChip(pt.risk) +
+        '</div>' + warn +
+        '<div style="font:400 10px/1.4 \'IBM Plex Mono\',monospace;color:rgba(242,246,249,.42);margin-top:4px">' +
+          esc(pt.device || '') + ' · ' + esc(pt.id) +
+          (dom.min !== undefined ? ' · rango ' + dom.min + '–' + dom.max + (dom.unit ? ' ' + dom.unit : '') : '') +
+        '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:11px;align-items:center;flex-wrap:wrap">' + ctrl +
+          '<button data-prep style="padding:9px 15px;border-radius:999px;border:1px solid rgba(0,144,232,.45);' +
+            'background:rgba(0,144,232,.2);color:#9FD8F7;font:500 12px/1 Outfit,sans-serif;cursor:pointer">' +
+            'Preparar cambio</button>' +
+        '</div>' +
+        '<div data-out style="margin-top:11px"></div>';
+
+      var out = wrap.querySelector('[data-out]');
+      wrap.querySelector('[data-prep]').onclick = function () {
+        var v = wrap.querySelector('[data-v]').value;
+        if (v === '') { out.textContent = 'Escribe un valor.'; return; }
+        out.innerHTML = '<span style="font:400 11.5px/1.5 Outfit,sans-serif;color:rgba(242,246,249,.6)">Preparando…</span>';
+        spFetch('/prepare', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id: pt.id, value: isNaN(Number(v)) ? v : Number(v) })
+        }).then(function (r) {
+          if (!r.ok) {
+            out.innerHTML = '<span style="color:#FF9C93;font:400 11.5px/1.5 Outfit,sans-serif">' +
+              esc(r.j.detail || r.j.error || ('error ' + r.status)) + '</span>';
+            return;
+          }
+          confirmStep(out, pt, r.j);
+        });
+      };
+      return wrap;
+    }
+
+    // The confirmation step states CURRENT -> NEW in words before anything is
+    // sent, which is the whole point of prepare/commit.
+    function confirmStep(out, pt, prep) {
+      var needsTwo = pt.risk === 'medium' || pt.risk === 'danger';
+      var armed = false;
+      out.innerHTML =
+        '<div style="padding:11px 13px;border-radius:12px;background:rgba(255,202,56,.10);' +
+          'border:1px solid rgba(255,202,56,.42)">' +
+          '<div style="font:500 9.5px/1 \'IBM Plex Mono\',monospace;letter-spacing:.1em;color:#FFCA38">' +
+            'CONFIRMA EL CAMBIO</div>' +
+          '<div style="font:500 14px/1.4 \'IBM Plex Mono\',monospace;color:#F2F6F9;margin-top:7px">' +
+            esc(String(prep.current)) + '  →  ' + esc(String(prep.to)) + '</div>' +
+          '<div style="font:400 11px/1.5 Outfit,sans-serif;color:rgba(242,246,249,.6);margin-top:5px">' +
+            esc(prep.will_set || pt.label) + ' · caduca en ' + (prep.expires_in || 120) + ' s</div>' +
+          (pt.risk === 'danger'
+            ? '<div style="font:500 12px/1.5 Outfit,sans-serif;color:#FF9C93;margin-top:7px">' +
+                'Vas a APAGAR ' + esc(pt.label || pt.id) + '. El equipo conectado perderá corriente.' +
+              '</div>'
+            : '') +
+          '<div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">' +
+            '<button data-go style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,202,56,.5);' +
+              'background:rgba(255,202,56,.2);color:#FFCA38;font:500 12px/1 Outfit,sans-serif;cursor:pointer">' +
+              (needsTwo ? 'Autorizar (1 de 2)' : 'Autorizar y aplicar') + '</button>' +
+            '<button data-cancel style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.18);' +
+              'background:rgba(255,255,255,.06);color:rgba(242,246,249,.7);font:500 12px/1 Outfit,sans-serif;' +
+              'cursor:pointer">Cancelar</button>' +
+          '</div>' +
+          '<div data-res style="font:400 11.5px/1.5 \'IBM Plex Mono\',monospace;margin-top:9px"></div>' +
+        '</div>';
+      var res = out.querySelector('[data-res]');
+      out.querySelector('[data-cancel]').onclick = function () { out.innerHTML = ''; };
+      out.querySelector('[data-go]').onclick = function () {
+        if (needsTwo && !armed) {
+          armed = true;
+          this.textContent = 'Confirmar de verdad (2 de 2)';
+          res.style.color = '#FFCA38';
+          res.textContent = 'Este punto es de riesgo ' + pt.risk + '. Pulsa otra vez para aplicarlo.';
+          return;
+        }
+        this.disabled = true;
+        res.style.color = 'rgba(242,246,249,.6)';
+        res.textContent = 'Aplicando…';
+        spFetch('/commit', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ptoken: prep.ptoken })
+        }).then(function (r) {
+          var j = r.j || {};
+          if (!r.ok) {
+            res.style.color = '#FF9C93';
+            res.textContent = 'No se aplicó: ' + (j.detail || j.error || ('error ' + r.status));
+            return;
+          }
+          // verified is the only thing that proves the device took the value.
+          if (j.set_ok && j.verified) {
+            res.style.color = '#7BE8DB';
+            res.textContent = 'Aplicado y verificado · antes ' + j.before + ' · ahora ' + j.after;
+          } else {
+            res.style.color = '#FFCA38';
+            res.textContent = 'NO CONFIRMADO. El equipo no devolvió el valor esperado' +
+              (j.after !== undefined ? ' (leyó ' + j.after + ')' : '') +
+              '. El transporte puede haber fallado; revisa antes de repetir.';
+          }
+        });
+      };
+    }
+
+    function openSetpoints() {
+      var d = spDialog();
+      d.style.display = 'flex';
+      var body = d.querySelector('#__rwspbody');
+      body.innerHTML = '<span style="font:400 12px/1.5 Outfit,sans-serif;color:rgba(242,246,249,.6)">Cargando…</span>';
+      spFetch('/writable').then(function (r) {
+        if (!r.ok) {
+          body.innerHTML = '<div style="font:400 12.5px/1.6 Outfit,sans-serif;color:#FF9C93">' +
+            esc(r.j.detail || r.j.error || ('error ' + r.status)) + '</div>';
+          return;
+        }
+        var pts = (r.j && r.j.points) || [];
+        body.innerHTML = '';
+        if (!pts.length) {
+          body.innerHTML = '<div style="font:400 12.5px/1.6 Outfit,sans-serif;color:rgba(242,246,249,.6)">' +
+            'No hay puntos habilitados para escritura.</div>';
+          return;
+        }
+        // Built from /writable every time: the allowlist grows on the backend
+        // and a hardcoded list would silently miss new points.
+        // Group by tier, safest first, each under a heading — 8 shutdown points
+        // mixed among thresholds is how the wrong one gets clicked.
+        var TIERS = [['safe', 'Seguros'], ['medium', 'Riesgo medio'], ['danger', 'Apagan equipo']];
+        for (var t = 0; t < TIERS.length; t++) {
+          var group = pts.filter(function (x) { return (x.risk || 'safe') === TIERS[t][0]; });
+          if (!group.length) continue;
+          var h = document.createElement('div');
+          h.style.cssText = 'font:500 9.5px/1 "IBM Plex Mono",monospace;letter-spacing:.12em;margin:14px 0 8px;' +
+            'color:' + (TIERS[t][0] === 'danger' ? '#FF9C93' : TIERS[t][0] === 'medium' ? '#FFCA38' : 'rgba(242,246,249,.45)');
+          h.textContent = TIERS[t][1].toUpperCase() + ' · ' + group.length;
+          body.appendChild(h);
+          for (var i = 0; i < group.length; i++) body.appendChild(renderPoint(group[i]));
+        }
+      });
+    }
+
+    // The entry point only exists where writes are possible. Probing once keeps
+    // a dead button off the public board.
+    function wireSetpoints() {
+      if (SP_STATE.checked) return;
+      SP_STATE.checked = true;
+      spFetch('/writable').then(function (r) {
+        if (!r.ok) return;                       // tunnel → 403 → no button
+        var btn = document.createElement('button');
+        btn.id = '__rwspbtn';
+        btn.textContent = 'Ajustes';
+        btn.style.cssText = 'position:fixed;right:14px;bottom:42px;z-index:99998;padding:10px 18px;' +
+          'border-radius:999px;border:1px solid rgba(0,144,232,.5);background:rgba(0,144,232,.22);' +
+          'color:#9FD8F7;font:500 12px/1 Outfit,sans-serif;cursor:pointer;backdrop-filter:blur(8px)';
+        btn.onclick = openSetpoints;
+        document.body.appendChild(btn);
+      });
+    }
+
+    // ---- Gemini panel -------------------------------------------------------
+    // The design ships a static "Hola Diego, ¿te ayudo?" card. It becomes a real
+    // assistant here: it reads the SAME live feed the board shows, asks Gemini
+    // through the server (which holds the key — the page never sees it), and
+    // renders the answer in a dialog.
+    //
+    // Any change it proposes is a PROPOSAL. Nothing is applied without the
+    // operator pressing Authorise, and even then it only goes through if a
+    // write path exists and is enabled; today the twin is read-only by design,
+    // so proposals are recorded, never executed.
+    var AI_BUSY = false;
+
+    function aiSnapshot() {
+      // A compact, factual briefing. Sending 1,387 raw points would cost tokens
+      // and bury the signal, so this is the fleet summary plus every anomaly.
+      var rows = state.rows, byDev = {}, alarms = [], stale = [];
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        if (/^u\d+_o\d+_/.test(r.name)) continue;              // per-outlet detail
+        var d = byDev[r.label] = byDev[r.label] || {};
+        if (r.value !== null) d[r.name] = r.value;
+        else if (r.text) d[r.name] = r.text;
+        if (r.name === 'alarmCount' && r.value > 0) alarms.push(r.label + ': ' + r.value);
+        var a = ageOf(r.ts);
+        if (a !== null && a > STALE_S && stale.indexOf(r.label) === -1) stale.push(r.label);
+      }
+      return {
+        equipos: byDev,
+        alarmas: alarms,
+        lecturas_viejas: stale,
+        frescura_s: state.freshest === null ? null : Math.round(state.freshest),
+        total_puntos: rows.length
+      };
+    }
+
+    function aiPrompt(question) {
+      return [
+        'Eres un asistente de operaciones de un homelab con equipos Panduit.',
+        'Responde en español neutro, breve y concreto. No inventes lecturas:',
+        'usa SOLO los datos de abajo. Si algo no está en los datos, dilo.',
+        '',
+        'Datos en vivo (JSON):',
+        JSON.stringify(aiSnapshot()),
+        '',
+        'Decodificación: UPS systemStatus 1=OK..6=crítica · FMPS systemStatus',
+        'es ModuleStatus, donde 2=ok y 3=notok (en este equipo el notok se debe',
+        'a slots vacíos, no a falla) · batteryState 2=normal · timeRemaining',
+        '"sentinel" significa que la UPS está en línea, sin descarga.',
+        '',
+        'Pregunta del operador: ' + question,
+        '',
+        'Si propones un cambio de configuración (un setpoint), escríbelo al final',
+        'en una línea aparte con el formato exacto:',
+        'PROPUESTA: <equipo> | <parámetro> | <valor actual> -> <valor propuesto> | <motivo en una frase>',
+        'No propongas cambios si no hay evidencia en los datos.'
+      ].join('\n');
+    }
+
+    function aiDialog() {
+      var d = document.getElementById('__rwai');
+      if (d) return d;
+      d = document.createElement('div');
+      d.id = '__rwai';
+      d.style.cssText = 'position:fixed;inset:0;z-index:100000;display:none;align-items:center;' +
+        'justify-content:center;background:rgba(4,8,12,.72);backdrop-filter:blur(6px);padding:18px';
+      d.innerHTML =
+        '<div style="max-width:640px;width:100%;max-height:82vh;overflow:auto;border-radius:22px;' +
+          'background:linear-gradient(160deg,rgba(18,26,34,.98),rgba(10,16,22,.99));' +
+          'border:1px solid rgba(255,255,255,.16);box-shadow:0 30px 90px rgba(0,0,0,.6);padding:20px 22px">' +
+          '<div style="display:flex;align-items:center;gap:10px">' +
+            '<div style="width:26px;height:26px;border-radius:9px;background:#00AE9E;display:flex;' +
+              'align-items:center;justify-content:center;font:600 11px/1 Outfit,sans-serif;color:#04161C">AI</div>' +
+            '<b style="font:500 14px/1.2 Outfit,sans-serif;color:#F2F6F9">Asistente Gemini</b>' +
+            '<span id="__rwaimodel" style="margin-left:auto;font:400 9.5px/1 \'IBM Plex Mono\',monospace;' +
+              'color:rgba(242,246,249,.4)"></span>' +
+            '<button id="__rwaix" style="margin-left:10px;background:none;border:none;color:rgba(242,246,249,.6);' +
+              'font-size:20px;cursor:pointer;line-height:1">×</button>' +
+          '</div>' +
+          '<div id="__rwaibody" style="margin-top:14px;font:400 13px/1.6 Outfit,sans-serif;' +
+            'color:rgba(242,246,249,.86);white-space:pre-wrap"></div>' +
+          '<div id="__rwaiprop"></div>' +
+          '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">' +
+            '<input id="__rwaiq" placeholder="Pregunta algo sobre el homelab…" ' +
+              'style="flex:1 1 240px;min-width:0;padding:10px 13px;border-radius:999px;background:rgba(255,255,255,.07);' +
+              'border:1px solid rgba(255,255,255,.14);color:#F2F6F9;font:400 12.5px/1 Outfit,sans-serif;outline:none">' +
+            '<button id="__rwaigo" style="padding:10px 18px;border-radius:999px;border:1px solid rgba(0,174,158,.45);' +
+              'background:rgba(0,174,158,.22);color:#7BE8DB;font:500 12px/1 Outfit,sans-serif;cursor:pointer">Preguntar</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(d);
+      d.addEventListener('click', function (e) { if (e.target === d) d.style.display = 'none'; });
+      d.querySelector('#__rwaix').onclick = function () { d.style.display = 'none'; };
+      d.querySelector('#__rwaigo').onclick = function () { aiAsk(d.querySelector('#__rwaiq').value); };
+      d.querySelector('#__rwaiq').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') aiAsk(this.value);
+      });
+      return d;
+    }
+
+    // A proposal is rendered as an explicit authorisation step. Nothing is sent
+    // to any device until the operator presses the button, and the current build
+    // records the decision rather than writing — the twin exposes no write path.
+    function renderProposal(line) {
+      var host = document.getElementById('__rwaiprop');
+      host.innerHTML = '';
+      var m = line.match(/^PROPUESTA:\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+)$/);
+      if (!m) return;
+      var box = document.createElement('div');
+      box.style.cssText = 'margin-top:14px;padding:13px 15px;border-radius:14px;' +
+        'background:rgba(255,202,56,.10);border:1px solid rgba(255,202,56,.42)';
+      box.innerHTML =
+        '<div style="font:500 9.5px/1 \'IBM Plex Mono\',monospace;letter-spacing:.12em;color:#FFCA38">' +
+          'CAMBIO PROPUESTO · REQUIERE AUTORIZACIÓN</div>' +
+        '<div style="font:500 13.5px/1.4 Outfit,sans-serif;color:#F2F6F9;margin-top:8px">' +
+          esc(m[1]) + ' · ' + esc(m[2]) + '</div>' +
+        '<div style="font:400 12.5px/1.5 \'IBM Plex Mono\',monospace;color:rgba(242,246,249,.75);margin-top:4px">' +
+          esc(m[3]) + '</div>' +
+        '<div style="font:400 12px/1.5 Outfit,sans-serif;color:rgba(242,246,249,.65);margin-top:6px">' +
+          esc(m[4]) + '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">' +
+          '<button data-ok style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,202,56,.5);' +
+            'background:rgba(255,202,56,.2);color:#FFCA38;font:500 12px/1 Outfit,sans-serif;cursor:pointer">Autorizar</button>' +
+          '<button data-no style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.18);' +
+            'background:rgba(255,255,255,.06);color:rgba(242,246,249,.7);font:500 12px/1 Outfit,sans-serif;cursor:pointer">Descartar</button>' +
+        '</div>' +
+        '<div data-note style="font:400 11px/1.5 \'IBM Plex Mono\',monospace;color:rgba(242,246,249,.45);margin-top:10px"></div>';
+      host.appendChild(box);
+      var note = box.querySelector('[data-note]');
+      box.querySelector('[data-ok]').onclick = function () {
+        // Honest about what actually happens: the twin has no write path today.
+        note.textContent = 'Autorizado por el operador. NO se envió al equipo: el twin está en modo ' +
+          'solo lectura y no expone escritura. Queda registrado para aplicarlo manualmente.';
+        note.style.color = '#7BE8DB';
+        this.disabled = true; box.querySelector('[data-no]').disabled = true;
+      };
+      box.querySelector('[data-no]').onclick = function () {
+        note.textContent = 'Propuesta descartada.'; this.disabled = true;
+        box.querySelector('[data-ok]').disabled = true;
+      };
+    }
+
+    function aiAsk(question) {
+      if (AI_BUSY) return;
+      question = (question || '').trim();
+      if (!question) question = '¿Qué es lo más importante que debo revisar ahora mismo?';
+      var d = aiDialog();
+      d.style.display = 'flex';
+      var body = d.querySelector('#__rwaibody');
+      document.getElementById('__rwaiprop').innerHTML = '';
+      body.textContent = 'Consultando…';
+      AI_BUSY = true;
+      fetch(API.replace(/\/api$/, '') + '/ai/ask', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt: aiPrompt(question) })
+      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          AI_BUSY = false;
+          if (!res.ok) {
+            body.textContent = 'No se pudo consultar a Gemini: ' +
+              (res.j.detail || res.j.error || 'error desconocido') +
+              (res.j.error === 'sin clave' ? '\n\nEl servidor no tiene GEMINI_API_KEY definida.' : '');
+            return;
+          }
+          var text = res.j.text || '(respuesta vacía)';
+          d.querySelector('#__rwaimodel').textContent = res.j.model || '';
+          var prop = text.split('\n').filter(function (l) { return /^PROPUESTA:/.test(l.trim()); })[0];
+          body.textContent = text.replace(/^PROPUESTA:.*$/m, '').trim();
+          if (prop) renderProposal(prop.trim());
+        })
+        .catch(function (e) { AI_BUSY = false; body.textContent = 'Error de red: ' + e.message; });
+    }
+
+    // Turn the design's static assistant card into the entry point.
+    function wireAssistant() {
+      var spans = document.getElementsByTagName('span'), i, card = null;
+      for (i = 0; i < spans.length; i++) {
+        if (/¿te ayudo\?/i.test(spans[i].textContent || '')) { card = spans[i]; break; }
+      }
+      if (!card) return;
+      var host = card, hops = 0;
+      while (host && hops < 4 && !/22px|18px|26px/.test(getComputedStyle(host).borderRadius)) {
+        host = host.parentElement; hops++;
+      }
+      if (!host || host.hasAttribute('data-rwai-wired')) return;
+      host.setAttribute('data-rwai-wired', '1');
+      host.style.cursor = 'pointer';
+      host.title = 'Abrir el asistente Gemini';
+      host.addEventListener('click', function () { aiAsk(''); });
+
+      if (!host.querySelector('[data-rwaihint]')) {
+        var hint = document.createElement('div');
+        hint.setAttribute('data-rwaihint', '1');
+        hint.style.cssText = 'margin-top:10px;font:500 9.5px/1 "IBM Plex Mono",monospace;' +
+          'letter-spacing:.1em;color:rgba(4,22,28,.62)';
+        hint.textContent = 'TOCA PARA PREGUNTAR · GEMINI LEE LOS DATOS EN VIVO';
+        host.appendChild(hint);
+      }
     }
 
     // --- freshness banner ---------------------------------------------------
@@ -180,6 +1003,12 @@
           state.error = null;
           index(rows);
           rebindDeviceRows();
+          rebindByContext();
+          rebindCounters();
+          rebindCharts();
+          rebindSparklines();
+          wireAssistant();
+          wireSetpoints();
           banner();
         })
         .catch(function (e) {
@@ -192,7 +1021,7 @@
     // The design runtime hydrates and re-renders; rebinding runs on a light
     // interval so values survive view switches, while the fetch keeps its own
     // slower cadence matched to the collector's 30 s write cycle.
-    setInterval(function () { try { if (state.rows.length) { rebindDeviceRows(); banner(); } } catch (e) {} }, 1000);
+    setInterval(function () { try { if (state.rows.length) { rebindDeviceRows(); rebindByContext(); rebindCounters(); rebindCharts(); rebindSparklines(); wireAssistant(); banner(); } } catch (e) { window.__rwErr = String(e && e.stack || e); } }, 1000);
     setInterval(tick, PERIOD_MS);
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', tick);
     else setTimeout(tick, 800);
@@ -353,6 +1182,14 @@
 
       //   -- cards ---------------------------------------------------------
       '  [data-rw="cell"]{min-height:0!important;padding:16px 14px!important}',
+      // A grid item defaults to min-width:auto, so its widest child sets a floor
+      // and the card refuses to shrink. Without this the cards sat 7-53px wider
+      // than the screen even after their contents were made to wrap.
+      '  [data-rw="grid"]>*,[data-rw="cell"]{min-width:0!important;max-width:100%!important}',
+      '  [data-rw="cell"] *{max-width:100%}',
+      // Camera tiles need a viewing height of their own: the live feed and the
+      // placeholders alike were collapsing to a 22px strip.
+      '  [data-rwcamhost="1"]{min-height:190px!important;position:relative!important}',
       '  [data-rwfill="1"]{min-height:210px!important}',
       '  [data-rw="chips"]>*{flex:1 0 40px!important;min-width:40px!important}',
       // Keep the small mono labels on one line; wrapping them mid-value is what
@@ -627,6 +1464,14 @@
         // diagram's min-width. Four consecutive passes (~1s) means a real
         // diagram that cannot compress, not a layout mid-flight.
         var seen = +(c.getAttribute('data-rwover') || 0);
+        // A card holding the live camera is never a diagram: the video fills its
+        // tile, so the min-width meant for rigid schematics pushed the whole
+        // video wall 273px past a 390px screen.
+        if (c.querySelector('img[data-rwcam]') || c.querySelector('[data-rwcamhost]')) {
+          c.removeAttribute('data-rwscroll');
+          c.removeAttribute('data-rwover');
+          continue;
+        }
         if (over) {
           c.setAttribute('data-rwover', ++seen);
           if (seen >= 4) c.setAttribute('data-rwscroll', '1');
@@ -778,6 +1623,12 @@
         }
       }
       target.insertBefore(img, target.firstChild);
+      // The tile collapses to ~22px once the view stacks on a phone, which left
+      // the feed as an invisible sliver. Tag it so the phone rules can floor it.
+      // Tag ONLY the tile. Tagging its parent too gave a large container a
+      // min-height and position:relative, which pushed the PTZ and events
+      // panels on top of the video wall on a phone.
+      target.setAttribute('data-rwcamhost', '1');
 
       // Hide the "SEÑAL DE VIDEO" caption of THIS tile only once frames arrive;
       // if the relay is down the caption must stay rather than a black hole.
@@ -797,13 +1648,23 @@
     function startPolling(img, tile) {
       if (window.__rwCamTimer) return;
       var busy = false;
+      // Preload into a detached Image and only swap the src once the bytes are
+      // decoded, so the visible element never shows a half-loaded frame.
+      // (A two-element cross-fade was tried and removed: the design runtime
+      // re-renders this tile, which orphaned the buffer references and stopped
+      // the loop entirely — 12 of 12 samples blank.)
       window.__rwCamTimer = setInterval(function () {
-        if (busy || document.hidden || !img.isConnected) return;
-        var b = tile.getBoundingClientRect();
+        var live = document.querySelector('img[data-rwcam]');
+        if (busy || document.hidden || !live) return;
+        var b = live.getBoundingClientRect();
         if (b.bottom < -50 || b.top > innerHeight + 50 || b.width === 0) return;
         busy = true;
         var next = new Image();
-        next.onload = function () { img.src = next.src; busy = false; };
+        var done = function () { live.src = next.src; busy = false; };
+        next.onload = function () {
+          // decode() keeps the swap off the paint path where supported.
+          if (next.decode) next.decode().then(done, done); else done();
+        };
         next.onerror = function () { busy = false; };
         next.src = CAM_SNAP + '&t=' + Date.now();
       }, CAM_MS);

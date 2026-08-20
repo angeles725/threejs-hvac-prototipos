@@ -31,6 +31,18 @@ const API = arg('api', 'http://127.0.0.1:8123').replace(/\/$/, '');
 // machine through the tunnel, so the stream is proxied under this origin too.
 const CAM = arg('cam', 'http://127.0.0.1:8124').replace(/\/$/, '');
 const DIR = path.resolve(arg('dir', HERE));
+// Read from the environment, never from a file inside the repo, so the key
+// cannot be committed by accident.
+const GEMINI_KEY = process.env.GEMINI_API_KEY || arg('gemini-key', '');
+const GEMINI_MODEL = process.env.GEMINI_MODEL || arg('gemini-model', 'gemini-2.0-flash');
+const AI_PER_MIN = Number(arg('ai-per-min', 12));
+let aiHits = [];
+const WRITER = process.env.TWIN_WRITER || arg('writer', 'http://127.0.0.1:8125').replace(/\/$/, '');
+const TOKEN_PATH = process.env.TWIN_WRITE_TOKEN_FILE ||
+  arg('writer-token-file', '/mnt/c/Users/equipo/twin-db/.writer/writer.token');
+function readWriteToken() {
+  try { return fs.readFileSync(TOKEN_PATH, 'utf8').trim(); } catch { return ''; }
+}
 // Only these collector routes are reachable through the tunnel. The collector
 // also accepts POST /recommendation; it is deliberately NOT proxied, so nothing
 // reached from outside can write into the twin.
@@ -77,6 +89,119 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(502, { 'content-type': 'application/json' })
          .end(JSON.stringify({ error: 'collector unreachable', detail: String(e.message || e) }));
     }
+    return;
+  }
+
+  // ---- setpoint writes (LOCAL ONLY) ----------------------------------------
+  // twin_writer runs on :8125 and can change real equipment. The backend was
+  // explicit that it must never leave the machine, and this board is published
+  // openly, so requests that arrived through the tunnel are refused here.
+  // cloudflared always stamps cf-ray / cf-connecting-ip, so their presence is
+  // the tell — a visitor cannot strip them, they are added by the edge.
+  // The write token is read from disk by this server and never sent to a page.
+  if (url.pathname.startsWith('/write/')) {
+    const viaTunnel = !!(req.headers['cf-ray'] || req.headers['cf-connecting-ip']);
+    const peer = req.socket.remoteAddress || '';
+    const localPeer = peer.includes('127.0.0.1') || peer === '::1' || peer.includes('::ffff:127.0.0.1');
+    if (viaTunnel || !localPeer) {
+      log('write REFUSED', url.pathname, viaTunnel ? 'via tunnel' : 'peer ' + peer);
+      res.writeHead(403, { 'content-type': 'application/json' }).end(JSON.stringify({
+        error: 'solo desde la laptop',
+        detail: 'Los cambios de setpoint no se exponen por el túnel. Abre el tablero en http://127.0.0.1:' + PORT + ' para operarlos.'
+      }));
+      return;
+    }
+    const token = readWriteToken();
+    if (!token) {
+      res.writeHead(503, { 'content-type': 'application/json' })
+         .end(JSON.stringify({ error: 'sin token', detail: 'no se pudo leer writer.token' }));
+      return;
+    }
+    const sub = url.pathname.replace(/^\/write/, '') || '/';
+    if (!['/writable', '/prepare', '/commit', '/audit'].includes(sub)) {
+      res.writeHead(404).end('{"error":"ruta no permitida"}'); return;
+    }
+    let body = '';
+    req.on('data', c => { body += c; if (body.length > 20000) req.destroy(); });
+    req.on('end', async () => {
+      try {
+        const ctl = new AbortController();
+        const t = setTimeout(() => ctl.abort(), 20000);
+        const up = await fetch(WRITER + sub + (url.search || ''), {
+          method: req.method, signal: ctl.signal,
+          headers: { 'content-type': 'application/json', 'X-Twin-Write-Token': token },
+          body: req.method === 'GET' ? undefined : (body || '{}')
+        });
+        clearTimeout(t);
+        const txt = await up.text();
+        res.writeHead(up.status, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(txt);
+      } catch (e) {
+        log('write FAIL', sub, e.message);
+        res.writeHead(502, { 'content-type': 'application/json' })
+           .end(JSON.stringify({ error: 'twin_writer no responde', detail: String(e.message || e) }));
+      }
+    });
+    return;
+  }
+
+  // ---- Gemini proxy --------------------------------------------------------
+  // The API key lives HERE, never in the page. This board is public, so a key
+  // embedded in the HTML would be readable by every visitor and spendable on
+  // the owner's account. The browser posts a question, the server attaches the
+  // key and forwards it to Google.
+  if (url.pathname === '/ai/ask') {
+    if (req.method !== 'POST') { res.writeHead(405).end('only POST'); return; }
+    if (!GEMINI_KEY) {
+      res.writeHead(503, { 'content-type': 'application/json' })
+         .end(JSON.stringify({ error: 'sin clave', detail: 'GEMINI_API_KEY no está definida en el servidor' }));
+      return;
+    }
+    // The endpoint is reachable by anyone holding the public URL, so it is rate
+    // limited: without this, one visitor could drain the account's quota.
+    var now = Date.now();
+    aiHits = aiHits.filter(t => now - t < 60000);
+    if (aiHits.length >= AI_PER_MIN) {
+      res.writeHead(429, { 'content-type': 'application/json' })
+         .end(JSON.stringify({ error: 'demasiadas consultas', detail: `límite ${AI_PER_MIN}/min` }));
+      return;
+    }
+    aiHits.push(now);
+
+    let body = '';
+    req.on('data', c => { body += c; if (body.length > 200_000) req.destroy(); });
+    req.on('end', async () => {
+      try {
+        const ask = JSON.parse(body || '{}');
+        const prompt = String(ask.prompt || '').slice(0, 20000);
+        if (!prompt) { res.writeHead(400).end('{"error":"prompt vacío"}'); return; }
+        const ctl = new AbortController();
+        const t = setTimeout(() => ctl.abort(), 30000);
+        const up = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+          { method: 'POST', signal: ctl.signal,
+            headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_KEY },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.2, maxOutputTokens: 700 }
+            }) });
+        clearTimeout(t);
+        const j = await up.json();
+        if (!up.ok) {
+          log('gemini HTTP', up.status, JSON.stringify(j).slice(0, 160));
+          res.writeHead(up.status, { 'content-type': 'application/json' })
+             .end(JSON.stringify({ error: 'gemini rechazó la consulta', status: up.status,
+                                   detail: (j.error && j.error.message) || '' }));
+          return;
+        }
+        const text = ((j.candidates || [])[0]?.content?.parts || []).map(x => x.text || '').join('').trim();
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+           .end(JSON.stringify({ text, model: GEMINI_MODEL }));
+      } catch (e) {
+        log('gemini FAIL', e.message);
+        res.writeHead(502, { 'content-type': 'application/json' })
+           .end(JSON.stringify({ error: 'no se pudo consultar a Gemini', detail: String(e.message || e) }));
+      }
+    });
     return;
   }
 
@@ -165,4 +290,6 @@ server.listen(PORT, '127.0.0.1', () => {
   log(`  http://127.0.0.1:${PORT}/api/current → proxy a ${API}`);
   log(`  rutas permitidas: ${[...ALLOW].join(' ')} (solo GET)`);
   log(`  http://127.0.0.1:${PORT}/cam/stream → proxy a ${CAM}`);
+  log(`  escritura: ${readWriteToken() ? 'token OK · ' + WRITER + ' · SOLO desde 127.0.0.1' : 'sin token (' + TOKEN_PATH + ')'}`);
+  log(`  Gemini: ${GEMINI_KEY ? 'clave presente · modelo ' + GEMINI_MODEL + ' · ' + AI_PER_MIN + '/min' : 'SIN CLAVE (define GEMINI_API_KEY)'}`);
 });
