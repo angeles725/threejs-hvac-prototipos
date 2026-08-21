@@ -61,6 +61,23 @@ const ductMesh = new THREE.Mesh(dg, new THREE.MeshStandardMaterial({
   emissive:0x0d3238, emissiveIntensity:.25 }));
 scene.add(ductMesh);
 
+// v5: closed footprints as SOLID boxes at true MRR width (B14) — length×h×width, rotated by MRR angle.
+// rotation.y = box.ang works with the mapZ flip: the raw long-axis heading maps straight to the Y-rot.
+const boxData = data.boxes || [];
+const boxMesh = new THREE.InstancedMesh(
+  new THREE.BoxGeometry(1,1,1),
+  new THREE.MeshStandardMaterial({ color:0x37a9ba, metalness:.5, roughness:.38,
+    emissive:0x0d3238, emissiveIntensity:.2 }),
+  boxData.length || 1);
+{ const dummy = new THREE.Object3D();
+  for (let i=0;i<boxData.length;i++) { const b=boxData[i], h=b.h||H;
+    dummy.position.set(mapX(b.x), b.z + h/2, mapZ(b.y));
+    dummy.rotation.set(0, b.ang, 0);
+    dummy.scale.set(b.L, h, b.w);
+    dummy.updateMatrix(); boxMesh.setMatrixAt(i, dummy.matrix); }
+  boxMesh.instanceMatrix.needsUpdate = true; }
+scene.add(boxMesh);
+
 // round takeoffs
 const roundGroup = new THREE.Group();
 const rMat = new THREE.MeshStandardMaterial({ color:0xe6a13c, roughness:.5, metalness:.3 });
@@ -103,12 +120,12 @@ const ctxLines = new THREE.LineSegments(cg, new THREE.LineBasicMaterial({ color:
 scene.add(ctxLines);
 
 const bind = (id, obj) => { const el=document.getElementById(id); if(el) el.addEventListener('change', e => obj.visible = e.target.checked); };
-bind('t_duct', ductMesh); bind('t_round', roundGroup); bind('t_term', termGroup);
+bind('t_duct', ductMesh); bind('t_duct', boxMesh); bind('t_round', roundGroup); bind('t_term', termGroup);
 bind('t_grid', gridGroup); bind('t_ctx', ctxLines); bind('t_ahu', ahuGroup);
 
 const stats = document.getElementById('stats');
 if (stats) stats.innerHTML =
-  `${data.ducts.length.toLocaleString()} tramos de ducto · ${data.rounds.length} tomas · `+
+  `${(data.ducts.length+boxData.length).toLocaleString()} tramos de ducto (${boxData.length.toLocaleString()} sólidos) · ${data.rounds.length} tomas · `+
   `${data.terminals.length} terminales · ${Object.keys(F.gridX).length} ejes<br>`+
   `Piso ${W.toFixed(0)}×${D.toFixed(0)} m · ducto @ BOD ${F.bod_median} m · unidad certificada 1 m`;
 

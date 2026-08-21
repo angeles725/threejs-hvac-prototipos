@@ -65,10 +65,13 @@ la leyenda enciende/apaga cada capa.
 
 - **Encuadre por defecto**: la cámara alta subvende la altura variable; un ángulo más rasante
   (o un preset lateral) la haría legible de entrada.
-- **Ancho por-ducto** desde la etiqueta W″ (hoy el ducto extruye el contorno dibujado tal cual;
-  la altura ya viene de la etiqueta, el ancho seguiría el emparejamiento robusto B6 §6.4).
+- **Ancho de los tramos de doble-línea abierta**: v5 da ancho real solo a los footprints CERRADOS
+  (~1,493, vía rectángulo de área mínima, B14); los ~24,873 tramos de doble-línea abierta siguen como
+  muros-contorno y esperan el emparejamiento de bordes B6 §6.4.
 - **Massing del AHU** con footprint medido del cúmulo (hoy son cajas nominales en las 2 zonas).
 
-## Hecho (v4)
+## Hecho
 
-- **Altura por-ducto** desde la etiqueta `W"xH"` (B8 §8.3), reemplaza la altura fija de 0.42 m.
+- **v4 — Altura por-ducto** desde la etiqueta `W"xH"` (B8 §8.3), reemplaza la altura fija de 0.42 m.
+- **v5 — Ancho por-ducto (parcial)**: los footprints cerrados se rinden como **cajas sólidas** al ancho
+  real de su rectángulo de área mínima (B14, piso 0.13 m para conservar el 6″); ~1,493 tramos.

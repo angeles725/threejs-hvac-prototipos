@@ -25,7 +25,63 @@ RECT = re.compile(r'(\d{1,2})"\s*[xX]\s*(\d{1,2})"')
 # B8 §8.3: the nearest label within SNAP_R metres owns a run's height; beyond it, fall back to the
 # labeled median. 2.5 m covers ~83% of drawn duct length (median run→label distance is 1.56 m).
 SNAP_R = 2.5
+# v5: a closed duct footprint becomes a solid box sized by its minimum-area rectangle (B14). The width
+# floor is 0.13 m (keeps 6" ducts; rejects text-glyph closed polys at 25-75 mm — B14 §14.2).
+BOX_WMIN, BOX_WMAX, BOX_LMAX = 0.13, 2.0, 60.0
 clean = lambda t: re.sub(r'[{}]', '', re.sub(r'\\[A-Za-z][^;]*;', '', t)).strip()
+
+
+def _hull(pts):
+    pts = sorted(set(pts))
+    if len(pts) < 3:
+        return pts
+    def cross(o, a, b):
+        return (a[0]-o[0])*(b[1]-o[1]) - (a[1]-o[1])*(b[0]-o[0])
+    lo = []
+    for p in pts:
+        while len(lo) >= 2 and cross(lo[-2], lo[-1], p) <= 0:
+            lo.pop()
+        lo.append(p)
+    up = []
+    for p in reversed(pts):
+        while len(up) >= 2 and cross(up[-2], up[-1], p) <= 0:
+            up.pop()
+        up.append(p)
+    return lo[:-1] + up[:-1]
+
+
+def mrr(pts):
+    """Minimum-area rectangle (B14): (width, length, cx, cy, angle) — angle = long-axis heading."""
+    h = _hull(pts)
+    if len(h) < 3:
+        return None
+    best = None
+    n = len(h)
+    for i in range(n):
+        ax, ay = h[i]; bx, by = h[(i+1) % n]
+        ex, ey = bx-ax, by-ay
+        Ln = math.hypot(ex, ey)
+        if Ln < 1e-9:
+            continue
+        ux, uy = ex/Ln, ey/Ln
+        vx, vy = -uy, ux
+        us = [(px-ax)*ux + (py-ay)*uy for px, py in h]
+        vs = [(px-ax)*vx + (py-ay)*vy for px, py in h]
+        umin, umax = min(us), max(us)
+        vmin, vmax = min(vs), max(vs)
+        w, d = umax-umin, vmax-vmin
+        area = w*d
+        if best is None or area < best[0]:
+            uc, vc = (umin+umax)/2, (vmin+vmax)/2
+            cx, cy = ax+uc*ux+vc*vx, ay+uc*uy+vc*vy
+            best = (area, w, d, cx, cy, ux, uy, vx, vy)
+    _, w, d, cx, cy, ux, uy, vx, vy = best
+    if w >= d:
+        width, length, angx, angy = d, w, ux, uy
+    else:
+        width, length, angx, angy = w, d, vx, vy
+    return (round(width, 3), round(length, 3), round(cx, 3), round(cy, 3),
+            round(math.atan2(angy, angx), 4))
 
 
 def load(k):
@@ -60,6 +116,7 @@ def nearest_bod(x, y, bod, default):
 
 def main():
     ducts, rounds, terminals, context = [], [], [], []
+    boxes = []    # v5: closed footprints as solid MRR boxes {x,y,w,L,ang,z} (B14)
     rlabels = []  # (x, y, w_m, h_m) rectangular W"xH" section labels, A-frame
     gridX = {}
     allx, ally = [], []
@@ -107,8 +164,16 @@ def main():
                         continue
                     cy = sum(q[1] for q in p) / len(p)
                     z = nearest_bod(cx, cy, bod, med)
-                    ducts.append({"p": p, "z": round(z, 2)})
                     allx += [q[0] for q in p]; ally += [q[1] for q in p]
+                    # v5: a closed footprint with a duct-sized MRR width → solid box, not outline walls
+                    if e.closed and len(p) >= 3:
+                        m = mrr(p)
+                        if m and BOX_WMIN <= m[0] <= BOX_WMAX and m[1] <= BOX_LMAX:
+                            w, L, bx, by, ang = m
+                            boxes.append({"x": bx, "y": by, "w": w, "L": L,
+                                          "ang": ang, "z": round(z, 2)})
+                            continue
+                    ducts.append({"p": p, "z": round(z, 2)})
                 elif e.dxftype() == "CIRCLE":
                     x = e.dxf.center.x + dx
                     if not (lo <= x < hi):
@@ -135,11 +200,7 @@ def main():
     grid = defaultdict(list)
     for i, (lx, ly, _, _) in enumerate(rlabels):
         grid[(int(lx // SNAP_R), int(ly // SNAP_R))].append(i)
-    labeled = 0
-    for d in ducts:
-        p = d["p"]
-        cx = sum(q[0] for q in p) / len(p)
-        cy = sum(q[1] for q in p) / len(p)
+    def assign_h(cx, cy):
         gi, gj = int(cx // SNAP_R), int(cy // SNAP_R)
         best, bh = SNAP_R * SNAP_R, None
         for a in range(gi - 1, gi + 2):
@@ -149,11 +210,17 @@ def main():
                     dd = (lx - cx) ** 2 + (ly - cy) ** 2
                     if dd < best:
                         best, bh = dd, lh
-        if bh is not None:
-            d["h"] = round(bh, 3)
-            labeled += 1
-        else:
-            d["h"] = h_fallback
+        return (round(bh, 3), True) if bh is not None else (h_fallback, False)
+
+    labeled = 0
+    for d in ducts:
+        p = d["p"]
+        d["h"], lab = assign_h(sum(q[0] for q in p) / len(p),
+                               sum(q[1] for q in p) / len(p))
+        labeled += lab
+    for b in boxes:
+        b["h"], lab = assign_h(b["x"], b["y"])
+        labeled += lab
 
     # floor extent from grid + duct envelope (B2)
     xs = sorted(gridX.values())
@@ -168,15 +235,16 @@ def main():
                  "provenance": "ducts+rounds+terminals=CERT; context=INFER traced; "
                                "z=BOD tags; h=W\"xH\" label (B8 §8.3), nearest within 2.5 m else median"},
         "floor": floor,
-        "ducts": ducts, "rounds": rounds, "terminals": terminals, "context": context,
+        "ducts": ducts, "boxes": boxes, "rounds": rounds,
+        "terminals": terminals, "context": context,
     }
     with open(OUT, "w") as f:
         json.dump(out, f, separators=(",", ":"))
     print(f"wrote {OUT}")
-    print(f"  ducts={len(ducts)} rounds={len(rounds)} terminals={len(terminals)} "
-          f"context={len(context)} grid_axes={len(gridX)}")
-    print(f"  rect labels={len(rlabels)} · ducts with a labeled height={labeled} "
-          f"({100*labeled/len(ducts):.0f}% by count) · fallback h={h_fallback} m")
+    print(f"  ducts(walls)={len(ducts)} boxes(MRR solid)={len(boxes)} rounds={len(rounds)} "
+          f"terminals={len(terminals)} context={len(context)} grid_axes={len(gridX)}")
+    print(f"  rect labels={len(rlabels)} · runs with a labeled height={labeled} "
+          f"({100*labeled/(len(ducts)+len(boxes)):.0f}% by count) · fallback h={h_fallback} m")
     print(f"  floor X[{floor['xmin']},{floor['xmax']}] Y[{floor['ymin']},{floor['ymax']}] "
           f"({floor['xmax']-floor['xmin']:.0f}x{floor['ymax']-floor['ymin']:.0f} m)")
     print(f"  terminals by type: {dict(Counter(t['t'] for t in terminals))}")
