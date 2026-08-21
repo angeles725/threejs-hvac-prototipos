@@ -4,7 +4,14 @@
 set -e
 cd "$(dirname "$0")"
 # 1. regenerate the data layer from the DXF (read-only)
-python3 extract-floor.py /home/cristian/investigacion/COB-IM2/raw cob-im2-floor.json
+#    the certified corpus keeps only .dwg; convert to .dxf with libredwg if needed.
+RAW="/home/cristian/investigacion/COB-IM2/raw"
+DXF="$RAW"
+if ! ls "$RAW"/14A.dxf >/dev/null 2>&1; then
+  DXF="$(mktemp -d)"
+  for k in 14A 14B 14C; do dwg2dxf -o "$DXF/$k.dxf" "$RAW/$k.dwg"; done
+fi
+python3 extract-floor.py "$DXF" cob-im2-floor.json
 # 2. bundle the viewer (app.mjs + vendored three) into one import-free ESM
 npx --yes esbuild@0.19.11 app.mjs --bundle --format=esm \
   --alias:three=./vendor/three.module.js --outfile=/tmp/cob-bundle.js --log-level=warning

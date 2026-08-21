@@ -41,18 +41,18 @@ for (const gx of Object.values(F.gridX)) {
 }
 scene.add(gridGroup);
 
-// ducts: solid extruded walls (merged mesh)
-const H = 0.42;
+// ducts: solid extruded walls (merged mesh); height is per-duct from its W"xH" label (B8)
+const H = 0.30;                          // fallback when a run carries no d.h
 const pos = [], nor = [];
-const pushQuad = (ax,az,bx,bz,z) => {
-  const y0=z, y1=z+H;
+const pushQuad = (ax,az,bx,bz,z,h) => {
+  const y0=z, y1=z+h;
   const A0=[ax,y0,az],B0=[bx,y0,bz],B1=[bx,y1,bz],A1=[ax,y1,az];
   let nx=-(bz-az), nz=(bx-ax); const L=Math.hypot(nx,nz)||1; nx/=L; nz/=L;
   for (const v of [A0,B0,B1, A0,B1,A1]) pos.push(v[0],v[1],v[2]);
   for (let i=0;i<6;i++) nor.push(nx,0,nz);
 };
-for (const d of data.ducts) { const z=d.z, p=d.p;
-  for (let i=0;i<p.length-1;i++) pushQuad(mapX(p[i][0]),mapZ(p[i][1]), mapX(p[i+1][0]),mapZ(p[i+1][1]), z); }
+for (const d of data.ducts) { const z=d.z, h=d.h||H, p=d.p;
+  for (let i=0;i<p.length-1;i++) pushQuad(mapX(p[i][0]),mapZ(p[i][1]), mapX(p[i+1][0]),mapZ(p[i+1][1]), z, h); }
 const dg = new THREE.BufferGeometry();
 dg.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
 dg.setAttribute('normal', new THREE.Float32BufferAttribute(nor,3));

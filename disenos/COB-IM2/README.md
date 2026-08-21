@@ -26,7 +26,10 @@ un marco común.
 
 ## Qué muestra (v1)
 
-- **Red de ductos** (teal) a su elevación real **BOD** (bottom-of-duct, mediana 3.76 m).
+- **Red de ductos** (teal) a su elevación real **BOD** (bottom-of-duct, mediana 3.76 m), con
+  **altura por-ducto** leída de la etiqueta `W"xH"` (B8 §8.3): 16 secciones de 4″ a 44″
+  (0.10–1.12 m). 86% de los tramos toman su altura de la etiqueta más cercana (≤2.5 m); el resto
+  usa la mediana etiquetada (0.254 m).
 - **Tomas redondas** (naranja) con diámetro certificado (etiquetas `N"ø`).
 - **Terminales** (579): difusores de suministro (azul) vs retornos (naranja) vs dampers (gris).
 - **Malla de columnas** (18 ejes, bahías de 9.20 m — de las burbujas del plano).
@@ -58,8 +61,14 @@ la leyenda enciende/apaga cada capa.
 ./build.sh    # extrae datos de los DXF → empaca con esbuild → ensambla el HTML offline
 ```
 
-## Pendiente (v4)
+## Pendiente
 
-- **Altura por-ducto** desde la etiqueta W″×H″ (hoy usa una altura representativa de 0.42 m);
-  requiere asociar cada etiqueta a su tramo (emparejamiento de bordes robusto, B6 §6.4).
-- Massing del AHU con footprint medido del cúmulo (hoy son cajas nominales en las 2 zonas).
+- **Encuadre por defecto**: la cámara alta subvende la altura variable; un ángulo más rasante
+  (o un preset lateral) la haría legible de entrada.
+- **Ancho por-ducto** desde la etiqueta W″ (hoy el ducto extruye el contorno dibujado tal cual;
+  la altura ya viene de la etiqueta, el ancho seguiría el emparejamiento robusto B6 §6.4).
+- **Massing del AHU** con footprint medido del cúmulo (hoy son cajas nominales en las 2 zonas).
+
+## Hecho (v4)
+
+- **Altura por-ducto** desde la etiqueta `W"xH"` (B8 §8.3), reemplaza la altura fija de 0.42 m.
