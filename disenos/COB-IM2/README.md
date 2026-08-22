@@ -19,6 +19,7 @@ un marco común.
 | `cob-im2-floor.json` | Capa de datos del piso: ductos, tomas redondas, terminales, malla, contexto. |
 | `extract-floor.py` | Extractor read-only que regenera el JSON desde los 3 DXF. |
 | `build.sh` | Rebuild reproducible: extrae datos → empaca con esbuild → ensambla el HTML offline. |
+| `qa-check.sh` | Guard de regresión rápido (sin browser): valida geometría sana, sin dead-code, datos embebidos. |
 | `qa-render-offline.png` | Captura de QA (headless Chrome). |
 
 > **`cob-im2-3d.html` no se edita a mano** — es el espejo construido. Edita `app.mjs` /
