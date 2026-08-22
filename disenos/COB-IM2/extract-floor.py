@@ -84,6 +84,70 @@ def mrr(pts):
             round(math.atan2(angy, angx), 4))
 
 
+# B6 §6.4: pair opposite walls among open double-line straight segments → solid boxes with true width.
+# Guards (B6 §6.3 pollution): parallel + ≥70% overlap + mutual-closest + width floor 0.13 m (drops the
+# 0.10 m false-pair peak, keeps 6"). Validated by corpus probe edge-pairing.py. The outline walls are
+# KEPT (compact polylines, no segment explosion — that ballooned the offline file 2.4x); the box fills
+# INSIDE them (2 cm inset, applied by the caller) so there is no z-fight and no size blow-up.
+EP_LADDER = [0.13, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.60,
+             0.70, 0.80, 0.90, 1.00, 1.20, 1.40, 1.60, 1.80, 2.00]
+EP_WMIN, EP_WMAX, EP_PAR, EP_OVL = 0.13, 2.0, 0.99, 0.70
+
+
+def edge_pair_boxes(segs):
+    """segs = [(x1,y1,x2,y2,z)] → boxes[{x,y,w,L,ang,z}] for mutual-closest opposite-wall pairs."""
+    S = []
+    for x1, y1, x2, y2, z in segs:
+        dx, dy = x2 - x1, y2 - y1
+        Ln = math.hypot(dx, dy)
+        S.append(None if Ln < 0.5 else ((x1 + x2) / 2, (y1 + y2) / 2, dx / Ln, dy / Ln, Ln / 2, z))
+    grid = defaultdict(list)
+    for i, s in enumerate(S):
+        if s:
+            grid[(int(s[0] // EP_WMAX), int(s[1] // EP_WMAX))].append(i)
+
+    def perp(a, b):
+        return abs((b[0] - a[0]) * (-a[3]) + (b[1] - a[1]) * a[2])
+
+    def overlap(a, b):
+        def proj(px, py):
+            return (px - a[0]) * a[2] + (py - a[1]) * a[3]
+        tb = sorted([proj(b[0] - b[2] * b[4], b[1] - b[3] * b[4]),
+                     proj(b[0] + b[2] * b[4], b[1] + b[3] * b[4])])
+        return max(0.0, min(a[4], tb[1]) - max(-a[4], tb[0])) / min(2 * a[4], 2 * b[4])
+
+    best = [None] * len(S)
+    for i, a in enumerate(S):
+        if not a:
+            continue
+        gi, gj = int(a[0] // EP_WMAX), int(a[1] // EP_WMAX)
+        bd, bj = 1e9, -1
+        for u in range(gi - 1, gi + 2):
+            for v in range(gj - 1, gj + 2):
+                for j in grid.get((u, v), ()):
+                    b = S[j]
+                    if j == i or abs(a[2] * b[2] + a[3] * b[3]) < EP_PAR:
+                        continue
+                    d = perp(a, b)
+                    if not (EP_WMIN <= d <= EP_WMAX) or d >= bd or overlap(a, b) < EP_OVL:
+                        continue
+                    bd, bj = d, j
+        best[i] = (bj, bd) if bj >= 0 else None
+
+    boxes = []
+    for i, bi in enumerate(best):
+        if not bi:
+            continue
+        j, d = bi
+        if best[j] and best[j][0] == i and i < j:
+            a, b = S[i], S[j]
+            boxes.append({"x": round((a[0] + b[0]) / 2, 3), "y": round((a[1] + b[1]) / 2, 3),
+                          "w": min(EP_LADDER, key=lambda s: abs(s - d)),
+                          "L": round(min(2 * a[4], 2 * b[4]), 3),
+                          "ang": round(math.atan2(a[3], a[2]), 4), "z": a[5]})
+    return boxes
+
+
 def load(k):
     doc = ezdxf.readfile(f"{RAW}/{k}.dxf")
     return doc.modelspace(), OFF[k], OWN[k]
@@ -212,6 +276,17 @@ def main():
                         best, bh = dd, lh
         return (round(bh, 3), True) if bh is not None else (h_fallback, False)
 
+    # v6: edge-pair the OPEN double-line outlines into solid boxes (B6 §6.4); walls stay compact.
+    segs = []
+    for d in ducts:
+        p, z = d["p"], d["z"]
+        for i in range(len(p) - 1):
+            segs.append((p[i][0], p[i][1], p[i + 1][0], p[i + 1][1], z))
+    edge_boxes = edge_pair_boxes(segs)
+    for eb in edge_boxes:                       # 2 cm inset → the fill sits inside the outline walls
+        eb["w"] = round(max(0.05, eb["w"] - 0.02), 3)
+    boxes += edge_boxes
+
     labeled = 0
     for d in ducts:
         p = d["p"]
@@ -241,7 +316,8 @@ def main():
     with open(OUT, "w") as f:
         json.dump(out, f, separators=(",", ":"))
     print(f"wrote {OUT}")
-    print(f"  ducts(walls)={len(ducts)} boxes(MRR solid)={len(boxes)} rounds={len(rounds)} "
+    print(f"  ducts(walls)={len(ducts)} boxes(solid: MRR closed + edge-paired open)={len(boxes)} "
+          f"(edge-paired={len(edge_boxes)}) rounds={len(rounds)} "
           f"terminals={len(terminals)} context={len(context)} grid_axes={len(gridX)}")
     print(f"  rect labels={len(rlabels)} · runs with a labeled height={labeled} "
           f"({100*labeled/(len(ducts)+len(boxes)):.0f}% by count) · fallback h={h_fallback} m")
