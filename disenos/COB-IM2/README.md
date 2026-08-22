@@ -66,7 +66,7 @@ la leyenda enciende/apaga cada capa.
 - **Encuadre por defecto**: la cámara alta subvende la altura variable; un ángulo más rasante
   (o un preset lateral) la haría legible de entrada.
 - **Ancho de la mayoría de los tramos de doble-línea abierta**: v6 empareja los que casan mutuamente
-  (~460 de las ~24,873, cobertura ~16–23% B6 §6.4); el resto sigue como muros-contorno hasta subir la
+  (~760 de las ~24,873, B6 §6.4, con longitud mínima 0.3 m); el resto sigue como muros-contorno hasta subir la
   cobertura del emparejamiento.
 - **Massing del AHU** con footprint medido del cúmulo (hoy son cajas nominales en las 2 zonas).
 
@@ -76,4 +76,4 @@ la leyenda enciende/apaga cada capa.
 - **v5 — Ancho por-ducto (cerrados)**: los footprints cerrados se rinden como **cajas sólidas** al ancho
   real de su rectángulo de área mínima (B14, piso 0.13 m para conservar el 6″); ~1,493 tramos.
 - **v6 — Ancho por-ducto (doble-línea abierta)**: emparejamiento de paredes opuestas (B6 §6.4, piso
-  0.13 m) → ~460 cajas sólidas más, con inset de 2 cm dentro del contorno (sin z-fighting, +0.1 MB).
+  0.13 m) → ~760 cajas sólidas más, con inset de 2 cm dentro del contorno (sin z-fighting, +0.1 MB).
