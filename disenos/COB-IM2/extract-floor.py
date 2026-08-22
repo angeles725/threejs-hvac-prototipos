@@ -142,9 +142,12 @@ def edge_pair_boxes(segs):
         j, d = bi
         if best[j] and best[j][0] == i and i < j:
             a, b = S[i], S[j]
+            Lseg = min(2 * a[4], 2 * b[4])
+            if Lseg <= d:            # a duct RUN is longer than its width; w>L ⇒ false pair (a junction)
+                continue
             boxes.append({"x": round((a[0] + b[0]) / 2, 3), "y": round((a[1] + b[1]) / 2, 3),
                           "w": min(EP_LADDER, key=lambda s: abs(s - d)),
-                          "L": round(min(2 * a[4], 2 * b[4]), 3),
+                          "L": round(Lseg, 3),
                           "ang": round(math.atan2(a[3], a[2]), 4), "z": a[5]})
     return boxes
 

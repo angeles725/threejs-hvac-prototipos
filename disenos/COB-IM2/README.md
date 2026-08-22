@@ -63,17 +63,17 @@ la leyenda enciende/apaga cada capa.
 
 ## Pendiente
 
-- **Encuadre por defecto**: la cámara alta subvende la altura variable; un ángulo más rasante
-  (o un preset lateral) la haría legible de entrada.
 - **Ancho de la mayoría de los tramos de doble-línea abierta**: v6 empareja los que casan mutuamente
-  (~760 de las ~24,873, B6 §6.4, con longitud mínima 0.3 m); el resto sigue como muros-contorno hasta subir la
+  (~552 de las ~24,873, B6 §6.4, con guard L>w para descartar pares falsos); el resto sigue como muros-contorno hasta subir la
   cobertura del emparejamiento.
 - **Massing del AHU** con footprint medido del cúmulo (hoy son cajas nominales en las 2 zonas).
 
 ## Hecho
 
+- **Encuadre rasante**: cámara baja (17 m) apuntando a la banda de ductos, para que la altura/volumen
+  se aprecie de entrada.
 - **v4 — Altura por-ducto** desde la etiqueta `W"xH"` (B8 §8.3), reemplaza la altura fija de 0.42 m.
 - **v5 — Ancho por-ducto (cerrados)**: los footprints cerrados se rinden como **cajas sólidas** al ancho
   real de su rectángulo de área mínima (B14, piso 0.13 m para conservar el 6″); ~1,493 tramos.
 - **v6 — Ancho por-ducto (doble-línea abierta)**: emparejamiento de paredes opuestas (B6 §6.4, piso
-  0.13 m) → ~760 cajas sólidas más, con inset de 2 cm dentro del contorno (sin z-fighting, +0.1 MB).
+  0.13 m) → ~552 cajas sólidas más (guard L>w descarta pares falsos), inset 2 cm, sin z-fighting.
