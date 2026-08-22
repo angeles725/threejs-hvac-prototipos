@@ -44,6 +44,9 @@ BOX_WMIN, BOX_WMAX, BOX_LMAX = 0.13, 2.0, 60.0
 # 52% of the duct JSON bytes. Applies to open outlines AND closed polys that failed the MRR test (the
 # 25-75 mm text glyphs of B14 §14.2).
 DUCT_MIN_DIAG = 0.10
+# v13: max sagitta (chord-to-arc distance) when tessellating a bulged duct polyline. 2 cm keeps curves
+# smooth at the 155 m building scale without exploding the vertex count.
+FLATTEN_TOL = 0.02
 clean = lambda t: re.sub(r'[{}]', '', re.sub(r'\\[A-Za-z][^;]*;', '', t)).strip()
 
 
@@ -283,6 +286,25 @@ def build_ahu(trunks):
     return boxes
 
 
+def flatten_lwpoly(e, dx):
+    """LWPOLYLINE point list with bulge arcs tessellated (ezdxf 1.x has no LWPolyline.flattening).
+    Walks virtual_entities (LINE + ARC), samples each ARC to FLATTEN_TOL sagitta, dedups seams."""
+    raw = []
+    for ve in e.virtual_entities():
+        t = ve.dxftype()
+        if t == "LINE":
+            raw.append((ve.dxf.start.x, ve.dxf.start.y)); raw.append((ve.dxf.end.x, ve.dxf.end.y))
+        elif t == "ARC":
+            for v in ve.flattening(FLATTEN_TOL):
+                raw.append((v.x, v.y))
+    out = []
+    for x, y in raw:
+        pt = (round(x + dx, 3), round(y, 3))
+        if not out or out[-1] != pt:
+            out.append(pt)
+    return out
+
+
 def load(k):
     doc = ezdxf.readfile(f"{RAW}/{k}.dxf")
     return doc.modelspace(), OFF[k], OWN[k]
@@ -373,7 +395,14 @@ def main():
             # HVAC duct outlines
             if ('HVAC' in up or 'DUCT' in up):
                 if e.dxftype() == "LWPOLYLINE":
-                    p = [(round(q[0] + dx, 3), round(q[1], 3)) for q in e.get_points()]
+                    # v13: 3.1% of duct polylines carry a bulge (an arc segment) — rounded end-caps and
+                    # U-bends. get_points() drops the bulge, flattening each arc to a straight chord. When
+                    # a bulge is present, tessellate the true arc (sagitta <= FLATTEN_TOL); otherwise keep
+                    # the raw vertices (no size cost on the 97% that are straight).
+                    if any(abs(q[4]) > 1e-6 for q in e.get_points()):
+                        p = flatten_lwpoly(e, dx)
+                    else:
+                        p = [(round(q[0] + dx, 3), round(q[1], 3)) for q in e.get_points()]
                     if len(p) < 2:
                         continue
                     cx = sum(q[0] for q in p) / len(p)

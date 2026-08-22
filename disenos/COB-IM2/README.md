@@ -90,6 +90,12 @@ Para QA reproducible, `?cam=x,y,z,tx,ty,tz` fija el punto de vista (coords de mu
   las coloca en la **X/Y medida** (antes estaban en `D/2`, mal) y **subdivide por hueco en Y** para que la
   zona este rinda **dos cajas** en vez de una losa que cruzara su hueco de 16 m. [INFER], transparentes.
   La caja central cae exactamente en la convergencia de troncales — verificación visual del anclaje.
+- **v13 — Ductos curvos (tessellation de `bulge`)**: el 3.1% de las polilíneas de ducto (892) llevan un
+  `bulge` (segmento de arco: extremos redondeados, codos en U), y `get_points()` lo descartaba, aplanando
+  cada arco a una cuerda recta. Ahora, cuando hay bulge, se tessella el arco real (`virtual_entities` →
+  ARC.flattening, sagitta 2 cm; ezdxf 1.x no tiene `LWPolyline.flattening`). Efecto medido: **+254 cajas
+  sólidas** (1,898→2,152) porque los rectángulos de extremo redondeado ahora dan un MRR correcto y
+  califican como sólido en vez de muro; curvas visibles en los extremos de ducto; pixel-diff 0.195%.
 - **v12 — Altura por ancho-medido (83 cajas corregidas)**: `assign_h` tomaba la altura de la etiqueta
   `W"xH"` más cercana por distancia, ignorando que una caja sólida ya trae un **ancho medido**. La
   etiqueta más cercana tiene un W que **no casa** el ancho medido el **70%** de las veces (probe
