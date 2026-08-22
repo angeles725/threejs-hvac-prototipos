@@ -27,12 +27,17 @@ for dd in d["ducts"]:
 for r in d["rounds"]:
     if r["d"] <= 0 or bad(r["x"]):
         errs.append("bad round")
+for a in d.get("ahu", []):
+    if a["w"] <= 0 or a["d"] <= 0 or bad(a["x"]) or bad(a["y"]):
+        errs.append("bad ahu box")
+    elif not (xmin - 2 <= a["x"] <= xmax + 2 and ymin - 2 <= a["y"] <= ymax + 2):
+        errs.append("ahu box outside floor")
 if errs:
     from collections import Counter
     print("FAIL geometry:", dict(Counter(errs)))
     sys.exit(1)
 print(f"PASS geometry — {len(d['boxes'])} boxes, {len(d['ducts'])} duct-outlines, "
-      f"{len(d['rounds'])} rounds, {len(d['terminals'])} terminals all sane")
+      f"{len(d['rounds'])} rounds, {len(d['terminals'])} terminals, {len(d.get('ahu', []))} ahu all sane")
 PY
 
 python3 - <<'PY'

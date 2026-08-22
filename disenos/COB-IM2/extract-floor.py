@@ -227,6 +227,46 @@ def edge_pair_boxes(segs):
     return boxes
 
 
+# B9 §9.3: the mech-room has NO named block — locate the AHU zones by their high-CFM discharge trunks
+# (>=2500 CFM; the scattered 1800-CFM tags are secondary branches), then size a massing box to each
+# dense sub-cluster. Split on a Y gap so the east zone's two stacks are not bridged into one void-
+# filling slab. [INFER] context, padded to the equipment body — not certified geometry.
+AHU_CFM_MIN = 2500     # plant-defining trunks (B9 table: central 5450/5000, east 2500x4)
+AHU_ZGAP = 20.0        # X gap separating the central plant from the east zone
+AHU_YGAP = 8.0         # Y gap splitting stacked sub-clusters within a zone
+AHU_PAD = 2.0          # equipment-body margin around the discharge-tag cluster
+AHU_MIN = 4.0          # min footprint so a single-column tag stack still renders a sane box
+
+
+def _split(vals, key, gap):
+    """split a list into runs where the consecutive gap in `key` exceeds `gap`."""
+    vals = sorted(vals, key=key)
+    groups, cur = [], [vals[0]]
+    for v in vals[1:]:
+        if key(v) - key(cur[-1]) > gap:
+            groups.append(cur); cur = [v]
+        else:
+            cur.append(v)
+    groups.append(cur)
+    return groups
+
+
+def build_ahu(trunks):
+    """trunks=[(x,y,cfm)] (>=AHU_CFM_MIN, ownership-deduped) → boxes[{x,y,w,d,cfm}] per dense cluster."""
+    boxes = []
+    if not trunks:
+        return boxes
+    for zone in _split(trunks, lambda t: t[0], AHU_ZGAP):       # X: central vs east
+        for stack in _split(zone, lambda t: t[1], AHU_YGAP):    # Y: split stacked sub-clusters
+            xs = [t[0] for t in stack]; ys = [t[1] for t in stack]
+            boxes.append({"x": round((min(xs) + max(xs)) / 2, 2),
+                          "y": round((min(ys) + max(ys)) / 2, 2),
+                          "w": round(max(max(xs) - min(xs) + 2 * AHU_PAD, AHU_MIN), 2),
+                          "d": round(max(max(ys) - min(ys) + 2 * AHU_PAD, AHU_MIN), 2),
+                          "cfm": max(t[2] for t in stack)})
+    return boxes
+
+
 def load(k):
     doc = ezdxf.readfile(f"{RAW}/{k}.dxf")
     return doc.modelspace(), OFF[k], OWN[k]
@@ -261,6 +301,7 @@ def main():
     ducts, rounds, terminals, context = [], [], [], []
     boxes = []    # v5: closed footprints as solid MRR boxes {x,y,w,L,ang,z} (B14)
     rlabels = []  # (x, y, w_m, h_m) rectangular W"xH" section labels, A-frame
+    trunks = []   # (x, y, cfm) high-CFM discharge trunks → AHU zone anchors (B9 §9.3)
     gridX = {}
     allx, ally = [], []
 
@@ -293,6 +334,15 @@ def main():
                     if lo <= x < hi:
                         rlabels.append((x, e.dxf.insert.y,
                                         int(mr.group(1)) * IN2M, int(mr.group(2)) * IN2M))
+
+            # high-CFM discharge trunks (>=2500) → AHU zone anchors (B9 §9.3). Not PDF-scoped; the
+            # ownership window dedups the same trunk co-registered into two sheets.
+            if e.dxftype() == "MTEXT":
+                mcfm = re.search(r'(\d{2,4})\s*CFM', e.text.replace('\n', ' '), re.I)
+                if mcfm and int(mcfm.group(1)) >= AHU_CFM_MIN:
+                    x = e.dxf.insert.x + dx
+                    if lo <= x < hi:
+                        trunks.append((round(x, 2), round(e.dxf.insert.y, 2), int(mcfm.group(1))))
 
             # HVAC duct outlines
             if ('HVAC' in up or 'DUCT' in up):
@@ -381,13 +431,15 @@ def main():
         "gridX": {str(k): v for k, v in sorted(gridX.items())},
         "bod_median": 3.76,
     }
+    ahu = build_ahu(trunks)   # B9 §9.3: massing boxes sized to the high-CFM discharge clusters [INFER]
     out = {
         "meta": {"unit": "m", "frame": "14A", "source": "COB-IM2 14A/B/C level 4 (INBAS)",
                  "provenance": "ducts+rounds+terminals=CERT; context=INFER traced; "
+                               "ahu=INFER (massing sized to >=2500 CFM discharge cluster, B9 §9.3); "
                                "z=BOD tags; h=W\"xH\" label (B8 §8.3), nearest within 2.5 m else median"},
         "floor": floor,
         "ducts": ducts, "boxes": boxes, "rounds": rounds,
-        "terminals": terminals, "context": context,
+        "terminals": terminals, "context": context, "ahu": ahu,
     }
     with open(OUT, "w") as f:
         json.dump(out, f, separators=(",", ":"))
@@ -400,6 +452,8 @@ def main():
     print(f"  floor X[{floor['xmin']},{floor['xmax']}] Y[{floor['ymin']},{floor['ymax']}] "
           f"({floor['xmax']-floor['xmin']:.0f}x{floor['ymax']-floor['ymin']:.0f} m)")
     print(f"  terminals by type: {dict(Counter(t['t'] for t in terminals))}")
+    print(f"  AHU trunks(>={AHU_CFM_MIN} CFM)={len(trunks)} → {len(ahu)} massing box(es): "
+          f"{[(a['x'], a['y'], a['w'], a['d']) for a in ahu]}")
 
 
 if __name__ == "__main__":

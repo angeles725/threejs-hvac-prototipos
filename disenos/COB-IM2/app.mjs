@@ -108,12 +108,13 @@ for (const r of data.rounds) {
 }
 scene.add(roundGroup);
 
-// AHU massing (B9: 2 zones, [INFER])
+// AHU massing (B9 §9.3: no named block — boxes sized to the high-CFM discharge cluster, at the
+// measured X/Y of that cluster, [INFER]). Falls back to nothing if the data layer predates v8.
 const ahuGroup = new THREE.Group();
 const ahuMat = new THREE.MeshStandardMaterial({ color:0xc23b3b, roughness:.6, metalness:.2, transparent:true, opacity:.35 });
-for (const zone of [{x:95, w:8, d:7}, {x:164, w:7, d:6}]) {
-  const box = new THREE.Mesh(new THREE.BoxGeometry(zone.w, CEIL*0.8, zone.d), ahuMat);
-  box.position.set(mapX(zone.x), CEIL*0.4, D/2); ahuGroup.add(box);
+for (const a of (data.ahu || [])) {
+  const box = new THREE.Mesh(new THREE.BoxGeometry(a.w, CEIL*0.85, a.d), ahuMat);
+  box.position.set(mapX(a.x), CEIL*0.425, mapZ(a.y)); ahuGroup.add(box);
 }
 scene.add(ahuGroup);
 

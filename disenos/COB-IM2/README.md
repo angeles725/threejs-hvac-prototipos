@@ -67,7 +67,6 @@ Para QA reproducible, `?cam=x,y,z,tx,ty,tz` fija el punto de vista (coords de mu
 
 - **Techo de cobertura (~45% del largo abierto)**: son ductos de **línea simple** y fittings aislados
   (bucket "isolated" del probe), sin pared opuesta que emparejar — no recuperables por geometría de doble-línea.
-- **Massing del AHU** con footprint medido del cúmulo (hoy son cajas nominales en las 2 zonas).
 
 ## Hecho
 
@@ -86,3 +85,8 @@ Para QA reproducible, `?cam=x,y,z,tx,ty,tz` fija el punto de vista (coords de mu
   del mismo lado bloquea rellenos de pasillo fantasma). **Ningún guard numérico se aflojó** (PAR/OVL/WMIN/
   L>w idénticos): el salto viene de la estructura, no de tolerancias. Menos cajas (~405) pero cada una es
   un *run* continuo, no un fragmento — el archivo offline no crece.
+- **v8 — Massing del AHU medido** (B9 §9.3): el mech-room no tiene bloque nombrado, así que se ancla por
+  los tags de trunk de descarga ≥2500 CFM. El extractor deriva las cajas del cúmulo (dedup por ownership),
+  las coloca en la **X/Y medida** (antes estaban en `D/2`, mal) y **subdivide por hueco en Y** para que la
+  zona este rinda **dos cajas** en vez de una losa que cruzara su hueco de 16 m. [INFER], transparentes.
+  La caja central cae exactamente en la convergencia de troncales — verificación visual del anclaje.
