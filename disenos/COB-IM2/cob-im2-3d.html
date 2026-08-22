@@ -20788,6 +20788,7 @@ window.__cam = () => {
   const p = camera.position, t = controls.target;
   return [p.x, p.y, p.z, t.x, t.y, t.z].map((v) => +v.toFixed(2));
 };
+window.__info = () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles });
 var VIEWS = {
   graze: [W * 0.32, 17, D * 1.5, W * 0.5, 4, D * 0.38],
   plan: [W * 0.5, 95, D * 0.5 + 0.01, W * 0.5, 3.76, D * 0.5],
@@ -20878,11 +20879,21 @@ var boxMesh = new InstancedMesh(
 scene.add(boxMesh);
 var roundGroup = new Group();
 var rMat = new MeshStandardMaterial({ color: 15114556, roughness: 0.5, metalness: 0.3 });
-for (const r of data.rounds) {
-  const cyl = new Mesh(new CylinderGeometry(r.d / 2, r.d / 2, 0.5, 12), rMat);
-  cyl.position.set(mapX(r.x), r.z - 0.25, mapZ(r.y));
-  roundGroup.add(cyl);
+var roundMesh = new InstancedMesh(new CylinderGeometry(1, 1, 1, 12), rMat, data.rounds.length || 1);
+roundMesh.count = data.rounds.length;
+{
+  const dummy = new Object3D();
+  for (let i = 0; i < data.rounds.length; i++) {
+    const r = data.rounds[i];
+    dummy.position.set(mapX(r.x), r.z - 0.25, mapZ(r.y));
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.set(r.d / 2, 0.5, r.d / 2);
+    dummy.updateMatrix();
+    roundMesh.setMatrixAt(i, dummy.matrix);
+  }
+  roundMesh.instanceMatrix.needsUpdate = true;
 }
+roundGroup.add(roundMesh);
 scene.add(roundGroup);
 var ahuGroup = new Group();
 var ahuMat = new MeshStandardMaterial({ color: 12729147, roughness: 0.6, metalness: 0.2, transparent: true, opacity: 0.35 });
@@ -20896,14 +20907,30 @@ var supply = /* @__PURE__ */ new Set(["SD", "CD", "SR", "LD"]);
 var ret = /* @__PURE__ */ new Set(["RR", "ER"]);
 var termGroup = new Group();
 var geoT = new BoxGeometry(0.6, 0.12, 0.6);
-var matS = new MeshStandardMaterial({ color: 4884200 });
-var matR = new MeshStandardMaterial({ color: 14250314 });
-var matD = new MeshStandardMaterial({ color: 9081500 });
-for (const t of data.terminals) {
-  const m = supply.has(t.t) ? matS : ret.has(t.t) ? matR : matD;
-  const box = new Mesh(geoT, m);
-  box.position.set(mapX(t.x), CEIL - 0.15, mapZ(t.y));
-  termGroup.add(box);
+var termMat = {
+  s: new MeshStandardMaterial({ color: 4884200 }),
+  r: new MeshStandardMaterial({ color: 14250314 }),
+  d: new MeshStandardMaterial({ color: 9081500 })
+};
+var termBy = { s: [], r: [], d: [] };
+for (const t of data.terminals)
+  termBy[supply.has(t.t) ? "s" : ret.has(t.t) ? "r" : "d"].push(t);
+{
+  const dummy = new Object3D();
+  for (const k of ["s", "r", "d"]) {
+    const list = termBy[k];
+    const im = new InstancedMesh(geoT, termMat[k], list.length || 1);
+    im.count = list.length;
+    for (let i = 0; i < list.length; i++) {
+      dummy.position.set(mapX(list[i].x), CEIL - 0.15, mapZ(list[i].y));
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      im.setMatrixAt(i, dummy.matrix);
+    }
+    im.instanceMatrix.needsUpdate = true;
+    termGroup.add(im);
+  }
 }
 scene.add(termGroup);
 var cv = [];

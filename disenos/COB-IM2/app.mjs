@@ -31,6 +31,8 @@ if (_camQ) { const c = _camQ.split(',').map(Number);
     camera.position.set(c[0], c[1], c[2]); controls.target.set(c[3], c[4], c[5]); } }
 window.__cam = () => { const p = camera.position, t = controls.target;
   return [p.x, p.y, p.z, t.x, t.y, t.z].map(v => +v.toFixed(2)); };
+// QA hook: draw-call / triangle counts after the last render (design3d kit — measure, don't guess).
+window.__info = () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles });
 
 // HUD view presets (same [x,y,z,tx,ty,tz] world-space format as ?cam / window.__cam).
 const VIEWS = {
@@ -99,14 +101,20 @@ const boxMesh = new THREE.InstancedMesh(
   boxMesh.instanceMatrix.needsUpdate = true; }
 scene.add(boxMesh);
 
-// round takeoffs
+// round take-offs — one InstancedMesh (unit cylinder, per-instance scale = ø/2) instead of 421 meshes
+// each with its own geometry (421 draw calls + 421 geometries → 1 of each).
 const roundGroup = new THREE.Group();
 const rMat = new THREE.MeshStandardMaterial({ color:0xe6a13c, roughness:.5, metalness:.3 });
-for (const r of data.rounds) {
-  const cyl = new THREE.Mesh(new THREE.CylinderGeometry(r.d/2, r.d/2, 0.5, 12), rMat);
-  cyl.position.set(mapX(r.x), r.z-0.25, mapZ(r.y)); roundGroup.add(cyl);
-}
-scene.add(roundGroup);
+const roundMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(1,1,1,12), rMat, data.rounds.length||1);
+roundMesh.count = data.rounds.length;
+{ const dummy = new THREE.Object3D();
+  for (let i=0;i<data.rounds.length;i++) { const r=data.rounds[i];
+    dummy.position.set(mapX(r.x), r.z-0.25, mapZ(r.y));
+    dummy.rotation.set(0,0,0);
+    dummy.scale.set(r.d/2, 0.5, r.d/2);
+    dummy.updateMatrix(); roundMesh.setMatrixAt(i, dummy.matrix); }
+  roundMesh.instanceMatrix.needsUpdate = true; }
+roundGroup.add(roundMesh); scene.add(roundGroup);
 
 // AHU massing (B9 §9.3: no named block — boxes sized to the high-CFM discharge cluster, at the
 // measured X/Y of that cluster, [INFER]). Falls back to nothing if the data layer predates v8.
@@ -118,18 +126,23 @@ for (const a of (data.ahu || [])) {
 }
 scene.add(ahuGroup);
 
-// terminals
+// terminals — one InstancedMesh per role (supply / return / damper) instead of 579 meshes.
 const supply = new Set(['SD','CD','SR','LD']), ret = new Set(['RR','ER']);
 const termGroup = new THREE.Group();
 const geoT = new THREE.BoxGeometry(0.6,0.12,0.6);
-const matS = new THREE.MeshStandardMaterial({ color:0x4a86e8 });
-const matR = new THREE.MeshStandardMaterial({ color:0xd9714a });
-const matD = new THREE.MeshStandardMaterial({ color:0x8a929c });
-for (const t of data.terminals) {
-  const m = supply.has(t.t)?matS : ret.has(t.t)?matR : matD;
-  const box = new THREE.Mesh(geoT, m);
-  box.position.set(mapX(t.x), CEIL-0.15, mapZ(t.y)); termGroup.add(box);
-}
+const termMat = { s: new THREE.MeshStandardMaterial({ color:0x4a86e8 }),
+                  r: new THREE.MeshStandardMaterial({ color:0xd9714a }),
+                  d: new THREE.MeshStandardMaterial({ color:0x8a929c }) };
+const termBy = { s:[], r:[], d:[] };
+for (const t of data.terminals) termBy[supply.has(t.t)?'s':ret.has(t.t)?'r':'d'].push(t);
+{ const dummy = new THREE.Object3D();
+  for (const k of ['s','r','d']) { const list=termBy[k];
+    const im = new THREE.InstancedMesh(geoT, termMat[k], list.length||1);
+    im.count = list.length;
+    for (let i=0;i<list.length;i++) { dummy.position.set(mapX(list[i].x), CEIL-0.15, mapZ(list[i].y));
+      dummy.rotation.set(0,0,0); dummy.scale.set(1,1,1);
+      dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix); }
+    im.instanceMatrix.needsUpdate = true; termGroup.add(im); } }
 scene.add(termGroup);
 
 // ghosted context

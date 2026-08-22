@@ -90,6 +90,11 @@ Para QA reproducible, `?cam=x,y,z,tx,ty,tz` fija el punto de vista (coords de mu
   las coloca en la **X/Y medida** (antes estaban en `D/2`, mal) y **subdivide por hueco en Y** para que la
   zona este rinda **dos cajas** en vez de una losa que cruzara su hueco de 16 m. [INFER], transparentes.
   La caja central cae exactamente en la convergencia de troncales — verificación visual del anclaje.
+- **v11 — Render instanciado (~1025 → 22 draw calls)**: las 421 tomas redondas se creaban como Mesh
+  individuales, **cada uno con su propia `CylinderGeometry`**, y los 579 terminales como Mesh sueltos
+  (~1000 draw calls, 421 geometrías). Ahora son `InstancedMesh` (1 para rounds con escala per-instancia
+  = ø/2; 3 por rol de terminal). Draw calls medidos **22** (`window.__info`), geometrías de cilindro
+  421 → 1. Pixel-diff vs. v10: **0.000%** — idéntico, solo más liviano en la GPU del cliente.
 - **v10 — Tomas redondas desde la etiqueta certificada (100 → 421)**: el extractor sacaba los rounds
   de geometría **CIRCLE** (100 círculos de 5–343 mm en capas HVAC), que resultaron ser un conjunto
   **disjunto** de las tomas reales (0 de 421 a <0.5 m de una etiqueta ø). B6 §6.1 certifica que el
