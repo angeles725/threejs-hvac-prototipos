@@ -20934,16 +20934,41 @@ for (const t of data.terminals)
   }
 }
 scene.add(termGroup);
+var ctxGroup = new Group();
+var WALL_H = 3;
+var WALL_MIN_LEN = 8;
+var dist2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 var cv = [];
+var wpos = [];
 for (const c of data.context) {
   const p = c.p;
+  let plen = 0;
   for (let i = 0; i < p.length - 1; i++)
-    cv.push(mapX(p[i][0]), 0.03, mapZ(p[i][1]), mapX(p[i + 1][0]), 0.03, mapZ(p[i + 1][1]));
+    plen += dist2(p[i], p[i + 1]);
+  const wall = plen > WALL_MIN_LEN;
+  for (let i = 0; i < p.length - 1; i++) {
+    const ax = mapX(p[i][0]), az = mapZ(p[i][1]), bx = mapX(p[i + 1][0]), bz = mapZ(p[i + 1][1]);
+    cv.push(ax, 0.03, az, bx, 0.03, bz);
+    if (wall)
+      wpos.push(ax, 0, az, bx, 0, bz, bx, WALL_H, bz, ax, 0, az, bx, WALL_H, bz, ax, WALL_H, az);
+  }
 }
 var cg = new BufferGeometry();
 cg.setAttribute("position", new Float32BufferAttribute(cv, 3));
-var ctxLines = new LineSegments(cg, new LineBasicMaterial({ color: 7042176, transparent: true, opacity: 0.5 }));
-scene.add(ctxLines);
+ctxGroup.add(new LineSegments(cg, new LineBasicMaterial({ color: 7042176, transparent: true, opacity: 0.5 })));
+var wg = new BufferGeometry();
+wg.setAttribute("position", new Float32BufferAttribute(wpos, 3));
+wg.computeVertexNormals();
+ctxGroup.add(new Mesh(wg, new MeshStandardMaterial({
+  color: 3818060,
+  roughness: 0.9,
+  transparent: true,
+  opacity: 0.18,
+  side: DoubleSide,
+  depthWrite: false
+})));
+scene.add(ctxGroup);
+var ctxLines = ctxGroup;
 var bind = (id, obj) => {
   const el = document.getElementById(id);
   if (el)

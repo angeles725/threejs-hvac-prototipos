@@ -90,6 +90,12 @@ Para QA reproducible, `?cam=x,y,z,tx,ty,tz` fija el punto de vista (coords de mu
   las coloca en la **X/Y medida** (antes estaban en `D/2`, mal) y **subdivide por hueco en Y** para que la
   zona este rinda **dos cajas** en vez de una losa que cruzara su hueco de 16 m. [INFER], transparentes.
   La caja central cae exactamente en la convergencia de troncales — verificación visual del anclaje.
+- **v17 — Muros perimetrales en 3D (extrusión de contexto >8 m)**: la arquitectura era solo líneas planas.
+  Los trazos >8 m son perímetro/muros/núcleos certificados (B10), así que se extruyen a muros translúcidos
+  bajos (hasta 3 m, **debajo** del plenum de ductos BOD 3.76 m, sin ocluir el HVAC). Las particiones 4–8 m
+  (menos ciertas) quedan como líneas planas. Da un envolvente de edificio; sigue [INFER], opacidad 0.18,
+  toggle `t_ctx`. Los SOLID (fragmentos de relleno, no flechas) y los HATCH grandes (poché de muro, sin
+  shafts) se auditaron y descartaron esta ronda.
 - **v16 — Malla de columnas 2D real (18 en fila → 72 en grilla)**: el build ponía una columna por eje X a
   media-profundidad (una fila falsa). Las columnas reales están dibujadas como **HATCH cuadrados de poché**
   (~0.31×0.26 m) en las intersecciones de la grilla; el probe encontró 72 en filas Y≈11.5/25.3/34.5/48.3

@@ -149,14 +149,33 @@ for (const t of data.terminals) termBy[supply.has(t.t)?'s':ret.has(t.t)?'r':'d']
     im.instanceMatrix.needsUpdate = true; termGroup.add(im); } }
 scene.add(termGroup);
 
-// ghosted context
-const cv = [];
+// ghosted context: floor lines for every trace + low translucent walls for the LONG ones only. B10
+// certifies PDF polylines >8 m as perimeter/walls/cores; shorter 4-8 m partitions stay flat (less
+// certain). Walls rise to WALL_H, below the BOD duct plenum, so the HVAC stays visible above. Faint +
+// toggled with t_ctx — [INFER], not claimed as measured.
+const ctxGroup = new THREE.Group();
+const WALL_H = 3.0, WALL_MIN_LEN = 8.0;
+const dist2 = (a,b)=>Math.hypot(a[0]-b[0], a[1]-b[1]);
+const cv = [], wpos = [];
 for (const c of data.context) { const p=c.p;
-  for (let i=0;i<p.length-1;i++) cv.push(mapX(p[i][0]),0.03,mapZ(p[i][1]), mapX(p[i+1][0]),0.03,mapZ(p[i+1][1])); }
+  let plen = 0; for (let i=0;i<p.length-1;i++) plen += dist2(p[i], p[i+1]);
+  const wall = plen > WALL_MIN_LEN;
+  for (let i=0;i<p.length-1;i++) {
+    const ax=mapX(p[i][0]), az=mapZ(p[i][1]), bx=mapX(p[i+1][0]), bz=mapZ(p[i+1][1]);
+    cv.push(ax,0.03,az, bx,0.03,bz);
+    if (wall) wpos.push(ax,0,az, bx,0,bz, bx,WALL_H,bz,  ax,0,az, bx,WALL_H,bz, ax,WALL_H,az);
+  }
+}
 const cg = new THREE.BufferGeometry();
 cg.setAttribute('position', new THREE.Float32BufferAttribute(cv,3));
-const ctxLines = new THREE.LineSegments(cg, new THREE.LineBasicMaterial({ color:0x6b7480, transparent:true, opacity:.5 }));
-scene.add(ctxLines);
+ctxGroup.add(new THREE.LineSegments(cg, new THREE.LineBasicMaterial({ color:0x6b7480, transparent:true, opacity:.5 })));
+const wg = new THREE.BufferGeometry();
+wg.setAttribute('position', new THREE.Float32BufferAttribute(wpos,3));
+wg.computeVertexNormals();
+ctxGroup.add(new THREE.Mesh(wg, new THREE.MeshStandardMaterial({ color:0x3a424c, roughness:.9,
+  transparent:true, opacity:.18, side:THREE.DoubleSide, depthWrite:false })));
+scene.add(ctxGroup);
+const ctxLines = ctxGroup;
 
 const bind = (id, obj) => { const el=document.getElementById(id); if(el) el.addEventListener('change', e => obj.visible = e.target.checked); };
 bind('t_duct', ductMesh); bind('t_duct', boxMesh); bind('t_round', roundGroup); bind('t_term', termGroup);
