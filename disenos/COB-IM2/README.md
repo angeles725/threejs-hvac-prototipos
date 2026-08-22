@@ -6,14 +6,14 @@ contiguos de un mismo piso lineal de ~152 m** (ejes de columna 1–18), co-regis
 un marco común.
 
 > **Este entregable es el producto de un estudio Research-SDD**, no de un DesignSpec inventado.
-> La geometría es **evidencia certificada**, no supuesta. El corpus completo (10 bloques citados,
+> La geometría es **evidencia certificada**, no supuesta. El corpus completo (14 bloques citados,
 > con probes reproducibles) vive en `~/investigacion/COB-IM2/` (target #26).
 
 ## Archivos
 
 | Archivo | Qué es |
 |---|---|
-| **`cob-im2-3d.html`** | **Entregable: visor 3D offline single-file (~4.8 MB). Abre con doble clic — cero internet.** |
+| **`cob-im2-3d.html`** | **Entregable: visor 3D offline single-file (~4.9 MB). Abre con doble clic — cero internet.** |
 | `app.mjs` | Fuente del visor (se empaca en el HTML offline). |
 | `vendor/` | Three.js 0.160.0 + OrbitControls vendorizados (para el bundle offline). |
 | `cob-im2-floor.json` | Capa de datos del piso: ductos, tomas redondas, terminales, malla, contexto. |
@@ -24,7 +24,7 @@ un marco común.
 > **`cob-im2-3d.html` no se edita a mano** — es el espejo construido. Edita `app.mjs` /
 > `extract-floor.py` y corre `./build.sh`.
 
-## Qué muestra (v1)
+## Qué muestra
 
 - **Red de ductos** (teal) a su elevación real **BOD** (bottom-of-duct, mediana 3.76 m), con
   **altura por-ducto** leída de la etiqueta `W"xH"` (B8 §8.3): 16 secciones de 4″ a 44″
@@ -53,7 +53,8 @@ un marco común.
 ## Uso
 
 Abre `cob-im2-3d.html` con doble clic (no necesita servidor ni internet). Órbita con el mouse;
-la leyenda enciende/apaga cada capa.
+los botones **Rasante / Planta / Iso** cambian de vista; la leyenda enciende/apaga cada capa.
+Para QA reproducible, `?cam=x,y,z,tx,ty,tz` fija el punto de vista (coords de mundo).
 
 ## Rebuild
 
