@@ -32,6 +32,17 @@ if (_camQ) { const c = _camQ.split(',').map(Number);
 window.__cam = () => { const p = camera.position, t = controls.target;
   return [p.x, p.y, p.z, t.x, t.y, t.z].map(v => +v.toFixed(2)); };
 
+// HUD view presets (same [x,y,z,tx,ty,tz] world-space format as ?cam / window.__cam).
+const VIEWS = {
+  graze: [W * 0.32, 17, D * 1.5, W * 0.5, 4.0, D * 0.38],
+  plan:  [W * 0.5, 95, D * 0.5 + 0.01, W * 0.5, 3.76, D * 0.5],
+  iso:   [W * 0.5 - 62, 52, D * 1.25, W * 0.5, 4.0, D * 0.42],
+};
+document.querySelectorAll('#views button').forEach((btn) => btn.addEventListener('click', () => {
+  const v = VIEWS[btn.dataset.view]; if (!v) return;
+  camera.position.set(v[0], v[1], v[2]); controls.target.set(v[3], v[4], v[5]);
+}));
+
 scene.add(new THREE.HemisphereLight(0xdfe8f2, 0x2a2f38, 1.4));
 const sun = new THREE.DirectionalLight(0xfff4e6, 1.4);
 sun.position.set(W*0.3, 90, D*0.6); scene.add(sun);
