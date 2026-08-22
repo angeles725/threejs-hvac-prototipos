@@ -90,6 +90,11 @@ Para QA reproducible, `?cam=x,y,z,tx,ty,tz` fija el punto de vista (coords de mu
   las coloca en la **X/Y medida** (antes estaban en `D/2`, mal) y **subdivide por hueco en Y** para que la
   zona este rinda **dos cajas** en vez de una losa que cruzara su hueco de 16 m. [INFER], transparentes.
   La caja central cae exactamente en la convergencia de troncales — verificación visual del anclaje.
+- **v15 — Contexto arquitectónico más completo (umbral 8→4 m)**: `PDF2_Geometry` es la arquitectura
+  raster-trazada; el 88% son fragmentos <0.5 m (ruido). El build solo mostraba las polilíneas >8 m
+  (perímetro/núcleos). Bajar el piso a **4 m** suma **~1,206 líneas** de partición (muros interiores),
+  quedándose por encima del ruido de mobiliario <2 m. La planta ahora lee como un plano de piso completo
+  con salas; pixel-diff en planta 1.11%. Contexto sigue [INFER], ghosted, sin extruir.
 - **v14 — ARC/SPLINE de ducto sueltos (+104 outlines curvos)**: el inventario del DXF mostró geometría de
   ducto en entidades ARC (37 codos, esparcidos) y SPLINE (115, un cúmulo en X[120,134]) que el build tiraba
   (solo leía LWPOLYLINE). Se tessellan (`flattening`) y se agregan como outlines abiertos (aristas, sin

@@ -47,6 +47,9 @@ DUCT_MIN_DIAG = 0.10
 # v13: max sagitta (chord-to-arc distance) when tessellating a bulged duct polyline. 2 cm keeps curves
 # smooth at the 155 m building scale without exploding the vertex count.
 FLATTEN_TOL = 0.02
+# v15: ghosted-context length floor. 4 m keeps partition walls (real architecture) while dropping the
+# <2 m raster-trace fragments (furniture/fixtures/noise) — the trace is 88% sub-0.5 m.
+CTX_MIN_LEN = 4.0
 clean = lambda t: re.sub(r'[{}]', '', re.sub(r'\\[A-Za-z][^;]*;', '', t)).strip()
 
 
@@ -443,13 +446,16 @@ def main():
                     allx += xs; ally += ys
                     ducts.append({"p": p, "z": round(nearest_bod(cx, cy, bod, med), 2)})
 
-            # ghosted context: PDF2 long polylines (B10: >8 m = perimeter/walls/cores)
+            # ghosted context: PDF2 long polylines (B10). The trace is 88% sub-0.5 m raster noise; only
+            # long runs are real architecture. >8 m gives the perimeter/cores; CTX_MIN_LEN=4 m also picks
+            # up partition walls (adds ~400 lines/sheet) for a more readable floor-plan underlay without
+            # the <2 m furniture/fixture fragments.
             if lay.startswith("PDF") and e.dxftype() == "LWPOLYLINE":
                 p = [(q[0], q[1]) for q in e.get_points()]
                 if len(p) < 2:
                     continue
                 L = sum(math.dist(p[i], p[i + 1]) for i in range(len(p) - 1))
-                if L > 8:
+                if L > CTX_MIN_LEN:
                     cx = sum(q[0] for q in p) / len(p) + dx
                     if lo <= cx < hi:
                         context.append({"p": [[round(q[0] + dx, 2), round(q[1], 2)] for q in p]})
