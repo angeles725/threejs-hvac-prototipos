@@ -1,4 +1,4 @@
-<!-- review-status: pending -->
+<!-- review-status: applied 2026-08-21 · kit v1.17 -->
 # COB-IM2 — design3d retro (2026-08-21, R3F Phase-2 delivery, user-supplied session)
 
 **Scope:** the Phase-2 dashboard build of COB-IM2 14A — a React Three Fiber `DuctViewer.jsx` component

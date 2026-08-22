@@ -1,4 +1,4 @@
-<!-- review-status: pending -->
+<!-- review-status: applied 2026-08-21 · kit v1.17 -->
 # design3d retro (2026-08-21) — CV co-registration (SIFT/RANSAC) invents a scale the CAD does not have
 
 **Scope:** a user-supplied session that extended the CV-on-raster approach to MULTI-SHEET assembly —

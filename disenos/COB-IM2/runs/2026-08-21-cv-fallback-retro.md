@@ -1,4 +1,4 @@
-<!-- review-status: pending -->
+<!-- review-status: applied 2026-08-21 · kit v1.17 -->
 # design3d retro (2026-08-21) — CV-on-raster CAD reconstruction: a resolution-gated last resort
 
 **Scope:** a user-supplied session that reconstructed a plan by **computer vision on a DWG raster

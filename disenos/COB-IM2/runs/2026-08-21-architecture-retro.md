@@ -1,4 +1,4 @@
-<!-- review-status: pending -->
+<!-- review-status: applied 2026-08-21 · kit v1.17 -->
 # COB-IM2 — design3d retro (2026-08-21, architecture decision, user-directed)
 
 **Scope:** COB-IM2 DWG→3D reconstruction (research-sdd corpus #26 + the `disenos/COB-IM2/` viewer).
