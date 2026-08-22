@@ -23,6 +23,15 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(W*0.5, 4.0, D*0.38);
 controls.enableDamping = true; controls.maxPolarAngle = Math.PI/2.02;
 
+// design3d kit Rule 9 — deterministic capture hook: ?cam=x,y,z,tx,ty,tz scripts the viewpoint,
+// window.__cam reads it back. Coordinates are world-space (already mapX/mapZ'd). QA over identical views.
+const _camQ = new URLSearchParams(location.search).get('cam');
+if (_camQ) { const c = _camQ.split(',').map(Number);
+  if (c.length === 6 && c.every(Number.isFinite)) {
+    camera.position.set(c[0], c[1], c[2]); controls.target.set(c[3], c[4], c[5]); } }
+window.__cam = () => { const p = camera.position, t = controls.target;
+  return [p.x, p.y, p.z, t.x, t.y, t.z].map(v => +v.toFixed(2)); };
+
 scene.add(new THREE.HemisphereLight(0xdfe8f2, 0x2a2f38, 1.4));
 const sun = new THREE.DirectionalLight(0xfff4e6, 1.4);
 sun.position.set(W*0.3, 90, D*0.6); scene.add(sun);
