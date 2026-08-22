@@ -188,12 +188,10 @@ def main():
     rlabels = []  # (x, y, w_m, h_m) rectangular W"xH" section labels, A-frame
     gridX = {}
     allx, ally = [], []
-    bod_all = []
 
     for k in ["14A", "14B", "14C"]:
         msp, dx, (lo, hi) = load(k)
         bod = collect_bod(msp, dx)
-        bod_all += bod
         med = 3.76
         for e in msp:
             if not e.dxf.hasattr('layer'):
@@ -302,7 +300,6 @@ def main():
         labeled += lab
 
     # floor extent from grid + duct envelope (B2)
-    xs = sorted(gridX.values())
     floor = {
         "xmin": round(min(allx), 2), "xmax": round(max(allx), 2),
         "ymin": round(min(ally), 2), "ymax": round(max(ally), 2),
