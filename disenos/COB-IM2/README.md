@@ -90,6 +90,12 @@ Para QA reproducible, `?cam=x,y,z,tx,ty,tz` fija el punto de vista (coords de mu
   las coloca en la **X/Y medida** (antes estaban en `D/2`, mal) y **subdivide por hueco en Y** para que la
   zona este rinda **dos cajas** en vez de una losa que cruzara su hueco de 16 m. [INFER], transparentes.
   La caja central cae exactamente en la convergencia de troncales — verificación visual del anclaje.
+- **v16 — Malla de columnas 2D real (18 en fila → 72 en grilla)**: el build ponía una columna por eje X a
+  media-profundidad (una fila falsa). Las columnas reales están dibujadas como **HATCH cuadrados de poché**
+  (~0.31×0.26 m) en las intersecciones de la grilla; el probe encontró 72 en filas Y≈11.5/25.3/34.5/48.3
+  (perímetro 18 c/u, interiores 16) × los 18 ejes X — la regularidad de bahía prueba que son estructurales.
+  Se extraen los HATCH cuadrados (0.2–1.5 m, aspecto ≤2) que snapean a un eje X, y se renderizan en su
+  posición real. El edificio ahora tiene un esqueleto estructural, no una línea de columnas.
 - **v15 — Contexto arquitectónico más completo (umbral 8→4 m)**: `PDF2_Geometry` es la arquitectura
   raster-trazada; el 88% son fragmentos <0.5 m (ruido). El build solo mostraba las polilíneas >8 m
   (perímetro/núcleos). Bajar el piso a **4 m** suma **~1,206 líneas** de partición (muros interiores),

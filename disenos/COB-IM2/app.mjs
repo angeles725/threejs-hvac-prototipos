@@ -54,13 +54,17 @@ const slab = new THREE.Mesh(new THREE.BoxGeometry(W+6, 0.3, D+6),
   new THREE.MeshStandardMaterial({ color:0x20262e, roughness:.95 }));
 slab.position.set(W/2, -0.15, D/2); scene.add(slab);
 
-// column grid
+// column grid — real 2D grid from the measured HATCH footprints (v16), at each X-axis x Y-row
+// intersection. Falls back to one column per X-axis at mid-depth if the data layer predates v16.
 const gridGroup = new THREE.Group();
 const CEIL = 4.2;
 const colMat = new THREE.MeshStandardMaterial({ color:0x9aa7b4, roughness:.7 });
-for (const gx of Object.values(F.gridX)) {
-  const col = new THREE.Mesh(new THREE.BoxGeometry(0.5,CEIL,0.5), colMat);
-  col.position.set(mapX(gx), CEIL/2, D/2); gridGroup.add(col);
+const cols = (data.columns && data.columns.length)
+  ? data.columns.map(c => ({ x: c.x, y: c.y, w: Math.max(c.w, 0.35), d: Math.max(c.d, 0.35) }))
+  : Object.values(F.gridX).map(gx => ({ x: gx, y: F.ymax - D / 2, w: 0.5, d: 0.5 }));
+for (const c of cols) {
+  const col = new THREE.Mesh(new THREE.BoxGeometry(c.w, CEIL, c.d), colMat);
+  col.position.set(mapX(c.x), CEIL/2, mapZ(c.y)); gridGroup.add(col);
 }
 scene.add(gridGroup);
 

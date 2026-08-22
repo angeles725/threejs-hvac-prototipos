@@ -289,6 +289,32 @@ def build_ahu(trunks):
     return boxes
 
 
+# B2/columns: the real structural columns are drawn as small square HATCH fills (poché) at the grid
+# intersections — a ~0.3 m footprint at each X-axis crossing of ~4 Y-rows. The build used to place one
+# column per X-axis at mid-depth (a single false row); these give the true 2D grid. COL_* bound the
+# column-like footprint (square, 0.2-1.5 m) and the snap to a grid X-line.
+COL_MIN, COL_MAX, COL_AR, COL_SNAP = 0.2, 1.5, 2.0, 1.0
+
+
+def hatch_bbox(e):
+    """(cx, cy, w, h) of a HATCH's boundary bbox, or None."""
+    xs, ys = [], []
+    try:
+        for path in e.paths:
+            for v in getattr(path, "vertices", []):
+                xs.append(v[0]); ys.append(v[1])
+            for edge in getattr(path, "edges", []):
+                for attr in ("start", "end"):
+                    p = getattr(edge, attr, None)
+                    if p is not None:
+                        xs.append(p[0]); ys.append(p[1])
+    except Exception:
+        return None
+    if not xs:
+        return None
+    return ((min(xs)+max(xs))/2, (min(ys)+max(ys))/2, max(xs)-min(xs), max(ys)-min(ys))
+
+
 def flatten_lwpoly(e, dx):
     """LWPOLYLINE point list with bulge arcs tessellated (ezdxf 1.x has no LWPolyline.flattening).
     Walks virtual_entities (LINE + ARC), samples each ARC to FLATTEN_TOL sagitta, dedups seams."""
@@ -343,6 +369,7 @@ def main():
     boxes = []    # v5: closed footprints as solid MRR boxes {x,y,w,L,ang,z} (B14)
     rlabels = []  # (x, y, w_m, h_m) rectangular W"xH" section labels, A-frame
     trunks = []   # (x, y, cfm) high-CFM discharge trunks → AHU zone anchors (B9 §9.3)
+    col_cands = []  # (x, y, w, h) square HATCH footprints → column candidates (filtered post-loop)
     gridX = {}
     allx, ally = [], []
 
@@ -460,6 +487,18 @@ def main():
                     if lo <= cx < hi:
                         context.append({"p": [[round(q[0] + dx, 2), round(q[1], 2)] for q in p]})
 
+            # column footprints: small square HATCH fills (poché). Grid-snap filter is applied post-loop
+            # (needs the full gridX). Ownership window dedups the seam.
+            if e.dxftype() == "HATCH":
+                bb = hatch_bbox(e)
+                if bb:
+                    hx, hy, hw, hh = bb
+                    if (COL_MIN <= hw <= COL_MAX and COL_MIN <= hh <= COL_MAX
+                            and max(hw, hh) / max(min(hw, hh), 1e-6) <= COL_AR):
+                        cx = hx + dx
+                        if lo <= cx < hi:
+                            col_cands.append((round(cx, 2), round(hy, 2), round(hw, 2), round(hh, 2)))
+
     # per-duct height from the nearest W"xH" label (B8 §8.3); unlabelled runs → labeled median.
     hs = sorted(h for _, _, _, h in rlabels)
     h_fallback = round(hs[len(hs) // 2], 3) if hs else 0.30
@@ -510,6 +549,14 @@ def main():
         b["h"], lab = assign_h(b["x"], b["y"], b["w"])   # box width disambiguates which label owns it
         labeled += lab
 
+    # columns: keep the square HATCH footprints that snap to a grid X-line (the real 2D grid); drop the
+    # rest (wall poché / stray fills). gridX is complete now.
+    gx_vals = sorted(gridX.values())
+    columns = []
+    for cx, cy, cw, ch in col_cands:
+        if gx_vals and min(abs(cx - gx) for gx in gx_vals) <= COL_SNAP:
+            columns.append({"x": cx, "y": cy, "w": cw, "d": ch})
+
     # floor extent from grid + duct envelope (B2)
     floor = {
         "xmin": round(min(allx), 2), "xmax": round(max(allx), 2),
@@ -525,7 +572,7 @@ def main():
                                "z=BOD tags; h=W\"xH\" label (B8 §8.3), nearest within 2.5 m else median"},
         "floor": floor,
         "ducts": ducts, "boxes": boxes, "rounds": rounds,
-        "terminals": terminals, "context": context, "ahu": ahu,
+        "terminals": terminals, "context": context, "ahu": ahu, "columns": columns,
     }
     with open(OUT, "w") as f:
         json.dump(out, f, separators=(",", ":"))
@@ -540,6 +587,8 @@ def main():
     print(f"  terminals by type: {dict(Counter(t['t'] for t in terminals))}")
     print(f"  AHU trunks(>={AHU_CFM_MIN} CFM)={len(trunks)} → {len(ahu)} massing box(es): "
           f"{[(a['x'], a['y'], a['w'], a['d']) for a in ahu]}")
+    col_rows = sorted(set(round(c['y']) for c in columns))
+    print(f"  columns={len(columns)} (from {len(col_cands)} square-hatch candidates) · Y-rows≈{col_rows}")
 
 
 if __name__ == "__main__":
