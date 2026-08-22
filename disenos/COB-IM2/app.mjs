@@ -13,13 +13,14 @@ const mapX = x => x - F.xmin;
 const mapZ = y => F.ymax - y;            // B2/nave-panccadia: flip, do NOT mirror
 
 const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 2000);
-camera.position.set(W*0.5, 60, D*1.8);
+// Grazing hero: low eye + target at the duct band so per-duct height/volume reads (a high eye flattens it).
+camera.position.set(W*0.32, 17, D*1.5);
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(W/2, 2, D/2);
+controls.target.set(W*0.5, 4.0, D*0.38);
 controls.enableDamping = true; controls.maxPolarAngle = Math.PI/2.02;
 
 scene.add(new THREE.HemisphereLight(0xdfe8f2, 0x2a2f38, 1.4));
