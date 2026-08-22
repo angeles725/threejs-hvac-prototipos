@@ -11,6 +11,9 @@ if ! ls "$RAW"/14A.dxf >/dev/null 2>&1; then
   DXF="$(mktemp -d)"
   for k in 14A 14B 14C; do dwg2dxf -o "$DXF/$k.dxf" "$RAW/$k.dwg"; done
 fi
+# clean up on any exit: the temp DXF dir (only if we made one, ~130 MB) + the bundle scratch file
+cleanup() { [ "$DXF" != "$RAW" ] && rm -rf "$DXF"; rm -f /tmp/cob-bundle.js; }
+trap cleanup EXIT
 python3 extract-floor.py "$DXF" cob-im2-floor.json
 # 2. bundle the viewer (app.mjs + vendored three) into one import-free ESM
 npx --yes esbuild@0.19.11 app.mjs --bundle --format=esm \
