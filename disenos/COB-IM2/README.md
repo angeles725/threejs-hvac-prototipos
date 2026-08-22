@@ -65,9 +65,8 @@ Para QA reproducible, `?cam=x,y,z,tx,ty,tz` fija el punto de vista (coords de mu
 
 ## Pendiente
 
-- **Ancho de la mayoría de los tramos de doble-línea abierta**: v6 empareja los que casan mutuamente
-  (~552 de las ~24,873, B6 §6.4, con guard L>w para descartar pares falsos); el resto sigue como muros-contorno hasta subir la
-  cobertura del emparejamiento.
+- **Techo de cobertura (~45% del largo abierto)**: son ductos de **línea simple** y fittings aislados
+  (bucket "isolated" del probe), sin pared opuesta que emparejar — no recuperables por geometría de doble-línea.
 - **Massing del AHU** con footprint medido del cúmulo (hoy son cajas nominales en las 2 zonas).
 
 ## Hecho
@@ -79,3 +78,11 @@ Para QA reproducible, `?cam=x,y,z,tx,ty,tz` fija el punto de vista (coords de mu
   real de su rectángulo de área mínima (B14, piso 0.13 m para conservar el 6″); ~1,493 tramos.
 - **v6 — Ancho por-ducto (doble-línea abierta)**: emparejamiento de paredes opuestas (B6 §6.4, piso
   0.13 m) → ~552 cajas sólidas más (guard L>w descarta pares falsos), inset 2 cm, sin z-fighting.
+- **v7 — Cobertura de emparejamiento 16%→52%**: el matcher v6 emparejaba a nivel de *segmento*, así que
+  un muro dibujado como muchos segmentos cortos perdía el concurso mutual-closest (buckets non-mutual +
+  low-overlap = ~2,600 de 3,100 sin emparejar — artefacto de fragmentación, no ambigüedad, corpus probe
+  `edge-pairing-ceiling.py`). v7 **agrega los segmentos colineales en líneas-de-muro** antes de emparejar
+  y usa nearest-mutual **por lado** (una pared puede servir a dos ductos de un banco; una pared más cercana
+  del mismo lado bloquea rellenos de pasillo fantasma). **Ningún guard numérico se aflojó** (PAR/OVL/WMIN/
+  L>w idénticos): el salto viene de la estructura, no de tolerancias. Menos cajas (~405) pero cada una es
+  un *run* continuo, no un fragmento — el archivo offline no crece.

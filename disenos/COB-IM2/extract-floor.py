@@ -85,70 +85,145 @@ def mrr(pts):
 
 
 # B6 §6.4: pair opposite walls among open double-line straight segments → solid boxes with true width.
-# Guards (B6 §6.3 pollution): parallel + ≥70% overlap + mutual-closest + width floor 0.13 m (drops the
-# 0.10 m false-pair peak, keeps 6"). Validated by corpus probe edge-pairing.py. The outline walls are
-# KEPT (compact polylines, no segment explosion — that ballooned the offline file 2.4x); the box fills
-# INSIDE them (2 cm inset, applied by the caller) so there is no z-fight and no size blow-up.
+# v7: aggregate COLLINEAR segments into wall-lines BEFORE pairing, then pair nearest-mutual opposite
+# walls PER SIDE. The prior segment-level matcher capped at ~16% of open length: its dominant misses
+# (non-mutual + low-overlap, ~2,600 of 3,100 unpaired) were artefacts of one wall drawn as many short
+# segments — a fragmentation defect, not genuine ambiguity (corpus probe edge-pairing-ceiling.py). Wall-
+# line aggregation lifts coverage to ~52% (probe wallline-ceiling.py) with NO guard loosened: PAR/OVL/
+# WMIN/L>w are unchanged. Per-side pairing lets one wall serve two ducts (banks) while a nearer wall on
+# the same side blocks phantom aisle-fills; the ~45% residual is true single-line ducts and isolated
+# fittings. Outline walls are KEPT (compact); each box fills INSIDE them (2 cm inset by the caller).
 EP_LADDER = [0.13, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.60,
              0.70, 0.80, 0.90, 1.00, 1.20, 1.40, 1.60, 1.80, 2.00]
 EP_WMIN, EP_WMAX, EP_PAR, EP_OVL = 0.13, 2.0, 0.99, 0.70
+EP_MINL = 0.3          # min segment length fed to aggregation (drops glyph-scale noise)
+EP_ANGTOL = 0.012      # ~0.7° — collinear if headings agree within this
+EP_OFFTOL = 0.03       # collinear if perpendicular offsets agree within 3 cm
+
+
+def _merge_iv(iv):
+    """merge a list of 1-D intervals → disjoint sorted intervals."""
+    iv = sorted(iv)
+    out = [list(iv[0])]
+    for a, b in iv[1:]:
+        if a <= out[-1][1] + 1e-6:
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return out
+
+
+def _isect_iv(A, B):
+    """contiguous overlap sub-intervals between two disjoint-sorted interval sets (same axis)."""
+    out = []; i = j = 0
+    while i < len(A) and j < len(B):
+        lo = max(A[i][0], B[j][0]); hi = min(A[i][1], B[j][1])
+        if hi > lo:
+            out.append((lo, hi))
+        if A[i][1] < B[j][1]:
+            i += 1
+        else:
+            j += 1
+    return out
 
 
 def edge_pair_boxes(segs):
-    """segs = [(x1,y1,x2,y2,z)] → boxes[{x,y,w,L,ang,z}] for mutual-closest opposite-wall pairs."""
-    EP_MINL = 0.3   # min segment length; 0.3 (vs 0.5) adds ~48% more clean pairs, same width profile
-    S = []
+    """segs = [(x1,y1,x2,y2,z)] → boxes[{x,y,w,L,ang,z}].
+
+    Aggregate collinear segments into wall-lines, then emit a solid box for each contiguous overlap
+    between a wall-line and its nearest-mutual opposite wall on either side.
+    """
+    # 1) cluster collinear segments into wall-lines (canonical heading in [0,pi), shared perp offset).
+    lines = []   # {ux,uy, theta, off, intervals:[(t0,t1)], zw:[(len,z)]}
     for x1, y1, x2, y2, z in segs:
         dx, dy = x2 - x1, y2 - y1
         Ln = math.hypot(dx, dy)
-        S.append(None if Ln < EP_MINL else ((x1 + x2) / 2, (y1 + y2) / 2, dx / Ln, dy / Ln, Ln / 2, z))
-    grid = defaultdict(list)
-    for i, s in enumerate(S):
-        if s:
-            grid[(int(s[0] // EP_WMAX), int(s[1] // EP_WMAX))].append(i)
-
-    def perp(a, b):
-        return abs((b[0] - a[0]) * (-a[3]) + (b[1] - a[1]) * a[2])
-
-    def overlap(a, b):
-        def proj(px, py):
-            return (px - a[0]) * a[2] + (py - a[1]) * a[3]
-        tb = sorted([proj(b[0] - b[2] * b[4], b[1] - b[3] * b[4]),
-                     proj(b[0] + b[2] * b[4], b[1] + b[3] * b[4])])
-        return max(0.0, min(a[4], tb[1]) - max(-a[4], tb[0])) / min(2 * a[4], 2 * b[4])
-
-    best = [None] * len(S)
-    for i, a in enumerate(S):
-        if not a:
+        if Ln < EP_MINL:
             continue
-        gi, gj = int(a[0] // EP_WMAX), int(a[1] // EP_WMAX)
-        bd, bj = 1e9, -1
-        for u in range(gi - 1, gi + 2):
-            for v in range(gj - 1, gj + 2):
-                for j in grid.get((u, v), ()):
-                    b = S[j]
-                    if j == i or abs(a[2] * b[2] + a[3] * b[3]) < EP_PAR:
-                        continue
-                    d = perp(a, b)
-                    if not (EP_WMIN <= d <= EP_WMAX) or d >= bd or overlap(a, b) < EP_OVL:
-                        continue
-                    bd, bj = d, j
-        best[i] = (bj, bd) if bj >= 0 else None
+        ux, uy = dx / Ln, dy / Ln
+        if uy < 0 or (uy == 0 and ux < 0):        # canonicalise to the upper half-circle
+            ux, uy = -ux, -uy
+        theta = math.atan2(uy, ux)
+        off = x1 * (-uy) + y1 * ux                 # signed perpendicular offset of the line
+        t1, t2 = x1 * ux + y1 * uy, x2 * ux + y2 * uy
+        t0, t1 = (t1, t2) if t1 < t2 else (t2, t1)
+        hit = None
+        for ln in lines:
+            da = abs(theta - ln["theta"]); da = min(da, math.pi - da)
+            if da <= EP_ANGTOL and abs(off - ln["off"]) <= EP_OFFTOL:
+                hit = ln; break
+        if hit is None:
+            lines.append({"ux": ux, "uy": uy, "theta": theta, "off": off,
+                          "intervals": [(t0, t1)], "zw": [(Ln, z)]})
+        else:
+            hit["intervals"].append((t0, t1)); hit["zw"].append((Ln, z))
+    for ln in lines:
+        ln["iv"] = _merge_iv(ln["intervals"])
+        ln["cov"] = sum(b - a for a, b in ln["iv"])
+        ln["z"] = sorted(ln["zw"])[len(ln["zw"]) // 2][1]   # median-by-count wall elevation
 
-    boxes = []
-    for i, bi in enumerate(best):
-        if not bi:
-            continue
-        j, d = bi
-        if best[j] and best[j][0] == i and i < j:
-            a, b = S[i], S[j]
-            Lseg = min(2 * a[4], 2 * b[4])
-            if Lseg <= d:            # a duct RUN is longer than its width; w>L ⇒ false pair (a junction)
+    n = len(lines)
+
+    def valid_pair(a, b):
+        """(d, overlap_subintervals) if a,b are opposite duct walls, else None. No guard loosened."""
+        if abs(a["ux"] * b["ux"] + a["uy"] * b["uy"]) < EP_PAR:
+            return None
+        d = abs(a["off"] - b["off"])
+        if not (EP_WMIN <= d <= EP_WMAX):
+            return None
+        ov = _isect_iv(a["iv"], b["iv"])
+        ovl = sum(hi - lo for lo, hi in ov)
+        span = min(a["cov"], b["cov"])
+        if span <= 0 or ovl / span < EP_OVL or span <= d:   # OVL + L>w guard
+            return None
+        return (d, ov)
+
+    # 2) nearest valid opposite wall per SIDE (+off / -off). One wall may serve two ducts; a nearer
+    #    wall on the same side pre-empts a phantom fill across it.
+    pos, neg = [None] * n, [None] * n
+    for i in range(n):
+        a = lines[i]; bp = (1e9, -1, None); bn = (1e9, -1, None)
+        for j in range(n):
+            if j == i:
                 continue
-            boxes.append({"x": round((a[0] + b[0]) / 2, 3), "y": round((a[1] + b[1]) / 2, 3),
-                          "w": min(EP_LADDER, key=lambda s: abs(s - d)),
-                          "L": round(Lseg, 3),
-                          "ang": round(math.atan2(a[3], a[2]), 4), "z": a[5]})
+            v = valid_pair(a, lines[j])
+            if not v:
+                continue
+            d = v[0]
+            if lines[j]["off"] > a["off"]:
+                bp = min(bp, (d, j, v), key=lambda t: t[0])
+            else:
+                bn = min(bn, (d, j, v), key=lambda t: t[0])
+        pos[i] = (bp[1], bp[2]) if bp[1] >= 0 else None
+        neg[i] = (bn[1], bn[2]) if bn[1] >= 0 else None
+
+    # 3) keep mutual pairs; emit one box per contiguous overlap (gaps are not filled).
+    boxes = []
+    for i in range(n):
+        for e in (pos[i], neg[i]):
+            if not e:
+                continue
+            j, v = e
+            if i >= j:                            # dedupe unordered pair
+                continue
+            j_back = neg[j] if lines[j]["off"] > lines[i]["off"] else pos[j]
+            if not (j_back and j_back[0] == i):   # mutual on this side?
+                continue
+            a, b = lines[i], lines[j]
+            d, ov = v
+            w = min(EP_LADDER, key=lambda s: abs(s - d))
+            off_m = (a["off"] + b["off"]) / 2
+            nx, ny = -a["uy"], a["ux"]
+            zc = round((a["z"] + b["z"]) / 2, 2)
+            for lo, hi in ov:
+                L = hi - lo
+                if L <= w:            # L>w per sub-interval (snapped w, matches qa) — skips junctions
+                    continue
+                tc = (lo + hi) / 2
+                cx = off_m * nx + tc * a["ux"]
+                cy = off_m * ny + tc * a["uy"]
+                boxes.append({"x": round(cx, 3), "y": round(cy, 3), "w": w,
+                              "L": round(L, 3), "ang": round(a["theta"], 4), "z": zc})
     return boxes
 
 
