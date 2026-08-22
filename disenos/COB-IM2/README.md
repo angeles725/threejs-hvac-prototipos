@@ -13,7 +13,7 @@ un marco común.
 
 | Archivo | Qué es |
 |---|---|
-| **`cob-im2-3d.html`** | **Entregable: visor 3D offline single-file (~4.9 MB). Abre con doble clic — cero internet.** |
+| **`cob-im2-3d.html`** | **Entregable: visor 3D offline single-file (~3.4 MB). Abre con doble clic — cero internet.** |
 | `app.mjs` | Fuente del visor (se empaca en el HTML offline). |
 | `vendor/` | Three.js 0.160.0 + OrbitControls vendorizados (para el bundle offline). |
 | `cob-im2-floor.json` | Capa de datos del piso: ductos, tomas redondas, terminales, malla, contexto. |
@@ -90,3 +90,9 @@ Para QA reproducible, `?cam=x,y,z,tx,ty,tz` fija el punto de vista (coords de mu
   las coloca en la **X/Y medida** (antes estaban en `D/2`, mal) y **subdivide por hueco en Y** para que la
   zona este rinda **dos cajas** en vez de una losa que cruzara su hueco de 16 m. [INFER], transparentes.
   La caja central cae exactamente en la convergencia de troncales — verificación visual del anclaje.
+- **v9 — Poda de ruido de fittings (−30% de archivo)**: el 72% de los outlines de ducto medían <0.3 m
+  (mediana 5 cm de diagonal, 1,720 degenerados de largo cero) — detalle de piezas Fabrication sobre las
+  juntas (98% a <0.5 m de un ducto real), **invisible a escala de 155 m** pero el 52% de los bytes de
+  ductos. Se descartan en el extractor los outlines con bbox < 0.10 m (bajo la sección real más chica,
+  6″=0.15 m; también los glifos cerrados 25–75 mm de B14). Verificado por pixel-diff: **0.07% de píxeles
+  cambian** en la vista hero. Archivo 4.9 → 3.4 MB, red de ductos idéntica.

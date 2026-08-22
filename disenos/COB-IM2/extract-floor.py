@@ -28,6 +28,12 @@ SNAP_R = 2.5
 # v5: a closed duct footprint becomes a solid box sized by its minimum-area rectangle (B14). The width
 # floor is 0.13 m (keeps 6" ducts; rejects text-glyph closed polys at 25-75 mm — B14 §14.2).
 BOX_WMIN, BOX_WMAX, BOX_LMAX = 0.13, 2.0, 60.0
+# v9: drop fitting-detail / glyph outlines whose full bbox extent is < 0.10 m — below the smallest
+# real duct section (6" = 0.15 m). They are Fabrication-piece detail sitting on the joints (98% within
+# 0.5 m of a real duct), invisible at building scale (measured 0.07% pixel diff at the hero view) yet
+# 52% of the duct JSON bytes. Applies to open outlines AND closed polys that failed the MRR test (the
+# 25-75 mm text glyphs of B14 §14.2).
+DUCT_MIN_DIAG = 0.10
 clean = lambda t: re.sub(r'[{}]', '', re.sub(r'\\[A-Za-z][^;]*;', '', t)).strip()
 
 
@@ -364,6 +370,9 @@ def main():
                             boxes.append({"x": bx, "y": by, "w": w, "L": L,
                                           "ang": ang, "z": round(z, 2)})
                             continue
+                    xs = [q[0] for q in p]; ys = [q[1] for q in p]
+                    if math.hypot(max(xs) - min(xs), max(ys) - min(ys)) < DUCT_MIN_DIAG:
+                        continue                     # fitting-detail / glyph noise (v9)
                     ducts.append({"p": p, "z": round(z, 2)})
                 elif e.dxftype() == "CIRCLE":
                     x = e.dxf.center.x + dx
