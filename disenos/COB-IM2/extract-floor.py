@@ -31,6 +31,10 @@ ROUND_LBL = re.compile(r'(\d{1,3})\s*"?\s*ø')
 # B8 §8.3: the nearest label within SNAP_R metres owns a run's height; beyond it, fall back to the
 # labeled median. 2.5 m covers ~83% of drawn duct length (median run→label distance is 1.56 m).
 SNAP_R = 2.5
+# v12: a nearby W"xH" label is accepted as THIS box's height source when its W is within HW_TOL of the
+# box's measured width. 0.05 m absorbs the 2 cm edge-box inset + the ladder snapping while still telling
+# adjacent duct sizes apart (6"=0.15 vs 8"=0.20).
+HW_TOL = 0.05
 # v5: a closed duct footprint becomes a solid box sized by its minimum-area rectangle (B14). The width
 # floor is 0.13 m (keeps 6" ducts; rejects text-glyph closed polys at 25-75 mm — B14 §14.2).
 BOX_WMIN, BOX_WMAX, BOX_LMAX = 0.13, 2.0, 60.0
@@ -408,17 +412,28 @@ def main():
     grid = defaultdict(list)
     for i, (lx, ly, _, _) in enumerate(rlabels):
         grid[(int(lx // SNAP_R), int(ly // SNAP_R))].append(i)
-    def assign_h(cx, cy):
+    def assign_h(cx, cy, width=None):
+        # v12: a solid box already carries a MEASURED width; among the nearby W"xH" labels, prefer the
+        # one whose W matches that width (the label that actually describes THIS run) over the merely
+        # closest one — the nearest label's W disagrees with the measured width 70% of the time (probe
+        # height-match.py). Conservative: only override when a width-matching label exists inside SNAP_R,
+        # else keep nearest-by-distance. HW_TOL absorbs the 2 cm edge-box inset + ladder snapping.
         gi, gj = int(cx // SNAP_R), int(cy // SNAP_R)
-        best, bh = SNAP_R * SNAP_R, None
+        cands = []          # (dist2, label_w, label_h)
         for a in range(gi - 1, gi + 2):
             for b in range(gj - 1, gj + 2):
                 for i in grid.get((a, b), ()):
-                    lx, ly, _, lh = rlabels[i]
+                    lx, ly, lw, lh = rlabels[i]
                     dd = (lx - cx) ** 2 + (ly - cy) ** 2
-                    if dd < best:
-                        best, bh = dd, lh
-        return (round(bh, 3), True) if bh is not None else (h_fallback, False)
+                    if dd <= SNAP_R * SNAP_R:
+                        cands.append((dd, lw, lh))
+        if not cands:
+            return (h_fallback, False)
+        if width is not None:
+            wm = [c for c in cands if abs(c[1] - width) <= HW_TOL]
+            if wm:
+                return (round(min(wm, key=lambda c: c[0])[2], 3), True)
+        return (round(min(cands, key=lambda c: c[0])[2], 3), True)
 
     # v6: edge-pair the OPEN double-line outlines into solid boxes (B6 §6.4); walls stay compact.
     segs = []
@@ -438,7 +453,7 @@ def main():
                                sum(q[1] for q in p) / len(p))
         labeled += lab
     for b in boxes:
-        b["h"], lab = assign_h(b["x"], b["y"])
+        b["h"], lab = assign_h(b["x"], b["y"], b["w"])   # box width disambiguates which label owns it
         labeled += lab
 
     # floor extent from grid + duct envelope (B2)
