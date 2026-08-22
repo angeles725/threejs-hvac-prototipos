@@ -90,6 +90,12 @@ Para QA reproducible, `?cam=x,y,z,tx,ty,tz` fija el punto de vista (coords de mu
   las coloca en la **X/Y medida** (antes estaban en `D/2`, mal) y **subdivide por hueco en Y** para que la
   zona este rinda **dos cajas** en vez de una losa que cruzara su hueco de 16 m. [INFER], transparentes.
   La caja central cae exactamente en la convergencia de troncales — verificación visual del anclaje.
+- **v14 — ARC/SPLINE de ducto sueltos (+104 outlines curvos)**: el inventario del DXF mostró geometría de
+  ducto en entidades ARC (37 codos, esparcidos) y SPLINE (115, un cúmulo en X[120,134]) que el build tiraba
+  (solo leía LWPOLYLINE). Se tessellan (`flattening`) y se agregan como outlines abiertos (aristas, sin
+  ancho inventado), con los mismos guards de ruido/ownership. ~39 m de geometría curva antes ausente;
+  pixel-diff 0.057%. (El audit de texto de esta ronda fue dead-end: las 99 MTEXT son la leyenda/nomenclatura
+  y notas de revisión, no nombres de sala ni flujo.)
 - **v13 — Ductos curvos (tessellation de `bulge`)**: el 3.1% de las polilíneas de ducto (892) llevan un
   `bulge` (segmento de arco: extremos redondeados, codos en U), y `get_points()` lo descartaba, aplanando
   cada arco a una cuerda recta. Ahora, cuando hay bulge, se tessella el arco real (`virtual_entities` →

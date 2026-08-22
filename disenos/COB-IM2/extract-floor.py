@@ -423,6 +423,25 @@ def main():
                     if math.hypot(max(xs) - min(xs), max(ys) - min(ys)) < DUCT_MIN_DIAG:
                         continue                     # fitting-detail / glyph noise (v9)
                     ducts.append({"p": p, "z": round(z, 2)})
+                elif e.dxftype() in ("ARC", "SPLINE"):
+                    # v14: standalone curved duct entities the LWPOLYLINE path missed — 37 ARC elbows
+                    # (spread, filling bends) + 115 SPLINEs (one clustered feature). Tessellate to an open
+                    # outline (edges, not centrelines — no invented width), same noise + ownership guards.
+                    try:
+                        p = [(round(v.x + dx, 3), round(v.y, 3)) for v in e.flattening(FLATTEN_TOL)]
+                    except Exception:
+                        p = []
+                    if len(p) < 2:
+                        continue
+                    cx = sum(q[0] for q in p) / len(p)
+                    if not (lo <= cx < hi):
+                        continue
+                    xs = [q[0] for q in p]; ys = [q[1] for q in p]
+                    if math.hypot(max(xs) - min(xs), max(ys) - min(ys)) < DUCT_MIN_DIAG:
+                        continue
+                    cy = sum(q[1] for q in p) / len(p)
+                    allx += xs; ally += ys
+                    ducts.append({"p": p, "z": round(nearest_bod(cx, cy, bod, med), 2)})
 
             # ghosted context: PDF2 long polylines (B10: >8 m = perimeter/walls/cores)
             if lay.startswith("PDF") and e.dxftype() == "LWPOLYLINE":
