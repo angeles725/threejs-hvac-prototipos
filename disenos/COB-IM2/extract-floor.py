@@ -22,6 +22,12 @@ OWN = {"14A": (-1e9, 89.5), "14B": (89.5, 143.0), "14C": (143.0, 1e9)}
 IN2M = 0.0254
 # B8 §8.2: rectangular ducts carry a W"xH" inch label on the PDF text layer (502 labels, 46 sizes).
 RECT = re.compile(r'(\d{1,2})"\s*[xX]\s*(\d{1,2})"')
+# B6 §6.1: round ducts carry an explicit N"ø diameter label (inches). This IS the certified diameter —
+# "no inference". v10: rounds are built from these labels (421 deduped, ~97% 6" diffuser take-offs,
+# spread across the floor, 91% within 2 m of a diffuser), NOT from CIRCLE geometry — the 100 circles on
+# HVAC layers are a disjoint set (0 within 0.5 m of a label) and were the wrong source. The ø char is the
+# round discriminator; a W"xH" rectangular label has no ø, so RECT.search excludes it as a guard.
+ROUND_LBL = re.compile(r'(\d{1,3})\s*"?\s*ø')
 # B8 §8.3: the nearest label within SNAP_R metres owns a run's height; beyond it, fall back to the
 # labeled median. 2.5 m covers ~83% of drawn duct length (median run→label distance is 1.56 m).
 SNAP_R = 2.5
@@ -344,11 +350,21 @@ def main():
             # high-CFM discharge trunks (>=2500) → AHU zone anchors (B9 §9.3). Not PDF-scoped; the
             # ownership window dedups the same trunk co-registered into two sheets.
             if e.dxftype() == "MTEXT":
-                mcfm = re.search(r'(\d{2,4})\s*CFM', e.text.replace('\n', ' '), re.I)
+                txt = e.text.replace('\n', ' ')
+                mcfm = re.search(r'(\d{2,4})\s*CFM', txt, re.I)
                 if mcfm and int(mcfm.group(1)) >= AHU_CFM_MIN:
                     x = e.dxf.insert.x + dx
                     if lo <= x < hi:
                         trunks.append((round(x, 2), round(e.dxf.insert.y, 2), int(mcfm.group(1))))
+                # round-duct take-offs from the certified N"ø label (B6 §6.1); RECT excludes W"xH"
+                mo = ROUND_LBL.search(txt)
+                if mo and not RECT.search(txt) and 2 <= int(mo.group(1)) <= 96:
+                    x = e.dxf.insert.x + dx
+                    if lo <= x < hi:
+                        y = e.dxf.insert.y
+                        rounds.append({"x": round(x, 2), "y": round(y, 2),
+                                       "d": round(int(mo.group(1)) * IN2M, 3),
+                                       "z": round(nearest_bod(x, y, bod, med), 2)})
 
             # HVAC duct outlines
             if ('HVAC' in up or 'DUCT' in up):
@@ -374,14 +390,6 @@ def main():
                     if math.hypot(max(xs) - min(xs), max(ys) - min(ys)) < DUCT_MIN_DIAG:
                         continue                     # fitting-detail / glyph noise (v9)
                     ducts.append({"p": p, "z": round(z, 2)})
-                elif e.dxftype() == "CIRCLE":
-                    x = e.dxf.center.x + dx
-                    if not (lo <= x < hi):
-                        continue
-                    y = e.dxf.center.y
-                    rounds.append({"x": round(x, 2), "y": round(y, 2),
-                                   "d": round(2 * e.dxf.radius, 3),
-                                   "z": round(nearest_bod(x, y, bod, med), 2)})
 
             # ghosted context: PDF2 long polylines (B10: >8 m = perimeter/walls/cores)
             if lay.startswith("PDF") and e.dxftype() == "LWPOLYLINE":

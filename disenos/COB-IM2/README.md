@@ -90,6 +90,12 @@ Para QA reproducible, `?cam=x,y,z,tx,ty,tz` fija el punto de vista (coords de mu
   las coloca en la **X/Y medida** (antes estaban en `D/2`, mal) y **subdivide por hueco en Y** para que la
   zona este rinda **dos cajas** en vez de una losa que cruzara su hueco de 16 m. [INFER], transparentes.
   La caja central cae exactamente en la convergencia de troncales — verificación visual del anclaje.
+- **v10 — Tomas redondas desde la etiqueta certificada (100 → 421)**: el extractor sacaba los rounds
+  de geometría **CIRCLE** (100 círculos de 5–343 mm en capas HVAC), que resultaron ser un conjunto
+  **disjunto** de las tomas reales (0 de 421 a <0.5 m de una etiqueta ø). B6 §6.1 certifica que el
+  diámetro ES la etiqueta `N"ø` ("no inference"). Ahora se construyen desde esas etiquetas: **421
+  deduplicadas** (~97% de 6″, esparcidas por todo el piso, 91% a <2 m de un difusor). Reconcilia el
+  código con la tabla de Procedencia, que ya citaba la etiqueta como fuente.
 - **v9 — Poda de ruido de fittings (−30% de archivo)**: el 72% de los outlines de ducto medían <0.3 m
   (mediana 5 cm de diagonal, 1,720 degenerados de largo cero) — detalle de piezas Fabrication sobre las
   juntas (98% a <0.5 m de un ducto real), **invisible a escala de 155 m** pero el 52% de los bytes de
