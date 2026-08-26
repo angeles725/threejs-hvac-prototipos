@@ -26,12 +26,19 @@ coordinating sessions; each claim traces to the session that measured it.
 
 ## RESOLVED since first draft
 
-- **WU2 (label→run height recovery) → recoverable ≈ 0. CLOSED.** Independently confirmed by BOTH
-  investigador1 (1/284 ≥24" runs pass the gate) and 121 (0/673 informative runs; 639 have a label
-  within 2.5m but median best width-error 101.6mm = 5× the 20mm gate). The 38.3% height gap is
-  **SOURCE-ABSENT** — unknown-height runs are dominantly 4–7" wide and the drawing carries essentially
-  no rectangular size labels below 8". **Better binding cannot close it; there is no extractor height
-  fix.** (This retires "WU2 recovers height", which was the presumed critical path.)
+- **WU2 (label→run height recovery) → NOT recoverable. CLOSED, three independent measurements.**
+  investigador1 (1/284 ≥24" runs pass) + 121 (0/673 informative) + team A's WU2 (research-cob-im2
+  PR #1, using the required width-gated binder, h=None uninterpolated). The decisive one is team A's
+  **RANDOM-WIDTH CONTROL**: real width finds a width-matching label within 5m for **11.9% of unsized
+  runs** vs **49.4% for a random ladder width** — real matches BELOW chance, i.e. nearby labels belong
+  to OTHER ducts. Honestly-recoverable upper bound ≤ ~139 runs / ~97m = ~10% of the 971.8m gap, each
+  needing per-run confirmation; ~89% is a drawing-completeness floor (size never tagged near the run).
+  **Coverage is FINAL: 38.3% assumed / 61.7% measured BY LENGTH (trunk worst, 29.9%). There is no
+  extractor height fix; Z cannot be closed.** (team A's pre-control draft overclaimed "27–99.7%
+  recoverable"; the control corrected it before ship — the discipline working. investigador1 is
+  verifying the method on PR #1.)
+- **MECO / clearance datum → confirmed ZERO in the DXF.** The clash gate's clearance arm must be
+  handed a threshold externally; there is nothing in-drawing to derive it from.
 - **H4 hardening → done. HARD-CONFIRMED** (three legs, above).
 
 ## OPEN — what could still move a number
