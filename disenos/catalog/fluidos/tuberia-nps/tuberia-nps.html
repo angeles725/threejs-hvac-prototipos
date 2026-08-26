@@ -54920,8 +54920,25 @@ key.shadow.camera.left = -6; key.shadow.camera.right = 6;
 key.shadow.camera.top = 6; key.shadow.camera.bottom = -6;
 key.shadow.camera.near = 0.5; key.shadow.camera.far = 24;
 scene.add(key);
-const fill = new T.DirectionalLight(0xbcd0e0, 0.85);
-fill.position.set(-3.0, 2.2, -2.0); scene.add(fill);
+// FRONTAL fill, on the camera side. This is the piece that was missing and it is
+// specific to what we draw: a key light from above and behind rakes horizontal
+// faces and leaves VERTICAL ones dark, and a pipe run or a duct side is almost
+// entirely vertical face. At metalness 0.90 those faces then reflect a dark room
+// and read as black — which is what three blind agents scored, and what I first
+// tried to fix by adding ambient (it barely moved) and then by adding an
+// environment (it barely moved either). Neither lights a vertical face; a light
+// positioned toward +Z does.
+//
+// Recipe from nave-panccadia's equipos-ondemand/freidora/freidora.html:84 —
+// a proven headless brushed-metal setup, not invented here.
+const fill = new T.DirectionalLight(0xf4f7ff, 1.15);
+fill.position.set(1.5, 2.0, 5); scene.add(fill);
+const rim = new T.DirectionalLight(0xbcd0e0, 0.35);
+rim.position.set(-3.0, 2.2, -2.0); scene.add(rim);
+// The brightness lever for bare metal is the ENVIRONMENT, never metalness:
+// lowering metalness to make a swatch match is modelling the measurement instead
+// of the metal. Carbon steel really is ~0.9.
+scene.environmentIntensity = 1.9;
 
 // Carbon-steel pipe, painted. metalness near-binary per DESIGNSPEC rule 2.
 const matPipe = new T.MeshStandardMaterial({ color: 0x8d9aa6, metalness: 0.90, roughness: 0.38 });
@@ -55177,6 +55194,53 @@ window.__qaFraming = () => {
   return { mvpElements: Array.from(mvp.elements), corners, W: innerWidth, H: innerHeight, hud };
 };
 window.__manifest = () => MANIFEST;
+
+// __colorCrop(partKey) -> the on-screen pixel rect of that part's INTERIOR, so a
+// colour probe samples metal and not background.
+//
+// This exists because a hand-typed crop is a check that cannot see what it
+// measures. Mine straddled a pipe edge, averaged ~40% background, and reported
+// dE00 26.4 — a confident FAIL on a correct material, and I was one step from
+// re-lighting good geometry to satisfy it. Then the eccentric shot moved to an
+// orthographic camera and the same fixed rect fell off the part again: 34.8.
+// Same check, same failure, twice in a day. Derived from the projection, it
+// cannot drift when the camera does.
+// KNOWN LIMIT, measured: deriving the rect from geometry is NECESSARY but not
+// SUFFICIENT. The label sprites draw with depthTest:false and renderOrder 10, so
+// they sit ON TOP of the parts — a geometrically perfect crop can still sample a
+// label. It happened: a crop derived for straight|8 landed on the "OD 4.5"" text
+// and the probe returned dE00 42.4 with full confidence.
+//
+// So the rule is not "derive the crop", it is "sample a region that is derived
+// AND free of overlays". Until the caller can hide the labels for the colour
+// pass, this returns a rect that may be occluded, and the caller must check.
+//
+// Third distinct way this one check has produced a confident wrong number today:
+// straddling the silhouette edge (26.4), a fixed rect against a moved camera
+// (34.8), and now an overlay drawn on top (42.4). Every one looked like a
+// material failure and none of them was.
+window.__colorCrop = (key, inset = 0.34) => {
+  const m = CELL[key];
+  if (!m) return null;
+  m.updateMatrixWorld(true);
+  renderCam.updateMatrixWorld(); renderCam.updateProjectionMatrix();
+  const b = new T.Box3().setFromObject(m);
+  const mn = b.min, mx = b.max, p = new T.Vector3();
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const c of [[mn.x,mn.y,mn.z],[mx.x,mn.y,mn.z],[mn.x,mx.y,mn.z],[mx.x,mx.y,mn.z],
+                   [mn.x,mn.y,mx.z],[mx.x,mn.y,mx.z],[mn.x,mx.y,mx.z],[mx.x,mx.y,mx.z]]){
+    p.set(c[0], c[1], c[2]).project(renderCam);
+    x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
+    y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+  }
+  const W = innerWidth, H = innerHeight;
+  // inset hard, so the rect is well inside the silhouette and never touches an edge
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const hw = (x1 - x0) / 2 * (1 - inset), hh = (y1 - y0) / 2 * (1 - inset);
+  const L = Math.round((cx - hw + 1) * 0.5 * W), R = Math.round((cx + hw + 1) * 0.5 * W);
+  const Tp = Math.round((1 - (cy + hh)) * 0.5 * H), B = Math.round((1 - (cy - hh)) * 0.5 * H);
+  return { x: L, y: Tp, w: Math.max(2, R - L), h: Math.max(2, B - Tp), dprNote: 'CSS px — multiply by the capture DPR' };
+};
 
 // Native-res crops the gate asked for. Two of the five criticals are not
 // scorable from a whole-board shot — the eccentric reducer's one flat side and
