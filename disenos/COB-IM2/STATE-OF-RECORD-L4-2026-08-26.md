@@ -43,28 +43,48 @@ coordinating sessions; each claim traces to the session that measured it.
   handed a threshold externally; there is nothing in-drawing to derive it from.
 - **H4 hardening → done. HARD-CONFIRMED** (three legs, above).
 
-## RESOLVED — the 4" question (121 ran, investigador1 verified independently)
+## RESOLVED — the 4" question (121 ran → then RENDERED it and self-corrected; investigador1 verified the ARITHMETIC only)
 
-- **The 4" class is MISCLASSIFIED WIDTH, not spurious geometry.** 128/211 of the 4" unknown-height runs
-  join the network at both ends (a *higher* joined rate than the label-bound control), so they are real
-  ducts with a wrong width, not invented pairings — 121's earlier "spurious" wording is retracted. Raw
-  widths are multimodal with a tight **82.4mm cluster (~80 runs, a repeated drawing motif)**; snap
-  displacement median 14.5mm (pressed to the 20mm ceiling) vs 2.3mm for label-bound. **Use
-  "misclassified width", never "spurious pairs".**
-- **Honest coverage is a BRACKET, denominators named:** 38.3% by length as-shipped → 37.0% dropping the
-  80-run 82.4mm cluster → 32.2% dropping all 211 4" runs. Realistically ~37% (≈90 of the 211 are
-  legitimately 4"-ish). **The height gap is NOT a denominator artifact — it survives at 32–37% by
-  length. It shrinks the gap by 1–6 points, not a reprieve.**
+- **38.3% by length substantially STANDS.** The earlier 32–37% bracket is **RETRACTED** — it wrongly
+  assumed the 4" runs were droppable. 121 plotted the 82.4mm cluster (matplotlib, headless — a picture,
+  not a display) and looked: the 4" runs are mostly **REAL small branch ducts with genuinely unknown
+  height**, so they BELONG in the denominator. Dropping them understates the gap.
+- **Mechanism = INNER-PAIR SELECTION (the old H2 at small scale).** For sampled runs (L4_1598, L4_1825,
+  14C) the extractor paired an **inner** line pair at 82.5mm instead of the true **outer** pair at
+  ~105mm, and the imperial ladder snapped it back to 4" (101.6mm) — landing near the right width by
+  accident. Perpendicular flanking-separation of 40 cluster runs: **31/40 at 89–105mm** (real 4"-scale
+  ducts); only ~5/40 are detail geometry (e.g. L4_1183, a `BD-40"x20"` damper detail). So "misclassified
+  width" is right, but it is wrong-PAIR selection, not a bogus run — the same H2 failure investigador1
+  and 121 chased at trunk scale at the start, reappearing at small scale where it actually happens.
+- **Honest correction: ≤ ~1 point** (only the ~5/40 → ~25 of 211 detail-geometry runs are droppable).
+  "Coverage is better than 38.3%, never worse" holds in DIRECTION but the size is ~1 point, not 6.
+- **Process note worth keeping:** investigador1's 31.9%/37.0% arithmetic was correct and reconciles
+  exactly with 121's — but it verified the *arithmetic*, not the *interpretation* (droppable vs real);
+  both had it wrong in the same direction until 121 rendered the picture. **A render beat a second
+  arithmetic check.** (121's image: `scratchpad/cluster-82mm.png`, sent to the user.)
 
 ## OPEN — small threads
 
-- **5mm-over-gate eyeball** (immaterial to the headline): a few 24"/26" runs sit 5mm over the width
-  gate from a '25"x20"' label — worth a manual look, does not change the frame.
-- **Eyeball the 82.4mm cluster** (121's suggestion, a human-eyes-beat-a-statistic call): open the
-  cad2d viewer, search 3 of the 80-run cluster's ids, look at the uncollapsed source polylines
-  underneath, and say what they are. Five minutes, worth more than another statistic.
-- **H2 — width/centreline accuracy** (right wall from the 3-parallel stack): **UNTESTED, unresolvable
-  with current data** (no size labels on those stack lines) — NOT refuted. Parked.
+- **PR #1 §4 connectivity line — HOLD before merge.** team A's §4 (commit c3f3950) says "173/173 wide
+  unlabeled runs join at both ends, zero floating"; investigador1 gets **162/173** under degree≥2 (6
+  one-end, 5 truly isolated). The 173 count is exact; "zero floating" does NOT reproduce. May be a
+  definitional difference (team A's "joined" looser than degree≥2) — reconcile the definition; do not
+  ship a connectivity figure that doesn't reproduce. Height conclusion unaffected.
+- **H2 — width/centreline accuracy**: still UNTESTED at trunk scale, but a **verified instance now
+  exists at small-branch scale** — inner-pair selection in the 82.4mm cluster (see the 4" resolution).
+  Bounded (~1 point of the denominator); a real small width-accuracy issue, not a coverage mover.
+- **~139 recoverable candidates** (all ≥8", zero 4", a loose upper bound) → 121's cad2d for
+  human-in-loop per-run confirmation (Track A final close).
+- **5mm-over-gate eyeball** (immaterial): a few 24"/26" runs sit 5mm over the gate from a '25"x20"'
+  label — worth a manual look, does not change the frame.
+- **[DONE] Eyeball the 82.4mm cluster** — 121 rendered it (matplotlib, headless); resolved above.
+
+## OPERATIONAL HAZARD (anyone running captures/gates)
+
+- **serve.py can bind a port ALREADY serving another session's tree** and fail silently — the probe
+  then measures the WRONG tree and exits 0 (green light on the wrong files). 12 hit this on port 8123,
+  moved to 8137. **Pin a unique port AND assert serve.py actually bound before trusting any gate/capture
+  result.**
 
 ## DELIVERABLE FRAME (the honest pivot)
 
@@ -85,14 +105,21 @@ what the source has and does not**:
    61.7% measured height only — **permanently**, since the 38.3% will never be recovered (do not assume
    a top to make an unknown-height run clashable — render it as explicitly unknown).
 
-## Known defects (not blocking WU2)
+## Defects — fixed this session (12, gate now LIVE after user unblock, commit 82af818)
 
-- **Viewer provenance-legibility (12's Defect-1, live in the shipped viewer).** The viewer hides the
-  whole small class by default — **1094.6m = 43.1% by length** — collapsed to one color. Of that,
-  **587.4m carries MEASURED height** whose provenance credit is denied, and **507.1m is genuinely
-  assumed** and reads as certain (the §13 trap, live). The 587.4m is already inside the 61.7%-measured
-  total — this is a display defect, **separate from WU2 gap-recovery**, on team A's viewer surface.
-- **Ortho-camera resize** (`system-3d:55150`): ortho frustum not recomputed on resize; model stretches.
+- **Viewer provenance-legibility (Defect-1) → FIXED.** Was hiding the whole small class (1094.6m =
+  43.1% by length) collapsed to one color; now shows height provenance on every run (121's cad2d
+  pattern). This was the live §13 trap in the render.
+- **§13.2 denominator trap, LIVE in the client-facing viewport → FIXED.** The HUD showed 20.7% (rect
+  labels by COUNT, excluding 442 round-label runs) next to 38.3% by length — reconciling to nothing,
+  in the deliverable. Both figures now name "de la longitud" (the exact prose trap the denominator rule
+  targets, caught by the live gate).
+- **Ortho-camera resize → FIXED** (same commit): frustum now recomputed on resize.
+
+## Defects — remaining
+
+- **Viewer framing** (found by the first live gate run): network crops past the right edge and overlaps
+  the HUD. Now measurable, queued as its own WU on team A's viewer surface.
 
 ## Staged proposals (NOT applied — user promotes)
 
