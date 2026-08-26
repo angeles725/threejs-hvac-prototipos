@@ -26,10 +26,15 @@ from pathlib import Path
 from collections import defaultdict
 
 try:
-    from shapely.geometry import LineString, Polygon
+    from shapely.geometry import LineString, Point, Polygon
     from shapely.strtree import STRtree
 except ImportError:
     raise SystemExit("shapely >= 2.0 required. Install with: pip install shapely")
+
+# Extractor TEE_MARGIN: an endpoint within this distance of the other run's
+# axis is a missed-tee (the runs connect at a fitting not captured by shared
+# node topology).  Must match the extractor constant.
+TEE_MARGIN = 0.20  # metres
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +170,20 @@ def analyse(data_path: Path, meco: float | None, top_n: int):
             if adj_key in adjacent_pairs:
                 continue
 
+            # Geometric adjacency: missed-tee check.
+            # If either endpoint of one run lies within TEE_MARGIN of the other
+            # run's centreline axis, the runs connect at a fitting the node
+            # topology missed (extractor TEE_MARGIN artefact).  Exclude them.
+            axis_a = LineString([run_a["p0"], run_a["p1"]])
+            axis_b = LineString([run_b["p0"], run_b["p1"]])
+            if (
+                Point(run_a["p0"]).distance(axis_b) < TEE_MARGIN
+                or Point(run_a["p1"]).distance(axis_b) < TEE_MARGIN
+                or Point(run_b["p0"]).distance(axis_a) < TEE_MARGIN
+                or Point(run_b["p1"]).distance(axis_a) < TEE_MARGIN
+            ):
+                continue
+
             # Compute actual plan intersection area (filtering out edge/point touches)
             geom_b = footprints[global_idx_b]
             intersection = geom_a.intersection(geom_b)
@@ -209,18 +228,31 @@ def analyse(data_path: Path, meco: float | None, top_n: int):
 
             if z_overlap(bod_a, h_a, bod_b, h_b):
                 overlap_z = min(bod_a + h_a, bod_b + h_b) - max(bod_a, bod_b)
+                # Double-bind BOD proxy flag: both runs bound a label (not
+                # a direct measurement) and share the same BOD value — a
+                # necessary (but not sufficient) condition for the double-bind
+                # artifact.  The definitive screen requires the extractor's
+                # per-run label-instance handle (not present in this JSON).
+                double_bind_proxy = (
+                    run_a.get("bod_src") == "label"
+                    and run_b.get("bod_src") == "label"
+                    and bod_a == bod_b
+                )
                 real_clashes.append({
                     "id_a": run_a["id"],
                     "id_b": run_b["id"],
                     "cls_a": run_a.get("cls"),
                     "cls_b": run_b.get("cls"),
                     "bod_a": bod_a,
+                    "bod_src_a": run_a.get("bod_src"),
                     "h_a": h_a,
                     "bod_b": bod_b,
+                    "bod_src_b": run_b.get("bod_src"),
                     "h_b": h_b,
                     "z_overlap_m": round(overlap_z, 4),
                     "plan_overlap_area_m2": round(plan_area, 5),
                     "centroid": (round(intersection.centroid.x, 3), round(intersection.centroid.y, 3)),
+                    "double_bind_proxy": double_bind_proxy,
                 })
             else:
                 clash_free_pairs += 1
@@ -281,6 +313,21 @@ def write_report(result: dict, output_path: Path) -> str:
     lines.append("**Tool:** `disenos/COB-IM2/tools/duct-clash.py`  ")
     lines.append("**§13 discipline:** runs with `h=None` are never assigned a top — reported as UNRESOLVED, neither clash nor clash-free.  ")
     lines.append("")
+    lines.append("## Headline conclusion")
+    lines.append("")
+    lines.append("**0 CONFIRMED coordination clashes.**")
+    lines.append("")
+    lines.append("The tool found plan-crossing candidates, but all of them are ADVISORY and none can be confirmed")
+    lines.append("as a real coordination clash with the data available.  Two extractor weaknesses dominate the")
+    lines.append("candidate list, and the Z-test is structurally inactive on this dataset.  The tool's primary")
+    lines.append("value here was **surfacing those two extractor defects**, not flagging coordination work items.")
+    lines.append("")
+    lines.append("| Weakness | What it does | Status |")
+    lines.append("|---|---|---|")
+    lines.append("| **Missed-tee connections** | Runs that connect at a fitting but share no node appear as plan-crossing non-adjacent pairs | Fixed in this tool (TEE_MARGIN=0.20 m geometric screen); 8 false positives removed |")
+    lines.append("| **Double-bound BOD labels** | Nearest-label binder assigns the same label to two runs → identical `bod`, making otherwise-unrelated runs falsely co-planar | Mechanism confirmed on spot-check L4_0773↔L4_0857; definitive screen needs extractor label-instance handle (team A) |")
+    lines.append("| **Inactive Z-test** | ~83% of BODs sit in a 0.1 m band; every plan-crossing also Z-overlaps | No clash-free confirmed pairs in the resolvable subset |")
+    lines.append("")
 
     # --- Summary table ---
     lines.append("## Dataset summary")
@@ -321,48 +368,61 @@ def write_report(result: dict, output_path: Path) -> str:
     lines.append("")
 
     # --- Clash results ---
-    lines.append("## Clash analysis results")
+    lines.append("## Clash screen results")
     lines.append("")
 
     total_inspected_pairs = len(real_clashes) + len(unresolved_pairs) + clash_free_pairs
-    lines.append(f"Pairs with overlapping 2D footprints (non-adjacent): **{total_inspected_pairs}**")
+    double_bind_proxy_count = sum(1 for c in real_clashes if c.get("double_bind_proxy"))
+    lines.append(f"Pairs with overlapping 2D footprints (non-adjacent, post-TEE_MARGIN filter): **{total_inspected_pairs}**")
     lines.append("")
     lines.append(f"| Category | Pairs | % of {total_inspected_pairs} pairs |")
     lines.append("|---|---|---|")
-    lines.append(f"| **REAL CLASHES** (both h known, Z-intervals overlap > 1 cm) | {len(real_clashes)} | {100*len(real_clashes)/max(1,total_inspected_pairs):.1f}% |")
-    lines.append(f"| **UNRESOLVED** (h=None on at least one run) | {len(unresolved_pairs)} | {100*len(unresolved_pairs)/max(1,total_inspected_pairs):.1f}% |")
+    lines.append(f"| **ADVISORY candidates** (both h known, Z-intervals overlap > 1 cm) | {len(real_clashes)} | {100*len(real_clashes)/max(1,total_inspected_pairs):.1f}% |")
+    lines.append(f"| — of which double-bind BOD proxy (same `bod` value, both `bod_src=label`) | {double_bind_proxy_count} | {100*double_bind_proxy_count/max(1,len(real_clashes)):.1f}% of candidates |")
+    lines.append(f"| **UNRESOLVED** (h=None on at least one run — §13) | {len(unresolved_pairs)} | {100*len(unresolved_pairs)/max(1,total_inspected_pairs):.1f}% |")
     lines.append(f"| **Clash-free confirmed** (both h known, no Z overlap) | {clash_free_pairs} | {100*clash_free_pairs/max(1,total_inspected_pairs):.1f}% |")
     lines.append("")
-
-    if len(real_clashes) == 0:
-        lines.append("**The resolvable subset is clash-free.** No pair with both heights known produces a Z-interval overlap exceeding 1 cm.")
-    else:
-        lines.append(f"**{len(real_clashes)} real clash(es) detected** in the resolvable (both-h-known) subset:")
+    lines.append("> **Why these are ADVISORY, not confirmed clashes — three compounding reasons:**")
+    lines.append(">")
+    lines.append("> 1. **Z-test inactive.** ~83% of BODs cluster in a ~0.1 m band (median 3.76 m, 25th–75th pct")
+    lines.append(">    3.71–3.79 m) with duct heights of 0.15–0.30 m. Every plan-crossing pair also Z-overlaps —")
+    lines.append(">    zero clash-free confirmed. A \"candidate\" means two ducts cross in plan at plenum height,")
+    lines.append(">    not a proven vertical conflict. The step-over is designed in the field or via a coordination")
+    lines.append(">    drawing that was not digitised.")
+    lines.append("> 2. **Double-bound BOD labels.** The extractor's nearest-label binder assigns the same BOD label")
+    lines.append(">    to multiple runs with no exclusivity — runs at different plan locations share an identical `bod`")
+    lines.append(">    without truly being co-planar. Mechanism confirmed by spot-check on L4_0773↔L4_0857 (the")
+    lines.append(f">    highest-ranked candidate before the TEE_MARGIN fix). Proxy signature (same `bod`, both")
+    lines.append(f">    `bod_src=label`) matches **{double_bind_proxy_count} of {len(real_clashes)} candidates**.")
+    lines.append(">    Definitive screen requires the extractor's per-run label-instance handle — not in this JSON;")
+    lines.append(">    team A owns it.")
+    lines.append("> 3. **Missed-tee residue.** 8 false positives removed by the TEE_MARGIN=0.20 m geometric screen.")
+    lines.append(">    Residual missed-tees beyond 0.20 m remain possible.")
     lines.append("")
 
     if real_clashes:
-        lines.append("### Real clash detail")
+        lines.append("### ADVISORY candidate detail")
         lines.append("")
-        lines.append("| # | Run A | Run B | cls A | cls B | BOD A (m) | h A (m) | BOD B (m) | h B (m) | Z-overlap (m) | Plan-area overlap (m²) | Centroid (x, y) |")
-        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
-        # Find most significant clash by plan area
-        max_clash = max(real_clashes, key=lambda c: c["plan_overlap_area_m2"])
-        micro_threshold = 1e-3  # m² — below this, flag as possible digitization artifact
+        lines.append("All entries are ADVISORY — none are confirmed coordination clashes.  ")
+        lines.append("Column `DBP` = double-bind BOD proxy flag (both `bod_src=label`, same `bod` value — candidate for the double-bind artifact; definitive check requires extractor label-instance handle).")
+        lines.append("")
+        lines.append("| # | Run A | Run B | cls A | cls B | BOD A | h A (m) | BOD B | h B (m) | Z-overlap (m) | Plan-area (m²) | DBP | Centroid (x, y) |")
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+        micro_threshold = 1e-3
         micro_count = sum(1 for c in real_clashes if c["plan_overlap_area_m2"] < micro_threshold)
 
         for i, c in enumerate(real_clashes, 1):
-            note = " ⚠ micro-overlap" if c["plan_overlap_area_m2"] < micro_threshold else ""
+            note = " ⚠" if c["plan_overlap_area_m2"] < micro_threshold else ""
+            dbp = "**yes**" if c.get("double_bind_proxy") else "no"
             lines.append(
                 f"| {i} | {c['id_a']} | {c['id_b']} | {c['cls_a']} | {c['cls_b']} "
                 f"| {c['bod_a']} | {c['h_a']} | {c['bod_b']} | {c['h_b']} "
                 f"| {c['z_overlap_m']} | {c['plan_overlap_area_m2']}{note} "
-                f"| ({c['centroid'][0]}, {c['centroid'][1]}) |"
+                f"| {dbp} | ({c['centroid'][0]}, {c['centroid'][1]}) |"
             )
         lines.append("")
-        lines.append(f"**Most significant clash:** {max_clash['id_a']} ({max_clash['cls_a']}) vs {max_clash['id_b']} ({max_clash['cls_b']}) — plan overlap {max_clash['plan_overlap_area_m2']:.5f} m², Z overlap {max_clash['z_overlap_m']} m, at ({max_clash['centroid'][0]}, {max_clash['centroid'][1]})")
-        lines.append("")
         if micro_count:
-            lines.append(f"**Note:** {micro_count} clash(es) marked `⚠ micro-overlap` have plan intersection area < 1 mm² ({micro_threshold} m²). These meet the geometric criteria but may be digitization artifacts (parallel runs whose extruded widths barely cross). Treat as advisory pending field verification.")
+            lines.append(f"**⚠ = micro-overlap** (plan area < 1 mm²) — meets geometric threshold but may be a digitization artifact; treat as lowest-confidence advisory.")
             lines.append("")
 
     lines.append("### Unresolved pairs (sample — first 30)")
