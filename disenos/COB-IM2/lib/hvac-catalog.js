@@ -233,21 +233,38 @@
    * the family is (w0,h0) x (w1,h1) x length, and an evidence set that shows one
    * length has shown half the family.
    *
-   * PROVENANCE OF THOSE TWO LENGTHS: they come from 121's part-number inventory,
-   * NOT from the pinned artifact. `L4-full.json` sha 7533dccb carries transitions
-   * as {node, kind, w, h, x, y} with no length field at all, and the strings
-   * "10cm" / "30cm" / "RED" appear nowhere in it. Verified, and recorded here so
-   * the two numbers keep their own source instead of inheriting [CERT] from the
-   * artifact that does not contain them.
+   * THE TWO LEGEND LENGTHS ARE NAMES, NOT MEASUREMENTS — do not build to them.
+   * COB's M-HVAC-DUCT LEGEND does carry REDUCCIÓN RECTANGULAR part numbers
+   * (3093643 / 3093738 labelled 10 cm, 3090626 labelled 30 cm), and I cited them
+   * here until 121 measured the blocks themselves: the names contradict the
+   * geometry. The "10 cm" blocks measure 76.2 mm and 305.3 mm; the "30 cm" blocks
+   * 508 / 709 / 754 mm; and two blocks sharing part number 3093738 disagree with
+   * each other. No bbox axis matches its stated length on any of the six. 76.2 mm
+   * is exactly 3" and 406.4 mm exactly 16" — the blocks are drawn imperial with
+   * metric names pasted on.
+   *
+   * So LENGTH IS A FREE PARAMETER driven by the width change, not a lookup:
+   * `length >= 1.5 * dW`, from SMACNA's 1:3 minimum transition slope. The part
+   * numbers are good for NAMING a part and nothing else. The constant below is
+   * kept only so callers can still reproduce the legend's nominal labels; it is
+   * not a dimension source.
    */
-  C.TRANSITION_LENGTHS_M = [0.10, 0.30];
-  C.transitionRect = ({ w0 = IN(20), h0 = IN(12), w1 = IN(12), h1 = IN(8), length = 0.30 }) => ({
-    geometry: sweep([frame(0, 0, 0, 1, 0, 0), frame(length, 0, 0, 1, 0, 0)],
-                    [ringRect(w0, h0), ringRect(w1, h1)], true, true),
-    ports: [P('in', [0, 0, 0], [-1, 0, 0], RECT(w0, h0)),
-            P('out', [length, 0, 0], [1, 0, 0], RECT(w1, h1))],
-    meta: { kind: 'transition-rect', label: `Transición ${(w0 / 0.0254).toFixed(0)}"×${(h0 / 0.0254).toFixed(0)} → ${(w1 / 0.0254).toFixed(0)}"×${(h1 / 0.0254).toFixed(0)}"` }
-  });
+  C.TRANSITION_LENGTHS_NOMINAL_M = [0.10, 0.30];   // legend NAMES — see above, not measurements
+  /** SMACNA 1:3 minimum slope: the shortest defensible transition for a width change. */
+  C.transitionMinLength = (w0, w1) => 1.5 * Math.abs(w0 - w1);
+  C.transitionRect = ({ w0 = IN(20), h0 = IN(12), w1 = IN(12), h1 = IN(8), length = null }) => {
+    // Derived by default, overridable when a caller has a real measured length.
+    const L = length != null ? length : Math.max(0.15, C.transitionMinLength(w0, w1));
+    return {
+      geometry: sweep([frame(0, 0, 0, 1, 0, 0), frame(L, 0, 0, 1, 0, 0)],
+                      [ringRect(w0, h0), ringRect(w1, h1)], true, true),
+      ports: [P('in', [0, 0, 0], [-1, 0, 0], RECT(w0, h0)),
+              P('out', [L, 0, 0], [1, 0, 0], RECT(w1, h1))],
+      meta: { kind: 'transition-rect', length_m: +L.toFixed(4),
+              length_src: length != null ? 'caller' : 'derived: SMACNA 1:3 min slope, 1.5 x dW',
+              label: `Transición ${(w0 / 0.0254).toFixed(0)}"×${(h0 / 0.0254).toFixed(0)} → ${(w1 / 0.0254).toFixed(0)}"×${(h1 / 0.0254).toFixed(0)}"` }
+    };
+  };
 
   /** Rect → round transition. Both rings are resampled to the same count. */
   C.transitionRectRound = ({ w = IN(14), h = IN(10), d = IN(10), length = 0.45, segments = 24 }) => {
