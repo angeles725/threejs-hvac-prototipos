@@ -77,15 +77,17 @@ Consequences per arm:
    ceiling / SMACNA spec / user input), not on our Z data.
 2. **Run-to-run vertical CLASH needs both ducts' full extent (`bod`..`bod+h`); the TOP `h` is the
    missing piece** — so THIS arm is the one bounded by the height gap, and the gap **concentrates on
-   the trunk** (the largest, most consequential ducts: trunk height coverage is the lowest, ~30%).
-   Exact captured-height coverage is being reconciled by the team — the raw figure (~42% of runs by
-   count, matching §13's 38.3% by length) is an UNDERCOUNT, because the viewer discards ~587m of
-   *measured* height via a small-class collapse; the certified data carries more than the viewer
-   shows. **So the gate must read the certified `L4-full.json`, never the viewer's collapsed
-   geometry.** A vertical-clash verdict on an assumed top is inferred, not measured, and must be
-   surfaced as such, never rendered as fact (§13 discipline). The current extractor is already
-   §13-correct: unknown-height runs carry `h=None` (absent stays absent, never a fabricated default)
-   — the gate must preserve that.
+   the trunk** (the largest, most consequential ducts: trunk height coverage is the lowest, ~30%
+   of trunk runs). Height coverage is SETTLED (not an open number): **61.7% measured / 38.3% assumed,
+   by network length** (denominator named on purpose — the by-length vs by-count confusion is a
+   recurring trap). A SEPARATE viewer *display* defect exists — the viewer collapses ~587m (43.1%
+   by length) of *measured* height into a hidden color — but that height is already **inside** the
+   61.7% measured; the certified data carries it, the viewer just under-shows it. So the gate must
+   read the certified `L4-full.json` (which has the full 61.7%), never the viewer's collapsed
+   geometry; the viewer's display defect does not reduce the gate's input. A vertical-clash verdict
+   on an assumed top is inferred, not measured, and must be surfaced as such, never rendered as fact
+   (§13 discipline). The current extractor is already §13-correct: unknown-height runs carry
+   `h=None` (absent stays absent, never a fabricated default) — the gate must preserve that.
 3. **Fittings carry no `bod`** in `L4-full.json`, so fitting-to-fitting clash at a node cannot be
    caught until fittings are meshed. Run-to-run is phase 1; fitting geometry is phase 2.
 
