@@ -165,3 +165,46 @@ The catalog is finite and small:
 
 That is the whole real set. Anything beyond it is invented, and should be justified against a
 drawing before it is built.
+
+---
+
+## 9. Reducer lengths — COB's own two blocks do not cover COB's own transitions
+
+The `M-HVAC-DUCT` legend specifies reducer bodies in exactly **two lengths: 10 cm and 30 cm**.
+Checked against the transitions actually present.
+
+**Isolating genuine reducers.** Of 188 `transition` fittings, 57 sit on nodes with more than two
+runs (junctions — a small branch off a large trunk is a *takeoff*, not a reducer, and applying a
+transition-slope rule to it is meaningless) and 4 join non-collinear runs. That leaves
+**127 genuine in-line reducers**.
+
+**The standard.** SMACNA gives a minimum slope of **1:3** for a change in dimension (≈18.4° per
+side); 15° per side is the recommended convergence limit. So a symmetric reducer needs a body at
+least `1.5 × ΔW` long.
+
+**Result — 19 of 127 (15%) cannot be built from either COB block.**
+
+| from → to | ΔW | body needed at 1:3 | angle if built at 30 cm |
+|---|---|---|---|
+| 9" → 66" | 1448 mm | 2172 mm | 67.5° per side |
+| 24" → 72" | 1219 mm | 1829 mm | 63.8° per side |
+| 18" → 60" | 1067 mm | 1600 mm | 60.6° per side |
+| 5" → 24" | 483 mm | 724 mm | 38.8° per side |
+| 6" → 24" ×3 | 457 mm | 686 mm | 37.3° per side |
+| 8" → 24", 4" → 20" | 406 mm | 610 mm | 34.1° per side |
+| 6" → 18" ×4 | 305 mm | 457 mm | 26.9° per side |
+
+The other 108 are small steps — 80 at 25 mm and 24 at 51 mm (one- and two-inch changes) — which
+are comfortably compliant at either length.
+
+**Catalog requirement:** reducer length must be a **free parameter driven by ΔW**, not a choice
+between the two legend values. Generating a component that offers only 10 cm and 30 cm would make
+15% of COB's own transitions unbuildable to standard. A sensible default is `length ≥ 1.5 × ΔW`,
+with the two legend lengths available as presets for the small steps that dominate by count.
+
+**Caveat, stated because it bounds the claim.** This compares ΔW against the *legend block*
+lengths. The drawn length of each transition is **not** in `L4-full.json` (fittings are stored as
+points), so I have not measured what the drawing actually draws — the transitions may well be
+drawn longer than the legend blocks, in which case the drawing is fine and only the block library
+is short. Establishing which would need the transition geometry read back out of the DXF. What is
+certain either way is the catalog requirement above.
