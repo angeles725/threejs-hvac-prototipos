@@ -55011,9 +55011,59 @@ controls.maxPolarAngle = Math.PI*0.495;
 // max is 400 m: the model's diagonal is ~159 m, so that is a generous whole-view
 // with room to pull back, and a hard stop before the network becomes a speck.
 controls.zoomToCursor = true;      // dolly toward what the cursor is over
-controls.zoomSpeed    = 0.7;
 controls.minDistance  = 0.6;       // just outside a duct wall
 controls.maxDistance  = 400;
+
+// NAVIGATION at this scale. The defaults are written for an object you orbit at
+// arm's length, not a 153 x 42 m plate: at 200 m out, a default-speed drag spins
+// the whole floor past the frame, and a pan moves in screen pixels rather than
+// in metres. Slower rotate, screen-space pan, and damping already on.
+controls.rotateSpeed = 0.55;
+controls.panSpeed = 0.7;
+controls.screenSpacePanning = true;
+
+// ── SMOOTH DOLLY ───────────────────────────────────────────────────────────
+// OrbitControls' wheel zoom is taken over entirely. Three separate things made
+// it uncontrollable and only the first is about speed:
+//
+//   1. RAW deltaY. Browsers report wildly different magnitudes for one notch —
+//      a mouse can send 100+, a trackpad 3 — so the same gesture jumps a
+//      different distance on every device. Math.sign() normalises it: one
+//      notch is one step, whatever the hardware says.
+//   2. ADDITIVE step. Moving a fixed number of metres is far too fast when you
+//      are 200 m out and far too slow at 2 m. A MULTIPLICATIVE step is
+//      proportional to where you already are, so the feel is identical near
+//      and far.
+//   3. NO EASING. r160 does not damp the dolly at all — enableDamping covers
+//      rotate and pan only — so every notch lands instantly. Here the wheel
+//      only sets a DESTINATION radius and the frame loop eases toward it.
+//
+// Constants (0.12 step, 0.16 ease) are from the reference viewer the user
+// pointed at as the feel they want, not invented here.
+controls.enableZoom = false;       // we own the wheel now
+let _dollyTarget = null;
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const cam = activeCam();
+  const cur = cam.position.distanceTo(controls.target);
+  const base = _dollyTarget != null ? _dollyTarget : cur;
+  const next = base * (1 + Math.sign(e.deltaY) * 0.12);
+  _dollyTarget = Math.min(controls.maxDistance, Math.max(controls.minDistance, next));
+}, { passive: false });
+
+function stepDolly(){
+  if (_dollyTarget == null) return;
+  const cam = activeCam();
+  const cur = cam.position.distanceTo(controls.target);
+  const next = cur + (_dollyTarget - cur) * 0.16;
+  if (Math.abs(_dollyTarget - cur) < 0.004){ _dollyTarget = null; return; }
+  const dir = new T.Vector3().subVectors(cam.position, controls.target).normalize();
+  cam.position.copy(controls.target).addScaledVector(dir, next);
+}
+// A drag or a re-frame must cancel an in-flight glide — an exact framing is an
+// exact framing, never blended with a stale zoom destination.
+controls.addEventListener('start', () => { _dollyTarget = null; });
+
 controls.update();
 window.__cam = ()=>({p:activeCam().position.toArray().map(v=>+v.toFixed(2)),
                      t:controls.target.toArray().map(v=>+v.toFixed(2))});
@@ -55366,7 +55416,8 @@ let _pinned = false;
 (function tick(){
   requestAnimationFrame(tick);
   if (!_pinned){ _pinned = true; applyCamQuery(); }
-  controls.update();
+  stepDolly();                 // before controls.update(): OrbitControls
+  controls.update();           // re-derives its radius from the camera position
   renderer.render(scene, activeCam());
 })();
 console.log('COB-IM2 L4:', DATA.meta.stats);

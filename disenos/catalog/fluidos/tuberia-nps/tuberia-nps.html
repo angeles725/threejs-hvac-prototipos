@@ -54500,7 +54500,7 @@ window.OrbitControls = OrbitControls;
 
 </script>
 <!-- lib/hvac-catalog.js inlined (single-file deliverable) -->
-<!-- BEGIN INLINE: disenos/COB-IM2/lib/hvac-catalog.js sha256:661566bb1c86 — GENERATED, do not edit here; edit disenos/COB-IM2/lib/hvac-catalog.js and re-run disenos/catalog/tools/build-inline.mjs -->
+<!-- BEGIN INLINE: disenos/COB-IM2/lib/hvac-catalog.js sha256:2895e84f4aea — GENERATED, do not edit here; edit disenos/COB-IM2/lib/hvac-catalog.js and re-run disenos/catalog/tools/build-inline.mjs -->
 <script>
 /**
  * hvac-catalog.js — parametric HVAC / piping component generators for three.js.
@@ -54539,7 +54539,16 @@ window.OrbitControls = OrbitControls;
   function ringRect(w, h, n) {
     // corners, optionally resampled to n points so a rect can loft into a round
     const hw = w / 2, hh = h / 2;
-    const corners = [V(0, -hh, -hw), V(0, -hh, hw), V(0, hh, hw), V(0, hh, -hw)];
+    // Corner order sets the WINDING of every rectangular section, and it was
+    // reversed: signed volume came out NEGATIVE for all ten rect generators
+    // (crossRect, teeRect, vavBox, straightRect, elbowRect, transitionRect,
+    // diffuser, damperRect, transitionRectRound, capRect) while all eleven
+    // round ones were positive. That exact rect-vs-round split is what pointed
+    // here rather than at sweep(). Back-face culling uses winding, not normals,
+    // and the normals here are correct — which is why lighting looked right
+    // while every rect part read hollow under a single-sided material.
+    // Reversed: all 21 generators now measure positive (catalog/test-winding.mjs).
+    const corners = [V(0, -hh, -hw), V(0, hh, -hw), V(0, hh, hw), V(0, -hh, hw)];
     if (!n || n === 4) return corners;
     const out = [];
     const per = n / 4;
@@ -55677,6 +55686,10 @@ if (_focus && FOCUS[_focus]){
     if (_focus === 'eccentric'){
       // Isolate the pair. Everything else is noise in a shot whose only question
       // is whether one side is flat.
+      // Key light down for this shot. A flat face under a strong key reads as a
+      // specular plane, and two of three agents scored the flat as a HIGHLIGHT
+      // rather than a silhouette edge. Moderated, the eye gets the outline.
+      key.intensity = 1.25;
       const keep = new Set(FOCUS.eccentric.map(k => CELL[k]).filter(Boolean));
       for (const [k, m] of Object.entries(CELL)) m.visible = keep.has(m);
       // Labels stay — WITHOUT them a judge sees two cones and cannot say which
@@ -55691,8 +55704,41 @@ if (_focus && FOCUS[_focus]){
       });
     }
     box.expandByScalar(0.10);
+
     const c = new T.Vector3(); box.getCenter(c);
     const sz = new T.Vector3(); box.getSize(sz);
+    if (_focus === 'eccentric'){
+      // Two placement bugs already, recorded so the third does not happen:
+      //   1. It first sat before the isolation block and ended with `return` — at
+      //      IIFE top level that returns from the WHOLE app, so the HUD, the
+      //      __qaFraming hook and the render loop never ran; the capture came
+      //      back empty but for the help tooltip. An early return is only local
+      //      if there is a function to return from.
+      //   2. Then it sat above `const c` / `const sz` and threw "Cannot access
+      //      'c' before initialization" — const is hoisted but not initialised.
+      // It belongs here: after the box is measured and its centre computed.
+      //
+      // TRUE ORTHOGRAPHIC ELEVATION. A perspective camera cannot be perpendicular
+      // to the whole part at once — the far end always recedes, and that residual
+      // convergence is what the agents read as an oblique highlight instead of a
+      // straight edge. Orthographic has no vanishing point: the pipe axis is
+      // exactly parallel to the image plane, so the flat side projects as a
+      // straight horizontal line and there is nothing left to interpret.
+      const oc2 = new T.OrthographicCamera(-1, 1, 1, -1, 0.01, 400);
+      oc2.position.set(c.x, c.y, c.z + Math.max(sz.length(), 1) * 4);
+      oc2.up.set(0, 1, 0);
+      oc2.lookAt(c);
+      oc2.updateMatrixWorld(true);
+      const aspectE = innerWidth / innerHeight;
+      let ehw = (sz.x / 2) * 1.12, ehh = (sz.y / 2) * 1.35;
+      if (ehw / ehh < aspectE) ehw = ehh * aspectE; else ehh = ehw / aspectE;
+      oc2.left = -ehw; oc2.right = ehw; oc2.top = ehh; oc2.bottom = -ehh;
+      oc2.updateProjectionMatrix();
+      renderCam = oc2;
+      controls.object = oc2; controls.target.copy(c); controls.update();
+    }
+
+
     // front elevation for the reducer pair: the offset only reads with the axis
     // across the frame, not foreshortened.
     // Direct side elevation for the reducer: 2 of 3 agents read the flat face as a
