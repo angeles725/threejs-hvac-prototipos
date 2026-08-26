@@ -84,6 +84,38 @@ network." That is too broad. Precise, verified position:
   height (43.1% of length) into one hidden color — the §13 "assumed reads as certain" trap is live
   in the viewer, so WU2 coverage must be reconciled against the viewer's collapsed number.
 
+## WU2 RESULT (2026-08-26) — the height gap is source-absent, not recoverable
+
+Independently verified (investigador1) against certified `L4-full.json` + 121's full label
+export, at the extractor's own gates (`WIDTH_GATE`=20mm, `LABEL_MAX_DIST`=2.5m):
+
+- Of **284** unknown-height runs ≥24″, **exactly 1** has a gate-passing rect label — consistent
+  with 121's powered run (3/673 across all widths; 0/673 with the bound-label binder).
+- Where a label sits near a trunk-scale unknown run it belongs to a **different-width** duct
+  (best width error 250–360mm, ≫ the 20mm gate); many trunk runs have **no** rect label within
+  2.5m. The drawing carries essentially no rectangular size labels below 8″.
+
+**Conclusion: the 38.3%-by-length height gap is SOURCE-ABSENT, not misbound.** No amount of
+better label→run binding recovers it — the drafter never wrote those heights. This retires
+"fix the extractor to recover heights." Honest frame: height is **61.7% measured / 38.3%
+source-absent** (kept `h=None`, correctly); the viewer must *show* the absence, not collapse it;
+the clash vertical-arm runs only on the 61.7%.
+
+Caveats on record: (a) a few 24″/26″ runs sit 5mm over the gate from a `25"x20"` label — tight,
+not wildly missing; (b) 211 informative unknown runs are 4″ wide (implausible rect ducts,
+`geom+ladder` snapped) — if spurious, the real gap is *smaller* than 38.3%, never larger.
+
+## H4 HARD-CONFIRMED — the "long walls" are perimeter linear-diffuser runs
+
+Per-tap-CFM-along-the-wall discriminator (12's proposal, run on 121's labels):
+- **51m wall (14A):** 49 CFM taps + 49 `LD-#` tags (100/175/200 CFM, ~4.2m spacing), 4 small
+  rect labels (8–12″), **zero trunk labels**.
+- **58/60m wall (14B):** 62 CFM taps + 64 `LD-#` tags (100–175 CFM), one 14"x12".
+
+A long duct carrying a regular sequence of numbered linear-diffuser taps at diffuser-scale CFM
+is a linear-diffuser run by definition. Three independent legs (label-type, data-side ≤24″-only
+runs, per-tap CFM/LD sequence) → **hard-confirmed**.
+
 **H1 (run-split): CONCEDED**, verified independently by reading `extract-l4-full.py:780-870`.
 The two-tier design is genuine — `MERGE_GAP=0.90` does real 0-gap geometry merges;
 `BRIDGE_GAP=2.50` (:791) does topology-only bridging (:815-870) that adds **zero metres** (the
