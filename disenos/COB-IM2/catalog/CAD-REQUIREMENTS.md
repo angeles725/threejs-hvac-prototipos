@@ -102,18 +102,24 @@ superseded 2,132-run baseline and should be discarded.)*
 11 combos). **SD and MD do not appear** as damper types anywhere in the level-4 sheets — `SD`
 in this drawing means supply diffuser, not smoke damper. Do not build SD/MD damper parts.
 
-## 5. Terminals — 4 families, 529 instances
+## 5. Terminals — 4 families, 551 instances
 
-| type | n | meaning |
-|---|---|---|
-| SD | 249 | supply diffuser |
-| LD | 152 | linear diffuser |
-| RR | 86 | return register |
-| CD | 42 | ceiling diffuser |
+**Use the label tags, not `terminals[]`.** Same nesting as the rect families, resolved the same way:
 
-Plus 90 VAV boxes in `equipment`. *(A peer reports SD 257 / LD 164 / CD 45 from a direct DXF
-tag parse; the counts above are from `L4-full.json terminals[]`. The ~3% delta is unreconciled
-and worth one check before these drive part quantities.)*
+| type | labels (use) | `terminals[]` | meaning |
+|---|---|---|---|
+| SD | **256** | 249 | supply diffuser |
+| LD | **164** | 152 | linear diffuser |
+| RR | **86** | 86 | return register |
+| CD | **45** | 42 | ceiling diffuser |
+| **total** | **551** | 529 | |
+
+`terminals[]` is a **strict subset**: it contains zero instances the labels lack, and drops 22
+that they have (`LD-1` ×6, `LD-2` ×6, `SD-1` ×6, `CD-1` ×3, `SD-2` ×1). Plus 90 VAV boxes in
+`equipment`.
+
+*(A peer reads SD 257 against this parse's 256 — a one-count regex edge case, not material.
+LD, CD and RR agree exactly.)*
 
 ## 6. COB's own fitting blocks — use these names
 
