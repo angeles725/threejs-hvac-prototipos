@@ -72,3 +72,40 @@ cinematic post — AO only), (e) no console/geometry errors in the capture.
 - Terminal/diffuser geometry is representative, not a manufacturer part — `provenance: standard`.
 - This catalog is component geometry; it does not assert the L4 network's height/Z (that gap is a
   documented drawing-completeness floor — see `~/investigacion/COB-IM2/tools/l4/HEIGHT-Z-GROUND-TRUTH.md`).
+
+## Proven process to reuse — from `disenos/nave-panccadia/equipos/` (already did this)
+
+nave-panccadia built an equipment catalog the same shape we need. Adopt its working method verbatim
+where it fits; these are battle-tested with retros behind them.
+
+1. **Folder-as-contract, PNG-as-thumbnail.** Each component is a folder `catalog/<slug>/` holding
+   `<slug>.html` (self-contained viewer), `design-spec.yaml` (the contract), and
+   `runs/{<slug>.png, <slug>.console.json, <slug>.review.json, progress.yaml}`. The gate-capture PNG
+   IS the catalog thumbnail — one artifact, two jobs. (`nave-panccadia/equipos/catalogo.html:81-97`)
+2. **Static data-driven catalog, no build step.** `catalogo.html` hardcodes a `GROUPS` array
+   (`{title, items:[{slug,name,dim}]}`) grouped by family (for us: rectangular / round / elbow / tee
+   / cross / transition / reducer / damper / terminal / pipe) and renders one card per item linking
+   `<slug>/<slug>.html`. Reusable almost verbatim.
+3. **Declare `gate_passes:` per asset** (their #1 confirmed lesson). A simple pipe/duct section needs
+   only `[materials]`; a fitting `[structural, materials]`. Forcing the full 8-pass ladder makes the
+   gate un-passable for a flat catalog and tempts a checker-bypass. (`equipos/runs/2026-08-07-retro.md`)
+4. **DesignSpec is the single contract**: `complexity` (8 axes → tier), `critical_features` with
+   numeric `threshold`s, `references[]` with `[CERT]` provenance markers, `dimensions_real` as
+   `{value, confidence}`, `perf_budget {draws, tris}` MEASURED not guessed, and — critical for a
+   duct/pipe catalog — the `hierarchy.attachment` **socket schema** (`parent_socket`,
+   `local_start/end`, `contact_type: flange|slip-fit|socket|embedded`, `embed_depth`, `overlap`,
+   `gap_tolerance`) for how connectors mate. This subsumes our port contract.
+5. **Objective anchors, not reviewer coin-flips.** The materials gate is reviewer-variance-dominated
+   (±0.25 on pixel-identical renders). Put a `colorTarget {srgb, deltaE00Max, crop}` + `invariant_tests`
+   (assert via `console.error`, never `console.assert`) in the spec — a SCRIPT judges the dimension/
+   colour, the model judges only identity. (`equipos-v2/runs/benchmark-note.md`)
+6. **Capture every articulated state; derive cameras.** A real defect showed only in a second
+   (articulated) capture; hardcoded cameras lie. Use `fitView(subject, az, el)` + framing-probe.
+7. **Reusable material recipes apply directly**: `brushed-stainless-recipe` (env intensity 2.15 +
+   HemisphereLight + frontal fill + roughness 0.30) for galvanised-steel ducts, `transmission-free-glass`
+   (MeshStandard opacity ~0.4, NOT MeshPhysical.transmission — stalls SwiftShader) for clear/PVC pipe.
+   r160 gotcha: `material.envMapIntensity`, NOT `scene.environmentIntensity` (silently nonexistent).
+8. **Retro + operator-amendments, propose-never-apply.** Each spec keeps an `operator_amendments`
+   block (asked→done+measurement); each run writes `runs/<date>-retro.md` that STAGES lessons, never
+   silently mutates the kit. Kit A/B tests go in an isolated sibling folder so shipped assets stay
+   frozen (`equipos-v2/`).
