@@ -18,7 +18,11 @@
     border-radius:10px;backdrop-filter:blur(14px);box-shadow:0 8px 32px rgba(0,0,0,.5)}
   #side{top:14px;left:14px;width:306px;max-height:calc(100vh - 28px);overflow:auto;padding:14px 16px}
   #side h1{margin:0 0 2px;font-size:14px}
-  #side .sub{color:var(--dim);font-size:11px;margin-bottom:12px}
+  .szrow{display:flex;align-items:center;gap:8px;margin:5px 0}
+.szrow label{color:var(--dim);font-size:11px;min-width:78px}
+.szrow select{flex:1;background:#161b22;color:#e8edf3;border:1px solid #2b3541;border-radius:5px;padding:3px 6px;font:inherit;font-size:11px}
+.szNote{color:var(--dim);font-size:10.5px;margin:6px 0 2px;line-height:1.4}
+#side .sub{color:var(--dim);font-size:11px;margin-bottom:12px}
   .grp{margin:12px 0 5px;font-size:10px;letter-spacing:.9px;text-transform:uppercase;color:var(--dim)}
   .item{padding:6px 8px;border-radius:7px;cursor:pointer;border:1px solid transparent}
   .item:hover{background:rgba(90,169,255,.10);border-color:rgba(90,169,255,.30)}
@@ -55339,32 +55343,81 @@ const acc   = new T.MeshStandardMaterial({color:0x3f8f8a, metalness:0.4,  roughn
 steel.userData = MATERIALS.steel; alu.userData = MATERIALS.alu; acc.userData = MATERIALS.acc;
 
 // ── what the gallery shows ────────────────────────────────────────────────
+const COB = {
+  // Every size below is a family the ENGINEER LABELLED in the COB level-4
+  // drawings, with the count of labels carrying it. Nothing here is invented:
+  // the list is cob-l4-duct-inventory.json, design-intent population.
+  source: 'cob-l4-duct-inventory.json · design intent (502 rect + 442 round labels)',
+  rect: [[8,8,87], [12,8,55], [10,8,54], [14,12,39], [10,10,31], [12,10,26], [12,12,21], [16,14,13], [14,14,11], [60,20,11], [44,44,11], [34,20,10], [24,4,9], [16,16,8], [30,18,8], [28,20,8], [24,10,7], [24,14,7], [40,20,7], [18,18,6], [25,20,6], [24,20,6], [18,12,6], [54,20,5], [20,20,4], [14,10,4], [16,12,4], [24,12,4], [42,36,4], [52,36,4], [24,24,3], [34,24,3], [60,31,3], [16,15,2], [8,10,2], [36,20,2], [6,8,2], [26,26,1], [30,20,1], [42,20,1], [85,31,1], [69,26,1], [88,20,1], [14,24,1], [24,34,1], [87,33,1]],
+  round: [[6,435], [10,7], [8,4], [12,2], [4,1]],
+  fittings: {"elbow": 684, "tee": 217, "transition": 188, "cross": 68},
+  terminals: {"SD": 257, "LD": 164, "RR": 86, "CD": 45},
+  dampers: ["BD", "FD"],
+  // NPS is STANDARD-derived, never measured in COB: the drawings carry no
+  // plumbing layer on any of the nine sheets. ASME B36.10M ladder.
+  nps: ['1/2','3/4','1','1-1/4','1-1/2','2','2-1/2','3','4','5','6','8','10','12'],
+};
+
+// ── the catalog, PARAMETRIC over the real families ────────────────────────
+// The board used to be twenty parts at invented demo sizes (w=12", h=8"). It now
+// enumerates against COB above: pick a family and every rect part rebuilds at
+// that size, pick an NPS and the whole pipe family follows. A size that is not
+// in the drawings cannot be selected, which is the point -- a catalog whose
+// sizes are free invents parts nobody specified.
+//
+// `sizes` says WHICH ladder an entry follows: 'rect' takes w/h from a labelled
+// rect family, 'round' a labelled diameter, 'nps' a B36.10M pipe size, and null
+// means the part has no size axis worth browsing.
 const CATALOG = [
-  ['Ducto recto',      'straightRect',        {w:IN(12), h:IN(8), length:1.1}, steel],
-  ['Ducto redondo',    'straightRound',       {d:IN(10), length:1.1}, steel],
-  ['Codo 90° bloque',  'elbowRect',           {w:IN(14), h:IN(10), angle:90, segments:1}, steel],
-  ['Codo 90° 5 gajos', 'elbowRect',           {w:IN(14), h:IN(10), angle:90, segments:5}, steel],
-  ['Codo 45°',         'elbowRect',           {w:IN(14), h:IN(10), angle:45, segments:3}, steel],
-  ['Codo redondo 90°', 'elbowRound',          {d:IN(10), angle:90}, steel],
-  ['Tee / derivación', 'teeRect',             {w:IN(20), h:IN(12), bw:IN(10), bh:IN(8)}, steel],
-  ['Transición rect',  'transitionRect',      {w0:IN(20), h0:IN(12), w1:IN(12), h1:IN(8), length:0.55}, steel],
-  ['Transición→round', 'transitionRectRound', {w:IN(14), h:IN(10), d:IN(10), length:0.5}, steel],
-  ['Compuerta',        'damperRect',          {w:IN(14), h:IN(10)}, steel],
-  ['Flexible',         'flexConnector',       {d:IN(8), length:1.0}, alu],
-  ['Tapa terminal',    'capRect',             {w:IN(12), h:IN(8)}, steel],
-  ['Caja VAV',         'vavBox',              {inletD:IN(10), w:IN(16), h:IN(12), tag:'VAV-436'}, alu],
-  ['Difusor SD-1',     'diffuser',            {type:'SD-1', size:IN(24), neckD:IN(8)}, alu],
-  ['Difusor lineal',   'diffuser',            {type:'LD-1', length:IN(48)}, alu],
-  ['Difusor CD-1',     'diffuser',            {type:'CD-1', size:IN(24), neckD:IN(8)}, alu],
-  ['Rejilla RR-4',     'diffuser',            {type:'RR-4', size:IN(24)}, alu],
-  // pipeStraight, NOT the deprecated pipeRound: NPS is a LABEL, not a measurement.
-  // pipeRound({d:IN(4)}) drew 4.000" OD where NPS 4 pipe is 4.500" -- an 11%
-  // undersize on a part the catalog labelled Ø4". pipeStraight reads the OD from
-  // the B36.10M table, so the label and the metal agree.
-  ['Tubo NPS 4"',      'pipeStraight',        {nps:'4', length:1.2}, acc],
-  ['Codo NPS 4" 90°',  'pipeElbow',           {nps:'4', angle:90}, acc],
-  ['Reducción excéntrica NPS 4→3', 'pipeReducer', {nps:'4', to:'3', eccentric:true}, acc],
+  ['Ducto recto',      'straightRect', 'rect',  (w,h)=>({w:IN(w), h:IN(h), length:1.1}), steel],
+  ['Codo 90° bloque',  'elbowRect',    'rect',  (w,h)=>({w:IN(w), h:IN(h), angle:90, segments:1}), steel],
+  ['Codo 90° 5 gajos', 'elbowRect',    'rect',  (w,h)=>({w:IN(w), h:IN(h), angle:90, segments:5}), steel],
+  ['Codo 45°',         'elbowRect',    'rect',  (w,h)=>({w:IN(w), h:IN(h), angle:45, segments:3}), steel],
+  ['Tee / derivación', 'teeRect',      'rect',  (w,h)=>({w:IN(w), h:IN(h), bw:IN(Math.max(6,Math.round(w/2))), bh:IN(Math.max(6,Math.round(h/2)))}), steel],
+  // crossRect was MISSING from this catalog while COB carries 68 crosses --
+  // the fourth-most-common fitting on the level had no entry at all.
+  ['Cruz',             'crossRect',    'rect',  (w,h)=>({w:IN(w), h:IN(h), bw:IN(Math.max(6,Math.round(w/2))), bh:IN(Math.max(6,Math.round(h/2)))}), steel],
+  ['Transición rect',  'transitionRect','rect', (w,h)=>({w0:IN(w), h0:IN(h), w1:IN(Math.max(6,Math.round(w*0.6))), h1:IN(Math.max(6,Math.round(h*0.7)))}), steel],
+  ['Compuerta',        'damperRect',   'rect',  (w,h)=>({w:IN(w), h:IN(h)}), steel],
+  ['Tapa terminal',    'capRect',      'rect',  (w,h)=>({w:IN(w), h:IN(h)}), steel],
+  ['Transición→round', 'transitionRectRound','rect', (w,h)=>({w:IN(w), h:IN(h), d:IN(6), length:0.5}), steel],
+
+  ['Ducto redondo',    'straightRound','round', (d)=>({d:IN(d), length:1.1}), steel],
+  ['Codo redondo 90°', 'elbowRound',   'round', (d)=>({d:IN(d), angle:90}), steel],
+  ['Flexible',         'flexConnector','round', (d)=>({d:IN(d), length:1.0}), alu],
+
+  ['Caja VAV',         'vavBox',       null,    ()=>({inletD:IN(10), w:IN(16), h:IN(12), tag:'VAV'}), alu],
+  ['Difusor SD',       'diffuser',     null,    ()=>({type:'SD-1', size:IN(24), neckD:IN(8)}), alu],
+  ['Difusor lineal LD','diffuser',     null,    ()=>({type:'LD-1', length:IN(48)}), alu],
+  ['Difusor CD',       'diffuser',     null,    ()=>({type:'CD-1', size:IN(24), neckD:IN(8)}), alu],
+  ['Rejilla RR',       'diffuser',     null,    ()=>({type:'RR-4', size:IN(24)}), alu],
+
+  // Pipe: NPS is a LABEL, not a measurement -- pipeStraight reads the OD from the
+  // B36.10M table so the label and the metal agree. The deprecated pipeRound drew
+  // the nominal as the OD, 11% undersize at NPS 4.
+  ['Tubo NPS',         'pipeStraight', 'nps',   (n)=>({nps:n, length:1.2}), acc],
+  ['Codo NPS 90°',     'pipeElbow',    'nps',   (n)=>({nps:n, angle:90}), acc],
+  ['Codo NPS 45°',     'pipeElbow',    'nps',   (n)=>({nps:n, angle:45}), acc],
+  ['Tee NPS',          'pipeTee',      'nps',   (n)=>({nps:n}), acc],
+  ['Reducción NPS',    'pipeReducer',  'nps',   (n)=>({nps:n, to:COB.nps[Math.max(0,COB.nps.indexOf(n)-1)]}), acc],
+  ['Reducción excéntrica NPS','pipeReducer','nps',(n)=>({nps:n, to:COB.nps[Math.max(0,COB.nps.indexOf(n)-1)], eccentric:true}), acc],
+  ['Cople NPS',        'pipeCoupling', 'nps',   (n)=>({nps:n}), acc],
+  ['Brida NPS',        'pipeFlange',   'nps',   (n)=>({nps:n}), acc],
+  ['Válvula NPS',      'pipeValve',    'nps',   (n)=>({nps:n, kind:'gate'}), acc],
 ];
+
+// current selection, defaulting to the MOST COMMON family in the drawings
+let selRect = 0, selRound = 0, selNps = COB.nps.indexOf('4');
+const curRect  = ()=>COB.rect[selRect];
+const curRound = ()=>COB.round[selRound];
+const curNps   = ()=>COB.nps[selNps];
+function paramsFor(entry){
+  const [,,sizes,make] = entry;
+  if (sizes === 'rect')  { const [w,h] = curRect();  return make(w,h); }
+  if (sizes === 'round') { const [d]   = curRound(); return make(d); }
+  if (sizes === 'nps')   return make(curNps());
+  return make();
+}
 
 // label sprites, drawn to a canvas so the file needs no font file
 function label(text, sub){
@@ -55389,11 +55442,21 @@ function label(text, sub){
 // ── lay the catalog out on a grid ─────────────────────────────────────────
 const COLS = 6, GX = 2.6, GZ = 2.6;
 const picks = [];       // {mesh, entry, ports, center}
+const boardLabels = [];
 const portGroup = new T.Group(); scene.add(portGroup);
 
+function clearBoard(){
+  for (const pk of picks){ scene.remove(pk.mesh); pk.mesh.geometry.dispose(); }
+  for (const sp of boardLabels) scene.remove(sp);
+  portGroup.clear();
+  picks.length = 0; boardLabels.length = 0;
+}
+
+function buildBoard(){
+clearBoard();
 CATALOG.forEach((entry, i) => {
-  const [name, fn, params, mat] = entry;
-  const comp = K.components[fn](params);
+  const [name, fn, sizes, make, mat] = entry;
+  const comp = K.components[fn](paramsFor(entry));
   const g = comp.geometry;
   g.computeBoundingBox();
   const bb = g.boundingBox;
@@ -55408,7 +55471,7 @@ CATALOG.forEach((entry, i) => {
 
   const sp = label(name, comp.meta.label.replace(/^[^ ]+ /, ''));
   sp.position.set(ox, bb.max.y - bb.min.y + 0.42, oz);
-  scene.add(sp);
+  scene.add(sp); boardLabels.push(sp);
 
   // port markers: a disc at the port, an arrow along its outward direction
   const pg = new T.Group();
@@ -55424,6 +55487,8 @@ CATALOG.forEach((entry, i) => {
   portGroup.add(pg);
   picks.push({mesh, entry, comp, center:new T.Vector3(ox, (bb.max.y-bb.min.y)/2, oz)});
 });
+}
+buildBoard();
 
 // ── camera ────────────────────────────────────────────────────────────────
 // A DESTINATION-LERP spherical controller, ported from the user's reference
@@ -55518,38 +55583,47 @@ const PANEL_PX = 322;                    // side panel + its margin
 function frameBoard(){
   const box = new T.Box3();
   for (const pk of picks) box.expandByObject(pk.mesh);
+  // Include the LABELS. They are sprites sitting above and beside each part and
+  // they extend past the mesh bounds, so a fit computed on meshes alone crops the
+  // outermost names -- which is what the board did once it grew to 27 parts.
+  for (const sp of boardLabels){
+    box.expandByPoint(new T.Vector3(sp.position.x - sp.scale.x*0.5, sp.position.y, sp.position.z));
+    box.expandByPoint(new T.Vector3(sp.position.x + sp.scale.x*0.5,
+                                    sp.position.y + sp.scale.y*0.5, sp.position.z));
+  }
   if (box.isEmpty()) { dst.target.set(0, .4, 0); dst.radius = 22; return; }
-  const size = box.getSize(new T.Vector3());
-  const mid  = box.getCenter(new T.Vector3());
+  // size/centre now come from the bounding SPHERE below — the axis-aligned pair
+  // that used to live here underestimated the projected width at this orbit angle.
   // Shift the target right by half the panel's share of the viewport, expressed
   // in world units at the board's depth, so the panel covers empty space rather
   // than parts.
+  // Fit on the BOUNDING SPHERE, not on the world-axis extents. The board is
+  // viewed at theta 0.86 (~49 deg), so its projected width is
+  // size.x*cos(t) + size.z*sin(t) -- for a 15.6 x 13 board that is about 20 m
+  // against a size.x of 15.6. Fitting on size.x therefore underestimates by a
+  // quarter and crops the outer column, which is what it did at 27 parts. A
+  // sphere has no orientation, so this holds at any orbit angle the user reaches.
   const vFov = camera.fov * Math.PI/180;
   const tanV = Math.tan(vFov/2);
   const tanH = tanV * camera.aspect;
-  const EL_Y = 0.62, EL_Z = 0.80;              // 3/4 view direction
-  const elev = Math.atan2(EL_Y, EL_Z);         // camera elevation above the board
+  const sphere = box.getBoundingSphere(new T.Sphere());
+  const r = sphere.radius;
+  // The panel hides a slice of the viewport, so the usable half-angle is smaller.
+  const usable = Math.max(0.5, 1 - PANEL_PX / innerWidth);
+  const halfH = Math.atan(tanH * usable);
+  const halfV = Math.atan(tanV);
+  const dist = (r / Math.sin(Math.min(halfH, halfV))) * 1.06;
+  const mid = sphere.center.clone();
 
-  // Horizontal need: the row width, padded, inside the horizontal half-FOV --
-  // then divided by the fraction of the viewport the panel does NOT cover.
-  const usable  = Math.max(0.5, 1 - PANEL_PX / innerWidth);
-  const distH   = (size.x * 0.5 * 1.10) / tanH / usable;
-  // Vertical need: the board's depth foreshortens by sin(elevation), plus part height.
-  const vExtent = size.z * Math.sin(elev) + size.y;
-  const distV   = (vExtent * 0.5 * 1.10) / tanV;
-  const dist    = Math.max(distH, distV);
+  // Pulling the camera back does NOT move the board out from under the panel --
+  // it only makes everything smaller behind it. The look-at has to shift LEFT of
+  // the subject for the subject to render right of centre, along the camera's own
+  // RIGHT vector (the board is viewed at an angle, so a world-X shift would slide
+  // it diagonally instead of sideways).
+  const worldPerPx = (2 * Math.tan(halfH) * dist) / innerWidth;
+  const right = new T.Vector3(Math.cos(dst.theta), 0, -Math.sin(dst.theta));
+  mid.addScaledVector(right, -PANEL_PX * worldPerPx * 0.5);
 
-  // Shift the target right by half the panel's width in world units at that
-  // distance, so the panel covers empty space instead of the first column.
-  // Shift the LOOK-AT LEFT of the board centre. Moving target AND camera by the
-  // same amount just translates the view and leaves the board centred over the
-  // panel -- the eye must sit left of the subject for the subject to render right.
-  const worldPerPx = (2 * tanH * dist) / innerWidth;
-  mid.x -= PANEL_PX * worldPerPx * 0.5;
-  // Clamp travel to the BOARD's scale, derived with the fit rather than guessed.
-  // Left unbounded the wheel either buries the camera inside a part or flies it
-  // off into empty space, and neither is recoverable without a reset. Sized to
-  // the parts on screen (0.2-2 m), not to the 153 m plant model.
   RAD_MIN = Math.max(0.25, dist * 0.04);
   RAD_MAX = dist * 2.5;
   dst.target.copy(mid);
@@ -55583,7 +55657,8 @@ side.innerHTML = `
   <label class="row"><input type="checkbox" id="cPorts" checked> Mostrar puertos</label>
   <label class="row"><input type="checkbox" id="cWire"> Malla (wireframe)</label>
   <div class="grp">${CATALOG.length} piezas</div>
-  <div id="list"></div>
+  <div id="sizes"></div>
+<div id="list"></div>
   <div class="grp">Contrato de puerto</div>
   <div class="sub" style="margin:0">
     <span class="pt"></span>Cada puerto lleva posición, dirección SALIENTE y sección
@@ -55594,13 +55669,52 @@ side.innerHTML = `
   </div>`;
 
 const list = document.getElementById('list');
-CATALOG.forEach(([name, fn, params], i) => {
-  const d = document.createElement('div');
-  d.className = 'item';
-  d.innerHTML = `<div class="n">${name}</div><div class="p">${fn}(${fmt(params)})</div>`;
-  d.onclick = () => focusOn(i);
-  list.appendChild(d);
-});
+function buildList(){
+  list.innerHTML = '';
+  CATALOG.forEach((entry, i) => {
+    const [name, fn] = entry;
+    const d = document.createElement('div');
+    d.className = 'item';
+    d.innerHTML = `<div class="n">${name}</div><div class="p">${fn}(${fmt(paramsFor(entry))})</div>`;
+    d.onclick = () => focusOn(i);
+    list.appendChild(d);
+  });
+}
+buildList();
+
+// ── size selector ─────────────────────────────────────────────────────────
+// The options are the FAMILIES THE DRAWINGS CARRY, with the number of labels
+// behind each, so the commonest sizes sort to the top and a size nobody
+// specified cannot be picked. Rebuilding the board on change is what makes this
+// a catalog of the real set rather than a gallery of demo parts.
+(function sizeUI(){
+  const host = document.getElementById('sizes');
+  if (!host) return;
+  const mk = (labelText, options, initial, onPick) => {
+    const wrap = document.createElement('div'); wrap.className = 'szrow';
+    const lab = document.createElement('label'); lab.textContent = labelText;
+    const sel = document.createElement('select');
+    options.forEach((o,i)=>{ const op=document.createElement('option');
+      op.value=i; op.textContent=o; sel.appendChild(op); });
+    sel.value = initial;
+    sel.onchange = () => { onPick(+sel.value); rebuild(); };
+    wrap.appendChild(lab); wrap.appendChild(sel); host.appendChild(wrap);
+  };
+  mk('Rect  W×H', COB.rect.map(([w,h,n])=>`${w}"×${h}"  · ${n} etiq.`), selRect, v=>selRect=v);
+  mk('Redondo Ø', COB.round.map(([d,n])=>`${d}"Ø  · ${n} etiq.`), selRound, v=>selRound=v);
+  mk('Tubería NPS', COB.nps.map(n=>`NPS ${n}"  · estándar`), selNps, v=>selNps=v);
+  const note = document.createElement('div'); note.className='szNote';
+  note.innerHTML = `${COB.rect.length} familias rect · ${COB.round.length} Ø · ${COB.nps.length} NPS<br>` +
+    `<span style="color:#8b97a6">rect y Ø medidos en COB · NPS es norma, sin dato de COB</span>`;
+  host.appendChild(note);
+})();
+
+function rebuild(){
+  buildBoard();
+  buildList();
+  settled = false; frameBoard(); applyCamera();
+  document.getElementById('info').style.display = 'none';
+}
 
 const info = document.getElementById('info');
 function focusOn(i){
