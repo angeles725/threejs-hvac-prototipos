@@ -18,7 +18,23 @@ const REPO = path.resolve(HERE, '../../..');
 const tmp = path.join(os.tmpdir(), `three-wind-${process.pid}.mjs`);
 fs.copyFileSync(path.join(REPO, 'disenos/datacenter-hotspot-sinCDN/vendor/three/three.module.js'), tmp);
 try { globalThis.THREE = await import(pathToFileURL(tmp).href); } finally { fs.rmSync(tmp, { force: true }); }
-new Function(fs.readFileSync(path.resolve(HERE, '../lib/hvac-catalog.js'), 'utf8')).call(globalThis);
+const LIB_HTML  = path.resolve(HERE, '../cob-im2-catalogo-3d.html');
+const LIB_FILE = path.resolve(HERE, '../lib/hvac-catalog.js');
+// The generators live INSIDE the viewer HTML — that page is the deliverable and
+// the source. Read them out of it, so these suites verify what actually ships.
+// (lib/hvac-catalog.js survives only for tuberia-nps, which still inlines it.)
+function loadCatalogSource() {
+  const html = fs.readFileSync(LIB_HTML, 'utf8');
+  const start = html.indexOf('(function (global) {');
+  const endMark = "})(typeof window !== 'undefined' ? window : globalThis);";
+  const end = html.indexOf(endMark, start);
+  if (start < 0 || end < 0) {
+    throw new Error('catalog generators not found in ' + LIB_HTML +
+      ' — the block markers moved; fix this loader rather than falling back silently');
+  }
+  return html.slice(start, end + endMark.length);
+}
+new Function(loadCatalogSource()).call(globalThis);
 const K = globalThis.HVACCatalog;
 
 function signedVolume(geo) {
