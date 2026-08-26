@@ -70,6 +70,15 @@ def load_offsets():
         OFFSETS = got
         OFFSET_SRC = os.path.basename(FULL_JSON) + " meta.sheets"
 FULL_JSON    = f"{RESEARCH}/tools/out/L4-full.json"   # certified artifact (supersedes L4-graph.json)
+
+# Team A's height-orphan triage. Optional: if absent the suspect layer is simply
+# empty and the rest of the viewer is unaffected. Copied out of the producing
+# session's scratchpad on purpose -- another session's temp dir is not a
+# dependency this build should carry.
+ORPHAN_JSON = os.environ.get("COB_ORPHAN_JSON", "/tmp/claude-1000/"
+    "-home-cristian-prototipos-three-js-threejs-hvac-prototipos-disenos-COB-IM2/"
+    "69413662-731f-477f-9e2b-4bdcb04290e7/scratchpad/height-orphan.json")
+ORPHAN_WHY = {"capacity_or_contended", "width_match_beyond_radius"}
 CONTEXT_JSON = f"{RESEARCH}/tools/l4/out/L4-context.json"
 
 # Content window in the global frame. The sheets carry a title-block/detail tail
@@ -112,6 +121,7 @@ LAYER_DEFS = [
     ("nodes",  "Nodes (deg \u2265 3 filled)",    "#ff9f43", False),
     ("fit",    "Fittings",                  "#2ecc71", False),
     ("term",   "Terminals / equipment",     "#d2a8ff", False),
+    ("susp",   "Height-orphan suspects",    "#ffa657", False),
 ]
 
 
@@ -280,6 +290,24 @@ def extract():
                          "c": [int(round(tm["x"] * Q)), int(round(tm["y"] * Q))],
                          "k": tm.get("type"), "cfm": tm.get("cfm")})
             counts["term"] += 1
+
+    # ---- team A's height-orphan suspects, as a highlight over the runs ----
+    if os.path.exists(ORPHAN_JSON):
+        od = json.load(open(ORPHAN_JSON))
+        why = {x["id"]: x for x in od.get("unknown_detail", [])
+               if x.get("why") in ORPHAN_WHY}
+        by_id = {str(r.get("id")): r for r in (json.load(open(FULL_JSON)).get("runs", [])
+                                               if os.path.exists(FULL_JSON) else [])}
+        for rid, x in why.items():
+            r = by_id.get(rid)
+            if r is None:
+                continue
+            ents.append({"l": "susp", "s": -1, "h": rid, "t": "RUN", "cl": 0,
+                         "p": enc([tuple(r["p0"][:2]), tuple(r["p1"][:2])]),
+                         "w": r.get("w"), "hs": r.get("h_src"), "cls": r.get("cls"),
+                         "why": x.get("why"), "nl": x.get("nearest_label"),
+                         "L": round(r.get("L", 0.0), 4)})
+            counts["susp"] += 1
 
     ctx_flags = None
     if os.path.exists(CONTEXT_JSON):
