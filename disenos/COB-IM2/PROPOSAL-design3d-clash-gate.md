@@ -63,15 +63,31 @@ face at `bod`. Direct mapping to a three.js `BoxGeometry`.
 
 ## The blocking dependency — and why it converges with the extractor debate
 
-The clash/clearance gate is **only as trustworthy as the Z data**, and two gaps bound it:
+The gate's two arms have DIFFERENT data readiness — a distinction investigador1's WU2 baseline
+made precise, and it corrects an earlier over-broad "38.3% assumed Z" framing:
 
-1. **38.3% of network length has an ASSUMED height (Z)** (`CRITIQUE-b16-roadmap.md` §13). A clash
-   or clearance computed against an assumed elevation is itself inferred, not measured — it must be
-   surfaced as such, never rendered as fact (the §13 discipline).
-2. **Fittings carry no `bod`** in `L4-full.json`, so fitting-to-fitting clash at a node cannot be
-   caught until fittings are meshed. Run-to-run clash is phase 1; fitting geometry is phase 2.
-3. **No clearance threshold (MECO) in the data** — it must come from a project source (structural
-   ceiling / SMACNA spec / user input) before the clearance arm can be calibrated.
+- **BOD (bottom-of-duct = the duct FLOOR / vertical position) is bound for 2015/2033 runs (~99%).**
+- The **38.3%-by-length gap is vertical EXTENT (the duct TOP = height `h`), not position.** So the
+  floor of every duct is known; the ceiling of 38.3%-by-length is not.
+
+Consequences per arm:
+
+1. **Clearance-BELOW a duct (the #1 HVAC question, "how much headroom under this run") uses BOD —
+   data-ready NOW at 99%.** It is blocked only on an external **MECO / clearance datum** (structural
+   ceiling / SMACNA spec / user input), not on our Z data.
+2. **Run-to-run vertical CLASH needs both ducts' full extent (`bod`..`bod+h`); the TOP `h` is the
+   missing piece** — so THIS arm is the one bounded by the height gap, and the gap **concentrates on
+   the trunk** (the largest, most consequential ducts: trunk height coverage is the lowest, ~30%).
+   Exact captured-height coverage is being reconciled by the team — the raw figure (~42% of runs by
+   count, matching §13's 38.3% by length) is an UNDERCOUNT, because the viewer discards ~587m of
+   *measured* height via a small-class collapse; the certified data carries more than the viewer
+   shows. **So the gate must read the certified `L4-full.json`, never the viewer's collapsed
+   geometry.** A vertical-clash verdict on an assumed top is inferred, not measured, and must be
+   surfaced as such, never rendered as fact (§13 discipline). The current extractor is already
+   §13-correct: unknown-height runs carry `h=None` (absent stays absent, never a fabricated default)
+   — the gate must preserve that.
+3. **Fittings carry no `bod`** in `L4-full.json`, so fitting-to-fitting clash at a node cannot be
+   caught until fittings are meshed. Run-to-run is phase 1; fitting geometry is phase 2.
 
 This is the same conclusion team A reached from the opposite direction: if the extractor's
 fragmentation is by-design (H1 settled), **the real thing that gates a clash test is the assumed-Z
@@ -81,8 +97,12 @@ viewer polish, is the next real target.**
 ## Recommendation
 
 - Port is **worth doing** and low-cost (2 MIT files + a ~60-line adapter).
-- But **stage it behind the Z resolution**: a clash gate shipped on 38.3%-assumed elevation would
-  render convincing clash verdicts that assert less than they appear to — the exact failure this
-  corpus exists to prevent. Activate the clearance arm only once MECO + a measured/assumed-Z policy
-  are decided; the run-to-run clash arm can land first as **advisory** (flag, don't block) so it
-  never over-claims on inferred Z.
+- **Stage the two arms separately, by data readiness** (the BOD-vs-height split above):
+  - **Clearance-below arm is data-ready NOW** (BOD ~99%). It ships as soon as a **MECO/clearance
+    datum** is supplied — that is its only blocker, an external spec, not our Z data.
+  - **Vertical run-to-run clash arm is height-bounded** and trunk-concentrated → land it as
+    **advisory** (flag, don't block) on runs with a real measured `h`, and NEVER emit a clash verdict
+    on an `h=None` run — skip it, don't assume a top. It graduates to blocking only when WU2's
+    label→run height recovery closes the trunk gap with real labels.
+- Read the certified `L4-full.json` (not the viewer's collapsed geometry, which discards ~587m of
+  measured height).
