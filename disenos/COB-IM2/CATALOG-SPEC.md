@@ -93,18 +93,29 @@ where it fits; these are battle-tested with retros behind them.
    numeric `threshold`s, `references[]` with `[CERT]` provenance markers, `dimensions_real` as
    `{value, confidence}`, `perf_budget {draws, tris}` MEASURED not guessed, and — critical for a
    duct/pipe catalog — the `hierarchy.attachment` **socket schema** (`parent_socket`,
-   `local_start/end`, `contact_type: flange|slip-fit|socket|embedded`, `embed_depth`, `overlap`,
-   `gap_tolerance`) for how connectors mate. This subsumes our port contract.
+   `local_start/end`, `contact_type`, `embed_depth`, `overlap`, `gap_tolerance`) for how connectors
+   mate. It subsumes the port contract. **Framing (accurate):** those fields are *furniture-proven*
+   in nave-panccadia (foot-cup / leg-tube specs), NOT HVAC-proven. They transfer on their OWN MERITS
+   — `embed_depth` prevents a fitting double-count (the class of the 1157-fitting error), and a
+   validator enforces the physics — not on precedent. 121 adopted it with HVAC contact types
+   (`contact_type: flange` per ASME B16.5 / `socket-weld` per B16.11 / `duct` per SMACNA TDC-TDF),
+   and `embed_depth` carries a `CERT-unavailable` marker since no drawing gives it. Do not cite it as
+   "proven for HVAC"; it is adopted-on-merits with HVAC-specific types.
 5. **Objective anchors, not reviewer coin-flips.** The materials gate is reviewer-variance-dominated
    (±0.25 on pixel-identical renders). Put a `colorTarget {srgb, deltaE00Max, crop}` + `invariant_tests`
    (assert via `console.error`, never `console.assert`) in the spec — a SCRIPT judges the dimension/
    colour, the model judges only identity. (`equipos-v2/runs/benchmark-note.md`)
 6. **Capture every articulated state; derive cameras.** A real defect showed only in a second
    (articulated) capture; hardcoded cameras lie. Use `fitView(subject, az, el)` + framing-probe.
-7. **Reusable material recipes apply directly**: `brushed-stainless-recipe` (env intensity 2.15 +
+7. **Reusable material recipes apply directly** — but split the provenance. SMACNA/ASME specify
+   **gauge, coating, and dimensions** `[STANDARD]`; they say NOTHING about PBR shading, so the
+   `metalness 0.9 / roughness 0.30` numbers are `[LOOK]`, backed by no standard. Never write
+   "metalness per SMACNA" — that invents a citation (same error class as a legend stating a length
+   its geometry contradicts). So: material MEANING (galvanised steel, 26-ga, G90 coating) `[STANDARD]`;
+   shading numbers `[LOOK]`. The recipes: `brushed-stainless-recipe` (env intensity 2.15 +
    HemisphereLight + frontal fill + roughness 0.30) for galvanised-steel ducts, `transmission-free-glass`
    (MeshStandard opacity ~0.4, NOT MeshPhysical.transmission — stalls SwiftShader) for clear/PVC pipe.
-   r160 gotcha: `material.envMapIntensity`, NOT `scene.environmentIntensity` (silently nonexistent).
+   r160 gotcha: `material.envMapIntensity`, NOT `scene.environmentIntensity` (added r163; a no-op in r160).
 8. **Retro + operator-amendments, propose-never-apply.** Each spec keeps an `operator_amendments`
    block (asked→done+measurement); each run writes `runs/<date>-retro.md` that STAGES lessons, never
    silently mutates the kit. Kit A/B tests go in an isolated sibling folder so shipped assets stay
