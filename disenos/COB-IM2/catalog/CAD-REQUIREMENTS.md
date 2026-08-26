@@ -197,6 +197,37 @@ least `1.5 × ΔW` long.
 The other 108 are small steps — 80 at 25 mm and 24 at 51 mm (one- and two-inch changes) — which
 are comfortably compliant at either length.
 
+### 9a. Provenance of the "10 cm / 30 cm" lengths — and why they cannot be used as dimensions
+
+Source of the two lengths: **the block NAMES in the `M-HVAC-DUCT` legend layer of the raw DXFs**,
+not `L4-full.json`. They are `[INFER]` from a name string. `[CERT]` applies only to what is in
+the pinned artifact (sha `7533dccb`), and these lengths are not in it.
+
+Exact blocks (level-4 sheets, all inserted at scale 1.0):
+
+| block name | part no. | name says | **measured bbox** |
+|---|---|---|---|
+| `REDUCCIÓN RECTANGULAR … LONGITUD - 10 cm-3093643-PLANTA BAJA Copy 1` | 3093643 | 100 mm | **76.2 × 406.4 mm** |
+| `REDUCCIÓN RECTANGULAR … LONGITUD - 10 cm-3093738-PLANTA BAJA Copy 1` | 3093738 | 100 mm | **76.2 × 406.4 mm** |
+| `REDUCCIÓN RECTANGULAR … LONGITUD - 10 cm-3093738-002` | 3093738 | 100 mm | **305.3 × 445.9 mm** |
+| `REDUCCIÓN RECTANGULAR … LONGITUD - 30 cm 3-3090626-001` | 3090626 | 300 mm | **708.9 × 635.3 mm** |
+| `REDUCCIÓN RECTANGULAR … LONGITUD - 30 cm 3-3090626-PLANTA BAJA Copy 1` | 3090626 | 300 mm | **508.0 × 660.4 mm** |
+| `REDUCCIÓN RECTANGULAR … LONGITUD - 30 cm 3-3090626-002` | 3090626 | 300 mm | **754.3 × 808.8 mm** |
+
+**The names do not match the geometry.** Neither bounding-box axis equals the stated length for
+any of the six, so the mismatch does not depend on which axis is taken as the flow direction.
+Worse, blocks sharing a part number differ from each other: `3093738` appears once at
+76.2 × 406.4 mm and once at 305.3 × 445.9 mm — a "10 cm" block measuring 305 mm across.
+
+**Consequence: do not source any dimension from these names.** They are evidence that COB's
+designer *thought in terms of* a short and a long reducer, and they are the right source for
+part **naming**. They are not a dimensional authority. Record them as
+`[INFER] legend-block-name`, never `[CERT]`.
+
+*(76.2 mm is exactly 3" and 406.4 mm exactly 16" — the blocks are drawn on an imperial grid, so
+the metric names in the block titles look like labels applied to imperial geometry rather than
+measurements of it.)*
+
 **Catalog requirement:** reducer length must be a **free parameter driven by ΔW**, not a choice
 between the two legend values. Generating a component that offers only 10 cm and 30 cm would make
 15% of COB's own transitions unbuildable to standard. A sensible default is `length ≥ 1.5 × ΔW`,
