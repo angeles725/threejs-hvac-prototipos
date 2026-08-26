@@ -54790,9 +54790,37 @@ for (const f of fittings){
              [cx+ux*d, bod+h/2, cz+uz*d], w1, r1.h||H_MED, ux, uz, COL_FIT, -1);
     nFit++;
   } else if (f.kind !== 'coupling'){
-    // + the residual lateral offset, so the corner is watertight
-    const w = Math.max(...rs.map(r=>r.w)) + 0.10;
-    pushBox(cx, bod + h/2, cz, 1, 0, w, w, h, COL_FIT, -1);
+    // MITRED fitting, not a generic box.
+    //
+    // Every elbow, tee and cross — 969 of the 1157 fittings — used to be one
+    // axis-aligned square box of side max(w)+0.10, drawn with ux=1, uz=0. It did
+    // not follow the ducts it joined, so a 45-degree run met a fitting squared to
+    // the world, and the network read as a chain of sausage links with a lump at
+    // every corner.
+    //
+    // A real mitred fitting is made of the runs themselves: each duct arriving at
+    // the node continues INTO it, cut on the mitre plane. So build one stub per
+    // arriving run, oriented along that run's own direction and carrying that
+    // run's own width and height. The stubs overlap inside the node and fill it
+    // with correctly-oriented metal; there is no separate lump to orient.
+    //
+    // This also makes a tee read as a tee and a cross as a cross for free: the
+    // count of arriving runs IS the fitting's shape, so a 4-run node grows four
+    // stubs without needing to know it is a cross.
+    for (const r of rs){
+      // direction from the node OUT along this run
+      const far = (r.n0 === f.node) ? r.p1 : r.p0;
+      let ux = X(far[0]) - cx, uz = Z(far[1]) - cz;
+      const L = Math.hypot(ux, uz);
+      if (L < 1e-6) continue;
+      ux /= L; uz /= L;
+      const rw = r.w, rh = r.h || H_MED;
+      // reach half the WIDEST arriving duct, so the corner closes even where a
+      // small branch meets a trunk, and never past the run's own length
+      const reach = Math.min(Math.max(...rs.map(x => x.w)) * 0.5 + 0.02, L * 0.9);
+      pushBox(cx + ux * reach / 2, bod + h / 2, cz + uz * reach / 2,
+              ux, uz, reach, rw, rh, COL_FIT, -1);
+    }
     nFit++;
   }
 }
