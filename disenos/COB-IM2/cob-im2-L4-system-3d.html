@@ -54570,6 +54570,37 @@ sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 scene.add(sun);
 
+// FRONTAL FILL, and it follows the camera. A sun from above and to one side
+// rakes the TOP of a duct and leaves its SIDES dark — and a duct is mostly
+// side. At metalness 0.88 those vertical faces then reflect a dark room and
+// read as near-black, which is what makes the network look like a silhouette
+// instead of sheet metal.
+//
+// A fixed frontal light would only help from one bearing, and this viewer is
+// orbited. So the fill rides with the camera: it is always on the side you are
+// looking from, and every face you can see is lit. Cheap — one light, no
+// shadow map, updated in the tick.
+//
+// Technique from nave-panccadia's equipos-ondemand/freidora recipe, which uses
+// a fixed +Z fill for a single-viewpoint product shot; camera-following is the
+// adaptation an orbit viewer needs.
+const fill = new T.DirectionalLight(0xf4f7ff, 0.95);
+scene.add(fill);
+scene.add(fill.target);
+function aimFill(){
+  const cam = activeCam();
+  // slightly above and to the left of the eye, so it fills without flattening
+  fill.position.copy(cam.position);
+  fill.position.y += 6;
+  fill.target.position.copy(controls.target);
+  fill.target.updateMatrixWorld();
+}
+
+// The environment is the brightness lever for bare metal — never metalness.
+// Lowering metalness to make the steel read would be modelling the render
+// instead of the material; galvanised duct really is a near-mirror.
+scene.environmentIntensity = 1.55;
+
 // ── model space ────────────────────────────────────────────────────────────
 const bb = DATA.meta.stats.bbox;                  // [x0,y0,x1,y1] in CAD metres
 const CX = (bb[0]+bb[2])/2, CY = (bb[1]+bb[3])/2;
@@ -55418,6 +55449,7 @@ let _pinned = false;
   if (!_pinned){ _pinned = true; applyCamQuery(); }
   stepDolly();                 // before controls.update(): OrbitControls
   controls.update();           // re-derives its radius from the camera position
+  aimFill();                   // the fill rides the camera, so every visible face is lit
   renderer.render(scene, activeCam());
 })();
 console.log('COB-IM2 L4:', DATA.meta.stats);
