@@ -233,9 +233,38 @@ between the two legend values. Generating a component that offers only 10 cm and
 15% of COB's own transitions unbuildable to standard. A sensible default is `length ≥ 1.5 × ΔW`,
 with the two legend lengths available as presets for the small steps that dominate by count.
 
-**Caveat, stated because it bounds the claim.** This compares ΔW against the *legend block*
-lengths. The drawn length of each transition is **not** in `L4-full.json` (fittings are stored as
-points), so I have not measured what the drawing actually draws — the transitions may well be
-drawn longer than the legend blocks, in which case the drawing is fine and only the block library
-is short. Establishing which would need the transition geometry read back out of the DXF. What is
-certain either way is the catalog requirement above.
+### 9b. DXF readback — the provisional 19 is RETIRED, and the real answer is smaller
+
+The 19-of-127 above compared ΔW against the *legend block* length (300 mm). That input turned out
+to be unsound (§9a), so the geometry was read back from the source instead: for each in-line
+reducer, the drawn taper was measured from the slanted `HVAC - Ductos` segments at the fitting,
+in the certified frame.
+
+**The drawing does not use a 300 mm reducer for these.** Measured tapers on the large transitions
+run **1311–1956 mm** — four to six times the longest legend block. So the provisional 19 was
+measuring the wrong thing, exactly as suspected. **It is withdrawn.**
+
+**What the drawing actually does:** of 127 in-line reducers, 89 have tapers extending beyond a
+compliant length (so they comply by construction), and 38 fall inside the measuring window. Of
+those 38, **13 are drawn shallower than SMACNA's 1:3 minimum** — 13 of 127 overall, about 10%,
+across 52.6 m of adjoining run.
+
+| from → to | ΔW | drawn | 1:3 needs | actual slope |
+|---|---|---|---|---|
+| 9" → 66" (×2) | 1448 mm | 1956 mm | 2172 mm | 1.35 : 1 |
+| 24" → 72" | 1219 mm | 1311 mm | 1829 mm | **1.08 : 1** |
+| 18" → 60" | 1067 mm | 1425 mm | 1600 mm | 1.34 : 1 |
+| 5" → 24" | 483 mm | 610 mm | 724 mm | 1.26 : 1 |
+| 6" → 18" (×2) | 305 mm | 351 mm | 457 mm | 1.15 : 1 |
+| plus six small steps (51–102 mm ΔW) | | | | 1.14–1.26 : 1 |
+
+**This is a finding about the DRAWING, not about our model** — these tapers are drawn at roughly
+1.1–1.35 : 1 where the standard asks for 3 : 1.
+
+**It is a floor, not a total.** The measuring window is deliberately bounded to 1.25× a compliant
+taper and to the duct's own lateral band, because a wider window imports neighbouring fittings'
+slanted walls and reads them as extra taper length — which **overstates** compliance. A looser
+2 m window put the count at 6; tightening it raised it to 13. The four largest violate under
+*both* windows, so those are robust regardless of method.
+
+Data: `TRANSITION-DRAWN-LENGTHS.json`.
