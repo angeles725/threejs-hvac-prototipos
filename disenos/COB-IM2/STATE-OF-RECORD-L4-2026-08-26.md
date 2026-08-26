@@ -136,9 +136,14 @@ what the source has and does not**:
   META-LESSON: a corroborated + ratified + built-upon diagnosis is still UNMEASURED if nobody ran the
   measurement; the simpler correct explanation (§4.1) was displaced by the more elegant winding theory
   precisely BECAUSE it was elegant. Sophistication isn't correctness; measurement is.
-- **Zoom not smooth / uncontrollable (USER-REPORTED, cob-im2-catalogo-3d.html)** — OrbitControls has mixed
-  damping config (an `enableDamping=false` path with `zoomSpeed=1.0`); enable damping on the active
-  controls + tune zoomSpeed. Viewer-team fix. Check all viewers, not just this one.
+- **Zoom not smooth / uncontrollable (USER-REPORTED, cob-im2-catalogo-3d.html)** — the app ALREADY has
+  damping on + zoomSpeed 0.7. An earlier read of `enableDamping=false / zoomSpeed=1.0` was the INLINED
+  three.js constructor DEFAULTS, not app config — the grep-over-vendored-library trap AGAIN (3rd instance
+  today; see the build-provenance row's corollary). Real cause: OrbitControls r160 does NOT damp the DOLLY
+  (zoom) at all — fix = the library's `controllers/smooth-dolly.mjs` MODULE, not a toggle. Goes in the
+  viewer pass, not a one-liner. NOTE: `cob-im2-catalogo-3d.html` is the CURRENT catalog viewer (not legacy;
+  no newer one exists) — patch it, don't redirect. Its DoubleSide duct interim IS a real one-liner (it
+  never got 3d85c2c) and can land now, ahead of the caps pass.
 
 ## Defects — remaining
 
