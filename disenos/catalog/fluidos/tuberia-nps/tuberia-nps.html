@@ -55366,11 +55366,11 @@ LADDER.forEach((nps, r) => ROW.forEach((entry, c) => {
 
 const colW = ROW.map((_, c) => {
   const w = built.filter(b => b.c === c).map(b => b.size.x);
-  return Math.max(0.30, Math.max(...w)) * 1.30;
+  return Math.max(0.26, Math.max(...w)) * 1.16;
 });
 const rowD = LADDER.map((_, r) => {
   const d = built.filter(b => b.r === r).map(b => Math.max(b.size.z, 0.22));
-  return Math.max(...d) * 2.6;
+  return Math.max(...d) * 1.85;
 });
 const colX = [];
 {
@@ -55408,6 +55408,32 @@ built.forEach(b => {
   lbl.position.set(m.position.x, 0.012, rowZ[b.r] + rowD[b.r] * 0.34);
   root.add(lbl);
 });
+
+// ── scale reference ───────────────────────────────────────────────────────
+// A metre bar. Without a scale cue "od matches B36.10M" is only checkable from
+// the label text, and the elbow's 1.5D centreline radius is unreadable — the
+// blind agents returned od as label-pass / geometry-UNRESOLVABLE for exactly
+// that reason. One bar converts both to something a judge can measure.
+function makeScaleBar(){
+  const g = new T.Group();
+  const bar = new T.Mesh(new T.BoxGeometry(1.0, 0.018, 0.018),
+    new T.MeshStandardMaterial({ color: 0xd8a03c, metalness: 0.0, roughness: 0.5 }));
+  bar.position.y = 0.009;
+  g.add(bar);
+  for (const x of [-0.5, 0.5]){
+    const tick = new T.Mesh(new T.BoxGeometry(0.018, 0.10, 0.018), bar.material);
+    tick.position.set(x, 0.05, 0);
+    g.add(tick);
+  }
+  const lbl = makeLabel('1.00 m', 'referencia de escala');
+  lbl.position.set(0, 0.16, 0);
+  g.add(lbl);
+  g.userData.isScaleBar = true;
+  return g;
+}
+const scaleBar = makeScaleBar();
+scaleBar.position.set(colX[0] - colW[0] * 0.15, 0, rowZ[rowZ.length - 1] + rowD[rowD.length - 1] * 0.78);
+root.add(scaleBar); SUBJECT.attach(scaleBar);
 
 // ── camera ────────────────────────────────────────────────────────────────
 const camera = new T.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 200);
@@ -55452,8 +55478,8 @@ function frameSubject() {
     }
     const fill2 = Math.max((x1 - x0) / 2, (y1 - y0) / 2);
     if (!isFinite(fill2) || fill2 <= 0) break;
-    if (Math.abs(fill2 - 0.70) < 0.005) break;
-    d *= fill2 / 0.70;
+    if (Math.abs(fill2 - 0.80) < 0.005) break;
+    d *= fill2 / 0.80;
   }
   controls.update();
 }
@@ -55514,6 +55540,49 @@ if (_focus && FOCUS[_focus]){
     box.expandByObject(m); n++;
   }
   if (n){
+    if (_focus === 'nps1'){
+      // The previous "crop" was the board re-framed at the same distance, so it
+      // added no legibility at all — the NPS 1 parts sit in cells pitched for
+      // NPS 8 neighbours and stay tiny. A real close-up isolates the row AND
+      // re-spaces it by its own sizes, so each part fills its share of the frame.
+      const keep = new Set(FOCUS.nps1.map(k => CELL[k]).filter(Boolean));
+      for (const m of Object.values(CELL)) m.visible = keep.has(m);
+      scaleBar.visible = false;
+      // A GRID, not a row. Ten parts in a line is a wide/thin subject however
+      // tightly it is packed — the same shape that made the first board 15 m
+      // wide and, at 4:3, leaves the parts small no matter the distance. Four
+      // across gives an aspect close to the frame's, so each part gets real
+      // pixels. This is the crop's only job.
+      const members = FOCUS.nps1.map(k => CELL[k]).filter(Boolean);
+      const NCOL = 4;
+      const cw = [], ch = [];
+      members.forEach(m => {
+        m.geometry.computeBoundingBox();
+        const bbm = m.geometry.boundingBox;
+        cw.push(Math.max(bbm.max.x - bbm.min.x, 0.06));
+        ch.push(Math.max(bbm.max.z - bbm.min.z, 0.06));
+      });
+      const cellW = Math.max(...cw) * 1.16;
+      const cellH = Math.max(Math.max(...ch), 0.16) * 2.4;
+      const nrow = Math.ceil(members.length / NCOL);
+      members.forEach((m, k) => {
+        const cc = k % NCOL, rr = Math.floor(k / NCOL);
+        const nx = (cc - (NCOL - 1) / 2) * cellW;
+        const nz = (rr - (nrow - 1) / 2) * cellH;
+        const lbl = root.children.find(o => o.userData && o.userData.isLabel &&
+                    Math.abs(o.position.x - m.position.x) < 1e-6);
+        m.position.x = nx; m.position.z = nz;
+        if (lbl){ lbl.position.set(nx, 0.006, nz + cellH * 0.30);
+                  lbl.scale.multiplyScalar(0.30); lbl.visible = true;
+                  lbl.userData.keep = true; }
+      });
+      root.traverse(o => {
+        if (!(o.userData && o.userData.isLabel)) return;
+        if (!o.userData.keep) o.visible = false;
+      });
+      box.makeEmpty();
+      for (const m of members){ m.updateMatrixWorld(true); box.expandByObject(m); }
+    }
     // The eccentric crop is a GEOMETRY shot: its job is to show the one flat
     // side, and the label sprites are world-sized, so at crop distance they
     // become billboards that bury the very offset the judge is asked to score.
@@ -55539,7 +55608,11 @@ if (_focus && FOCUS[_focus]){
     const sz = new T.Vector3(); box.getSize(sz);
     // front elevation for the reducer pair: the offset only reads with the axis
     // across the frame, not foreshortened.
-    const dir = _focus === 'eccentric' ? new T.Vector3(0.02, 0.10, 1).normalize()
+    // Direct side elevation for the reducer: 2 of 3 agents read the flat face as a
+    // HIGHLIGHT rather than a straight silhouette edge, because any elevation angle
+    // turns the flat into a lit plane. Perpendicular to the axis, the flat bottom is
+    // a straight horizontal line in silhouette and there is nothing to interpret.
+    const dir = _focus === 'eccentric' ? new T.Vector3(0, 0, 1)
                                        : new T.Vector3(0.10, 0.55, 1).normalize();
     const vFov = camera.fov * Math.PI / 180;
     const aspect = innerWidth / innerHeight;
