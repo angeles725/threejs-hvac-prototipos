@@ -54777,14 +54777,29 @@ function makeGeo(b){
   return g;
 }
 const clipPlane = new T.Plane(new T.Vector3(0,-1,0), 99);
+// side: DoubleSide is load-bearing here, and the reason is winding, not taste.
+// pushBox builds its local frame as u = (ux,0,uz), v = (-uz,0,ux) with +Y up.
+// u x v = (0,-1,0) — the frame is LEFT-handed against +Y for EVERY run, so every
+// box's triangles wind backwards. The per-vertex normals are pushed by hand and
+// point correctly outward, which is why the lighting looked right; but back-face
+// culling uses WINDING, not normals. Under the default FrontSide the near wall
+// was culled and the far wall drawn, so a duct read as hollow and appeared to
+// flip as the camera orbited — the defect the user reported.
+//
+// DoubleSide is also the right long-term choice for an MEP viewer: you orbit
+// INTO ductwork here, and a section cut through a single-sided shell shows an
+// open interior. The winding itself should still be corrected at the builders
+// (reverse each triangle, or negate v) — that is the root fix; this is the one
+// that makes the model readable now, and it is not a mask: with a left-handed
+// frame there is no camera angle at which FrontSide is correct.
 const mat = new T.MeshStandardMaterial({
   vertexColors:true, metalness:0.88, roughness:0.34,
-  envMapIntensity:1.15, clippingPlanes:[clipPlane]
+  envMapIntensity:1.15, clippingPlanes:[clipPlane], side:T.DoubleSide
 });
 const matTerm = new T.MeshStandardMaterial({
   vertexColors:true, metalness:0.5, roughness:0.55,
   envMapIntensity:1.0, clippingPlanes:[clipPlane],
-  transparent:true, opacity:0.85
+  transparent:true, opacity:0.85, side:T.DoubleSide
 });
 const geo  = makeGeo(B.net);
 const geoT = makeGeo(B.term);
