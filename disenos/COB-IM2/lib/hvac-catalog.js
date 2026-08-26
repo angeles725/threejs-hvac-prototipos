@@ -453,7 +453,9 @@
    * NPS 12: Sch 40 is 0.406", Sch 40S / STD is 0.375". This table is Sch 40
    * carbon throughout. Anything quoting a stainless wall must come from
    * B36.19M and say so -- a wall silently taken from the wrong standard is a
-   * wrong ID, a wrong weight and a wrong spec, all from a plausible number. NPS is a LABEL, not a measurement: NPS 4 pipe has an
+   * wrong ID, a wrong weight and a wrong spec, all from a plausible number.
+   *
+   * NPS is a LABEL, not a measurement: NPS 4 pipe has an
    * outside diameter of 4.500", not 4.000". The old `pipeRound({d: IN(4)})`
    * drew the nominal as if it were the OD — 12.5% under real size at NPS 4,
    * and worse below NPS 2 where the label diverges further from the metal.
