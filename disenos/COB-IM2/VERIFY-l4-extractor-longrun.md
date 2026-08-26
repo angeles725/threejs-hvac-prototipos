@@ -162,3 +162,24 @@ of team A's WU2 (Z ground-truth).
 *Superseded acceptance criteria (1: single-run recovery, 2: runs ≥20 m) — withdrawn: they
 assumed the perimeter diffuser lines were trunk mains. Criteria 3–6 (connectivity range,
 ±3% quantities, no false pairs, sha change) remain valid for any future extractor change.*
+
+## Future extractor enhancement leads (logged 2026-08-26, not yet actioned)
+
+From the clash + BOD verification, two source-supported improvements that go beyond the current
+scalar model — logged for a future extractor pass; the vertical clash arm stays advisory meanwhile.
+
+1. **Transition-fitting → step-over resolves a "clash".** Several of the 27 unresolvable plan
+   crossings carry a **transition fitting drawn at the crossing** (the offset-box / trapezoid
+   symbol = a duct stepping over another). The model holds one scalar BOD per run, so a vertical
+   offset partway along a run is invisible and reads as a clash. Enhancement: detect a transition
+   symbol at a crossing and treat the run as stepping over → resolves that crossing without new
+   height data. Turns some of the 27 unresolvable into resolved.
+
+2. **Exclusive, on-span label binding (both channels).** The width→run and BOD→run binders use
+   nearest-distance without **exclusivity** (one label instance can bind multiple runs) or an
+   **on-span-projection** requirement (the label need not project onto the run's length).
+   Confirmed effects: BOD double-binding (`L4_0773` took the trunk's `BOD3.55` instead of its own
+   `BOD4.25`); and, with an on-span requirement, the loose 139-run recoverable-height upper bound
+   collapses to 7. Note (measured): **perpendicular-to-axis ranking does NOT fix the BOD case** —
+   on `L4_0773` both candidate labels are alongside (0.205 vs 0.297 m off-axis); **exclusivity is
+   the fix**, not the ranking metric. Low clash impact (only 1/28 clears) but a real binder defect.
