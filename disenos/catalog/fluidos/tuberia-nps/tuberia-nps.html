@@ -54500,6 +54500,7 @@ window.OrbitControls = OrbitControls;
 
 </script>
 <!-- lib/hvac-catalog.js inlined (single-file deliverable) -->
+<!-- BEGIN INLINE: disenos/COB-IM2/lib/hvac-catalog.js sha256:50e43aee5ff4 — GENERATED, do not edit here; edit disenos/COB-IM2/lib/hvac-catalog.js and re-run disenos/catalog/tools/build-inline.mjs -->
 <script>
 /**
  * hvac-catalog.js — parametric HVAC / piping component generators for three.js.
@@ -54730,13 +54731,44 @@ window.OrbitControls = OrbitControls;
   };
 
   /** Rectangular transition / reducer — a loft between two sections. */
-  C.transitionRect = ({ w0 = IN(20), h0 = IN(12), w1 = IN(12), h1 = IN(8), length = 0.5 }) => ({
-    geometry: sweep([frame(0, 0, 0, 1, 0, 0), frame(length, 0, 0, 1, 0, 0)],
-                    [ringRect(w0, h0), ringRect(w1, h1)], true, true),
-    ports: [P('in', [0, 0, 0], [-1, 0, 0], RECT(w0, h0)),
-            P('out', [length, 0, 0], [1, 0, 0], RECT(w1, h1))],
-    meta: { kind: 'transition-rect', label: `Transición ${(w0 / 0.0254).toFixed(0)}"×${(h0 / 0.0254).toFixed(0)} → ${(w1 / 0.0254).toFixed(0)}"×${(h1 / 0.0254).toFixed(0)}"` }
-  });
+  /**
+   * Rectangular transition / reducer. LENGTH is a real parameter of the family,
+   * not a drawing convenience: COB part numbers specify 0.10 m and 0.30 m, so
+   * the family is (w0,h0) x (w1,h1) x length, and an evidence set that shows one
+   * length has shown half the family.
+   *
+   * THE TWO LEGEND LENGTHS ARE NAMES, NOT MEASUREMENTS — do not build to them.
+   * COB's M-HVAC-DUCT LEGEND does carry REDUCCIÓN RECTANGULAR part numbers
+   * (3093643 / 3093738 labelled 10 cm, 3090626 labelled 30 cm), and I cited them
+   * here until 121 measured the blocks themselves: the names contradict the
+   * geometry. The "10 cm" blocks measure 76.2 mm and 305.3 mm; the "30 cm" blocks
+   * 508 / 709 / 754 mm; and two blocks sharing part number 3093738 disagree with
+   * each other. No bbox axis matches its stated length on any of the six. 76.2 mm
+   * is exactly 3" and 406.4 mm exactly 16" — the blocks are drawn imperial with
+   * metric names pasted on.
+   *
+   * So LENGTH IS A FREE PARAMETER driven by the width change, not a lookup:
+   * `length >= 1.5 * dW`, from SMACNA's 1:3 minimum transition slope. The part
+   * numbers are good for NAMING a part and nothing else. The constant below is
+   * kept only so callers can still reproduce the legend's nominal labels; it is
+   * not a dimension source.
+   */
+  C.TRANSITION_LENGTHS_NOMINAL_M = [0.10, 0.30];   // legend NAMES — see above, not measurements
+  /** SMACNA 1:3 minimum slope: the shortest defensible transition for a width change. */
+  C.transitionMinLength = (w0, w1) => 1.5 * Math.abs(w0 - w1);
+  C.transitionRect = ({ w0 = IN(20), h0 = IN(12), w1 = IN(12), h1 = IN(8), length = null }) => {
+    // Derived by default, overridable when a caller has a real measured length.
+    const L = length != null ? length : Math.max(0.15, C.transitionMinLength(w0, w1));
+    return {
+      geometry: sweep([frame(0, 0, 0, 1, 0, 0), frame(L, 0, 0, 1, 0, 0)],
+                      [ringRect(w0, h0), ringRect(w1, h1)], true, true),
+      ports: [P('in', [0, 0, 0], [-1, 0, 0], RECT(w0, h0)),
+              P('out', [L, 0, 0], [1, 0, 0], RECT(w1, h1))],
+      meta: { kind: 'transition-rect', length_m: +L.toFixed(4),
+              length_src: length != null ? 'caller' : 'derived: SMACNA 1:3 min slope, 1.5 x dW',
+              label: `Transición ${(w0 / 0.0254).toFixed(0)}"×${(h0 / 0.0254).toFixed(0)} → ${(w1 / 0.0254).toFixed(0)}"×${(h1 / 0.0254).toFixed(0)}"` }
+    };
+  };
 
   /** Rect → round transition. Both rings are resampled to the same count. */
   C.transitionRectRound = ({ w = IN(14), h = IN(10), d = IN(10), length = 0.45, segments = 24 }) => {
@@ -54917,8 +54949,17 @@ window.OrbitControls = OrbitControls;
 
   // ── NPS ladder (hydronic side) ───────────────────────────────────────────
   /**
-   * ASME B36.10M nominal pipe size → outside diameter and Schedule 40 wall,
-   * both in INCHES. NPS is a LABEL, not a measurement: NPS 4 pipe has an
+   * ASME B36.10M nominal pipe size → outside diameter and SCHEDULE 40 wall
+   * (carbon steel), both in INCHES.
+   *
+   * Schedule matters and the label is not optional. Sch 40 (B36.10M, carbon)
+   * and Sch 40S (B36.19M, stainless) are IDENTICAL up to NPS 10 and DIVERGE at
+   * NPS 12: Sch 40 is 0.406", Sch 40S / STD is 0.375". This table is Sch 40
+   * carbon throughout. Anything quoting a stainless wall must come from
+   * B36.19M and say so -- a wall silently taken from the wrong standard is a
+   * wrong ID, a wrong weight and a wrong spec, all from a plausible number.
+   *
+   * NPS is a LABEL, not a measurement: NPS 4 pipe has an
    * outside diameter of 4.500", not 4.000". The old `pipeRound({d: IN(4)})`
    * drew the nominal as if it were the OD — 12.5% under real size at NPS 4,
    * and worse below NPS 2 where the label diverges further from the metal.
@@ -54932,7 +54973,9 @@ window.OrbitControls = OrbitControls;
     '2-1/2': { od: 2.875, wall: 0.203 }, '3': { od: 3.500, wall: 0.216 },
     '4':   { od: 4.500, wall: 0.237 }, '5': { od: 5.563, wall: 0.258 },
     '6':   { od: 6.625, wall: 0.280 }, '8': { od: 8.625, wall: 0.322 },
-    '10':  { od: 10.750, wall: 0.365 }, '12': { od: 12.750, wall: 0.375 },
+    '10':  { od: 10.750, wall: 0.365 },
+    // 0.406 is Sch 40. 0.375 would be Sch 40S / STD -- see the divergence note above.
+    '12':  { od: 12.750, wall: 0.406 },
   };
   /** Outside diameter in METRES for an NPS label. Throws on an unknown size —
    *  a silent fallback would draw a plausible pipe at the wrong diameter. */
@@ -55144,6 +55187,7 @@ window.OrbitControls = OrbitControls;
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
+<!-- END INLINE -->
 <script>
 // IIFE, not top level: the inlined three.js declares module-scope names in the
 // global scope (`_box`, `_sphere`, `EventDispatcher`...). Sharing it is how commit
