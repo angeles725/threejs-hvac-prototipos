@@ -55002,10 +55002,93 @@ function frameBay(i){
   bayV.textContent = `ejes ${b.name} · ${b.width.toFixed(2)} m`;
   curBay = i;
 }
+// Fit the SUBJECT — the duct mesh — from its real AABB and the live aspect,
+// then slide it clear of the HUD. The previous framing was the hardcoded
+// `SPAN*0.55, SPAN*0.48, SPAN*0.62` looking at (0, 2, 0): a magic triple that
+// ignored the subject's bounds, the viewport aspect and the panel covering the
+// left third of the screen. framing-probe measured the result as ndcMax.x
+// 1.151 with overlapsHUD — the network ran off the right edge AND under the
+// panel. Nothing could show that before the __qaFraming hook existed, which is
+// the point of having it.
+const VIEW_DIR = new T.Vector3(0.55, 0.48, 0.62).normalize();
+const _fitBox = new T.Box3(), _fitSphere = new T.Sphere();
 function frameAll(){
-  const cam = activeCam();
-  cam.position.set(SPAN*0.55, SPAN*0.48, SPAN*0.62);
-  controls.target.set(0, 2.0, 0);
+  mesh.updateMatrixWorld(true);
+  _fitBox.setFromObject(mesh, true);
+  _fitBox.getBoundingSphere(_fitSphere);
+  const r = _fitSphere.radius, c = _fitSphere.center;
+
+  const aspect = innerWidth / innerHeight;
+  const vFov = camera.fov * Math.PI / 180;
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+
+  // The subject is 153 x 42 x ~2 m: its bounding SPHERE is dominated by the
+  // long axis, so fitting the sphere analytically leaves the actual AABB tiny
+  // on screen (measured occupancy 0.22 against the gate's occMin 0.25). Seed
+  // from the sphere, then converge on the real projected corners — the same 8
+  // points the gate measures, so the fit is against the metric itself and not
+  // against a proxy for it.
+  const mn = _fitBox.min, mx = _fitBox.max;
+  const CORNERS = [
+    [mn.x,mn.y,mn.z],[mx.x,mn.y,mn.z],[mn.x,mx.y,mn.z],[mx.x,mx.y,mn.z],
+    [mn.x,mn.y,mx.z],[mx.x,mn.y,mx.z],[mn.x,mx.y,mx.z],[mx.x,mx.y,mx.z],
+  ].map(v => new T.Vector3(v[0], v[1], v[2]));
+
+  // The lateral offset is SOLVED, not guessed. Three constraints fight here and
+  // a magic factor satisfies at most two: the subject's left edge must clear the
+  // HUD (overlapsHUD), its right edge must stay inside the frustum (cropped),
+  // and its centre must sit within the gate's centerTol of 0.30. Centring it in
+  // the free strip lands cx at the panel's half-width — 0.31, failing `centered`
+  // by a hair; shifting less re-introduces the HUD overlap. So: converge the
+  // distance first, measure the real projected half-width, then place the centre
+  // at the tightest point that clears the panel, and clamp it under centerTol.
+  const hud = document.getElementById('hud').getBoundingClientRect();
+  const hudNdc = 2 * Math.min(hud.right, innerWidth) / innerWidth - 1;
+
+  const TARGET_FILL = 0.62;          // of the limiting NDC axis; gate wants >= 0.60
+  const CENTER_CAP  = 0.28;          // gate centerTol is 0.30 — stay off the edge
+  let d = 1.10 * Math.max(r / Math.sin(vFov / 2), r / Math.sin(hFov / 2));
+  let ndcx = 0;
+  const fwd = new T.Vector3(), right = new T.Vector3(), p = new T.Vector3();
+  let hx = TARGET_FILL;
+
+  const place = () => {
+    camera.position.copy(c).addScaledVector(VIEW_DIR, d);
+    controls.target.copy(c);
+    fwd.subVectors(controls.target, camera.position);
+    right.crossVectors(fwd, camera.up).normalize();
+    const shift = -ndcx * d * Math.tan(hFov / 2);
+    camera.position.addScaledVector(right, shift);
+    controls.target.addScaledVector(right, shift);
+    camera.lookAt(controls.target);
+    camera.updateMatrixWorld(true);
+    camera.updateProjectionMatrix();
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const v of CORNERS){
+      p.copy(v).project(camera);
+      if (p.x < x0) x0 = p.x; if (p.x > x1) x1 = p.x;
+      if (p.y < y0) y0 = p.y; if (p.y > y1) y1 = p.y;
+    }
+    return { fill: Math.max((x1 - x0) / 2, (y1 - y0) / 2), hx: (x1 - x0) / 2 };
+  };
+
+  for (let it = 0; it < 8; it++){
+    const m = place();
+    hx = m.hx;
+    if (!isFinite(m.fill) || m.fill <= 0) break;
+    if (Math.abs(m.fill - TARGET_FILL) < 0.005) break;
+    d *= m.fill / TARGET_FILL;       // closer when too small, further when too big
+  }
+  ndcx = Math.min(CENTER_CAP, Math.max(0, hudNdc + hx + 0.01));
+  place();
+
+  camera.updateProjectionMatrix();
+  if (ortho){
+    const h = d * Math.tan(vFov / 2), w = h * aspect;
+    ortho.left = -w; ortho.right = w; ortho.top = h; ortho.bottom = -h;
+    ortho.position.copy(camera.position); ortho.up.copy(camera.up);
+    ortho.updateProjectionMatrix();
+  }
   controls.update();
   bayV.textContent = 'vista completa';
   curBay = -1;
@@ -55170,6 +55253,10 @@ addEventListener('resize', ()=>{
   }
   renderer.setSize(innerWidth, innerHeight, false);
 });
+// Boot framing: derived, not hardcoded. Runs after the HUD is in the DOM
+// because the fit reads the panel's rect.
+frameAll();
+
 // ── QA framing hook (design3d GATES.md mechanical check) ───────────────────
 // Raw geometry only, never a verdict: the page must not mark its own homework.
 // framing-probe.mjs runs geom-verify's pure core against these numbers. SUBJECT
