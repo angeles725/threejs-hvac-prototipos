@@ -102,24 +102,26 @@ superseded 2,132-run baseline and should be discarded.)*
 11 combos). **SD and MD do not appear** as damper types anywhere in the level-4 sheets — `SD`
 in this drawing means supply diffuser, not smoke damper. Do not build SD/MD damper parts.
 
-## 5. Terminals — 4 families, 551 instances
+## 5. Terminals — 4 families, 552 instances
 
 **Use the label tags, not `terminals[]`.** Same nesting as the rect families, resolved the same way:
 
 | type | labels (use) | `terminals[]` | meaning |
 |---|---|---|---|
-| SD | **256** | 249 | supply diffuser |
+| SD | **257** | 249 | supply diffuser |
 | LD | **164** | 152 | linear diffuser |
 | RR | **86** | 86 | return register |
 | CD | **45** | 42 | ceiling diffuser |
-| **total** | **551** | 529 | |
+| **total** | **552** | 529 | |
 
 `terminals[]` is a **strict subset**: it contains zero instances the labels lack, and drops 22
 that they have (`LD-1` ×6, `LD-2` ×6, `SD-1` ×6, `CD-1` ×3, `SD-2` ×1). Plus 90 VAV boxes in
 `equipment`.
 
-*(A peer reads SD 257 against this parse's 256 — a one-count regex edge case, not material.
-LD, CD and RR agree exactly.)*
+Reconciled with team A. An earlier read of SD 256 used an anchored `^PREFIX-N$` regex, which
+rejected exactly one label — `SD-1 BOD3.73` (sheet 14C, handle `2B693`), a label carrying both a
+tag and an elevation. The unanchored parse is correct. **Use these counts for any bill of
+quantities**; `terminals[]` is lossy.
 
 ## 6. COB's own fitting blocks — use these names
 
