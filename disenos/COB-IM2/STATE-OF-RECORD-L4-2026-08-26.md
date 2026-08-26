@@ -35,20 +35,34 @@ coordinating sessions; each claim traces to the session that measured it.
   needing per-run confirmation; ~89% is a drawing-completeness floor (size never tagged near the run).
   **Coverage is FINAL: 38.3% assumed / 61.7% measured BY LENGTH (trunk worst, 29.9%). There is no
   extractor height fix; Z cannot be closed.** (team A's pre-control draft overclaimed "27–99.7%
-  recoverable"; the control corrected it before ship — the discipline working. investigador1 is
-  verifying the method on PR #1.)
+  recoverable"; the control corrected it before ship — the discipline working. investigador1 then
+  REPRODUCED PR #1's numbers with independent code and confirmed the control is fair under BOTH a
+  label-frequency null (50.3%) and a stricter uniform-ladder null (18.8%) — real 11.9% is below both.
+  **WU2 is TRIPLE-CONFIRMED and settled.**)
 - **MECO / clearance datum → confirmed ZERO in the DXF.** The clash gate's clearance arm must be
   handed a threshold externally; there is nothing in-drawing to derive it from.
 - **H4 hardening → done. HARD-CONFIRMED** (three legs, above).
 
-## OPEN — what could still move a number
+## RESOLVED — the 4" question (121 ran, investigador1 verified independently)
 
-- **211 four-inch spurious-pair check** (121 running; investigador1 flagged the same). 211 informative
-  unknown-height runs are 4" wide, snapped to the smallest imperial rung — implausible as real
-  rectangular ducts. If some are spurious pairings, the unknown DENOMINATOR is inflated and real
-  coverage is **better than 38.3% (never worse)**. One owner runs, the other verifies.
+- **The 4" class is MISCLASSIFIED WIDTH, not spurious geometry.** 128/211 of the 4" unknown-height runs
+  join the network at both ends (a *higher* joined rate than the label-bound control), so they are real
+  ducts with a wrong width, not invented pairings — 121's earlier "spurious" wording is retracted. Raw
+  widths are multimodal with a tight **82.4mm cluster (~80 runs, a repeated drawing motif)**; snap
+  displacement median 14.5mm (pressed to the 20mm ceiling) vs 2.3mm for label-bound. **Use
+  "misclassified width", never "spurious pairs".**
+- **Honest coverage is a BRACKET, denominators named:** 38.3% by length as-shipped → 37.0% dropping the
+  80-run 82.4mm cluster → 32.2% dropping all 211 4" runs. Realistically ~37% (≈90 of the 211 are
+  legitimately 4"-ish). **The height gap is NOT a denominator artifact — it survives at 32–37% by
+  length. It shrinks the gap by 1–6 points, not a reprieve.**
+
+## OPEN — small threads
+
 - **5mm-over-gate eyeball** (immaterial to the headline): a few 24"/26" runs sit 5mm over the width
   gate from a '25"x20"' label — worth a manual look, does not change the frame.
+- **Eyeball the 82.4mm cluster** (121's suggestion, a human-eyes-beat-a-statistic call): open the
+  cad2d viewer, search 3 of the 80-run cluster's ids, look at the uncollapsed source polylines
+  underneath, and say what they are. Five minutes, worth more than another statistic.
 - **H2 — width/centreline accuracy** (right wall from the 3-parallel stack): **UNTESTED, unresolvable
   with current data** (no size labels on those stack lines) — NOT refuted. Parked.
 
@@ -61,6 +75,12 @@ what the source has and does not**:
    right — red `height UNKNOWN` = 1171 runs, reconciles to 971.8m / 2540.2m = **38.3%**, zero
    fabricated heights — and is the **reference pattern**. The shipped `system-3d` viewer does it
    WRONG (12's Defect-1: collapses provenance into one hidden color). Team A's viewer fix follows 121's.
+   **Co-registration lesson** (team A's investigador caught a 20.1mm error on 14C — exactly the 20mm
+   gate the tool exists to audit): "verify you're on the certified artifact" is NOT sufficient — 121 was
+   on the certified *overlay* but had the *source* DXF in a different pipeline's frame. Two pipelines
+   here carry different sheet offsets (`extract-graph.py` vs `extract-l4-full.py`). Register
+   source→overlay from ONE frame source (`meta.sheets`); cross-check offsets between pipelines, never
+   assume they match.
 2. **Clash gate runs on what's known**: clearance-below on BOD (~99%); vertical-clash advisory on the
    61.7% measured height only — **permanently**, since the 38.3% will never be recovered (do not assume
    a top to make an unknown-height run clashable — render it as explicitly unknown).
