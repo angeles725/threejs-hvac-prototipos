@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Catálogo de componentes HVAC · COB-IM2</title>
+<!-- inline icon: a favicon request 404s, which makes console_clean:false and fails the mechanical gate -->
+<link rel="icon" href="data:,">
 <style>
   :root{--bg:#101318;--panel:rgba(17,20,26,.88);--line:rgba(255,255,255,.10);
         --ink:#e8edf3;--dim:#8b97a6;--acc:#5aa9ff;--port:#ff8a4c}
@@ -54498,6 +54500,8 @@ window.OrbitControls = OrbitControls;
 
 </script>
 <script>
+/* INLINED VERBATIM from lib/hvac-catalog.js — do not hand-edit here.
+   Regenerate with: python3 catalog/inline-lib.py */
 /**
  * hvac-catalog.js — parametric HVAC / piping component generators for three.js.
  *
@@ -54727,13 +54731,44 @@ window.OrbitControls = OrbitControls;
   };
 
   /** Rectangular transition / reducer — a loft between two sections. */
-  C.transitionRect = ({ w0 = IN(20), h0 = IN(12), w1 = IN(12), h1 = IN(8), length = 0.5 }) => ({
-    geometry: sweep([frame(0, 0, 0, 1, 0, 0), frame(length, 0, 0, 1, 0, 0)],
-                    [ringRect(w0, h0), ringRect(w1, h1)], true, true),
-    ports: [P('in', [0, 0, 0], [-1, 0, 0], RECT(w0, h0)),
-            P('out', [length, 0, 0], [1, 0, 0], RECT(w1, h1))],
-    meta: { kind: 'transition-rect', label: `Transición ${(w0 / 0.0254).toFixed(0)}"×${(h0 / 0.0254).toFixed(0)} → ${(w1 / 0.0254).toFixed(0)}"×${(h1 / 0.0254).toFixed(0)}"` }
-  });
+  /**
+   * Rectangular transition / reducer. LENGTH is a real parameter of the family,
+   * not a drawing convenience: COB part numbers specify 0.10 m and 0.30 m, so
+   * the family is (w0,h0) x (w1,h1) x length, and an evidence set that shows one
+   * length has shown half the family.
+   *
+   * THE TWO LEGEND LENGTHS ARE NAMES, NOT MEASUREMENTS — do not build to them.
+   * COB's M-HVAC-DUCT LEGEND does carry REDUCCIÓN RECTANGULAR part numbers
+   * (3093643 / 3093738 labelled 10 cm, 3090626 labelled 30 cm), and I cited them
+   * here until 121 measured the blocks themselves: the names contradict the
+   * geometry. The "10 cm" blocks measure 76.2 mm and 305.3 mm; the "30 cm" blocks
+   * 508 / 709 / 754 mm; and two blocks sharing part number 3093738 disagree with
+   * each other. No bbox axis matches its stated length on any of the six. 76.2 mm
+   * is exactly 3" and 406.4 mm exactly 16" — the blocks are drawn imperial with
+   * metric names pasted on.
+   *
+   * So LENGTH IS A FREE PARAMETER driven by the width change, not a lookup:
+   * `length >= 1.5 * dW`, from SMACNA's 1:3 minimum transition slope. The part
+   * numbers are good for NAMING a part and nothing else. The constant below is
+   * kept only so callers can still reproduce the legend's nominal labels; it is
+   * not a dimension source.
+   */
+  C.TRANSITION_LENGTHS_NOMINAL_M = [0.10, 0.30];   // legend NAMES — see above, not measurements
+  /** SMACNA 1:3 minimum slope: the shortest defensible transition for a width change. */
+  C.transitionMinLength = (w0, w1) => 1.5 * Math.abs(w0 - w1);
+  C.transitionRect = ({ w0 = IN(20), h0 = IN(12), w1 = IN(12), h1 = IN(8), length = null }) => {
+    // Derived by default, overridable when a caller has a real measured length.
+    const L = length != null ? length : Math.max(0.15, C.transitionMinLength(w0, w1));
+    return {
+      geometry: sweep([frame(0, 0, 0, 1, 0, 0), frame(L, 0, 0, 1, 0, 0)],
+                      [ringRect(w0, h0), ringRect(w1, h1)], true, true),
+      ports: [P('in', [0, 0, 0], [-1, 0, 0], RECT(w0, h0)),
+              P('out', [L, 0, 0], [1, 0, 0], RECT(w1, h1))],
+      meta: { kind: 'transition-rect', length_m: +L.toFixed(4),
+              length_src: length != null ? 'caller' : 'derived: SMACNA 1:3 min slope, 1.5 x dW',
+              label: `Transición ${(w0 / 0.0254).toFixed(0)}"×${(h0 / 0.0254).toFixed(0)} → ${(w1 / 0.0254).toFixed(0)}"×${(h1 / 0.0254).toFixed(0)}"` }
+    };
+  };
 
   /** Rect → round transition. Both rings are resampled to the same count. */
   C.transitionRectRound = ({ w = IN(14), h = IN(10), d = IN(10), length = 0.45, segments = 24 }) => {
@@ -54868,7 +54903,10 @@ window.OrbitControls = OrbitControls;
     };
   };
 
-  /** Round pipe with flanges, for the hydronic side. */
+  /** DEPRECATED — kept so existing callers do not break. `d` here is drawn as
+   *  the OUTSIDE diameter, so `pipeRound({d: IN(4)})` is 4.000" OD where NPS 4
+   *  pipe is 4.500". Use `C.pipeStraight({nps: '4'})`, which reads the OD from
+   *  the B36.10M table. */
   C.pipeRound = ({ d = IN(4), length = 1.2, segments = 20, flange = true }) => {
     const geos = [sweep([frame(0, 0, 0, 1, 0, 0), frame(length, 0, 0, 1, 0, 0)],
                         [ringRound(d, segments), ringRound(d, segments)], true, true)];
@@ -54881,6 +54919,204 @@ window.OrbitControls = OrbitControls;
       ports: [P('in', [0, 0, 0], [-1, 0, 0], ROUND(d)),
               P('out', [length, 0, 0], [1, 0, 0], ROUND(d))],
       meta: { kind: 'pipe-round', label: `Tubería Ø${(d / 0.0254).toFixed(0)}" · ${length.toFixed(2)} m` }
+    };
+  };
+
+  /**
+   * Rectangular CROSS — four ports on one plane. Not a tee: `forNode` used to
+   * route 'cross' to teeRect, so all 68 crosses in the certified L4 data
+   * rendered as three-way fittings. A cross has two opposed branches; drawing
+   * one of them is a fitting that does not exist in the drawing.
+   */
+  C.crossRect = ({ w = IN(20), h = IN(12), bw = IN(10), bh = IN(8), length = 0.9, neck = 0.22 }) => {
+    const main = sweep([frame(0, 0, 0, 1, 0, 0), frame(length, 0, 0, 1, 0, 0)],
+                       [ringRect(w, h), ringRect(w, h)], true, true);
+    const cx = length / 2;
+    const arm = sgn => sweep(
+      [{ o: V(cx, 0, sgn * h * 0), x: V(0, 0, sgn), y: V(0, 1, 0) },
+       { o: V(cx, 0, sgn * (w / 2 + neck)), x: V(0, 0, sgn), y: V(0, 1, 0) }],
+      [ringRect(bw, bh), ringRect(bw, bh)], false, true);
+    return {
+      geometry: merge([main, arm(1), arm(-1)]),
+      ports: [P('in',  [0, 0, 0], [-1, 0, 0], RECT(w, h)),
+              P('out', [length, 0, 0], [1, 0, 0], RECT(w, h)),
+              P('b1', [cx, 0,  (w / 2 + neck)], [0, 0,  1], RECT(bw, bh)),
+              P('b2', [cx, 0, -(w / 2 + neck)], [0, 0, -1], RECT(bw, bh))],
+      meta: { kind: 'cross-rect',
+              label: `Cruz ${(w / 0.0254).toFixed(0)}"×${(h / 0.0254).toFixed(0)}" · ramales ${(bw / 0.0254).toFixed(0)}"×${(bh / 0.0254).toFixed(0)}"` }
+    };
+  };
+
+  // ── NPS ladder (hydronic side) ───────────────────────────────────────────
+  /**
+   * ASME B36.10M nominal pipe size → outside diameter and SCHEDULE 40 wall
+   * (carbon steel), both in INCHES.
+   *
+   * Schedule matters and the label is not optional. Sch 40 (B36.10M, carbon)
+   * and Sch 40S (B36.19M, stainless) are IDENTICAL up to NPS 10 and DIVERGE at
+   * NPS 12: Sch 40 is 0.406", Sch 40S / STD is 0.375". This table is Sch 40
+   * carbon throughout. Anything quoting a stainless wall must come from
+   * B36.19M and say so -- a wall silently taken from the wrong standard is a
+   * wrong ID, a wrong weight and a wrong spec, all from a plausible number.
+   *
+   * NPS is a LABEL, not a measurement: NPS 4 pipe has an
+   * outside diameter of 4.500", not 4.000". The old `pipeRound({d: IN(4)})`
+   * drew the nominal as if it were the OD — 12.5% under real size at NPS 4,
+   * and worse below NPS 2 where the label diverges further from the metal.
+   * Round DUCT is the opposite convention (nominal IS the diameter), which is
+   * why duct and pipe cannot share one size helper.
+   */
+  const NPS = {
+    '1/2': { od: 0.840, wall: 0.109 }, '3/4': { od: 1.050, wall: 0.113 },
+    '1':   { od: 1.315, wall: 0.133 }, '1-1/4': { od: 1.660, wall: 0.140 },
+    '1-1/2': { od: 1.900, wall: 0.145 }, '2': { od: 2.375, wall: 0.154 },
+    '2-1/2': { od: 2.875, wall: 0.203 }, '3': { od: 3.500, wall: 0.216 },
+    '4':   { od: 4.500, wall: 0.237 }, '5': { od: 5.563, wall: 0.258 },
+    '6':   { od: 6.625, wall: 0.280 }, '8': { od: 8.625, wall: 0.322 },
+    '10':  { od: 10.750, wall: 0.365 },
+    // 0.406 is Sch 40. 0.375 would be Sch 40S / STD -- see the divergence note above.
+    '12':  { od: 12.750, wall: 0.406 },
+  };
+  /** Outside diameter in METRES for an NPS label. Throws on an unknown size —
+   *  a silent fallback would draw a plausible pipe at the wrong diameter. */
+  const npsOD = nps => {
+    const e = NPS[String(nps)];
+    if (!e) throw new Error(`hvac-catalog: NPS ${nps} not in the B36.10M table`);
+    return IN(e.od);
+  };
+
+  /** Raised-face flange pair sized off the OD. Geometry only — bolt circle is
+   *  not modelled, so this is a flange READ, not a flange spec. */
+  const flangeRing = (od, x) => sweep(
+    [frame(x - 0.012, 0, 0, 1, 0, 0), frame(x + 0.012, 0, 0, 1, 0, 0)],
+    [ringRound(od * 1.8, 24), ringRound(od * 1.8, 24)], true, true);
+
+  C.pipeStraight = ({ nps = '4', length = 1.2, segments = 24, flanged = true }) => {
+    const od = npsOD(nps);
+    const geos = [sweep([frame(0, 0, 0, 1, 0, 0), frame(length, 0, 0, 1, 0, 0)],
+                        [ringRound(od, segments), ringRound(od, segments)], true, true)];
+    if (flanged) for (const x of [0.02, length - 0.02]) geos.push(flangeRing(od, x));
+    return {
+      geometry: merge(geos),
+      ports: [P('in', [0, 0, 0], [-1, 0, 0], ROUND(od)),
+              P('out', [length, 0, 0], [1, 0, 0], ROUND(od))],
+      meta: { kind: 'pipe-straight', nps, od_in: NPS[String(nps)].od,
+              label: `Tubo NPS ${nps}" (OD ${NPS[String(nps)].od}") · ${length.toFixed(2)} m` }
+    };
+  };
+
+  C.pipeElbow = ({ nps = '4', angle = 90, arcSegments = 14, segments = 24, legIn = 0.12, legOut = 0.12 }) => {
+    const od = npsOD(nps);
+    // Long-radius elbow: centreline radius = 1.5 x nominal, the LR convention.
+    const R = 1.5 * od;
+    const frames = [], rings = [];
+    frames.push(frame(-legIn, 0, 0, 1, 0, 0)); rings.push(ringRound(od, segments));
+    frames.push(frame(0, 0, 0, 1, 0, 0));      rings.push(ringRound(od, segments));
+    const rad = angle * Math.PI / 180;
+    for (let i = 1; i <= arcSegments; i++) {
+      const a = rad * i / arcSegments;
+      frames.push(frame(R * Math.sin(a), 0, R * (1 - Math.cos(a)),
+                        Math.cos(a), 0, Math.sin(a)));
+      rings.push(ringRound(od, segments));
+    }
+    const e = frames[frames.length - 1];
+    const tx = Math.cos(rad), tz = Math.sin(rad);
+    frames.push(frame(e.o.x + tx * legOut, 0, e.o.z + tz * legOut, tx, 0, tz));
+    rings.push(ringRound(od, segments));
+    const last = frames[frames.length - 1];
+    return {
+      geometry: sweep(frames, rings, true, true),
+      ports: [P('in', [-legIn, 0, 0], [-1, 0, 0], ROUND(od)),
+              P('out', [last.o.x, 0, last.o.z], [tx, 0, tz], ROUND(od))],
+      meta: { kind: 'pipe-elbow', nps, angle, radius_convention: 'long-radius 1.5D',
+              label: `Codo ${angle}° NPS ${nps}" · radio largo` }
+    };
+  };
+
+  C.pipeTee = ({ nps = '4', branch = null, length = 0.6, neck = 0.10, segments = 24 }) => {
+    const od = npsOD(nps), bod = npsOD(branch || nps);
+    const run = sweep([frame(0, 0, 0, 1, 0, 0), frame(length, 0, 0, 1, 0, 0)],
+                      [ringRound(od, segments), ringRound(od, segments)], true, true);
+    const cx = length / 2;
+    const arm = sweep([{ o: V(cx, 0, 0), x: V(0, 0, 1), y: V(0, 1, 0) },
+                       { o: V(cx, 0, od / 2 + neck), x: V(0, 0, 1), y: V(0, 1, 0) }],
+                      [ringRound(bod, segments), ringRound(bod, segments)], false, true);
+    return {
+      geometry: merge([run, arm]),
+      ports: [P('in', [0, 0, 0], [-1, 0, 0], ROUND(od)),
+              P('out', [length, 0, 0], [1, 0, 0], ROUND(od)),
+              P('branch', [cx, 0, od / 2 + neck], [0, 0, 1], ROUND(bod))],
+      meta: { kind: 'pipe-tee', nps, branch: branch || nps,
+              label: `Tee NPS ${nps}"${branch && branch !== nps ? ` × ${branch}"` : ''}` }
+    };
+  };
+
+  /** Concentric or eccentric reducer. Eccentric keeps ONE side flat — that is
+   *  the whole point of the fitting (air pocket control on a pump suction),
+   *  so the two variants are not interchangeable decoration. */
+  C.pipeReducer = ({ nps = '4', to = '3', length = 0.20, segments = 24, eccentric = false }) => {
+    const a = npsOD(nps), b = npsOD(to);
+    const drop = eccentric ? (a - b) / 2 : 0;
+    return {
+      geometry: sweep(
+        [frame(0, 0, 0, 1, 0, 0), frame(length, -drop, 0, 1, 0, 0)],
+        [ringRound(a, segments), ringRound(b, segments)], true, true),
+      ports: [P('in', [0, 0, 0], [-1, 0, 0], ROUND(a)),
+              P('out', [length, -drop, 0], [1, 0, 0], ROUND(b))],
+      meta: { kind: 'pipe-reducer', nps, to, eccentric,
+              label: `Reducción ${eccentric ? 'excéntrica' : 'concéntrica'} NPS ${nps}"→${to}"` }
+    };
+  };
+
+  C.pipeCoupling = ({ nps = '4', length = 0.09, segments = 24 }) => {
+    const od = npsOD(nps);
+    return {
+      geometry: sweep([frame(0, 0, 0, 1, 0, 0), frame(length, 0, 0, 1, 0, 0)],
+                      [ringRound(od * 1.18, segments), ringRound(od * 1.18, segments)], true, true),
+      ports: [P('in', [0, 0, 0], [-1, 0, 0], ROUND(od)),
+              P('out', [length, 0, 0], [1, 0, 0], ROUND(od))],
+      meta: { kind: 'pipe-coupling', nps, label: `Cople NPS ${nps}"` }
+    };
+  };
+
+  C.pipeFlange = ({ nps = '4', segments = 24 }) => {
+    const od = npsOD(nps), t = 0.024;
+    return {
+      geometry: flangeRing(od, t / 2),
+      ports: [P('in', [0, 0, 0], [-1, 0, 0], ROUND(od)),
+              P('out', [t, 0, 0], [1, 0, 0], ROUND(od))],
+      meta: { kind: 'pipe-flange', nps, label: `Brida NPS ${nps}"` }
+    };
+  };
+
+  /** Gate or ball valve: flanged body + bonnet + handwheel/lever stub. The
+   *  STEM is a named node so a viewer can pose open/closed. */
+  C.pipeValve = ({ nps = '4', kind = 'gate', segments = 24 }) => {
+    const od = npsOD(nps), body = od * 1.35, len = od * 2.2;
+    const geos = [
+      sweep([frame(0, 0, 0, 1, 0, 0), frame(len, 0, 0, 1, 0, 0)],
+            [ringRound(body, segments), ringRound(body, segments)], true, true),
+      flangeRing(od, 0.014), flangeRing(od, len - 0.014),
+      // bonnet + stem, up +Y from the body centre
+      sweep([{ o: V(len / 2, body / 2, 0), x: V(0, 1, 0), y: V(1, 0, 0) },
+             { o: V(len / 2, body / 2 + od * 0.9, 0), x: V(0, 1, 0), y: V(1, 0, 0) }],
+            [ringRound(od * 0.34, 16), ringRound(od * 0.34, 16)], true, false),
+    ];
+    // handwheel (gate) reads as a torus-less flat ring; lever (ball) as a bar
+    const topY = body / 2 + od * 0.9;
+    geos.push(kind === 'ball'
+      ? sweep([{ o: V(len / 2, topY, -od * 0.9), x: V(0, 0, 1), y: V(0, 1, 0) },
+               { o: V(len / 2, topY, od * 0.9), x: V(0, 0, 1), y: V(0, 1, 0) }],
+              [ringRect(od * 0.10, od * 0.22), ringRect(od * 0.10, od * 0.22)], true, true)
+      : sweep([{ o: V(len / 2, topY, 0), x: V(0, 1, 0), y: V(1, 0, 0) },
+               { o: V(len / 2, topY + 0.018, 0), x: V(0, 1, 0), y: V(1, 0, 0) }],
+              [ringRound(od * 1.25, 24), ringRound(od * 1.25, 24)], true, true));
+    return {
+      geometry: merge(geos),
+      ports: [P('in', [0, 0, 0], [-1, 0, 0], ROUND(od)),
+              P('out', [len, 0, 0], [1, 0, 0], ROUND(od))],
+      meta: { kind: `pipe-valve-${kind}`, nps, stem_pivot: [len / 2, body / 2, 0],
+              label: `Válvula de ${kind === 'ball' ? 'bola' : 'compuerta'} NPS ${nps}"` }
     };
   };
 
@@ -54911,7 +55147,7 @@ window.OrbitControls = OrbitControls;
     switch (kind) {
       case 'elbow':      return C.elbowRect(params);
       case 'tee':        return C.teeRect(params);
-      case 'cross':      return C.teeRect(params);
+      case 'cross':      return C.crossRect(params);
       case 'transition': return C.transitionRect(params);
       case 'terminal':   return C.capRect(params);
       case 'coupling':
@@ -54919,13 +55155,40 @@ window.OrbitControls = OrbitControls;
     }
   }
 
+  /**
+   * JSON manifest for one generated component: what it is, the exact params it
+   * was generated from, and where its numbers come from. Emitted per component
+   * so a viewer can instance it and a reviewer can audit it without reading the
+   * generator.
+   */
+  function manifest(comp, params, provenance) {
+    const g = comp.geometry;
+    const pos = g.getAttribute && g.getAttribute('position');
+    return {
+      family: comp.meta.kind,
+      label: comp.meta.label,
+      params: params || {},
+      ports: comp.ports.map(p => ({ id: p.id, p: p.p, dir: p.dir,
+                                    shape: p.shape, w: p.w, h: p.h, d: p.d })),
+      units: 'm',
+      scale: '1 unit = 1 m',
+      triangles: pos ? pos.count / 3 : null,
+      provenance: provenance || null,
+      meta: comp.meta
+    };
+  }
+
   global.HVACCatalog = {
-    IN, ringRect, ringRound, sweep, merge, transform,
-    mateMatrix, portsCompatible, forNode,
+    IN, NPS, npsOD, ringRect, ringRound, sweep, merge, transform,
+    mateMatrix, portsCompatible, forNode, manifest,
     components: C,
     list: Object.keys(C)
   };
 })(typeof window !== 'undefined' ? window : globalThis);
+
+
+
+
 
 </script>
 <script>
@@ -55002,7 +55265,13 @@ const CATALOG = [
   ['Difusor lineal',   'diffuser',            {type:'LD-1', length:IN(48)}, alu],
   ['Difusor CD-1',     'diffuser',            {type:'CD-1', size:IN(24), neckD:IN(8)}, alu],
   ['Rejilla RR-4',     'diffuser',            {type:'RR-4', size:IN(24)}, alu],
-  ['Tubería Ø4"',      'pipeRound',           {d:IN(4), length:1.2}, acc],
+  // pipeStraight, NOT the deprecated pipeRound: NPS is a LABEL, not a measurement.
+  // pipeRound({d:IN(4)}) drew 4.000" OD where NPS 4 pipe is 4.500" -- an 11%
+  // undersize on a part the catalog labelled Ø4". pipeStraight reads the OD from
+  // the B36.10M table, so the label and the metal agree.
+  ['Tubo NPS 4"',      'pipeStraight',        {nps:'4', length:1.2}, acc],
+  ['Codo NPS 4" 90°',  'pipeElbow',           {nps:'4', angle:90}, acc],
+  ['Reducción excéntrica NPS 4→3', 'pipeReducer', {nps:'4', to:'3', eccentric:true}, acc],
 ];
 
 // label sprites, drawn to a canvas so the file needs no font file
@@ -55066,12 +55335,55 @@ CATALOG.forEach((entry, i) => {
 
 // ── camera ────────────────────────────────────────────────────────────────
 const camera = new T.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 200);
-camera.position.set(0, 8.5, 11);
 const controls = new window.OrbitControls(camera, canvas);
 controls.enableDamping = true; controls.dampingFactor = 0.07;
-controls.target.set(0, 0.4, 0);
+
+// Frame the board from the LAID-OUT parts, never a hardcoded eye position.
+// The camera was pinned at (0,8.5,11) for an 18-part grid; adding parts pushed
+// the board past the frame edge and under the 306px side panel, so the catalog
+// shipped with its first column unviewable. A derived fit cannot go stale when
+// the part list grows -- and this list is meant to grow.
+const PANEL_PX = 322;                    // side panel + its margin
+function frameBoard(){
+  const box = new T.Box3();
+  for (const pk of picks) box.expandByObject(pk.mesh);
+  if (box.isEmpty()) { camera.position.set(0, 8.5, 11); controls.target.set(0, .4, 0); return; }
+  const size = box.getSize(new T.Vector3());
+  const mid  = box.getCenter(new T.Vector3());
+  // Shift the target right by half the panel's share of the viewport, expressed
+  // in world units at the board's depth, so the panel covers empty space rather
+  // than parts.
+  const vFov = camera.fov * Math.PI/180;
+  const tanV = Math.tan(vFov/2);
+  const tanH = tanV * camera.aspect;
+  const EL_Y = 0.62, EL_Z = 0.80;              // 3/4 view direction
+  const elev = Math.atan2(EL_Y, EL_Z);         // camera elevation above the board
+
+  // Horizontal need: the row width, padded, inside the horizontal half-FOV --
+  // then divided by the fraction of the viewport the panel does NOT cover.
+  const usable  = Math.max(0.5, 1 - PANEL_PX / innerWidth);
+  const distH   = (size.x * 0.5 * 1.10) / tanH / usable;
+  // Vertical need: the board's depth foreshortens by sin(elevation), plus part height.
+  const vExtent = size.z * Math.sin(elev) + size.y;
+  const distV   = (vExtent * 0.5 * 1.10) / tanV;
+  const dist    = Math.max(distH, distV);
+
+  // Shift the target right by half the panel's width in world units at that
+  // distance, so the panel covers empty space instead of the first column.
+  // Shift the LOOK-AT LEFT of the board centre. Moving target AND camera by the
+  // same amount just translates the view and leaves the board centred over the
+  // panel -- the eye must sit left of the subject for the subject to render right.
+  const worldPerPx = (2 * tanH * dist) / innerWidth;
+  mid.x -= PANEL_PX * worldPerPx * 0.5;
+  controls.target.copy(mid);
+  camera.position.set(mid.x, mid.y + dist * EL_Y, mid.z + dist * EL_Z);
+  camera.near = Math.max(0.1, dist * 0.02); camera.far = dist * 8;
+  camera.updateProjectionMatrix();
+}
+frameBoard();
 controls.maxPolarAngle = Math.PI*0.49;
 controls.update();
+window.__fit = frameBoard;      // deterministic re-frame for headless capture
 window.__cam = ()=>({p:camera.position.toArray().map(v=>+v.toFixed(2)),
                      t:controls.target.toArray().map(v=>+v.toFixed(2))});
 
@@ -55138,9 +55450,15 @@ addEventListener('click', ev => {
   if (hit) focusOn(picks.findIndex(p=>p.mesh===hit.object));
 });
 
+// Re-frame on resize ONLY while the view is untouched. The panel's share of the
+// viewport changes with width, so a fixed frame is wrong at another size -- but
+// stealing the camera back from someone who has orbited is worse.
+let userMoved = false;
+controls.addEventListener('start', ()=>{ userMoved = true; });
 addEventListener('resize', ()=>{
   camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight, false);
+  if (!userMoved) { frameBoard(); controls.update(); }
 });
 (function tick(){ requestAnimationFrame(tick); controls.update(); renderer.render(scene, camera); })();
 console.log('HVAC catalog:', K.list);

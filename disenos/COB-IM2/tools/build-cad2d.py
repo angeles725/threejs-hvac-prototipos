@@ -156,6 +156,7 @@ def polylen(pts, closed):
 def extract():
     ents = []
     counts = {k: 0 for k, _, _, _ in LAYER_DEFS}
+    lengths = {k: 0.0 for k, _, _, _ in LAYER_DEFS}
     sheets = ["14A", "14B", "14C"]
 
     for si, sid in enumerate(sheets):
@@ -275,6 +276,7 @@ def extract():
                          "lb": r.get("label"), "cls": r.get("cls"), "shp": r.get("shape"),
                          "L": round(r.get("L", 0.0), 4)})
             counts[lay] += 1
+            lengths[lay] += r.get("L", 0.0)
         for n in g.get("nodes", []):
             ents.append({"l": "nodes", "s": -1, "h": f'n{n["x"]:.2f},{n["y"]:.2f}', "t": "NODE",
                          "c": [int(round(n["x"] * Q)), int(round(n["y"] * Q))],
@@ -319,7 +321,7 @@ def extract():
                          "c": [int(round(col["x"] * Q)), int(round(col["y"] * Q))]})
             counts["grid"] += 1
 
-    return ents, counts, graph_meta, ctx_flags, sheets
+    return ents, counts, lengths, graph_meta, ctx_flags, sheets
 
 
 def main():
@@ -333,7 +335,7 @@ def main():
     for k, v in OFFSETS.items():
         print(f"    {k}: {v}", file=sys.stderr)
     print("reading source DXFs (read-only)...", file=sys.stderr)
-    ents, counts, gmeta, cflags, sheets = extract()
+    ents, counts, lengths, gmeta, cflags, sheets = extract()
 
     xs, ys = [], []
     for e in ents:
@@ -375,7 +377,7 @@ def main():
     data = {
         "meta": {
             "q": Q, "sheets": sheets, "bounds": bounds, "fit": fit_bounds, "clip": list(CLIP),
-            "counts": counts, "built": time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()),
+            "counts": counts, "lengths": {k: round(v, 1) for k, v in lengths.items()}, "built": time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()),
             "offsets": OFFSETS, "offset_src": OFFSET_SRC, "provenance": prov,
             "graph": gmeta, "context_flags": cflags,
             "source": {k: os.path.basename(v) for k, v in DXF_PATH.items()},
