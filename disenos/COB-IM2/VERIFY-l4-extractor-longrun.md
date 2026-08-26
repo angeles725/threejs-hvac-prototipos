@@ -65,7 +65,24 @@ same invented-continuity error the corpus fell into five times (§12/§14).
 
 ## RESOLUTION (2026-08-26) — three-team convergence
 
-**The §6.2/§8.1 premise was wrong. The extractor is measured-correct on the trunk network.**
+**The §6.2/§8.1 premise was wrong. The extractor is internally consistent (bound widths correct
+by construction, topology coherent); binding *completeness* is the open frontier (= WU2).**
+
+Scope note (a corrected overclaim): an earlier draft said "measured-correct on the trunk
+network." That is too broad. Precise, verified position:
+- **Topology coherent, not shattered** — certified `L4-full.json`: 483 components, largest 19.5%
+  inferred / 3.3% measured, 345 branching nodes (degree ≥3), classes trunk 391 / main 197 /
+  branch 440 / small 1005. (A "1 tee / 0.8% connected" alarm was a stale read of the *superseded*
+  `L4-graph.json` n0/n1 pipeline that §12 refuted — not the certified file.)
+- **Bound widths correct by construction** — all 420 runs with a bound WxH label match the label
+  width to ≤1″, because `WIDTH_GATE=20mm` cannot admit a mismatched label.
+- **Open (WU2):** binding *completeness* — the 38.3%-by-length height gap (1171 unknown-height
+  runs) — and the validity of unlabeled wide fragments (96 sub-0.5m ≥30″ runs). WU2 must use the
+  extractor's own **width-gated** binder (`WIDTH_GATE` 20mm, `LABEL_MAX_DIST` 2.5m), not a spatial
+  nearest-label binder (a spatial binder scores ~27% and is misleading).
+- **Deliverable note (render side, 12):** the shipped viewer collapses 587.4m of *measured*
+  height (43.1% of length) into one hidden color — the §13 "assumed reads as certain" trap is live
+  in the viewer, so WU2 coverage must be reconciled against the viewer's collapsed number.
 
 **H1 (run-split): CONCEDED**, verified independently by reading `extract-l4-full.py:780-870`.
 The two-tier design is genuine — `MERGE_GAP=0.90` does real 0-gap geometry merges;
