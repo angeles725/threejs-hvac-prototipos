@@ -473,6 +473,18 @@
     // 0.406 is Sch 40. 0.375 would be Sch 40S / STD -- see the divergence note above.
     '12':  { od: 12.750, wall: 0.406 },
   };
+  /**
+   * NOMINAL size in INCHES for an NPS label, fractions included ("3/4",
+   * "1-1/4", "2-1/2"). This is NOT the outside diameter and the two must never
+   * be confused: NPS 4 is nominal 4.000" and OD 4.500".
+   */
+  const npsNominal = nps => {
+    const t = String(nps).trim();
+    const m = t.match(/^(\d+)?(?:-)?(?:(\d+)\/(\d+))?$/);
+    if (!m || (!m[1] && !m[2])) throw new Error(`hvac-catalog: cannot parse NPS "${nps}"`);
+    return (m[1] ? parseInt(m[1], 10) : 0) + (m[2] ? parseInt(m[2], 10) / parseInt(m[3], 10) : 0);
+  };
+
   /** Outside diameter in METRES for an NPS label. Throws on an unknown size —
    *  a silent fallback would draw a plausible pipe at the wrong diameter. */
   const npsOD = nps => {
@@ -503,8 +515,18 @@
 
   C.pipeElbow = ({ nps = '4', angle = 90, arcSegments = 14, segments = 24, legIn = 0.12, legOut = 0.12 }) => {
     const od = npsOD(nps);
-    // Long-radius elbow: centreline radius = 1.5 x nominal, the LR convention.
-    const R = 1.5 * od;
+    // Long-radius elbow: ASME B16.9 centreline radius = 1.5 x NOMINAL, not 1.5 x
+    // the outside diameter. At NPS 4 that is 6.000", and the previous line here
+    // computed 1.5 * od = 6.750" — 12.5% oversize, on every elbow, at every size.
+    //
+    // The comment above it already said "1.5 x nominal" while the code did od.
+    // Two blind rounds passed the elbow render because a 12.5% radius error looks
+    // like a perfectly reasonable long-radius elbow; 121's deterministic test
+    // caught it in one run. A comment that states the correct rule next to code
+    // that breaks it is worse than no comment: it reassures the reader past the
+    // defect. This is GATES.md Rule 7 earning its place — what a human cannot
+    // measure by eye gets TESTED.
+    const R = IN(1.5 * npsNominal(nps));
     const frames = [], rings = [];
     frames.push(frame(-legIn, 0, 0, 1, 0, 0)); rings.push(ringRound(od, segments));
     frames.push(frame(0, 0, 0, 1, 0, 0));      rings.push(ringRound(od, segments));
@@ -675,7 +697,7 @@
   }
 
   global.HVACCatalog = {
-    IN, NPS, npsOD, ringRect, ringRound, sweep, merge, transform,
+    IN, NPS, npsOD, npsNominal, ringRect, ringRound, sweep, merge, transform,
     mateMatrix, portsCompatible, forNode, manifest,
     components: C,
     list: Object.keys(C)

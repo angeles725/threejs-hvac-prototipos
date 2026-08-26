@@ -54499,9 +54499,8 @@ window.OrbitControls = OrbitControls;
 })();
 
 </script>
+<!-- BEGIN INLINE: disenos/COB-IM2/lib/hvac-catalog.js sha256:661566bb1c86 — GENERATED, do not edit here; edit disenos/COB-IM2/lib/hvac-catalog.js and re-run disenos/catalog/tools/build-inline.mjs -->
 <script>
-/* INLINED VERBATIM from lib/hvac-catalog.js — do not hand-edit here.
-   Regenerate with: python3 catalog/inline-lib.py */
 /**
  * hvac-catalog.js — parametric HVAC / piping component generators for three.js.
  *
@@ -54977,6 +54976,18 @@ window.OrbitControls = OrbitControls;
     // 0.406 is Sch 40. 0.375 would be Sch 40S / STD -- see the divergence note above.
     '12':  { od: 12.750, wall: 0.406 },
   };
+  /**
+   * NOMINAL size in INCHES for an NPS label, fractions included ("3/4",
+   * "1-1/4", "2-1/2"). This is NOT the outside diameter and the two must never
+   * be confused: NPS 4 is nominal 4.000" and OD 4.500".
+   */
+  const npsNominal = nps => {
+    const t = String(nps).trim();
+    const m = t.match(/^(\d+)?(?:-)?(?:(\d+)\/(\d+))?$/);
+    if (!m || (!m[1] && !m[2])) throw new Error(`hvac-catalog: cannot parse NPS "${nps}"`);
+    return (m[1] ? parseInt(m[1], 10) : 0) + (m[2] ? parseInt(m[2], 10) / parseInt(m[3], 10) : 0);
+  };
+
   /** Outside diameter in METRES for an NPS label. Throws on an unknown size —
    *  a silent fallback would draw a plausible pipe at the wrong diameter. */
   const npsOD = nps => {
@@ -55007,8 +55018,18 @@ window.OrbitControls = OrbitControls;
 
   C.pipeElbow = ({ nps = '4', angle = 90, arcSegments = 14, segments = 24, legIn = 0.12, legOut = 0.12 }) => {
     const od = npsOD(nps);
-    // Long-radius elbow: centreline radius = 1.5 x nominal, the LR convention.
-    const R = 1.5 * od;
+    // Long-radius elbow: ASME B16.9 centreline radius = 1.5 x NOMINAL, not 1.5 x
+    // the outside diameter. At NPS 4 that is 6.000", and the previous line here
+    // computed 1.5 * od = 6.750" — 12.5% oversize, on every elbow, at every size.
+    //
+    // The comment above it already said "1.5 x nominal" while the code did od.
+    // Two blind rounds passed the elbow render because a 12.5% radius error looks
+    // like a perfectly reasonable long-radius elbow; 121's deterministic test
+    // caught it in one run. A comment that states the correct rule next to code
+    // that breaks it is worse than no comment: it reassures the reader past the
+    // defect. This is GATES.md Rule 7 earning its place — what a human cannot
+    // measure by eye gets TESTED.
+    const R = IN(1.5 * npsNominal(nps));
     const frames = [], rings = [];
     frames.push(frame(-legIn, 0, 0, 1, 0, 0)); rings.push(ringRound(od, segments));
     frames.push(frame(0, 0, 0, 1, 0, 0));      rings.push(ringRound(od, segments));
@@ -55179,18 +55200,15 @@ window.OrbitControls = OrbitControls;
   }
 
   global.HVACCatalog = {
-    IN, NPS, npsOD, ringRect, ringRound, sweep, merge, transform,
+    IN, NPS, npsOD, npsNominal, ringRect, ringRound, sweep, merge, transform,
     mateMatrix, portsCompatible, forNode, manifest,
     components: C,
     list: Object.keys(C)
   };
 })(typeof window !== 'undefined' ? window : globalThis);
 
-
-
-
-
 </script>
+<!-- END INLINE -->
 <script>
 const T = window.THREE, K = window.HVACCatalog, IN = K.IN;
 
@@ -55242,9 +55260,19 @@ const ground = new T.Mesh(new T.PlaneGeometry(120,120),
 ground.rotation.x = -Math.PI/2; ground.position.y = -0.9;
 ground.receiveShadow = true; scene.add(ground);
 
-const steel = new T.MeshStandardMaterial({color:0xb8bcc0, metalness:0.88, roughness:0.33, envMapIntensity:1.2});
-const alu   = new T.MeshStandardMaterial({color:0xd6dade, metalness:0.55, roughness:0.45, envMapIntensity:1.1});
-const acc   = new T.MeshStandardMaterial({color:0x3f8f8a, metalness:0.4,  roughness:0.5,  envMapIntensity:1.0});
+// side: DoubleSide — the catalog components are SWEPT SHELLS. sweep() builds a
+// wall surface and caps it by flag; a component whose caps are off, or any piece
+// the camera can orbit into, shows its interior. Under the default FrontSide the
+// interior's far walls are culled and the part reads as empty from one side and
+// solid from the other, flipping as you rotate.
+//
+// The L4 viewer got this in 3d85c2c and this file never did — the fix was
+// applied where the bug was reported rather than where the geometry lives, which
+// is why the user still sees it here. Materials, not viewers, are the right
+// place for it.
+const steel = new T.MeshStandardMaterial({color:0xb8bcc0, metalness:0.88, roughness:0.33, envMapIntensity:1.2, side:T.DoubleSide});
+const alu   = new T.MeshStandardMaterial({color:0xd6dade, metalness:0.55, roughness:0.45, envMapIntensity:1.1, side:T.DoubleSide});
+const acc   = new T.MeshStandardMaterial({color:0x3f8f8a, metalness:0.4,  roughness:0.5,  envMapIntensity:1.0, side:T.DoubleSide});
 
 // ── what the gallery shows ────────────────────────────────────────────────
 const CATALOG = [
@@ -55337,6 +55365,23 @@ CATALOG.forEach((entry, i) => {
 const camera = new T.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 200);
 const controls = new window.OrbitControls(camera, canvas);
 controls.enableDamping = true; controls.dampingFactor = 0.07;
+// Wheel zoom, same defaults problem as the L4 viewer: OrbitControls dollies
+// toward the ORBIT CENTRE unless told otherwise, so pointing at a component and
+// scrolling travels to the middle of the board instead. zoomSpeed 1.0 is also a
+// large step here, and with no bounds the camera can enter a part or leave for
+// orbit. (Note: r160 does not damp the dolly at all — enableDamping covers
+// rotate and pan only — so this makes zoom controllable, not yet smooth. The
+// design3d library's controllers/smooth-dolly.mjs is the real smoothing fix and
+// wants vendoring into these non-module pages as its own pass.)
+controls.zoomToCursor = true;
+controls.zoomSpeed    = 0.7;
+controls.minDistance  = 0.4;
+controls.maxDistance  = 60;
+// Zoom toward the CURSOR, not the orbit centre. Default-false sends the wheel at
+// the pivot, which on a board of 20 parts means you cannot approach the part you
+// are pointing at -- it reads as uncontrollable rather than merely different.
+controls.zoomToCursor = true;
+controls.zoomSpeed = 0.7;          // 1.0 overshoots at this scale
 
 // Frame the board from the LAID-OUT parts, never a hardcoded eye position.
 // The camera was pinned at (0,8.5,11) for an 18-part grid; adding parts pushed
@@ -55379,6 +55424,12 @@ function frameBoard(){
   camera.position.set(mid.x, mid.y + dist * EL_Y, mid.z + dist * EL_Z);
   camera.near = Math.max(0.1, dist * 0.02); camera.far = dist * 8;
   camera.updateProjectionMatrix();
+  // Clamp travel to the BOARD's scale, derived with the fit. Left at the defaults
+  // (0 .. Infinity) the wheel either buries the camera inside a part or flies it
+  // off into empty space, and neither is recoverable without a reset. These are
+  // sized to the parts on screen (0.2-2 m), not to the 153 m plant model.
+  controls.minDistance = Math.max(0.25, dist * 0.04);
+  controls.maxDistance = dist * 2.5;
 }
 frameBoard();
 controls.maxPolarAngle = Math.PI*0.49;
