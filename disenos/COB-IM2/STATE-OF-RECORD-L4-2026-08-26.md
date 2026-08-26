@@ -193,10 +193,18 @@ what the source has and does not**:
   part NAMING ONLY, nothing dimensional — no [INFER] 10/30cm anywhere; a citation of them would inherit a
   number the drawing's own geometry contradicts. **Durable catalog requirement: reducer length is
   ΔW-DRIVEN ONLY** (default ≥1.5×ΔW per SMACNA 1:3), no legend presets — and this is now unconditional
-  (there was never a real two-value choice to preserve). The earlier "19 of 127 too steep" is
-  PROVISIONAL / do-not-cite: it compared ΔW against 300mm from the unsound "30cm" name. A real
-  drawing-quality claim needs 121's DXF transition-geometry readback (green-lit, after the manifest +
-  catalog viewer). Part NAMES (3093643 etc.) stay valid for naming. This is a fourth instance of the
+  (there was never a real two-value choice to preserve). The provisional "19 of 127 too steep" is
+  WITHDRAWN (it compared against the unsound 300mm legend length). 121's DXF readback (done, 6a99feb)
+  measured what the drawing actually DRAWS — the slanted HVAC-Ductos taper at each reducer in the
+  certified frame: the large transitions use **1311–1956mm** tapers (4–6× any legend block), so 300mm
+  was never the real length. **REAL DRAWING FINDING (client-relevant): of 127 in-line reducers, AT LEAST
+  13 (~10%, over 52.6m of adjoining run) are drawn shallower than SMACNA's 1:3 minimum** — worst
+  24"→72" at **1.08:1** (standard asks 3:1). Stated as a FLOOR: a tight measuring window gives 13, a
+  loose one 6 — the loose window imports neighbouring fittings' tapers and UNDERSTATES violations, so 13
+  is a lower bound; the four largest (9→66 ×2, 24→72, 18→60) violate under BOTH windows = robust to the
+  method. A 72" trunk reducing at 1.08:1 is real pressure-loss + noise, not a drafting nicety — worth
+  raising with the client at the right time (user's call). Data: catalog/TRANSITION-DRAWN-LENGTHS.json
+  (all 127 rows, drawn/needed/slope). Part NAMES (3093643 etc.) stay valid for naming. This is a fourth instance of the
   conservative-reconstruction pattern's cousin: a metric name applied to imperial geometry is a fake
   spec that only measurement catches.
 - **Judging architecture (kit-faithful):** acceptance authority = fresh-context BLIND agents (team A
