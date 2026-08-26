@@ -196,7 +196,7 @@
     },
     "ports": {
      "type": "array",
-     "description": "Connection points, so a run can snap and instance rather than build ad-hoc geometry. Port ids are OPEN (in/out/branch/b1/b2/neck/...) -- a component is not a two-port pipeline; crossRect has b1+b2. `dir` is a free unit vector, NOT axis-aligned -- a 45 deg elbow emits [cos t,0,sin t] and any validator restricting dir to the six axes rejects every non-90 deg fitting. `shape` is PER PORT, never per component -- vavBox and transitionRectRound are round-in / rect-out.",
+     "description": "Connection points, so a run can snap and instance rather than build ad-hoc geometry. Port ids are OPEN (in/out/branch/b1/b2/neck/...) -- a component is not a two-port pipeline; crossRect has b1+b2. `dir` is a free unit vector, NOT axis-aligned -- a 45 deg elbow emits [cos t,0,sin t] and any validator restricting dir to the six axes rejects every non-90 deg fitting. `shape` is PER PORT, never per component -- vavBox and transitionRectRound are round-in / rect-out. A port may also declare `mating`: contact_type plus embed_depth, which is what makes an instanced assembly FIT rather than merely align. Adapted from nave-panccadia's equipment specs (parent_socket / contact_type / embed_depth / gap_tolerance) — note that its three uses there are FURNITURE joints, a leg into a foot cup, so the pattern is borrowed but the HVAC contact types and values are ours and carry their own provenance.",
      "items": {
       "type": "object",
       "required": [
@@ -246,6 +246,94 @@
        "d": {
         "type": "number",
         "description": "round only, metres. For PIPE this is the B36.10M OUTSIDE diameter, not the NPS label (NPS 4 is 4.500 in, not 4.000 in). For round DUCT the nominal IS the diameter -- duct and pipe do not share a size convention."
+       },
+       "mating": {
+        "type": "object",
+        "description": "HOW this port joins its neighbour, as distinct from WHERE it is. The port fields align two parts; these decide whether the assembly FITS. Concretely: a slip-fit or socket joint makes the assembled length SHORTER than the sum of the part lengths by embed_depth, so a run instanced by butting ports together is longer than the real duct, once per joint. On a network with hundreds of fittings that is a quantity error, not a rendering nicety.",
+        "required": [
+         "contact_type"
+        ],
+        "additionalProperties": false,
+        "properties": {
+         "contact_type": {
+          "enum": [
+           "flange",
+           "slip-fit",
+           "socket",
+           "butt",
+           "welded"
+          ],
+          "description": "flange  — bolted face to face, no overlap (ASME B16.5 pipe flanges; TDC/TDF duct flanges). slip-fit — one end slides inside the other by embed_depth (sheet-metal duct into a fitting). socket  — a receiving socket overlaps the inserted end (ASME B16.11 socket-weld pipe fittings; a round tap into a trunk). butt    — ends meet with no overlap (butt-welded pipe, B16.9). welded  — joined by weld with no mechanical overlap."
+         },
+         "embed_depth_m": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Overlap consumed by the joint, in metres. MUST be 0 for flange/butt/welded and > 0 for slip-fit/socket."
+         },
+         "gap_tolerance_m": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Permitted gap at the joint, in metres."
+         },
+         "provenance": {
+          "enum": [
+           "CERT",
+           "INFER",
+           "STANDARD"
+          ],
+          "description": "Where embed_depth comes from. STANDARD for values read off B16.11 etc.; INFER for shop practice; CERT only if measured in the COB drawings — which so far has never been possible, since the drawings are line-work with no joint detail."
+         }
+        },
+        "allOf": [
+         {
+          "if": {
+           "properties": {
+            "contact_type": {
+             "enum": [
+              "slip-fit",
+              "socket"
+             ]
+            }
+           },
+           "required": [
+            "contact_type"
+           ]
+          },
+          "then": {
+           "required": [
+            "embed_depth_m"
+           ],
+           "properties": {
+            "embed_depth_m": {
+             "exclusiveMinimum": 0
+            }
+           }
+          }
+         },
+         {
+          "if": {
+           "properties": {
+            "contact_type": {
+             "enum": [
+              "flange",
+              "butt",
+              "welded"
+             ]
+            }
+           },
+           "required": [
+            "contact_type"
+           ]
+          },
+          "then": {
+           "properties": {
+            "embed_depth_m": {
+             "maximum": 0
+            }
+           }
+          }
+         }
+        ]
        }
       },
       "oneOf": [

@@ -28,6 +28,14 @@ CASES = [
     ("VAV: round in + rect out, ONE part",   [{"id": "in", "pos": [0,0,0], "dir": [-1,0,0], "shape": "round", "d": 0.254},
                                               {"id": "out", "pos": [0.95,0,0], "dir": [1,0,0], "shape": "rect", "w": 0.3556, "h": 0.254}], True),
     ("neck port id (diffuser family)",       [{"id": "neck", "pos": [0,0.12,0], "dir": [0,1,0], "shape": "round", "d": 0.2032}], True),
+    ("slip-fit WITH embed_depth",            [{"id":"in","pos":[0,0,0],"dir":[-1,0,0],"shape":"round","d":0.1143,
+                                              "mating":{"contact_type":"slip-fit","embed_depth_m":0.038,"provenance":"INFER"}}], True),
+    ("slip-fit WITHOUT embed_depth",         [{"id":"in","pos":[0,0,0],"dir":[-1,0,0],"shape":"round","d":0.1143,
+                                              "mating":{"contact_type":"slip-fit"}}], False),
+    ("flange CLAIMING an overlap",           [{"id":"in","pos":[0,0,0],"dir":[-1,0,0],"shape":"round","d":0.1143,
+                                              "mating":{"contact_type":"flange","embed_depth_m":0.02}}], False),
+    ("unknown contact type",                 [{"id":"in","pos":[0,0,0],"dir":[-1,0,0],"shape":"round","d":0.1143,
+                                              "mating":{"contact_type":"glued","embed_depth_m":0.01}}], False),
 ]
 
 
