@@ -68,8 +68,8 @@ each viewer→artifact link — is in `data-provenance.json`. Summary:
 
 | Viewer | Carries provenance? |
 |---|---|
-| `cob-im2-L4-system-3d.html` | **Yes** — `w_src`, `h_src`, `bod_src` |
-| `cob-im2-L4-full-3d.html` | **Yes** — `w_src`, `h_src`, `bod_src` |
+| `cob-im2-L4-system-3d.html` | **Yes** — `w_src`, `h_src`, `bod_src` · **CANONICAL** (2033 runs / 2540.2 m, matches `L4-full.json` @ a29d14d) |
+| `cob-im2-L4-full-3d.html` | **Yes** — `w_src`, `h_src`, `bod_src` · but **SUPERSEDED data** (2132 runs / 2238.5 m — an earlier generation, not the canonical `L4-full.json`) |
 | `cob-im2-L4-complete-3d.html` | No |
 | `cob-im2-catalogo-3d.html` | No (catalog viewer, not a run dataset) |
 | `cob-im2-14A-3d.html` | No |
