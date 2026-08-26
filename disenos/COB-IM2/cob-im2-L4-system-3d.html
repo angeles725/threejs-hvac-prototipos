@@ -55041,7 +55041,10 @@ controls.maxPolarAngle = Math.PI*0.495;
 //
 // max is 400 m: the model's diagonal is ~159 m, so that is a generous whole-view
 // with room to pull back, and a hard stop before the network becomes a speck.
-controls.zoomToCursor = true;      // dolly toward what the cursor is over
+// controls.zoomToCursor is NOT set: it lives inside OrbitControls' own dolly,
+// which enableZoom = false turns off. Setting it here would read as the
+// mechanism that makes cursor-zoom work while doing nothing at all — which
+// is what it did until 121 measured the target never moving.
 controls.minDistance  = 0.6;       // just outside a duct wall
 controls.maxDistance  = 400;
 
@@ -55072,28 +55075,68 @@ controls.screenSpacePanning = true;
 // Constants (0.12 step, 0.16 ease) are from the reference viewer the user
 // pointed at as the feel they want, not invented here.
 controls.enableZoom = false;       // we own the wheel now
-let _dollyTarget = null;
-canvas.addEventListener('wheel', (e) => {
-  e.preventDefault();
+
+// The wheel zooms toward WHAT THE CURSOR IS OVER, and that requires moving the
+// TARGET as well as the camera.
+//
+// My first version set controls.zoomToCursor = true and then enableZoom = false
+// to take over the wheel. Disabling the zoom disables OrbitControls' dolly, and
+// zoomToCursor lives inside that dolly — so the flag was set and never read.
+// My own step then moved the camera along (position - target), which is the
+// orbit centre by definition. The zoom eased, clamped and felt fixed, and went
+// to the middle of the building every time: exactly the defect the comment
+// above says it exists to fix. 121 measured it (target unchanged across five
+// notches at the far corner) before anyone noticed by eye, because a zoom that
+// moves and eases FEELS correct.
+//
+// Scaling camera AND target about an anchor under the cursor is what actually
+// approaches the thing you point at. The anchor is a real hit on the ductwork
+// when there is one, so you close on the duct itself; otherwise it is the point
+// under the cursor on the plane through the target, which keeps a zoom over
+// empty floor from lurching.
+const _rayZ = new T.Raycaster(), _ptrZ = new T.Vector2(), _plane = new T.Plane();
+let _anchor = null, _wantScale = 1;
+
+function cursorAnchor(ev){
   const cam = activeCam();
-  const cur = cam.position.distanceTo(controls.target);
-  const base = _dollyTarget != null ? _dollyTarget : cur;
-  const next = base * (1 + Math.sign(e.deltaY) * 0.12);
-  _dollyTarget = Math.min(controls.maxDistance, Math.max(controls.minDistance, next));
+  _ptrZ.x = (ev.clientX / innerWidth) * 2 - 1;
+  _ptrZ.y = -(ev.clientY / innerHeight) * 2 + 1;
+  _rayZ.setFromCamera(_ptrZ, cam);
+  const hit = _rayZ.intersectObjects(meshT.visible ? [mesh, meshT] : [mesh], false)[0];
+  if (hit) return hit.point.clone();
+  const n = new T.Vector3().subVectors(cam.position, controls.target).normalize();
+  _plane.setFromNormalAndCoplanarPoint(n, controls.target);
+  const p = new T.Vector3();
+  return _rayZ.ray.intersectPlane(_plane, p) ? p.clone() : controls.target.clone();
+}
+
+canvas.addEventListener('wheel', (ev) => {
+  ev.preventDefault();
+  const cam = activeCam();
+  _anchor = cursorAnchor(ev);
+  const cur = cam.position.distanceTo(_anchor);
+  const next = cur * (1 + Math.sign(ev.deltaY) * 0.12);
+  const dTgt = cam.position.distanceTo(controls.target);
+  // keep the orbit radius inside its bounds after the scale is applied
+  const lo = controls.minDistance / Math.max(dTgt, 1e-6);
+  const hi = controls.maxDistance / Math.max(dTgt, 1e-6);
+  _wantScale = Math.min(hi, Math.max(lo, next / Math.max(cur, 1e-6)));
 }, { passive: false });
 
 function stepDolly(){
-  if (_dollyTarget == null) return;
+  if (_anchor == null) return;
+  // ease the SCALE, so near and far feel the same and nothing lands instantly
+  const k = 1 + (_wantScale - 1) * 0.16;
   const cam = activeCam();
-  const cur = cam.position.distanceTo(controls.target);
-  const next = cur + (_dollyTarget - cur) * 0.16;
-  if (Math.abs(_dollyTarget - cur) < 0.004){ _dollyTarget = null; return; }
-  const dir = new T.Vector3().subVectors(cam.position, controls.target).normalize();
-  cam.position.copy(controls.target).addScaledVector(dir, next);
+  cam.position.sub(_anchor).multiplyScalar(k).add(_anchor);
+  controls.target.sub(_anchor).multiplyScalar(k).add(_anchor);
+  _wantScale = 1 + (_wantScale - 1) * (1 - 0.16);
+  if (Math.abs(_wantScale - 1) < 0.0008){ _wantScale = 1; _anchor = null; }
 }
+
 // A drag or a re-frame must cancel an in-flight glide — an exact framing is an
 // exact framing, never blended with a stale zoom destination.
-controls.addEventListener('start', () => { _dollyTarget = null; });
+controls.addEventListener('start', () => { _anchor = null; _wantScale = 1; });
 
 controls.update();
 window.__cam = ()=>({p:activeCam().position.toArray().map(v=>+v.toFixed(2)),
