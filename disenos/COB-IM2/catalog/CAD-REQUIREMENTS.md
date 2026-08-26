@@ -268,3 +268,48 @@ slanted walls and reads them as extra taper length — which **overstates** comp
 *both* windows, so those are robust regardless of method.
 
 Data: `TRANSITION-DRAWN-LENGTHS.json`.
+
+
+---
+
+## 10. INSERT census — there is no design-intent fitting count to be had
+
+The proposal was to count the designer's own placed blocks (`COMPUERTA`, `REDUCCIÓN`,
+`CONEXION A RAMAL`) as a design-intent fitting count, sitting alongside the extractor's inferred
+elbow/tee/transition counts in the same design-intent ⊃ reconstruction frame that has held all
+session.
+
+**It does not work, and the reason is worth recording so nobody tries again.**
+
+Every `INSERT` across the three level-4 sheets, located in the certified frame:
+
+| block | instances | **inside the plan** | x range |
+|---|---|---|---|
+| `REDUCCIÓN RECTANGULAR …` | 18 | **0** | −970.5 … 359.4 |
+| `heat` | 8 | 0 | −121.3 … 33.8 |
+| `COMPUERTA RECTANGULAR -…-001` | 6 | 0 | −417.7 … −312.1 |
+| `COMPUERTA RECTANGULAR -…-PLANTA BAJA` | 6 | 0 | 255.6 … 359.4 |
+| `COMPUERTA RECTANGULAR -…-002` | 6 | 0 | −972.6 … −867.9 |
+| `DETALLE FORD_dwg-…` | 3 | 0 | 210.9 … 313.5 |
+| `CONEXION A RAMAL REDONDA -…` | 3 | 0 | −417.7 … −315.1 |
+| `logo` | 3 | 2 | 94.5 … 197.2 |
+| **total** | **53** | **2 — both the logo** | |
+
+**Of 53 INSERTs, exactly two land inside the plan region, and both are the logo.** Every fitting
+block sits out in the legend and detail strips at x = −972 … +359, far outside the plan at
+x 37 … 194. Each appears once or twice per sheet, which is the signature of a legend key, not of
+placed hardware.
+
+**So the fitting blocks are symbols in a legend, not instances in the drawing.** They show what a
+reducer, a damper and a round takeoff *look like*; nothing was ever placed. The ducts themselves
+are raw polylines, not block references — consistent with everything else found here: this is
+line-work, not a BIM model.
+
+**Consequence:** there is no design-intent fitting census in this drawing. The extractor's counts
+(elbow 684 / tee 217 / transition 188 / cross 68) are the *only* fitting counts available, and
+they are inferred from geometry. That is the one place in this document where the usual
+design-intent ⊃ reconstruction relationship does **not** apply — not because the reconstruction
+is complete, but because the design-intent side is empty.
+
+It does not weaken §6: the block *names* remain the right naming authority, and the two reducer
+lengths remain design intent (§9a) even though the geometry contradicts them (§9b).
