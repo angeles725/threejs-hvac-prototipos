@@ -35,7 +35,16 @@
   function ringRect(w, h, n) {
     // corners, optionally resampled to n points so a rect can loft into a round
     const hw = w / 2, hh = h / 2;
-    const corners = [V(0, -hh, -hw), V(0, -hh, hw), V(0, hh, hw), V(0, hh, -hw)];
+    // Corner order sets the WINDING of every rectangular section, and it was
+    // reversed: signed volume came out NEGATIVE for all ten rect generators
+    // (crossRect, teeRect, vavBox, straightRect, elbowRect, transitionRect,
+    // diffuser, damperRect, transitionRectRound, capRect) while all eleven
+    // round ones were positive. That exact rect-vs-round split is what pointed
+    // here rather than at sweep(). Back-face culling uses winding, not normals,
+    // and the normals here are correct — which is why lighting looked right
+    // while every rect part read hollow under a single-sided material.
+    // Reversed: all 21 generators now measure positive (catalog/test-winding.mjs).
+    const corners = [V(0, -hh, -hw), V(0, hh, -hw), V(0, hh, hw), V(0, -hh, hw)];
     if (!n || n === 4) return corners;
     const out = [];
     const per = n / 4;
