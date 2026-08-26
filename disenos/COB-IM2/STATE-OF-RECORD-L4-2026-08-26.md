@@ -186,14 +186,19 @@ what the source has and does not**:
   extractor's label loop is an EXCLUSIVE if/elif chain (ROUND→TERM→CFM→SIZE→BOD), so a combined label
   is claimed by the first kind and its secondary kind is silently dropped — negligible at n=1 (99.1%
   BOD), a known limitation if a future sheet uses combined labels routinely.
-- **Reducer-length finding (121, SMACNA-grounded):** of 127 genuine in-line reducers (after excluding
-  takeoffs — a small branch off a big trunk is a takeoff, not a reducer), **19 (15%) cannot be built
-  from COB's two legend block lengths (10/30cm)** at SMACNA's min 1:3 slope (body ≥ 1.5×ΔW) — the big
-  steps (9→66, 24→72, 18→60, 6→24×3, 6→18×4). Catalog requirement adopted: reducer length is a FREE
-  PARAMETER driven by ΔW (default ≥1.5×ΔW), 10/30cm as presets for the dominant small steps. NOT yet a
-  drawing finding — the DRAWN transition length isn't in L4-full.json (fittings stored as points); the
-  transitions may be drawn longer than the legend blocks. Settling that needs reading transition
-  geometry back from the DXF (121 can, as a follow-up). Catalog requirement holds either way.
+- **Reducer-length finding (121, SMACNA-grounded) — and the legend lengths turned out UNSOUND.** 121
+  measured all six M-HVAC-DUCT reducer blocks: NONE has a bbox axis equal to its metric name (a "100mm"
+  block measures 76.2×406.4mm = 3"×16" — imperial geometry carrying a metric-name label; same-part-number
+  blocks even disagree, e.g. 3093738 at both 76.2 and 305.3mm). So the legend NAMES are authority for
+  part NAMING ONLY, nothing dimensional — no [INFER] 10/30cm anywhere; a citation of them would inherit a
+  number the drawing's own geometry contradicts. **Durable catalog requirement: reducer length is
+  ΔW-DRIVEN ONLY** (default ≥1.5×ΔW per SMACNA 1:3), no legend presets — and this is now unconditional
+  (there was never a real two-value choice to preserve). The earlier "19 of 127 too steep" is
+  PROVISIONAL / do-not-cite: it compared ΔW against 300mm from the unsound "30cm" name. A real
+  drawing-quality claim needs 121's DXF transition-geometry readback (green-lit, after the manifest +
+  catalog viewer). Part NAMES (3093643 etc.) stay valid for naming. This is a fourth instance of the
+  conservative-reconstruction pattern's cousin: a metric name applied to imperial geometry is a fake
+  spec that only measurement catches.
 - **Judging architecture (kit-faithful):** acceptance authority = fresh-context BLIND agents (team A
   spawns, spec+PNG+rubric only, no context) per GATES.md §Verdict. The 4 coordinators = INFORMED EXPERT
   panel (domain-fit + catching the blind agents' known error modes), recorded as expert opinion, never a
