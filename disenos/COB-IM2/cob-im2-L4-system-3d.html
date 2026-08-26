@@ -54592,7 +54592,6 @@ const BOD_MED = DATA.meta.stats.bod_median_m || 3.76;
 const COL_CERT  = new T.Color(0x9fb0bd);   // measured width + labelled height
 const COL_INFER = new T.Color(0xd8a03c);   // height assumed
 const COL_FIT   = new T.Color(0x7c8b99);   // fittings
-const COL_SMALL = new T.Color(0x5f7183);   // < 8": never size-tagged on this floor
 
 // Runs already reach their node — the extractor's connector-snap pass moved
 // every shared endpoint onto the node along its own axis (median gap 0.153 m
@@ -54702,12 +54701,13 @@ function pushLoft(c0, w0, h0, c1, w1, h1, ux, uz, color, id){
   }
 }
 
-let nAssumed = 0;
+let nAssumed = 0, mAssumed = 0, mTotal = 0;
 const vstart = new Int32Array(runs.length), vend = new Int32Array(runs.length);
 const owner = new Uint8Array(runs.length);
 runs.forEach((r,i)=>{
   const h = r.h || H_MED;
-  if (!r.h) nAssumed++;
+  mTotal += r.L;
+  if (!r.h){ nAssumed++; mAssumed += r.L; }
   const bod = (r.bod !== null && r.bod !== undefined) ? r.bod : BOD_MED;
   const ax = X(r.p0[0]), az = Z(r.p0[1]);
   const bx = X(r.p1[0]), bz = Z(r.p1[1]);
@@ -54718,7 +54718,16 @@ runs.forEach((r,i)=>{
   const cx = (ax+bx)/2, cz = (az+bz)/2;
   const term = r.cls === 'small';
   TGT = term ? B.term : B.net;
-  const c = term ? COL_SMALL : (r.h ? COL_CERT : COL_INFER);
+  // Height provenance colours EVERY run, small class included. The old
+  // `term ? COL_SMALL : ...` branch collapsed 1094.6 m — 43.1% of network
+  // length — into one colour on the claim that ducts under 8" are "never
+  // size-tagged on this floor". Measured against L4-full.json that claim is
+  // false: 435 of 1005 small runs carry a labelled height (587.4 m, 53.7% of
+  // small length). The branch hid the distinction in both directions — 507.1 m
+  // of assumed height read as certain, and 587.4 m of measured height was
+  // denied its credit. Class is already carried by the separate mesh, material
+  // and toggle; it does not need the colour channel too.
+  const c = r.h ? COL_CERT : COL_INFER;
   CUR_DEV = bod - BOD_MED;
   vstart[i] = TGT.n; owner[i] = term ? 1 : 0;
   if (r.shape === 'round'){
@@ -55017,9 +55026,9 @@ document.getElementById('hud').innerHTML = `
   <div class="kv"><span>Nodos de red</span><b>${s.nodes}</b></div>
   <div class="kv"><span>Runs conectados</span><b>${pct(s.runs_connected, s.duct_runs)}</b></div>
   <div class="sec">Procedencia del dato</div>
-  <div class="kv"><span>Ancho medido</span><b class="ok">100%</b></div>
-  <div class="kv"><span>Alto con cota real</span><b>${s.pct_height_label}%</b></div>
-  <div class="kv"><span>BOD real</span><b>${s.pct_bod_label}%</b></div>
+  <div class="kv"><span>Ancho medido</span><b class="ok">100% de la longitud</b></div>
+  <div class="kv"><span>Alto con cota real</span><b>${(100*(mTotal-mAssumed)/mTotal).toFixed(1)}% de la longitud</b></div>
+  <div class="kv"><span>BOD real</span><b>${s.pct_bod_label}% de los tramos</b></div>
   <div class="kv"><span>Entrepiso</span><b class="warn">supuesto</b></div>
   <div class="sec">Aire</div>
   <div class="kv"><span>Terminales</span><b>${s.terminals_found}</b></div>
@@ -55071,9 +55080,8 @@ document.getElementById('hud').innerHTML = `
 `;
 document.getElementById('legend').innerHTML = `
   <span class="chip"><i class="dot" style="background:#9fb0bd"></i>alto con cota real</span>
-  <span class="chip"><i class="dot" style="background:#d8a03c"></i>alto supuesto (${nAssumed})</span>
-  <span class="chip"><i class="dot" style="background:#7c8b99"></i>accesorio (${nFit})</span>
-  <span class="chip"><i class="dot" style="background:#5f7183"></i>&lt;8", el plano no los acota</span>`;
+  <span class="chip"><i class="dot" style="background:#d8a03c"></i>alto supuesto — ${mAssumed.toFixed(1)} m de ${mTotal.toFixed(1)} m (${(100*mAssumed/mTotal).toFixed(1)}% de la longitud)</span>
+  <span class="chip"><i class="dot" style="background:#7c8b99"></i>accesorio (${nFit})</span>`;
 
 for (const el of document.querySelectorAll('.fcls')){
   el.onchange = () => { SHOW[el.dataset.k] = el.checked; applyFilter(SHOW); };
@@ -55148,9 +55156,42 @@ addEventListener('click', ()=>{ pinned = !pinned; });
 
 // ── loop ───────────────────────────────────────────────────────────────────
 addEventListener('resize', ()=>{
-  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  const aspect = innerWidth/innerHeight;
+  camera.aspect = aspect; camera.updateProjectionMatrix();
+  // The ortho camera is what tick() renders whenever it exists, so leaving it
+  // out of the resize handler stretched the model on every window change. Its
+  // vertical half-height is the frustum's meaning (it was derived once from the
+  // perspective distance at toggle time); only the horizontal extent depends on
+  // the viewport, so preserve top/bottom and re-derive left/right.
+  if (ortho){
+    const h = ortho.top, w = h * aspect;
+    ortho.left = -w; ortho.right = w;
+    ortho.updateProjectionMatrix();
+  }
   renderer.setSize(innerWidth, innerHeight, false);
 });
+// ── QA framing hook (design3d GATES.md mechanical check) ───────────────────
+// Raw geometry only, never a verdict: the page must not mark its own homework.
+// framing-probe.mjs runs geom-verify's pure core against these numbers. SUBJECT
+// is the duct mesh, deliberately NOT the whole scene — the ground plane and the
+// arch underlay would blow up the AABB and certify a miss as well framed.
+window.__qaFraming = () => {
+  const cam = activeCam();
+  cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+  const mvp = new T.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+  const b  = new T.Box3().setFromObject(mesh, true);
+  const mn = b.min, mx = b.max;
+  const corners = [
+    [mn.x,mn.y,mn.z],[mx.x,mn.y,mn.z],[mn.x,mx.y,mn.z],[mx.x,mx.y,mn.z],
+    [mn.x,mn.y,mx.z],[mx.x,mn.y,mx.z],[mn.x,mx.y,mx.z],[mx.x,mx.y,mx.z],
+  ];
+  const hudEl = document.querySelector('#hud');
+  const hud = hudEl
+    ? (r => ({left:r.left, right:r.right, top:r.top, bottom:r.bottom}))(hudEl.getBoundingClientRect())
+    : null;
+  return { mvpElements: Array.from(mvp.elements), corners, W: innerWidth, H: innerHeight, hud };
+};
+
 (function tick(){
   requestAnimationFrame(tick);
   controls.update();
