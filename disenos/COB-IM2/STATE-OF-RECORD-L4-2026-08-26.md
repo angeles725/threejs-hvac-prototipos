@@ -119,6 +119,20 @@ what the source has and does not**:
   in the deliverable. Both figures now name "de la longitud" (the exact prose trap the denominator rule
   targets, caught by the live gate).
 - **Ortho-camera resize → FIXED** (same commit): frustum now recomputed on resize.
+- **Duct "hollow / see-through, flips with the camera" (USER-REPORTED) → interim-fixed, root fix pending.**
+  Root cause is NOT single-sided material (that's the symptom): `pushBox` builds a LEFT-HANDED local frame
+  (u×v = −Y), so EVERY duct box winds backwards; normals are hand-set correct (why lighting looked fine),
+  but backface culling reads WINDING, so FrontSide culled the wrong face at every angle. INTERIM fix:
+  `side:DoubleSide` on both duct materials (12, 3d85c2c). ROOT fix pending in the §5 P1 winding+caps pass:
+  reverse the winding in `pushBox` (negate v / reverse each triangle) + add caps. IMPORTANT (investigador1
+  + 121): DoubleSide MASKS the inverted-winding bug AND silently fixed a PRE-EXISTING shadow defect
+  (pre-fix `shadowSide[FrontSide]=BackSide` generated the shadow map from the inverted faces the whole
+  time) — so any revert to single-sided (an opaque optimization, or setting shadowSide for acne) regresses
+  BOTH the shells and the shadows from one line; **"shadows look right now" is NOT evidence the winding is
+  fine.** So the builder winding fix is defense-in-depth, not optional. This bug was UNGATED not
+  undetectable: geom-verify `signedVolume` flags a backwards-wound closed box as V<0 — the viewer just
+  never had the mesh-integrity pass run on it. Visual proof pending: a behind-the-duct `?cam=` capture
+  (kit Rule 9), not `?bay=8` (too wide).
 
 ## Defects — remaining
 
