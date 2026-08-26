@@ -55374,38 +55374,99 @@ CATALOG.forEach((entry, i) => {
 });
 
 // ── camera ────────────────────────────────────────────────────────────────
-const camera = new T.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 200);
-const controls = new window.OrbitControls(camera, canvas);
-controls.enableDamping = true; controls.dampingFactor = 0.07;
-// Wheel zoom, same defaults problem as the L4 viewer: OrbitControls dollies
-// toward the ORBIT CENTRE unless told otherwise, so pointing at a component and
-// scrolling travels to the middle of the board instead. zoomSpeed 1.0 is also a
-// large step here, and with no bounds the camera can enter a part or leave for
-// orbit. (Note: r160 does not damp the dolly at all — enableDamping covers
-// rotate and pan only — so this makes zoom controllable, not yet smooth. The
-// design3d library's controllers/smooth-dolly.mjs is the real smoothing fix and
-// wants vendoring into these non-module pages as its own pass.)
+// A DESTINATION-LERP spherical controller, ported from the user's reference
+// viewer (hvac_planta_industrial_3d.html §11). It replaces OrbitControls here.
 //
-// Two sessions fixed this independently and the settings landed TWICE, which is
-// the duplicate-controls hazard itself: the second assignment silently wins and
-// a reader cannot tell which one is live. Consolidated to one block.
-// minDistance/maxDistance are NOT set here -- frameBoard() derives them from the
-// fit distance, so they track the board's actual scale instead of the 0.4/60 m
-// guess, and a hardcoded pair here would just be dead code overwritten a few
-// lines later.
-controls.zoomToCursor = true;
-controls.zoomSpeed    = 0.7;
+// Why replace rather than tune: OrbitControls damps rotate and pan but NEVER
+// the dolly, so zoom always arrives as an instant step. Bolting a smoothed
+// dolly on top means two systems own the camera — the dolly writes a position,
+// then OrbitControls re-derives its own spherical radius from that position on
+// the same frame and partly undoes it. Every extra property (zoomToCursor,
+// min/maxDistance, zoomSpeed) is another place they disagree. One system that
+// owns theta, phi, radius AND target end to end has no seam to fight over.
+//
+// Every input writes a DESTINATION; the frame loop eases the live values toward
+// it at a fixed rate. That single rule is what makes orbit, pan and zoom all
+// feel the same, which is the thing the reference gets right and we did not.
+const camera = new T.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 400);
+const sph = {theta: 0.86, phi: 1.02, radius: 22};
+const dst = {theta: sph.theta, phi: sph.phi, radius: sph.radius, target: new T.Vector3()};
+const camTarget = new T.Vector3();
+let RAD_MIN = 0.4, RAD_MAX = 60;          // re-derived from the board in frameBoard()
+const EASE = 0.16;                        // per-frame approach, the reference's value
+
+const clampPhi = v => Math.max(0.12, Math.min(Math.PI/2 - 0.02, v));
+const clampRad = v => Math.max(RAD_MIN, Math.min(RAD_MAX, v));
+
+function applyCamera(){
+  sph.theta  += (dst.theta  - sph.theta)  * EASE;
+  sph.phi    += (dst.phi    - sph.phi)    * EASE;
+  sph.radius += (dst.radius - sph.radius) * EASE;
+  camTarget.lerp(dst.target, EASE);
+  const s = Math.sin(sph.phi);
+  camera.position.set(
+    camTarget.x + sph.radius * s * Math.sin(sph.theta),
+    camTarget.y + sph.radius * Math.cos(sph.phi),
+    camTarget.z + sph.radius * s * Math.cos(sph.theta));
+  camera.lookAt(camTarget);
+}
+
+let dragging = null, lastX = 0, lastY = 0, userMoved = false;
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  dragging = (e.button === 2 || e.button === 1 || e.shiftKey) ? 'pan' : 'orbit';
+  lastX = e.clientX; lastY = e.clientY; userMoved = true;
+});
+canvas.addEventListener('pointerup',     e => { dragging = null; });
+canvas.addEventListener('pointercancel', e => { dragging = null; });
+canvas.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  if (dragging === 'orbit'){
+    dst.theta -= dx * 0.005;
+    dst.phi    = clampPhi(dst.phi - dy * 0.005);
+  } else {
+    // Pan speed scales with RADIUS, so dragging moves the same apparent distance
+    // whether you are across the board or inside a fitting.
+    const k = dst.radius * 0.0013;
+    const right = new T.Vector3(Math.cos(sph.theta), 0, -Math.sin(sph.theta));
+    dst.target.addScaledVector(right, -dx * k).addScaledVector(new T.Vector3(0,1,0), dy * k);
+  }
+});
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  // Math.sign, NOT the magnitude. Browsers report wheel deltas in three units --
+  // pixels (~100 a notch), LINES (~3), pages (~1) -- so any code that scales by
+  // deltaY behaves differently per browser, which is most of what "the zoom
+  // feels wrong" actually is. Direction only makes one notch mean one notch
+  // everywhere, and it cannot be got wrong by a deltaMode we did not anticipate.
+  dst.radius = clampRad(dst.radius * (1 + Math.sign(e.deltaY) * 0.12));
+  userMoved = true;
+}, {passive:false});
+
+let pinch = 0;                            // two-finger pinch, same destination
+canvas.addEventListener('touchmove', e => {
+  if (e.touches.length !== 2) return;
+  const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                       e.touches[0].clientY - e.touches[1].clientY);
+  if (pinch) { dst.radius = clampRad(dst.radius * (pinch / d)); userMoved = true; }
+  pinch = d;
+}, {passive:true});
+canvas.addEventListener('touchend', () => { pinch = 0; });
 
 // Frame the board from the LAID-OUT parts, never a hardcoded eye position.
 // The camera was pinned at (0,8.5,11) for an 18-part grid; adding parts pushed
 // the board past the frame edge and under the 306px side panel, so the catalog
 // shipped with its first column unviewable. A derived fit cannot go stale when
 // the part list grows -- and this list is meant to grow.
+let settled = false;
 const PANEL_PX = 322;                    // side panel + its margin
 function frameBoard(){
   const box = new T.Box3();
   for (const pk of picks) box.expandByObject(pk.mesh);
-  if (box.isEmpty()) { camera.position.set(0, 8.5, 11); controls.target.set(0, .4, 0); return; }
+  if (box.isEmpty()) { dst.target.set(0, .4, 0); dst.radius = 22; return; }
   const size = box.getSize(new T.Vector3());
   const mid  = box.getCenter(new T.Vector3());
   // Shift the target right by half the panel's share of the viewport, expressed
@@ -55433,23 +55494,27 @@ function frameBoard(){
   // panel -- the eye must sit left of the subject for the subject to render right.
   const worldPerPx = (2 * tanH * dist) / innerWidth;
   mid.x -= PANEL_PX * worldPerPx * 0.5;
-  controls.target.copy(mid);
-  camera.position.set(mid.x, mid.y + dist * EL_Y, mid.z + dist * EL_Z);
-  camera.near = Math.max(0.1, dist * 0.02); camera.far = dist * 8;
+  // Clamp travel to the BOARD's scale, derived with the fit rather than guessed.
+  // Left unbounded the wheel either buries the camera inside a part or flies it
+  // off into empty space, and neither is recoverable without a reset. Sized to
+  // the parts on screen (0.2-2 m), not to the 153 m plant model.
+  RAD_MIN = Math.max(0.25, dist * 0.04);
+  RAD_MAX = dist * 2.5;
+  dst.target.copy(mid);
+  dst.radius = clampRad(dist);
+  dst.theta = 0.86; dst.phi = clampPhi(1.02);
+  if (!settled){ // first frame: arrive exactly, do not glide in from nowhere
+    camTarget.copy(dst.target); sph.theta = dst.theta; sph.phi = dst.phi; sph.radius = dst.radius;
+    settled = true;
+  }
+  camera.near = Math.max(0.05, dist * 0.02); camera.far = dist * 8;
   camera.updateProjectionMatrix();
-  // Clamp travel to the BOARD's scale, derived with the fit. Left at the defaults
-  // (0 .. Infinity) the wheel either buries the camera inside a part or flies it
-  // off into empty space, and neither is recoverable without a reset. These are
-  // sized to the parts on screen (0.2-2 m), not to the 153 m plant model.
-  controls.minDistance = Math.max(0.25, dist * 0.04);
-  controls.maxDistance = dist * 2.5;
 }
 frameBoard();
-controls.maxPolarAngle = Math.PI*0.49;
-controls.update();
-window.__fit = frameBoard;      // deterministic re-frame for headless capture
+applyCamera();
+window.__fit = ()=>{ settled = false; frameBoard(); applyCamera(); };
 window.__cam = ()=>({p:camera.position.toArray().map(v=>+v.toFixed(2)),
-                     t:controls.target.toArray().map(v=>+v.toFixed(2))});
+                     t:camTarget.toArray().map(v=>+v.toFixed(2))});
 
 // ── side panel ────────────────────────────────────────────────────────────
 const fmt = o => Object.entries(o).map(([k,v]) =>
@@ -55486,10 +55551,11 @@ const info = document.getElementById('info');
 function focusOn(i){
   [...list.children].forEach((el,k)=>el.classList.toggle('on', k===i));
   const pk = picks[i], c = pk.comp;
-  controls.target.copy(pk.center);
-  const dir = camera.position.clone().sub(controls.target).normalize();
-  camera.position.copy(pk.center).addScaledVector(dir, 3.2);
-  controls.update();
+  // Ease to the part: set the destination and let the same lerp carry the view.
+  // Teleporting the camera is what made selection feel like a cut rather than a move.
+  dst.target.copy(pk.center);
+  dst.radius = clampRad(Math.max(RAD_MIN, 3.2));
+  userMoved = true;
   info.style.display = 'block';
   info.innerHTML = `<div class="t">${c.meta.label}</div>
     <div style="color:#8b97a6">kind <code>${c.meta.kind}</code> · ${
@@ -55517,14 +55583,12 @@ addEventListener('click', ev => {
 // Re-frame on resize ONLY while the view is untouched. The panel's share of the
 // viewport changes with width, so a fixed frame is wrong at another size -- but
 // stealing the camera back from someone who has orbited is worse.
-let userMoved = false;
-controls.addEventListener('start', ()=>{ userMoved = true; });
 addEventListener('resize', ()=>{
   camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight, false);
-  if (!userMoved) { frameBoard(); controls.update(); }
+  if (!userMoved) { settled = false; frameBoard(); applyCamera(); }
 });
-(function tick(){ requestAnimationFrame(tick); controls.update(); renderer.render(scene, camera); })();
+(function tick(){ requestAnimationFrame(tick); applyCamera(); renderer.render(scene, camera); })();
 console.log('HVAC catalog:', K.list);
 </script>
 </body>
