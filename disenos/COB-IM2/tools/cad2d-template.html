@@ -1,0 +1,442 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>COB-IM2 L4 — CAD 2D ground truth</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#0d1117;color:#c9d1d9;
+  font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow:hidden}
+#wrap{display:flex;height:100%}
+#side{width:290px;flex:none;background:#11161d;border-right:1px solid #222c37;
+  display:flex;flex-direction:column;overflow:hidden}
+#side header{padding:12px 14px;border-bottom:1px solid #222c37}
+#side h1{font-size:13px;letter-spacing:.04em;color:#e6edf3}
+#side .sub{font-size:11px;color:#6e7b8b;margin-top:3px}
+#side .scroll{overflow-y:auto;flex:1;padding:12px 14px 20px}
+.grp{margin-bottom:16px}
+.grp>h2{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6e7b8b;margin-bottom:7px}
+.row{display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;user-select:none}
+.row:hover{color:#e6edf3}
+.row input{accent-color:#4ea1ff;cursor:pointer}
+.sw{width:10px;height:10px;border-radius:2px;flex:none}
+.row .n{margin-left:auto;color:#5b6672;font-size:11px}
+.note{font-size:11px;color:#8b949e;background:#161b22;border-left:2px solid #d29922;
+  padding:7px 9px;margin-top:8px;border-radius:0 3px 3px 0}
+#info{border-top:1px solid #222c37;padding:10px 14px;min-height:118px;font-size:11.5px;background:#0f141a}
+#info .k{color:#6e7b8b}
+#info b{color:#e6edf3;font-weight:600}
+#info .hd{color:#4ea1ff;font-weight:600;margin-bottom:4px}
+#main{flex:1;position:relative;min-width:0}
+canvas{display:block;width:100%;height:100%;cursor:crosshair}
+#hud{position:absolute;left:12px;bottom:12px;background:rgba(13,17,23,.9);
+  border:1px solid #222c37;border-radius:4px;padding:7px 10px;font-size:11.5px;pointer-events:none}
+#hud .v{color:#e6edf3}
+#tools{position:absolute;left:12px;top:12px;display:flex;gap:6px}
+button{background:#161b22;color:#c9d1d9;border:1px solid #2b3541;border-radius:4px;
+  padding:5px 10px;font:inherit;font-size:11.5px;cursor:pointer}
+button:hover{border-color:#4ea1ff;color:#e6edf3}
+button.on{background:#1f6feb;border-color:#1f6feb;color:#fff}
+#find{position:absolute;right:12px;top:12px}
+#find input{background:#161b22;border:1px solid #2b3541;border-radius:4px;color:#c9d1d9;
+  padding:5px 9px;font:inherit;font-size:11.5px;width:150px}
+#find input:focus{outline:none;border-color:#4ea1ff}
+#meas{position:absolute;right:12px;bottom:12px;background:rgba(13,17,23,.94);
+  border:1px solid #2b3541;border-radius:4px;padding:9px 11px;font-size:11.5px;display:none}
+#meas .big{color:#ffd479;font-size:14px;font-weight:600}
+#meas .k{color:#6e7b8b}
+</style>
+<div id="wrap">
+<div id="side">
+  <header>
+    <h1>COB-IM2 · LEVEL 4 · CAD 2D</h1>
+    <div class="sub" id="subttl">source ground truth</div>
+  </header>
+  <div class="scroll">
+    <div class="grp"><h2>Source layers (DXF)</h2><div id="srcL"></div></div>
+    <div class="grp"><h2>Derived overlays</h2><div id="derL"></div>
+      <div class="note" id="provNote"></div></div>
+    <div class="grp"><h2>Sheets</h2><div id="shL"></div></div>
+    <div class="grp"><h2>Keys</h2>
+      <div style="font-size:11px;color:#8b949e">
+        <div>drag — pan · wheel — zoom</div>
+        <div><b style="color:#c9d1d9">M</b> measure · <b style="color:#c9d1d9">Esc</b> cancel</div>
+        <div><b style="color:#c9d1d9">F</b> fit · <b style="color:#c9d1d9">S</b> snap to vertex</div>
+      </div>
+    </div>
+  </div>
+  <div id="info"><div class="hd">nothing under cursor</div>
+    <span class="k">hover an entity to read its DXF handle</span></div>
+</div>
+<div id="main">
+  <canvas id="cv"></canvas>
+  <div id="tools">
+    <button id="bFit">fit</button><button id="bMeas">measure</button>
+    <button id="bSnap" class="on">snap</button>
+  </div>
+  <div id="find"><input id="q" placeholder="find handle / run id…"></div>
+  <div id="hud"><span class="k">X</span> <span class="v" id="cx">—</span>
+    <span class="k">Y</span> <span class="v" id="cy">—</span>
+    <span class="k">· 1px=</span><span class="v" id="cs">—</span></div>
+  <div id="meas"></div>
+</div>
+</div>
+<script>
+const D = __DATA__;
+const Q = D.meta.q;                       // 0.1 mm integer quantisation
+const LAYERS = D.layers, SHEETS = D.meta.sheets;
+const LC = {}; LAYERS.forEach(l => LC[l.id] = l);
+
+/* ---------- decode ---------- */
+const ents = D.ents;
+for (const e of ents) {
+  if (e.p) {                              // delta ints -> absolute metres
+    const p = e.p, n = p.length, xy = new Float64Array(n);
+    let x = p[0], y = p[1]; xy[0] = x / Q; xy[1] = y / Q;
+    for (let i = 2; i < n; i += 2) { x += p[i]; y += p[i+1]; xy[i] = x / Q; xy[i+1] = y / Q; }
+    e.xy = xy; e.p = null;
+  }
+  if (e.c) e.cw = e.c.map(v => v / Q);
+}
+
+/* ---------- view ---------- */
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+let V = { s: 1, tx: 0, ty: 0 };           // world -> screen: sx = x*s + tx ; sy = -y*s + ty
+let W = 0, H = 0, DPR = 1;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  draw();
+}
+const S2W = (px, py) => [(px - V.tx) / V.s, -(py - V.ty) / V.s];
+const W2S = (x, y) => [x * V.s + V.tx, -y * V.s + V.ty];
+
+function fit(b) {
+  b = b || D.meta.fit || D.meta.bounds;
+  const pad = 30;
+  const s = Math.min((W - 2*pad) / (b[2]-b[0]), (H - 2*pad) / (b[3]-b[1]));
+  V.s = s;
+  V.tx = W/2 - (b[0]+b[2])/2 * s;
+  V.ty = H/2 + (b[1]+b[3])/2 * s;
+  draw();
+}
+
+/* ---------- visibility ---------- */
+const visL = {}, visS = {};
+LAYERS.forEach(l => visL[l.id] = l.on);
+SHEETS.forEach((s,i) => visS[i] = true);
+visS[-1] = true;                          // derived overlays carry sheet -1
+
+/* ---------- per-layer/sheet path cache ---------- */
+const paths = new Map();
+function buildPaths() {
+  paths.clear();
+  for (const e of ents) {
+    if (!e.xy) continue;
+    const k = e.l + '|' + e.s;
+    let p = paths.get(k);
+    if (!p) { p = new Path2D(); paths.set(k, p); }
+    const xy = e.xy;
+    p.moveTo(xy[0], -xy[1]);
+    for (let i = 2; i < xy.length; i += 2) p.lineTo(xy[i], -xy[i+1]);
+    if (e.cl) p.closePath();
+  }
+}
+
+/* ---------- spatial index over segments ---------- */
+const B = D.meta.bounds, CELL = 2.0;
+const GW = Math.ceil((B[2]-B[0])/CELL)+1, GH = Math.ceil((B[3]-B[1])/CELL)+1;
+const grid = new Map();
+function cellKey(x,y){ return ((y-B[1])/CELL|0)*GW + ((x-B[0])/CELL|0); }
+function indexAll(){
+  grid.clear();
+  ents.forEach((e,ei) => {
+    const put = (x,y) => { const k = cellKey(x,y); let a = grid.get(k); if(!a){a=[];grid.set(k,a);} if(a[a.length-1]!==ei) a.push(ei); };
+    if (e.xy) {
+      const xy = e.xy;
+      for (let i = 0; i < xy.length; i += 2) {
+        put(xy[i], xy[i+1]);
+        if (i+2 < xy.length) {            // walk long segments so mid-span picks work
+          const x0=xy[i],y0=xy[i+1],x1=xy[i+2],y1=xy[i+3];
+          const n = Math.min(400, Math.ceil(Math.hypot(x1-x0,y1-y0)/CELL));
+          for (let t=1;t<n;t++) put(x0+(x1-x0)*t/n, y0+(y1-y0)*t/n);
+        }
+      }
+    } else if (e.cw) put(e.cw[0], e.cw[1]);
+  });
+}
+function near(x, y, rad) {
+  const out = new Set(), r = Math.ceil(rad/CELL);
+  const cx = (x-B[0])/CELL|0, cy = (y-B[1])/CELL|0;
+  for (let j=-r;j<=r;j++) for (let i=-r;i<=r;i++) {
+    const a = grid.get((cy+j)*GW + (cx+i));
+    if (a) for (const ei of a) out.add(ei);
+  }
+  return out;
+}
+
+/* ---------- geometry helpers ---------- */
+function ptSegD(px,py,x0,y0,x1,y1){
+  const dx=x1-x0, dy=y1-y0, L=dx*dx+dy*dy;
+  let t = L ? ((px-x0)*dx+(py-y0)*dy)/L : 0;
+  t = t<0?0:t>1?1:t;
+  return Math.hypot(px-(x0+dx*t), py-(y0+dy*t));
+}
+function pick(wx, wy, radW) {
+  let best = null, bd = radW;
+  for (const ei of near(wx, wy, radW)) {
+    const e = ents[ei];
+    if (!visL[e.l] || !visS[e.s]) continue;
+    let d = Infinity;
+    if (e.xy) { const xy=e.xy;
+      for (let i=0;i+3<xy.length;i+=2){ const dd=ptSegD(wx,wy,xy[i],xy[i+1],xy[i+2],xy[i+3]); if(dd<d)d=dd; }
+      if (e.cl && xy.length>=4) { const n=xy.length; const dd=ptSegD(wx,wy,xy[n-2],xy[n-1],xy[0],xy[1]); if(dd<d)d=dd; }
+    } else if (e.cw) {
+      d = e.t==='CIRCLE'||e.t==='ARC' ? Math.abs(Math.hypot(wx-e.cw[0],wy-e.cw[1])-e.cw[2])
+                                      : Math.hypot(wx-e.cw[0],wy-e.cw[1]);
+    }
+    if (d < bd) { bd = d; best = ei; }
+  }
+  return best;
+}
+function snapVert(wx, wy, radW) {
+  let best = null, bd = radW;
+  for (const ei of near(wx, wy, radW)) {
+    const e = ents[ei];
+    if (!visL[e.l] || !visS[e.s]) continue;
+    if (e.xy) { const xy=e.xy;
+      for (let i=0;i<xy.length;i+=2){ const d=Math.hypot(wx-xy[i],wy-xy[i+1]); if(d<bd){bd=d;best=[xy[i],xy[i+1]];} }
+    } else if (e.cw) { const d=Math.hypot(wx-e.cw[0],wy-e.cw[1]); if(d<bd){bd=d;best=[e.cw[0],e.cw[1]];} }
+  }
+  return best;
+}
+
+/* ---------- draw ---------- */
+let hoverI = -1, flashI = -1;
+function draw() {
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.fillStyle = '#0d1117'; ctx.fillRect(0,0,W,H);
+  ctx.save();
+  ctx.setTransform(DPR*V.s, 0, 0, DPR*V.s, DPR*V.tx, DPR*V.ty);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+  for (const L of LAYERS) {
+    if (!visL[L.id]) continue;
+    if (L.id[0]==='l'||L.id==='grid'||L.id==='nodes'||L.id==='fit'||L.id==='term') continue;
+    ctx.strokeStyle = L.color;
+    ctx.lineWidth = (L.id[0]==='r'&&L.id!=='ducts' ? 2.4 : 1.0) / V.s;
+    if (L.id[0]==='r') ctx.globalAlpha = 0.8;
+    for (let si=-1; si<SHEETS.length; si++) {
+      if (!visS[si]) continue;
+      const p = paths.get(L.id+'|'+si);
+      if (p) ctx.stroke(p);
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+
+  // point-ish + text layers, screen space
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  const showTxt = V.s > 14;
+  for (const e of ents) {
+    if (!e.cw || !visL[e.l] || !visS[e.s]) continue;
+    const [sx,sy] = W2S(e.cw[0], e.cw[1]);
+    if (sx<-40||sy<-40||sx>W+40||sy>H+40) continue;
+    const c = LC[e.l].color;
+    if (e.t==='TEXT') {
+      if (showTxt) { ctx.fillStyle = c;
+        ctx.font = ((e.sz||e.bod)?'600 ':'')+'11px ui-monospace,monospace';
+        ctx.fillText(e.x, sx+4, sy-3);
+        ctx.fillStyle = c; ctx.fillRect(sx-1.5,sy-1.5,3,3);
+      } else { ctx.fillStyle = c; ctx.globalAlpha=.55; ctx.fillRect(sx-1,sy-1,2,2); ctx.globalAlpha=1; }
+    } else if (e.t==='COL') {
+      ctx.strokeStyle=c; ctx.lineWidth=1; ctx.strokeRect(sx-3,sy-3,6,6);
+      if (showTxt){ctx.fillStyle=c;ctx.font='10px ui-monospace,monospace';ctx.fillText(e.h,sx+6,sy+3);}
+    } else if (e.t==='NODE') {
+      ctx.beginPath(); ctx.arc(sx,sy,e.dg>=3?3.4:2.2,0,6.284);
+      if(e.dg>=3){ctx.fillStyle=c;ctx.fill();} else {ctx.strokeStyle=c;ctx.lineWidth=1;ctx.stroke();}
+    } else if (e.t==='FIT') {
+      ctx.strokeStyle=c; ctx.lineWidth=1.4; ctx.strokeRect(sx-3.5,sy-3.5,7,7);
+    } else if (e.t==='TERM') {
+      ctx.fillStyle=c; ctx.beginPath();
+      ctx.moveTo(sx,sy-4); ctx.lineTo(sx+4,sy); ctx.lineTo(sx,sy+4); ctx.lineTo(sx-4,sy);
+      ctx.closePath(); ctx.fill();
+    } else if (e.t==='CIRCLE'||e.t==='ARC') {
+      ctx.strokeStyle=c; ctx.lineWidth=1; ctx.beginPath();
+      ctx.arc(sx,sy,e.cw[2]*V.s,0,6.284); ctx.stroke();
+    }
+  }
+
+  for (const [i,col,wd] of [[flashI,'#ffd479',3.5],[hoverI,'#ffffff',2.2]]) {
+    if (i<0) continue;
+    const e = ents[i];
+    ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=wd;
+    if (e.xy){ const xy=e.xy; ctx.beginPath();
+      let p=W2S(xy[0],xy[1]); ctx.moveTo(p[0],p[1]);
+      for(let k=2;k<xy.length;k+=2){p=W2S(xy[k],xy[k+1]);ctx.lineTo(p[0],p[1]);}
+      if(e.cl)ctx.closePath(); ctx.stroke();
+    } else if (e.cw){ const p=W2S(e.cw[0],e.cw[1]);
+      ctx.beginPath(); ctx.arc(p[0],p[1],6,0,6.284); ctx.stroke(); }
+  }
+  drawMeasure();
+  document.getElementById('cs').textContent = (1000/V.s).toFixed(1)+'mm';
+}
+
+/* ---------- measure ---------- */
+let measMode=false, mPts=[], mLive=null, snapOn=true;
+function drawMeasure(){
+  const box=document.getElementById('meas');
+  if(!mPts.length){box.style.display='none';return;}
+  const a=mPts[0], b=mPts[1]||mLive;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  const pa=W2S(a[0],a[1]);
+  ctx.fillStyle='#ffd479'; ctx.beginPath(); ctx.arc(pa[0],pa[1],4,0,6.284); ctx.fill();
+  if(!b){box.style.display='none';return;}
+  const pb=W2S(b[0],b[1]);
+  ctx.strokeStyle='#ffd479'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+  ctx.beginPath(); ctx.moveTo(pa[0],pa[1]); ctx.lineTo(pb[0],pb[1]); ctx.stroke();
+  ctx.setLineDash([]); ctx.beginPath(); ctx.arc(pb[0],pb[1],4,0,6.284); ctx.fill();
+  const dx=b[0]-a[0], dy=b[1]-a[1], d=Math.hypot(dx,dy);
+  box.style.display='block';
+  box.innerHTML = `<div class="big">${d.toFixed(4)} m</div>
+    <div>${(d*1000).toFixed(1)} mm &nbsp;·&nbsp; ${(d/0.0254).toFixed(2)}&quot;</div>
+    <div class="k">dx ${dx.toFixed(4)} &nbsp; dy ${dy.toFixed(4)}</div>
+    <div class="k">ang ${(Math.atan2(dy,dx)*180/Math.PI).toFixed(3)}&deg;</div>`;
+}
+
+/* ---------- info panel ---------- */
+function showInfo(i){
+  const box=document.getElementById('info');
+  if(i<0){box.innerHTML='<div class="hd">nothing under cursor</div><span class="k">hover an entity to read its DXF handle</span>';return;}
+  const e=ents[i], L=LC[e.l];
+  const sh = e.s>=0 ? SHEETS[e.s] : 'derived';
+  let r=`<div class="hd">${e.t} &nbsp;·&nbsp; ${e.h}</div>`;
+  r+=`<div><span class="k">layer</span> <b>${L.name}</b></div>`;
+  r+=`<div><span class="k">sheet</span> <b>${sh}</b></div>`;
+  if(e.xy) r+=`<div><span class="k">verts</span> <b>${e.xy.length/2}</b>`
+            +`<span class="k"> closed</span> <b>${e.cl?'yes':'no'}</b></div>`;
+  if(e.L!=null) r+=`<div><span class="k">length</span> <b>${e.L.toFixed(4)} m</b></div>`;
+  if(e.w!=null) r+=`<div><span class="k">width</span> <b>${(e.w*1000).toFixed(1)} mm</b> `
+            +`<span class="k">(${(e.w/0.0254).toFixed(2)}&quot;)</span></div>`;
+  if(e.ht!=null) r+=`<div><span class="k">height</span> <b>${(e.ht*1000).toFixed(1)} mm</b> <span class="k">(${(e.ht/0.0254).toFixed(2)}&quot;)</span></div>`;
+  if(e.hs) r+=`<div><span class="k">height src</span> <b style="color:${e.hs==='unknown'?'#f85149':'#3fb950'}">${e.hs}</b></div>`;
+  if(e.ws) r+=`<div><span class="k">width src</span> <b>${e.ws}</b></div>`;
+  if(e.lb) r+=`<div><span class="k">bound label</span> <b>${e.lb.replace(/</g,'&lt;')}</b></div>`;
+  if(e.cls) r+=`<div><span class="k">class</span> <b>${e.cls}</b> <span class="k">${e.shp||''}</span></div>`;
+  if(e.bs) r+=`<div><span class="k">BOD src</span> <b>${e.bs}</b></div>`;
+  if(e.bod!=null) r+=`<div><span class="k">BOD</span> <b>${e.bod} m</b></div>`;
+  if(e.k) r+=`<div><span class="k">kind</span> <b>${e.k}</b></div>`;
+  if(e.dg!=null) r+=`<div><span class="k">degree</span> <b>${e.dg}</b></div>`;
+  if(e.x) r+=`<div><span class="k">text</span> <b>${e.x.replace(/</g,'&lt;')}</b></div>`;
+  if(e.sz) r+=`<div><span class="k">size</span> <b>${e.sz[0]}&quot; × ${e.sz[1]}&quot;</b> <span class="k">(${(e.sz[0]*25.4).toFixed(0)}×${(e.sz[1]*25.4).toFixed(0)} mm)</span></div>`;
+  if(e.rd!=null) r+=`<div><span class="k">round</span> <b>${e.rd}&quot;ø</b></div>`;
+  if(e.bod!=null) r+=`<div><span class="k">BOD</span> <b>${e.bod.toFixed(2)} m</b>${(e.bod<2||e.bod>6)?' <span style="color:#f85149">out of range</span>':''}</div>`;
+  if(e.cfm!=null) r+=`<div><span class="k">flow</span> <b>${e.cfm} CFM</b></div>`;
+  if(e.xy){ let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+    for(let k=0;k<e.xy.length;k+=2){x0=Math.min(x0,e.xy[k]);x1=Math.max(x1,e.xy[k]);
+      y0=Math.min(y0,e.xy[k+1]);y1=Math.max(y1,e.xy[k+1]);}
+    r+=`<div><span class="k">bbox</span> ${x0.toFixed(3)}, ${y0.toFixed(3)} → ${x1.toFixed(3)}, ${y1.toFixed(3)}</div>`;
+  }
+  box.innerHTML=r;
+}
+
+/* ---------- interaction ---------- */
+let drag=null;
+cv.addEventListener('mousedown',e=>{ if(e.button===0&&!measMode) drag={x:e.clientX,y:e.clientY,tx:V.tx,ty:V.ty}; });
+window.addEventListener('mouseup',()=>drag=null);
+cv.addEventListener('mousemove',e=>{
+  const r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+  if(drag){ V.tx=drag.tx+(e.clientX-drag.x); V.ty=drag.ty+(e.clientY-drag.y); draw(); return; }
+  let [wx,wy]=S2W(px,py);
+  document.getElementById('cx').textContent=wx.toFixed(4);
+  document.getElementById('cy').textContent=wy.toFixed(4);
+  if(measMode){
+    if(snapOn){ const s=snapVert(wx,wy,14/V.s); if(s){wx=s[0];wy=s[1];} }
+    mLive=[wx,wy]; draw(); return;
+  }
+  const i=pick(wx,wy,7/V.s);
+  if(i!==hoverI){ hoverI=i; showInfo(i); draw(); }
+});
+cv.addEventListener('click',e=>{
+  if(!measMode) return;
+  const r=cv.getBoundingClientRect();
+  let [wx,wy]=S2W(e.clientX-r.left,e.clientY-r.top);
+  if(snapOn){ const s=snapVert(wx,wy,14/V.s); if(s){wx=s[0];wy=s[1];} }
+  if(mPts.length>=2) mPts=[];
+  mPts.push([wx,wy]); draw();
+});
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+  const [wx,wy]=S2W(px,py);
+  const f=Math.exp(-e.deltaY*0.0016);
+  V.s=Math.max(0.4,Math.min(40000,V.s*f));
+  V.tx=px-wx*V.s; V.ty=py+wy*V.s;
+  draw();
+},{passive:false});
+window.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT') return;
+  const k=e.key.toLowerCase();
+  if(k==='m'){ measMode=!measMode; mPts=[]; mLive=null;
+    document.getElementById('bMeas').classList.toggle('on',measMode); draw(); }
+  else if(k==='escape'){ measMode=false; mPts=[]; mLive=null;
+    document.getElementById('bMeas').classList.remove('on'); draw(); }
+  else if(k==='f') fit();
+  else if(k==='s'){ snapOn=!snapOn; document.getElementById('bSnap').classList.toggle('on',snapOn); }
+});
+document.getElementById('bFit').onclick=()=>fit();
+document.getElementById('bMeas').onclick=()=>{ measMode=!measMode; mPts=[]; mLive=null;
+  document.getElementById('bMeas').classList.toggle('on',measMode); draw(); };
+document.getElementById('bSnap').onclick=e=>{ snapOn=!snapOn; e.target.classList.toggle('on',snapOn); };
+document.getElementById('q').addEventListener('keydown',e=>{
+  if(e.key!=='Enter') return;
+  const t=e.target.value.trim().toUpperCase();
+  if(!t) return;
+  const i=ents.findIndex(x=>String(x.h).toUpperCase()===t);
+  if(i<0){ e.target.style.borderColor='#f85149'; setTimeout(()=>e.target.style.borderColor='',900); return; }
+  const en=ents[i];
+  visL[en.l]=true; visS[en.s]=true; syncBoxes();
+  let b;
+  if(en.xy){ let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+    for(let k=0;k<en.xy.length;k+=2){x0=Math.min(x0,en.xy[k]);x1=Math.max(x1,en.xy[k]);
+      y0=Math.min(y0,en.xy[k+1]);y1=Math.max(y1,en.xy[k+1]);}
+    const m=Math.max(1,(x1-x0)*0.08,(y1-y0)*0.08); b=[x0-m,y0-m,x1+m,y1+m];
+  } else b=[en.cw[0]-3,en.cw[1]-3,en.cw[0]+3,en.cw[1]+3];
+  flashI=i; showInfo(i); fit(b);
+  setTimeout(()=>{flashI=-1;draw();},2600);
+});
+
+/* ---------- panels ---------- */
+function mkRow(host,id,label,color,checked,onch){
+  const d=document.createElement('label'); d.className='row';
+  d.innerHTML=`<input type="checkbox" ${checked?'checked':''}>`
+    +(color?`<span class="sw" style="background:${color}"></span>`:'')
+    +`<span>${label}</span>`;
+  d.querySelector('input').addEventListener('change',ev=>onch(ev.target.checked));
+  host.appendChild(d); return d;
+}
+const boxes=[];
+function syncBoxes(){ boxes.forEach(([inp,get])=>inp.checked=get()); draw(); }
+(function panels(){
+  const src=document.getElementById('srcL'), der=document.getElementById('derL');
+  for(const L of LAYERS){
+    const host = ['ducts','mduct','lsize','lbod','lbad','linfo'].includes(L.id) ? src : der;
+    const row=mkRow(host,L.id,L.name,L.color,visL[L.id],v=>{visL[L.id]=v;draw();});
+    const n=document.createElement('span'); n.className='n'; n.textContent=D.meta.counts[L.id]||0;
+    row.appendChild(n);
+    boxes.push([row.querySelector('input'),()=>visL[L.id]]);
+  }
+  const sh=document.getElementById('shL');
+  SHEETS.forEach((s,i)=>{
+    const row=mkRow(sh,'s'+i,s,null,true,v=>{visS[i]=v;draw();});
+    boxes.push([row.querySelector('input'),()=>visS[i]]);
+  });
+  document.getElementById('provNote').innerHTML = D.meta.provenance;
+  document.getElementById('subttl').textContent =
+    `${D.meta.counts.ducts.toLocaleString()} duct entities · ${(D.meta.counts.lsize+D.meta.counts.lbod+D.meta.counts.lbad+D.meta.counts.linfo).toLocaleString()} labels · ${D.meta.built}`;
+})();
+
+buildPaths(); indexAll();
+window.addEventListener('resize',resize);
+resize(); fit();
+</script>
