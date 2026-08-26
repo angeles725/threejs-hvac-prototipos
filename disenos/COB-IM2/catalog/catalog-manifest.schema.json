@@ -1,119 +1,352 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "cob-catalog-manifest.v1",
-  "title": "COB duct/pipe catalog component manifest",
-  "description": "One manifest per catalog component. Every dimension must trace to a source, and every size a component claims to support must exist in cob-l4-duct-inventory.json (or be explicitly standard-derived). Enumerate, do not invent.",
-  "type": "object",
-  "required": ["id", "family", "kind", "params", "provenance", "gate"],
-  "additionalProperties": false,
-  "properties": {
-    "id":     { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
-                "description": "kebab-case, stable, used as the instancing key" },
-    "family": { "enum": ["duct-rect", "duct-round", "fitting", "damper", "terminal", "equipment", "pipe"] },
-    "kind":   { "type": "string",
-                "description": "elbow|tee|cross|transition|BD|FD|SD|LD|CD|RR|VAV|nps-pipe|straight" },
-    "display_name": { "type": "string" },
-    "cob_part_name": { "type": "string",
-      "description": "The designer's own block name from the M-HVAC-DUCT legend, verbatim, when one exists. Naming authority only -- NOT a dimensional authority (see CAD-REQUIREMENTS.md 9a)." },
-
-    "params": {
-      "type": "object",
-      "description": "Parametric inputs. Ranges must be justified by supported_sizes or by a standard.",
-      "additionalProperties": {
-        "type": "object",
-        "required": ["type", "unit"],
-        "properties": {
-          "type":    { "enum": ["number", "integer", "enum", "boolean"] },
-          "unit":    { "enum": ["in", "mm", "m", "deg", "none"] },
-          "min":     { "type": "number" },
-          "max":     { "type": "number" },
-          "default": {},
-          "enum":    { "type": "array" },
-          "derived_from": { "type": "string",
-            "description": "Formula when the value is not free, e.g. 'length >= 1.5 * delta_w' (SMACNA 1:3)." }
-        }
-      }
-    },
-
-    "supported_sizes": {
-      "type": "object",
-      "description": "The FINITE set this component covers. Validated against cob-l4-duct-inventory.json.",
-      "properties": {
-        "basis": { "const": "rect_families_design_intent",
-          "description": "The 46-family label set. NEVER rect_families_reconstructed (35) -- it drops the four largest ducts on the level and 40x20." },
-        "rect":  { "type": "array", "items": {
-                     "type": "object", "required": ["w_in", "h_in"],
-                     "properties": { "w_in": {"type":"integer"}, "h_in": {"type":"integer"} } } },
-        "round_dia_in": { "type": "array", "items": { "type": "integer" } },
-        "nps_in":       { "type": "array", "items": { "type": "number" } }
-      }
-    },
-
-    "provenance": {
-      "type": "object",
-      "required": ["certainty", "source"],
-      "properties": {
-        "certainty": { "enum": ["CERT", "INFER", "STANDARD"],
-          "description": "CERT = measured in the pinned artifact (L4-full.json sha 7533dccb) or the raw DXF. INFER = read off a name/label whose geometry is unverified. STANDARD = from a published standard, NOT from COB data -- mandatory for every pipe component." },
-        "source":    { "type": "string", "description": "exact artifact + locator" },
-        "artifact_sha": { "type": "string" },
-        "standard":  { "type": "string", "description": "e.g. 'SMACNA HVAC Duct Construction Standards' or 'ASME B36.10M'" },
-        "note":      { "type": "string" }
-      }
-    },
-
-    "license": {
-      "type": "object",
-      "description": "Required for any external mesh (design3d Rule 8). Omit for procedural geometry.",
-      "required": ["spdx", "url", "author", "sha256"],
-      "properties": {
-        "spdx":   { "enum": ["CC0-1.0", "CC-BY-4.0"] },
-        "url":    { "type": "string" },
-        "author": { "type": "string" },
-        "sha256": { "type": "string" }
-      }
-    },
-
-    "geometry": {
-      "type": "object",
-      "properties": {
-        "units":       { "const": "m", "description": "1 unit = 1 metre, always" },
-        "origin":      { "type": "string", "description": "where the local origin sits, e.g. 'inlet face centre'" },
-        "ports":       { "type": "array", "description": "connection points, so runs can instance and snap",
-                         "items": { "type": "object",
-                           "required": ["id", "pos", "dir", "shape"],
-                           "properties": {
-                             "id":    { "type": "string" },
-                             "pos":   { "type": "array", "items": {"type":"number"}, "minItems": 3, "maxItems": 3 },
-                             "dir":   { "type": "array", "items": {"type":"number"}, "minItems": 3, "maxItems": 3 },
-                             "shape": { "enum": ["rect", "round"] },
-                             "w":     { "type": "number" },
-                             "h":     { "type": "number" } } } },
-        "tri_count":   { "type": "integer" },
-        "instanceable":{ "type": "boolean", "description": "true if geometry is shared across instances (InstancedMesh)" }
-      }
-    },
-
-    "gate": {
-      "type": "object",
-      "required": ["status"],
-      "properties": {
-        "status":     { "enum": ["draft", "passed", "failed"] },
-        "pass_name":  { "type": "string" },
-        "score":      { "type": "number" },
-        "review":     { "type": "string", "description": "path to the review JSON" },
-        "screenshot": { "type": "string" }
-      }
-    },
-
-    "cob_usage": {
-      "type": "object",
-      "description": "How often this part actually occurs in COB level 4, from the inventory. Drives instancing priority and bill-of-quantities.",
-      "properties": {
-        "n":          { "type": "integer" },
-        "population": { "type": "string", "description": "MANDATORY when n is present: what n is counted over." }
-      },
-      "required": ["n", "population"]
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "cob-catalog-manifest.v1",
+ "title": "COB duct/pipe catalog component manifest",
+ "description": "One manifest per catalog component. Every dimension must trace to a source, and every size a component claims to support must exist in cob-l4-duct-inventory.json (or be explicitly standard-derived). Enumerate, do not invent.",
+ "type": "object",
+ "required": [
+  "id",
+  "family",
+  "kind",
+  "params",
+  "provenance",
+  "gate"
+ ],
+ "additionalProperties": false,
+ "properties": {
+  "id": {
+   "type": "string",
+   "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+   "description": "kebab-case, stable, used as the instancing key"
+  },
+  "family": {
+   "enum": [
+    "duct-rect",
+    "duct-round",
+    "fitting",
+    "damper",
+    "terminal",
+    "equipment",
+    "pipe"
+   ]
+  },
+  "kind": {
+   "type": "string",
+   "description": "elbow|tee|cross|transition|BD|FD|SD|LD|CD|RR|VAV|nps-pipe|straight"
+  },
+  "display_name": {
+   "type": "string"
+  },
+  "cob_part_name": {
+   "type": "string",
+   "description": "The designer's own block name from the M-HVAC-DUCT legend, verbatim, when one exists. Naming authority only -- NOT a dimensional authority (see CAD-REQUIREMENTS.md 9a)."
+  },
+  "params": {
+   "type": "object",
+   "description": "Parametric inputs. Ranges must be justified by supported_sizes or by a standard.",
+   "additionalProperties": {
+    "type": "object",
+    "required": [
+     "type",
+     "unit"
+    ],
+    "properties": {
+     "type": {
+      "enum": [
+       "number",
+       "integer",
+       "enum",
+       "boolean"
+      ]
+     },
+     "unit": {
+      "enum": [
+       "in",
+       "mm",
+       "m",
+       "deg",
+       "none"
+      ]
+     },
+     "min": {
+      "type": "number"
+     },
+     "max": {
+      "type": "number"
+     },
+     "default": {},
+     "enum": {
+      "type": "array"
+     },
+     "derived_from": {
+      "type": "string",
+      "description": "Formula when the value is not free, e.g. 'length >= 1.5 * delta_w' (SMACNA 1:3)."
+     }
     }
+   }
+  },
+  "supported_sizes": {
+   "type": "object",
+   "description": "The FINITE set this component covers. Validated against cob-l4-duct-inventory.json.",
+   "properties": {
+    "basis": {
+     "const": "rect_families_design_intent",
+     "description": "The 46-family label set. NEVER rect_families_reconstructed (35) -- it drops the four largest ducts on the level and 40x20."
+    },
+    "rect": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": [
+       "w_in",
+       "h_in"
+      ],
+      "properties": {
+       "w_in": {
+        "type": "integer"
+       },
+       "h_in": {
+        "type": "integer"
+       }
+      }
+     }
+    },
+    "round_dia_in": {
+     "type": "array",
+     "items": {
+      "type": "integer"
+     }
+    },
+    "nps_in": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     }
+    }
+   }
+  },
+  "provenance": {
+   "type": "object",
+   "required": [
+    "certainty",
+    "source"
+   ],
+   "properties": {
+    "certainty": {
+     "enum": [
+      "CERT",
+      "INFER",
+      "STANDARD"
+     ],
+     "description": "CERT = measured in the pinned artifact (L4-full.json sha 7533dccb) or the raw DXF. INFER = read off a name/label whose geometry is unverified. STANDARD = from a published standard, NOT from COB data -- mandatory for every pipe component."
+    },
+    "source": {
+     "type": "string",
+     "description": "exact artifact + locator"
+    },
+    "artifact_sha": {
+     "type": "string"
+    },
+    "standard": {
+     "type": "string",
+     "description": "e.g. 'SMACNA HVAC Duct Construction Standards' or 'ASME B36.10M'"
+    },
+    "note": {
+     "type": "string"
+    }
+   }
+  },
+  "license": {
+   "type": "object",
+   "description": "Required for any external mesh (design3d Rule 8). Omit for procedural geometry.",
+   "required": [
+    "spdx",
+    "url",
+    "author",
+    "sha256"
+   ],
+   "properties": {
+    "spdx": {
+     "enum": [
+      "CC0-1.0",
+      "CC-BY-4.0"
+     ]
+    },
+    "url": {
+     "type": "string"
+    },
+    "author": {
+     "type": "string"
+    },
+    "sha256": {
+     "type": "string"
+    }
+   }
+  },
+  "geometry": {
+   "type": "object",
+   "properties": {
+    "units": {
+     "const": "m",
+     "description": "1 unit = 1 metre, always"
+    },
+    "origin": {
+     "type": "string",
+     "description": "where the local origin sits, e.g. 'inlet face centre'"
+    },
+    "ports": {
+     "type": "array",
+     "description": "Connection points, so a run can snap and instance rather than build ad-hoc geometry. Port ids are OPEN (in/out/branch/b1/b2/neck/...) -- a component is not a two-port pipeline; crossRect has b1+b2. `dir` is a free unit vector, NOT axis-aligned -- a 45 deg elbow emits [cos t,0,sin t] and any validator restricting dir to the six axes rejects every non-90 deg fitting. `shape` is PER PORT, never per component -- vavBox and transitionRectRound are round-in / rect-out.",
+     "items": {
+      "type": "object",
+      "required": [
+       "id",
+       "pos",
+       "dir",
+       "shape"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "id": {
+        "type": "string",
+        "description": "open set: in, out, branch, b1, b2, neck, ..."
+       },
+       "pos": {
+        "type": "array",
+        "items": {
+         "type": "number"
+        },
+        "minItems": 3,
+        "maxItems": 3,
+        "description": "component-local metres; origin at the inlet port face, +X flow, +Y up, +Z lateral"
+       },
+       "dir": {
+        "type": "array",
+        "items": {
+         "type": "number"
+        },
+        "minItems": 3,
+        "maxItems": 3,
+        "description": "unit vector pointing OUT of the component; arbitrary direction, not axis-aligned. Two ports mate when dirA = -dirB and sections agree."
+       },
+       "shape": {
+        "enum": [
+         "rect",
+         "round"
+        ]
+       },
+       "w": {
+        "type": "number",
+        "description": "rect only, metres"
+       },
+       "h": {
+        "type": "number",
+        "description": "rect only, metres"
+       },
+       "d": {
+        "type": "number",
+        "description": "round only, metres. For PIPE this is the B36.10M OUTSIDE diameter, not the NPS label (NPS 4 is 4.500 in, not 4.000 in). For round DUCT the nominal IS the diameter -- duct and pipe do not share a size convention."
+       }
+      },
+      "oneOf": [
+       {
+        "title": "rectangular port",
+        "properties": {
+         "shape": {
+          "const": "rect"
+         }
+        },
+        "required": [
+         "w",
+         "h"
+        ],
+        "not": {
+         "required": [
+          "d"
+         ]
+        }
+       },
+       {
+        "title": "round port",
+        "properties": {
+         "shape": {
+          "const": "round"
+         }
+        },
+        "required": [
+         "d"
+        ],
+        "not": {
+         "anyOf": [
+          {
+           "required": [
+            "w"
+           ]
+          },
+          {
+           "required": [
+            "h"
+           ]
+          }
+         ]
+        }
+       }
+      ]
+     }
+    },
+    "tri_count": {
+     "type": "integer"
+    },
+    "instanceable": {
+     "type": "boolean",
+     "description": "true if geometry is shared across instances (InstancedMesh)"
+    }
+   }
+  },
+  "gate": {
+   "type": "object",
+   "required": [
+    "status"
+   ],
+   "properties": {
+    "status": {
+     "enum": [
+      "draft",
+      "passed",
+      "failed"
+     ]
+    },
+    "pass_name": {
+     "type": "string"
+    },
+    "score": {
+     "type": "number"
+    },
+    "review": {
+     "type": "string",
+     "description": "path to the review JSON"
+    },
+    "screenshot": {
+     "type": "string"
+    }
+   }
+  },
+  "cob_usage": {
+   "type": "object",
+   "description": "How often this part actually occurs in COB level 4, from the inventory. Drives instancing priority and bill-of-quantities.",
+   "properties": {
+    "n": {
+     "type": "integer"
+    },
+    "population": {
+     "type": "string",
+     "description": "MANDATORY when n is present: what n is counted over."
+    }
+   },
+   "required": [
+    "n",
+    "population"
+   ]
   }
+ }
 }

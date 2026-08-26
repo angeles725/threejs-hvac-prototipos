@@ -445,8 +445,15 @@
 
   // ── NPS ladder (hydronic side) ───────────────────────────────────────────
   /**
-   * ASME B36.10M nominal pipe size → outside diameter and Schedule 40 wall,
-   * both in INCHES. NPS is a LABEL, not a measurement: NPS 4 pipe has an
+   * ASME B36.10M nominal pipe size → outside diameter and SCHEDULE 40 wall
+   * (carbon steel), both in INCHES.
+   *
+   * Schedule matters and the label is not optional. Sch 40 (B36.10M, carbon)
+   * and Sch 40S (B36.19M, stainless) are IDENTICAL up to NPS 10 and DIVERGE at
+   * NPS 12: Sch 40 is 0.406", Sch 40S / STD is 0.375". This table is Sch 40
+   * carbon throughout. Anything quoting a stainless wall must come from
+   * B36.19M and say so -- a wall silently taken from the wrong standard is a
+   * wrong ID, a wrong weight and a wrong spec, all from a plausible number. NPS is a LABEL, not a measurement: NPS 4 pipe has an
    * outside diameter of 4.500", not 4.000". The old `pipeRound({d: IN(4)})`
    * drew the nominal as if it were the OD — 12.5% under real size at NPS 4,
    * and worse below NPS 2 where the label diverges further from the metal.
@@ -460,7 +467,9 @@
     '2-1/2': { od: 2.875, wall: 0.203 }, '3': { od: 3.500, wall: 0.216 },
     '4':   { od: 4.500, wall: 0.237 }, '5': { od: 5.563, wall: 0.258 },
     '6':   { od: 6.625, wall: 0.280 }, '8': { od: 8.625, wall: 0.322 },
-    '10':  { od: 10.750, wall: 0.365 }, '12': { od: 12.750, wall: 0.375 },
+    '10':  { od: 10.750, wall: 0.365 },
+    // 0.406 is Sch 40. 0.375 would be Sch 40S / STD -- see the divergence note above.
+    '12':  { od: 12.750, wall: 0.406 },
   };
   /** Outside diameter in METRES for an NPS label. Throws on an unknown size —
    *  a silent fallback would draw a plausible pipe at the wrong diameter. */
