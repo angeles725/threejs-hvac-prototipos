@@ -119,20 +119,26 @@ what the source has and does not**:
   in the deliverable. Both figures now name "de la longitud" (the exact prose trap the denominator rule
   targets, caught by the live gate).
 - **Ortho-camera resize → FIXED** (same commit): frustum now recomputed on resize.
-- **Duct "hollow / see-through, flips with the camera" (USER-REPORTED) → interim-fixed, root fix pending.**
-  Root cause is NOT single-sided material (that's the symptom): `pushBox` builds a LEFT-HANDED local frame
-  (u×v = −Y), so EVERY duct box winds backwards; normals are hand-set correct (why lighting looked fine),
-  but backface culling reads WINDING, so FrontSide culled the wrong face at every angle. INTERIM fix:
-  `side:DoubleSide` on both duct materials (12, 3d85c2c). ROOT fix pending in the §5 P1 winding+caps pass:
-  reverse the winding in `pushBox` (negate v / reverse each triangle) + add caps. IMPORTANT (investigador1
-  + 121): DoubleSide MASKS the inverted-winding bug AND silently fixed a PRE-EXISTING shadow defect
-  (pre-fix `shadowSide[FrontSide]=BackSide` generated the shadow map from the inverted faces the whole
-  time) — so any revert to single-sided (an opaque optimization, or setting shadowSide for acne) regresses
-  BOTH the shells and the shadows from one line; **"shadows look right now" is NOT evidence the winding is
-  fine.** So the builder winding fix is defense-in-depth, not optional. This bug was UNGATED not
-  undetectable: geom-verify `signedVolume` flags a backwards-wound closed box as V<0 — the viewer just
-  never had the mesh-integrity pass run on it. Visual proof pending: a behind-the-duct `?cam=` capture
-  (kit Rule 9), not `?bay=8` (too wide).
+- **Duct "hollow / see-through, flips with the camera" (USER-REPORTED) → DoubleSide interim, STENCIL CAPS
+  pending. WINDING THEORY RETRACTED (a cautionary tale).** The winding is CORRECT — 12 finally MEASURED it:
+  signedVolume over 1028 runs = 583 positive / **0 negative**, and FrontSide-vs-DoubleSide differs by only
+  **1.3% of pixels** (not the every-box-inside-out magnitude the theory predicted). The "left-handed
+  `pushBox` winding" root cause was an UNMEASURED hand-derivation that cascaded through a
+  ratify→corroborate→shadowSide chain before anyone ran the measurement. The ACTUAL cause is the ORIGINAL
+  §4.1: open-ended (uncapped) duct shells — you see through the open ends, and a clip plane shows the
+  hollow interior cross-section. FIX = **DoubleSide** masks the orbit-symptom (interim; applied to
+  system-3d + full-3d only, 3d85c2c) + **§5 P1 STENCIL CAPS** as the real repair. **NO winding reversal**
+  (reversing correct geometry would break it). `signedVolume` is still worth adding as a guard — it PASSES
+  today, so it protects a FUTURE regression, not a current defect (the 438 V=0 runs are applyFilter
+  collapsing hidden-class runs to centroid, not defective). The shadowSide finding was downstream of the
+  wrong premise — 121 to re-verify, not inherit. STILL OPEN: the fix reached system-3d + full-3d but NOT
+  `cob-im2-catalogo-3d.html`, which the user actively opens — the fix must reach EVERY deliverable viewer.
+  META-LESSON: a corroborated + ratified + built-upon diagnosis is still UNMEASURED if nobody ran the
+  measurement; the simpler correct explanation (§4.1) was displaced by the more elegant winding theory
+  precisely BECAUSE it was elegant. Sophistication isn't correctness; measurement is.
+- **Zoom not smooth / uncontrollable (USER-REPORTED, cob-im2-catalogo-3d.html)** — OrbitControls has mixed
+  damping config (an `enableDamping=false` path with `zoomSpeed=1.0`); enable damping on the active
+  controls + tune zoomSpeed. Viewer-team fix. Check all viewers, not just this one.
 
 ## Defects — remaining
 
