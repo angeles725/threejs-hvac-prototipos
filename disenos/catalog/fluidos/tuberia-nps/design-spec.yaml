@@ -1,0 +1,130 @@
+# DesignSpec — parametric NPS pipe family (hydronic side of the COB catalog).
+# Authoring rules: ~/.claude/skills/design3d/references/DESIGNSPEC.md
+#
+# THRESHOLDS ARE DELIBERATELY UNSET. 121 owns the critical-feature thresholds
+# and the certified requirements; the builder choosing the bar it is graded
+# against is marking its own homework. Every `threshold:` below reads TBD-121.
+
+design: tuberia-nps
+family: fluidos
+track: threejs
+mode: standard
+scale: "1 unit = 1 m"
+blockout_scale: "1 voxel = 0.05 m"
+
+complexity:
+  scores: {silhouette: 1, components: 3, hierarchy: 1, repetition: 3,
+           material_layers: 1, detail: 2, occlusion: 0, action_readiness: 1}
+  tier: moderate            # sum 12
+
+environment:
+  overlays:
+    qa_tools: research/tools
+    design_dir_root: disenos/catalog
+    library: ~/.claude/skills/design3d/library
+
+# ── P1 evidence ────────────────────────────────────────────────────────────
+references:
+  - source: "ASME B36.10M — Welded and Seamless Wrought Steel Pipe"
+    evidences: "outside diameter and Schedule 40 wall thickness per NPS designation"
+    suitability: pass
+  - source: "disenos/COB-IM2/lib/hvac-catalog.js (NPS table, lines ~400)"
+    evidences: "the OD/wall values actually compiled into the generator"
+    suitability: pass
+
+# PROVENANCE — read this before scoring anything as COB-accurate.
+provenance:
+  class: standard-catalog
+  cert_level: INFER
+  statement: >
+    Pipe is NOT present in the COB-IM2 drawings. A dwglayers sweep over all nine
+    COB DWGs (L2/L3/L4) finds no plumbing layer, and the certified L4-full.json
+    (sha 7533dccb) contains ducts only. These families are therefore standard-
+    catalog geometry at NPS sizes and must NEVER be marked [CERT] against this
+    project. Nothing here is grounded in COB measurement because COB has none.
+
+dimensions_real:
+  nps_range: {value: "1/2 through 12", confidence: high}
+  od_source: {value: "ASME B36.10M", confidence: high}
+  elbow_radius: {value: "long-radius, centreline 1.5 x nominal", confidence: high}
+  ladder_in_evidence_set: {value: "NPS 1, 4, 8", confidence: high}
+
+hierarchy:
+  - name: root
+    children:
+      - name: part_grid            # 10 families x 3 sizes = 30 instances
+        pivot: [0, 0, 0]
+        animation: none
+      - name: valve_stem           # the one moving element in the family
+        pivot: "meta.stem_pivot, emitted per valve instance"
+        animation: "rotate 0..90 (ball) | translate 0..stem_travel (gate)"
+      - name: labels
+        pivot: [0, 0, 0]
+        animation: none
+        note: "excluded from the __qaFraming SUBJECT — screen-space quads would inflate the AABB"
+
+materials:
+  - id: pipe_steel
+    family: bare-metal
+    color: "#8d9aa6"
+    metalness: 0.90
+    roughness: 0.38
+    evidence: "carbon steel pipe, mill finish; metalness near-binary per DESIGNSPEC rule 2"
+    source: table
+    confidence: 0.85
+  - id: valve_body
+    family: painted-metal
+    color: "#2f6f4f"
+    metalness: 0.0
+    roughness: 0.55
+    evidence: "cast/painted valve body; green is the conventional shop colour for water service"
+    source: estimated
+    confidence: 0.70
+    assumptions: "colour is conventional, not measured — no COB valve exists to sample"
+
+colorTarget: "#8d9aa6"          # pipe_steel, size-invariant across the family
+
+# ── critical features (WHAT they are is mine; the BAR is 121's) ────────────
+critical_features:
+  - id: od_matches_b3610m
+    description: >
+      Every part's outside diameter matches the B36.10M value for its NPS label,
+      not the nominal. NPS 4 must read 4.500", never 4.000".
+    threshold: TBD-121
+  - id: part_census_auditable
+    description: >
+      All ten families are present at all three sizes and each is NAMED in the
+      capture with its NPS and OD, so the census can be read from the pixels.
+    threshold: TBD-121
+  - id: ports_mate
+    description: >
+      Every port reports position, outward direction and section; two parts of
+      the same NPS mate when portA.dir = -portB.dir with agreeing sections.
+    threshold: TBD-121
+  - id: eccentric_is_eccentric
+    description: >
+      The eccentric reducer keeps ONE side flat and is visibly distinct from the
+      concentric one — that offset is the purpose of the fitting, not styling.
+    threshold: TBD-121
+  - id: elbow_is_long_radius
+    description: >
+      Elbows read as long-radius (centreline 1.5 x nominal), not mitred corners.
+    threshold: TBD-121
+
+quality_contract:
+  global_min: TBD-121
+  perf_budget: {draws: 140, tris: 40000}   # measured: 91 draws / 19598 tris
+
+capture_set:
+  - {label: default, query: "", note: "whole board, derived framing"}
+  # representative sizes are spanned WITHIN one shot by the 3-row ladder;
+  # add per-size close-ups if 121's rubric wants them scored separately.
+
+gate_state:
+  mechanical:
+    framing: "ok:true — fullyVisible, !cropped, centered, wellFramed, !overlapsHUD, occupancy 0.382"
+    perf: "91 draws / 19598 tris (SwiftShader)"
+    console: "only the dev server's /favicon.ico 404; the page is self-contained"
+    tests: null
+    note: "no test suite for this asset; recorded as null rather than fabricated"
+  review: pending

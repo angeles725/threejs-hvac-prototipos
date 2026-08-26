@@ -227,7 +227,21 @@
   };
 
   /** Rectangular transition / reducer — a loft between two sections. */
-  C.transitionRect = ({ w0 = IN(20), h0 = IN(12), w1 = IN(12), h1 = IN(8), length = 0.5 }) => ({
+  /**
+   * Rectangular transition / reducer. LENGTH is a real parameter of the family,
+   * not a drawing convenience: COB part numbers specify 0.10 m and 0.30 m, so
+   * the family is (w0,h0) x (w1,h1) x length, and an evidence set that shows one
+   * length has shown half the family.
+   *
+   * PROVENANCE OF THOSE TWO LENGTHS: they come from 121's part-number inventory,
+   * NOT from the pinned artifact. `L4-full.json` sha 7533dccb carries transitions
+   * as {node, kind, w, h, x, y} with no length field at all, and the strings
+   * "10cm" / "30cm" / "RED" appear nowhere in it. Verified, and recorded here so
+   * the two numbers keep their own source instead of inheriting [CERT] from the
+   * artifact that does not contain them.
+   */
+  C.TRANSITION_LENGTHS_M = [0.10, 0.30];
+  C.transitionRect = ({ w0 = IN(20), h0 = IN(12), w1 = IN(12), h1 = IN(8), length = 0.30 }) => ({
     geometry: sweep([frame(0, 0, 0, 1, 0, 0), frame(length, 0, 0, 1, 0, 0)],
                     [ringRect(w0, h0), ringRect(w1, h1)], true, true),
     ports: [P('in', [0, 0, 0], [-1, 0, 0], RECT(w0, h0)),
