@@ -102,8 +102,21 @@ source-absent** (kept `h=None`, correctly); the viewer must *show* the absence, 
 the clash vertical-arm runs only on the 61.7%.
 
 Caveats on record: (a) a few 24″/26″ runs sit 5mm over the gate from a `25"x20"` label — tight,
-not wildly missing; (b) 211 informative unknown runs are 4″ wide (implausible rect ducts,
-`geom+ladder` snapped) — if spurious, the real gap is *smaller* than 38.3%, never larger.
+not wildly missing; (b) the 4″-run question is RESOLVED (2026-08-26): the 211 `geom+ladder` 4″
+unknown-height runs are **real ducts**, not spurious pairs — 121 rendered the 82.4mm `w_raw`
+cluster (real thin duct bodies with diffuser drops + `6"ø`/BOD labels; only ~25 are true
+detail-geometry, e.g. runs inside damper details), and an independent frame-independent
+source-line measurement near `L4_1598` confirmed ~8 clustered horizontal HVAC-Ductos lines
+(~78mm span). Dropping them would *understate* the gap, so **38.3% stands** (the earlier
+32–37% bracket is withdrawn — an arithmetic check that reproduced but on a wrong interpretation).
+
+**Latent accuracy caveat (small-scale H2, does not change the height conclusion):** those cluster
+runs expose a real wrong-pair / width mis-measurement — the extractor's `w_raw` is off by up to
+~20mm and the imperial LADDER snaps it to a plausible nominal size, so the error is invisible in
+every width-based metric and only `w_raw` exposes it. ~order-25 runs. `absent-not-misbound` is
+untouched; height stays 38.3% source-absent / 61.7% measured. Flag: a pipeline that silently
+corrects its own imprecise raw measurements will keep doing so on data where the ladder does not
+rescue the number.
 
 ## H4 HARD-CONFIRMED — the "long walls" are perimeter linear-diffuser runs
 
