@@ -73,6 +73,10 @@ coordinating sessions; each claim traces to the session that measured it.
 - **H2 — width/centreline accuracy**: still UNTESTED at trunk scale, but a **verified instance now
   exists at small-branch scale** — inner-pair selection in the 82.4mm cluster (see the 4" resolution).
   Bounded (~1 point of the denominator); a real small width-accuracy issue, not a coverage mover.
+  **Latent-accuracy caveat (investigador1, worth keeping):** for ~order-25 of these runs the extractor's
+  `w_raw` is off by up to ~20mm and the imperial LADDER SNAPS it to a plausible nominal size — so the
+  error is invisible in every width-based metric; only `w_raw` exposes it. A pipeline that silently
+  ladder-corrects imprecise raw measurements will do so even where the ladder lands on the wrong nominal.
 - **~139 recoverable candidates** (all ≥8", zero 4", a loose upper bound) → 121's cad2d for
   human-in-loop per-run confirmation (Track A final close).
 - **5mm-over-gate eyeball** (immaterial): a few 24"/26" runs sit 5mm over the gate from a '25"x20"'
@@ -126,6 +130,18 @@ what the source has and does not**:
 - **`/design3d` topology/clash gate** (`PROPOSAL-design3d-clash-gate.md`): port scottstts
   `geometry-quality-kit` (MIT). Clearance-below arm is data-ready (BOD ~99%, needs only an external
   MECO datum); vertical-clash arm is advisory + skips `h=None` runs; reads certified `L4-full.json`.
+
+## New tooling (built + run this session)
+
+- **Duct clash/clearance tool** (`tools/duct-clash.py`, report `CLASH-REPORT-L4.md`): shapely oriented
+  footprint × Z-interval [BOD, BOD+h], adjacency-excluded, `h=None` SKIPPED per §13. First run on
+  L4-full.json flagged **36 CANDIDATE run-to-run clashes — UNVERIFIED** — plus 143 unresolved (a run
+  with unknown height, correctly not assumed) and 496 degenerate zero-length runs excluded. **Do NOT
+  cite 36 as a finding yet.** The dominant pattern (branch/small crossing at similar BOD) is exactly
+  where an incomplete extractor adjacency (a missed tee-connection) would masquerade as a clash, so the
+  list is a mix of possible real coordination clashes and false positives. Needs topology cross-check +
+  a visual spot-check of the top candidates (e.g. L4_0773 vs L4_0857 @ (102.78, 35.14)) in the cad2d
+  viewer before any is reported. 5 of the 36 have <1mm² plan overlap (likely digitization artifacts).
 
 ## Reference outcomes
 
