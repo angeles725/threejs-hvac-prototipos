@@ -151,12 +151,16 @@ what the source has and does not**:
   - The 28 still need the double-bind screen (both-runs-share-a-BOD-label-instance) before any is
     called a coordination clash; that screen needs the extractor's binding provenance (team A).
 
-- **EXTRACTOR DEFECT surfaced (real but minor)** — BOD binder is **non-exclusive** (one label instance
-  binds to multiple runs). **Fix = EXCLUSIVITY ONLY** (one label → one run). The perpendicular-to-axis
-  ranking idea is **RETRACTED**: 121 verified it picks the same wrong label (both candidates lie
-  alongside the run), changing exactly 1 of 28 BODs. Same proximity weakness as the width channel, now
-  in elevation — but it is NOT what produced the crossings (under exclusive binding only 1 of 28 clears).
-  Relayed to team A (measure prevalence over the 2015 BOD-bound runs, then the exclusivity fix).
+- **BOD double-bind is CORRECT-BY-DESIGN, not a defect (full retraction).** Earlier flagged the
+  non-exclusive BOD binder as an extractor defect + proposed an exclusivity fix; team A's investigador
+  measured it and exclusivity REGRESSES. 91% double-bind (515 labels / 1833 runs) is a per-region
+  shared PLENUM elevation datum (median 3.76m, 83% in one band, shared by co-planar ducts) — correct by
+  design. There are only 882 labels for 2015 runs, so exclusive one-label→one-run would drop BOD
+  coverage from 99.1% to ≤43%. Blanket exclusivity is a regression wearing a hygiene label. The perpendicular-
+  ranking idea was already retracted (picks the same wrong label). The ONLY genuine issue is the
+  elevation-STEP subset (clash-side, clears 1/28); the real clash-gate ceiling stays the missing
+  Z-profile — a documented known limit, same class as the height floor. (Two of my clash-side leads
+  turned out wrong; the verifier team measured both down. Recorded as-is.)
 
 ## Reference outcomes
 
@@ -165,3 +169,28 @@ what the source has and does not**:
   shadcn-ui (MIT) + tremor (Apache-2.0).
 - **Adopted discipline**: name the denominator with every percentage; verify licenses at the upstream
   LICENSE file.
+
+## Catalog phase + judging panel (user-directed, in progress)
+
+- **Duct + pipe catalog** via /design3d: 12 BUILDS + gates parametric parts (coordinated by team A);
+  121 supplies CAD requirements + verify + catalog viewer (coordinated by Orquestador1); requirements
+  in 121's PR #13 (`cob-l4-duct-inventory.json`). VALIDATION BASIS = the **46-family LABEL set** (design
+  intent), NOT the 35-run reconstructed ladder — the 35 drop the four largest trunks + 40x20 (7 labels)
+  because heights go unrecorded on big trunks; the 35 are a strict subset of the 46. Round = one size
+  (6"Ø ×435/442). Fittings elbow 684 / tee 217 / transition 188 / cross 68. Dampers = BD/FD only (SD =
+  supply diffuser; MD absent). NO plumbing layer on any of the 9 DWGs → pipes are NPS/ASME
+  standard-derived, never [CERT]. Name from COB's own M-HVAC-DUCT legend part numbers; two reducer
+  lengths → length is a catalog parameter. Open: terminals ~3% delta (121 L4-full.json vs team A DXF-parse).
+- **Judging architecture (kit-faithful):** acceptance authority = fresh-context BLIND agents (team A
+  spawns, spec+PNG+rubric only, no context) per GATES.md §Verdict. The 4 coordinators = INFORMED EXPERT
+  panel (domain-fit + catching the blind agents' known error modes), recorded as expert opinion, never a
+  gate PASS — we've read the builders' rationale so we can't be blind. 121 owns thresholds (off the
+  verified ladder); 12 + 121 are BUILDERS, not judges. Lenses: Orquestador1 = proportions/silhouette;
+  investigador1 = size/dimension vs ladder; team A Orq = part-census/material; team A investigador =
+  reads-at-native-res. Rule: size/detail scorable only with a scale cue or spec nominal, else UNRESOLVABLE.
+- **Panel judgment #1 (2026-08-26): viewer default view A (whole 78:1) vs B (bay) → UNANIMOUS 4/4 = B.**
+  All four independent, collected before any revealed. A's 78:1 aspect renders the network an illegible
+  dark carpet where measured-vs-assumed provenance vanishes; B shows proportioned real ductwork.
+  Action issued to 12: default = a bay, redefine `__qaFraming` SUBJECT to the presented bay (so it passes
+  framing mechanically — the design3d kit-learning), then add section caps. Recorded as a legibility
+  PANEL verdict, not a blind-gate PASS.
