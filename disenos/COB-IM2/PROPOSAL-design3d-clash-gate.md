@@ -107,7 +107,9 @@ viewer polish, is the next real target.**
     datum** is supplied — that is its only blocker, an external spec, not our Z data.
   - **Vertical run-to-run clash arm is height-bounded** and trunk-concentrated → land it as
     **advisory** (flag, don't block) on runs with a real measured `h`, and NEVER emit a clash verdict
-    on an `h=None` run — skip it, don't assume a top. It graduates to blocking only when WU2's
-    label→run height recovery closes the trunk gap with real labels.
+    on an `h=None` run — skip it, don't assume a top. **This is PERMANENT, not staged:** the 38.3%
+    height gap is source-absent (WU2 recoverable ≈ 0, confirmed by two independent measurements), so
+    this arm runs on the 61.7%-measured subset for good — there is no recovery that graduates it. The
+    honest render is to mark unknown-height runs as explicitly unknown, never to assume a top.
 - Read the certified `L4-full.json` (not the viewer's collapsed geometry, which discards ~587m of
   measured height).
