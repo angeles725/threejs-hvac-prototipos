@@ -3,10 +3,12 @@
 Source CAD and early 3D builds for the COB-IM2 plant, recovered on 2026-08-25 from
 `C:\Users\equipo\Downloads` (Windows filesystem) after the WSL2 environment was wiped.
 
-The prior WSL2-side working folder `disenos/COB-IM2/` (including `cob-im2-3d.html` and the
-`~/investigacion/COB-IM2/` research corpus) was lost and is **not** recoverable — only the
-files below, which lived on the Windows disk, survived. They are committed here so the work
-is versioned and backed up in git from now on.
+The WSL2 environment was wiped, and the old single-file build `cob-im2-3d.html` did not survive.
+The `~/investigacion/COB-IM2/` research corpus, however, was **recovered** and is versioned on
+GitHub as `angeles725/research-cob-im2` (extractor pipeline, raw DXFs, output JSONs) — it is not
+lost. How its data crosses into the viewers here is documented in `DATA-HANDOFF.md`, with a
+per-viewer provenance manifest in `data-provenance.json`. The files below, recovered from the
+Windows disk on 2026-08-25, are committed here so the deliverable is versioned and backed up.
 
 ## Source DWG (AutoCAD, 2026-08-18)
 
