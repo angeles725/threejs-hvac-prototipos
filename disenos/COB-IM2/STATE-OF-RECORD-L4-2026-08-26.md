@@ -134,14 +134,29 @@ what the source has and does not**:
 ## New tooling (built + run this session)
 
 - **Duct clash/clearance tool** (`tools/duct-clash.py`, report `CLASH-REPORT-L4.md`): shapely oriented
-  footprint × Z-interval [BOD, BOD+h], adjacency-excluded, `h=None` SKIPPED per §13. First run on
-  L4-full.json flagged **36 CANDIDATE run-to-run clashes — UNVERIFIED** — plus 143 unresolved (a run
-  with unknown height, correctly not assumed) and 496 degenerate zero-length runs excluded. **Do NOT
-  cite 36 as a finding yet.** The dominant pattern (branch/small crossing at similar BOD) is exactly
-  where an incomplete extractor adjacency (a missed tee-connection) would masquerade as a clash, so the
-  list is a mix of possible real coordination clashes and false positives. Needs topology cross-check +
-  a visual spot-check of the top candidates (e.g. L4_0773 vs L4_0857 @ (102.78, 35.14)) in the cad2d
-  viewer before any is reported. 5 of the 36 have <1mm² plan overlap (likely digitization artifacts).
+  footprint × Z-interval [BOD, BOD+h], `h=None` SKIPPED per §13. **Verified across three sessions →
+  0 CONFIRMED coordination clashes.** The tool's real yield is surfacing extractor weaknesses, not
+  finding clashes. Trail:
+  - Raw run: 36 candidates. investigador1 topology check: logic sound (no exclusion bug), but 8/36 were
+    **missed-tee false positives** (endpoints 2–76mm apart, inside the extractor's TEE_MARGIN=0.20m,
+    not noded). Applied a geometric-adjacency fix → **28** remain, all ADVISORY.
+  - Z-test is **INACTIVE**: ~83% of BODs sit in a ~0.1m plenum band, so every plan-crossing also
+    Z-overlaps (0/28 clash-free). A "clash" here = "crosses in plan at plenum height," NOT a proven
+    vertical conflict — the drawing doesn't encode the vertical step-over. This is exactly why the
+    gate's vertical arm is permanent-advisory.
+  - 121 rendered the top candidate (L4_0773↔L4_0857): NOT a clash and NOT a missed tee — a **BOD
+    label double-bind**. Both runs bound the same `BOD3.55` label (handle 27DCA); the branch took a
+    nearer-in-plan label over `BOD4.25` which lies along its own axis. Correct binding → 243mm
+    clearance, clash gone. **→ REAL EXTRACTOR DEFECT (see below).**
+  - The 28 still need the double-bind screen (both-runs-share-a-BOD-label-instance) before any is
+    called a coordination clash; that screen needs the extractor's binding provenance (team A).
+
+- **EXTRACTOR DEFECT surfaced (real but minor)** — BOD binder is **non-exclusive** (one label instance
+  binds to multiple runs). **Fix = EXCLUSIVITY ONLY** (one label → one run). The perpendicular-to-axis
+  ranking idea is **RETRACTED**: 121 verified it picks the same wrong label (both candidates lie
+  alongside the run), changing exactly 1 of 28 BODs. Same proximity weakness as the width channel, now
+  in elevation — but it is NOT what produced the crossings (under exclusive binding only 1 of 28 clears).
+  Relayed to team A (measure prevalence over the 2015 BOD-bound runs, then the exclusivity fix).
 
 ## Reference outcomes
 
