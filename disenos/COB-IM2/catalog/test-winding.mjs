@@ -18,7 +18,9 @@ const REPO = path.resolve(HERE, '../../..');
 const tmp = path.join(os.tmpdir(), `three-wind-${process.pid}.mjs`);
 fs.copyFileSync(path.join(REPO, 'disenos/datacenter-hotspot-sinCDN/vendor/three/three.module.js'), tmp);
 try { globalThis.THREE = await import(pathToFileURL(tmp).href); } finally { fs.rmSync(tmp, { force: true }); }
-const LIB_HTML  = path.resolve(HERE, '../cob-im2-catalogo-3d.html');
+// CATALOG_HTML lets prove-guards.mjs point a suite at a deliberately
+// corrupted copy without touching the real page.
+const LIB_HTML  = process.env.CATALOG_HTML || path.resolve(HERE, '../cob-im2-catalogo-3d.html');
 const LIB_FILE = path.resolve(HERE, '../lib/hvac-catalog.js');
 // The generators live INSIDE the viewer HTML — that page is the deliverable and
 // the source. Read them out of it, so these suites verify what actually ships.

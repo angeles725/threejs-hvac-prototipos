@@ -17,7 +17,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../../..');
 const THREE_PATH = path.join(REPO, 'disenos/datacenter-hotspot-sinCDN/vendor/three/three.module.js');
-const LIB_HTML  = path.resolve(HERE, '../cob-im2-catalogo-3d.html');
+// CATALOG_HTML lets prove-guards.mjs point a suite at a deliberately
+// corrupted copy without touching the real page.
+const LIB_HTML  = process.env.CATALOG_HTML || path.resolve(HERE, '../cob-im2-catalogo-3d.html');
 const LIB_FILE = path.resolve(HERE, '../lib/hvac-catalog.js');
 // The generators live INSIDE the viewer HTML — that page is the deliverable and
 // the source. Read them out of it, so these suites verify what actually ships.
