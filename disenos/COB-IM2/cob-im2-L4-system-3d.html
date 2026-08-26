@@ -54777,21 +54777,30 @@ function makeGeo(b){
   return g;
 }
 const clipPlane = new T.Plane(new T.Vector3(0,-1,0), 99);
-// side: DoubleSide is load-bearing here, and the reason is winding, not taste.
-// pushBox builds its local frame as u = (ux,0,uz), v = (-uz,0,ux) with +Y up.
-// u x v = (0,-1,0) — the frame is LEFT-handed against +Y for EVERY run, so every
-// box's triangles wind backwards. The per-vertex normals are pushed by hand and
-// point correctly outward, which is why the lighting looked right; but back-face
-// culling uses WINDING, not normals. Under the default FrontSide the near wall
-// was culled and the far wall drawn, so a duct read as hollow and appeared to
-// flip as the camera orbited — the defect the user reported.
+// side: DoubleSide, and the reason is NOT what this comment said before.
 //
-// DoubleSide is also the right long-term choice for an MEP viewer: you orbit
-// INTO ductwork here, and a section cut through a single-sided shell shows an
-// open interior. The winding itself should still be corrected at the builders
-// (reverse each triangle, or negate v) — that is the root fix; this is the one
-// that makes the model readable now, and it is not a mask: with a left-handed
-// frame there is no camera angle at which FrontSide is correct.
+// RETRACTED: I claimed pushBox built a left-handed frame (u x v = -Y) that wound
+// every box backwards, and that back-face culling was therefore showing the far
+// wall. That was a hand-derivation and it is WRONG. Measured, over every duct run
+// in the merged geometry, signed volume per run:
+//
+//     rect  n=1021   positive 583   negative 0
+//     round n=7      positive 5     negative 0
+//
+// Zero negatives. The winding is CORRECT and the boxes are closed. (The runs
+// reading V=0 are the ones applyFilter has collapsed to their centroid, not
+// defective geometry — a hidden run has no volume by construction.)
+//
+// What actually makes a duct read hollow is the CLIP PLANE. clipPlane cuts the
+// solid and the cut face is not capped, so a clipped duct exposes its interior;
+// under FrontSide the interior's far walls are culled and you see straight
+// through it, and which walls survive changes as the camera moves. That is the
+// §4.1 open-shell case, not a winding defect.
+//
+// DoubleSide is therefore a real fix for the symptom — the interior faces render
+// instead of being culled — but it is a MASK over an open cross-section, not a
+// repair of it. The root fix is stencil caps on the clip plane (§5 P1), which is
+// what makes a sectioned duct read as solid metal instead of a shell.
 const mat = new T.MeshStandardMaterial({
   vertexColors:true, metalness:0.88, roughness:0.34,
   envMapIntensity:1.15, clippingPlanes:[clipPlane], side:T.DoubleSide
@@ -54801,6 +54810,14 @@ const matTerm = new T.MeshStandardMaterial({
   envMapIntensity:1.0, clippingPlanes:[clipPlane],
   transparent:true, opacity:0.85, side:T.DoubleSide
 });
+// `?side=front` forces the pre-fix single-sided state so the defect can be
+// re-captured from the same pinned camera at any time. A before/after that
+// requires editing the file to reproduce is not reproducible; this makes the
+// regression demonstrable by URL, and it is also how the winding fix gets
+// verified — once the winding is correct, ?side=front must look RIGHT.
+if (new URLSearchParams(location.search).get('side') === 'front'){
+  mat.side = T.FrontSide; matTerm.side = T.FrontSide;
+}
 const geo  = makeGeo(B.net);
 const geoT = makeGeo(B.term);
 const mesh = new T.Mesh(geo, mat);
@@ -55299,8 +55316,37 @@ window.__qaFraming = () => {
   return { mvpElements: Array.from(mvp.elements), corners, W: innerWidth, H: innerHeight, hud };
 };
 
+// A pinned ?cam= must win over the boot framing, and the panel rects it depends
+// on are only real once the browser has laid out — so apply it on the first
+// settled frame rather than at script time.
+// design3d Hard Rule 9 — a scripted, reproducible viewpoint.
+// `?cam=x,y,z,tx,ty,tz` pins the camera exactly so a before/after pixel diff
+// compares the same view instead of two interactively-nudged ones.
+//
+// This block was lost once already: it was written, reported as added, and then
+// dropped by a rebase onto another session's commit, leaving a call to a
+// function that no longer existed. Verified present by grep this time, not by
+// the edit tool's success message.
+let _camQ = null;
+{
+  const q = new URLSearchParams(location.search).get('cam');
+  if (q){
+    const n = q.split(',').map(Number);
+    if (n.length === 6 && n.every(isFinite)) _camQ = n;
+  }
+}
+function applyCamQuery(){
+  if (!_camQ) return;
+  const cam = activeCam();
+  cam.position.set(_camQ[0], _camQ[1], _camQ[2]);
+  controls.target.set(_camQ[3], _camQ[4], _camQ[5]);
+  cam.updateProjectionMatrix();
+  controls.update();
+}
+let _pinned = false;
 (function tick(){
   requestAnimationFrame(tick);
+  if (!_pinned){ _pinned = true; applyCamQuery(); }
   controls.update();
   renderer.render(scene, activeCam());
 })();
