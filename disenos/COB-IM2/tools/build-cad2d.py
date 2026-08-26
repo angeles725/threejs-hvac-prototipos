@@ -36,13 +36,39 @@ DXF_PATH = {
     "14B": f"{RESEARCH}/raw/COB-IM2_14B_level_4.dxf",
     "14C": f"{RESEARCH}/raw/COB-IM2_14C_level_4.dxf",
 }
-# Verbatim from tools/l4/extract-graph.py OFFSETS -- the global 14A frame.
-# 14B [CERT] structural grid. 14C [INFER-strong] chained via 14B.
-OFFSETS = {
+# Sheet co-registration offsets into the global 14A frame.
+#
+# THESE ARE NOT HARDCODED, AND MUST NOT BE. Two pipelines in this project carry
+# DIFFERENT offsets for the same sheets:
+#   extract-graph.py   14B (37.2399, -0.5067)  14C (33.7799, -1.0384)
+#   extract-l4-full.py 14B (37.2500, -0.5000)  14C (33.8000, -1.0500)
+# The 14C disagreement is 20.1 mm in X. This viewer exists to audit a 20 mm
+# width gate, so overlaying runs from one frame on source drawn in the other
+# would inject an error the size of the thing being measured.
+#
+# The certified artifact declares its own offsets in meta.sheets, so we read
+# them from it and register the SOURCE to the OVERLAY. Fallback below is only
+# used if the artifact is missing, and is reported as such.
+FALLBACK_OFFSETS = {
     "14A": (0.000000, 0.000000),
-    "14B": (37.239900, -0.506700),
-    "14C": (33.779900, -1.038400),
+    "14B": (37.250000, -0.500000),
+    "14C": (33.800000, -1.050000),
 }
+OFFSETS = dict(FALLBACK_OFFSETS)
+OFFSET_SRC = "fallback (L4-full.json not read)"
+
+
+def load_offsets():
+    """Adopt the certified artifact's own co-registration."""
+    global OFFSETS, OFFSET_SRC
+    if not os.path.exists(FULL_JSON):
+        return
+    meta = json.load(open(FULL_JSON)).get("meta", {})
+    sheets = meta.get("sheets") or []
+    got = {s["sheet"]: tuple(s["offset"]) for s in sheets if "sheet" in s and "offset" in s}
+    if got:
+        OFFSETS = got
+        OFFSET_SRC = os.path.basename(FULL_JSON) + " meta.sheets"
 FULL_JSON    = f"{RESEARCH}/tools/out/L4-full.json"   # certified artifact (supersedes L4-graph.json)
 CONTEXT_JSON = f"{RESEARCH}/tools/l4/out/L4-context.json"
 
@@ -274,6 +300,10 @@ def main():
         "cob-im2-L4-cad2d.html")
     tpl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cad2d-template.html")
 
+    load_offsets()
+    print(f"co-registration offsets from: {OFFSET_SRC}", file=sys.stderr)
+    for k, v in OFFSETS.items():
+        print(f"    {k}: {v}", file=sys.stderr)
     print("reading source DXFs (read-only)...", file=sys.stderr)
     ents, counts, gmeta, cflags, sheets = extract()
 
@@ -309,13 +339,16 @@ def main():
             "nothing merged, paired or de-duplicated. Derived overlays are pipeline OUTPUT, not source: "
             "the column grid is <b>INFERRED</b> (" + (cflags or {}).get("column_grid_source", "?") + "), "
             "runs/nodes/fittings come from <b>L4-full.json</b> (certified; L4-graph.json is superseded and not used). "
-            "Do not read a derived overlay as ground truth.")
+            "Do not read a derived overlay as ground truth.<br><br>"
+            "<b>Co-registration.</b> Source sheets are registered using the offsets the certified "
+            "artifact declares (" + OFFSET_SRC + "), not extract-graph.py's, which differ by up to "
+            "20.1 mm on 14C. Source and overlay are therefore in one frame.")
 
     data = {
         "meta": {
             "q": Q, "sheets": sheets, "bounds": bounds, "fit": fit_bounds, "clip": list(CLIP),
             "counts": counts, "built": time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()),
-            "offsets": OFFSETS, "provenance": prov,
+            "offsets": OFFSETS, "offset_src": OFFSET_SRC, "provenance": prov,
             "graph": gmeta, "context_flags": cflags,
             "source": {k: os.path.basename(v) for k, v in DXF_PATH.items()},
         },
