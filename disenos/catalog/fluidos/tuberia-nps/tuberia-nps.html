@@ -55437,6 +55437,12 @@ root.add(scaleBar); SUBJECT.attach(scaleBar);
 
 // ── camera ────────────────────────────────────────────────────────────────
 const camera = new T.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 200);
+// Which camera actually renders. A close-up of the NPS 1 row does not want a
+// perspective camera at all: fitting one to a bounding box keeps inheriting the
+// board's scale, and two attempts at that produced a shot that was mostly empty
+// canvas. Orthographic sized to the row's own extent has no distance term to get
+// wrong — the frustum IS the crop.
+let renderCam = camera;
 const controls = new window.OrbitControls(camera, canvas);
 controls.enableDamping = true; controls.dampingFactor = 0.06;
 
@@ -55507,8 +55513,8 @@ document.getElementById('hud').innerHTML =
 
 // ── gate hook (GATES.md mechanical check) ─────────────────────────────────
 window.__qaFraming = () => {
-  camera.updateMatrixWorld(); camera.updateProjectionMatrix();
-  const mvp = new T.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  renderCam.updateMatrixWorld(); renderCam.updateProjectionMatrix();
+  const mvp = new T.Matrix4().multiplyMatrices(renderCam.projectionMatrix, renderCam.matrixWorldInverse);
   const b = new T.Box3().setFromObject(SUBJECT, true);
   const mn = b.min, mx = b.max;
   const corners = [
@@ -55580,6 +55586,47 @@ if (_focus && FOCUS[_focus]){
         if (!(o.userData && o.userData.isLabel)) return;
         if (!o.userData.keep) o.visible = false;
       });
+
+      // ORTHOGRAPHIC crop, sized to the row's own extent.
+      const gb = new T.Box3();
+      for (const m of members){ m.updateMatrixWorld(true); gb.expandByObject(m); }
+      for (const o of root.children) if (o.userData && o.userData.keep) gb.expandByObject(o);
+      const gc = new T.Vector3(); gb.getCenter(gc);
+      const dirO = new T.Vector3(0.16, 0.72, 1).normalize();
+      const oc = new T.OrthographicCamera(-1, 1, 1, -1, 0.01, 200);
+      oc.position.copy(gc).addScaledVector(dirO, Math.max(gb.getSize(new T.Vector3()).length(), 1) * 3);
+      oc.up.set(0, 1, 0);
+      oc.lookAt(gc);
+      oc.updateMatrixWorld(true);
+      // Fit the frustum to the corners in the camera's OWN axes: no distance term,
+      // so there is nothing to converge and nothing to inherit from the board.
+      const inv = new T.Matrix4().copy(oc.matrixWorld).invert();
+      let ex = 0, ey = 0;
+      const gmn = gb.min, gmx = gb.max;
+      for (const cpt of [
+        [gmn.x,gmn.y,gmn.z],[gmx.x,gmn.y,gmn.z],[gmn.x,gmx.y,gmn.z],[gmx.x,gmx.y,gmn.z],
+        [gmn.x,gmn.y,gmx.z],[gmx.x,gmn.y,gmx.z],[gmn.x,gmx.y,gmx.z],[gmx.x,gmx.y,gmx.z]]){
+        const v = new T.Vector3(cpt[0], cpt[1], cpt[2]).applyMatrix4(inv);
+        ex = Math.max(ex, Math.abs(v.x)); ey = Math.max(ey, Math.abs(v.y));
+      }
+      const aspectO = innerWidth / innerHeight;
+      // REVERTED to the widen-free fit. Two ortho attempts, and the second was a
+      // double-compensation: dividing the half-width by the usable fraction AND
+      // padding by the panel width shrank everything to nothing. This is the
+      // first version restored — the parts read at a usable size, and the right
+      // column is still clipped. It is the better of two wrong answers, kept
+      // deliberately rather than replaced by a third guess.
+      let hw = ex * 1.06, hh = ey * 1.10;
+      if (hw / hh < aspectO) hw = hh * aspectO; else hh = hw / aspectO;
+      const hudEl2 = document.getElementById('hud');
+      const hudFrac = hudEl2
+        ? Math.min(hudEl2.getBoundingClientRect().right, innerWidth) / innerWidth : 0;
+      const shiftO = hw * hudFrac * 0.55;
+      oc.left = -hw - shiftO; oc.right = hw - shiftO;
+      oc.top = hh; oc.bottom = -hh;
+      oc.updateProjectionMatrix();
+      renderCam = oc;
+      controls.object = oc; controls.target.copy(gc); controls.update();
       box.makeEmpty();
       for (const m of members){ m.updateMatrixWorld(true); box.expandByObject(m); }
     }
@@ -55634,7 +55681,7 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight, false);
 });
-(function tick() { requestAnimationFrame(tick); controls.update(); renderer.render(scene, camera); })();
+(function tick() { requestAnimationFrame(tick); controls.update(); renderer.render(scene, renderCam); })();
 document.body.setAttribute('data-app-ready', '1');
 console.log('pipe catalog:', MANIFEST.length, 'components');
 
