@@ -73,8 +73,9 @@ made precise, and it corrects an earlier over-broad "38.3% assumed Z" framing:
 Consequences per arm:
 
 1. **Clearance-BELOW a duct (the #1 HVAC question, "how much headroom under this run") uses BOD —
-   data-ready NOW at 99%.** It is blocked only on an external **MECO / clearance datum** (structural
-   ceiling / SMACNA spec / user input), not on our Z data.
+   data-ready NOW at 99%.** It is blocked only on an external **MECO / clearance datum** — which team
+   A confirmed is **ZERO in the DXF** (nothing in-drawing to derive it from), so it MUST be supplied
+   externally (structural ceiling / SMACNA spec / user input), not on our Z data.
 2. **Run-to-run vertical CLASH needs both ducts' full extent (`bod`..`bod+h`); the TOP `h` is the
    missing piece** — so THIS arm is the one bounded by the height gap, and the gap **concentrates on
    the trunk** (the largest, most consequential ducts: trunk height coverage is the lowest, ~30%
