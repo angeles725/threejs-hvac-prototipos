@@ -80,11 +80,14 @@ Consequences per arm:
    the trunk** (the largest, most consequential ducts: trunk height coverage is the lowest, ~30%
    of trunk runs). Height coverage is SETTLED (not an open number): **61.7% measured / 38.3% assumed,
    by network length** (denominator named on purpose — the by-length vs by-count confusion is a
-   recurring trap). A SEPARATE viewer *display* defect exists — the viewer collapses ~587m (43.1%
-   by length) of *measured* height into a hidden color — but that height is already **inside** the
-   61.7% measured; the certified data carries it, the viewer just under-shows it. So the gate must
-   read the certified `L4-full.json` (which has the full 61.7%), never the viewer's collapsed
-   geometry; the viewer's display defect does not reduce the gate's input. A vertical-clash verdict
+   recurring trap). A SEPARATE viewer *display* defect exists (12's Defect-1,
+   three DISTINCT figures — don't conflate them): the viewer hides the WHOLE small class by default,
+   **1094.6m = 43.1% by length**, collapsed to one color; of that, **587.4m carries MEASURED height**
+   whose provenance credit is denied (measured reads as hidden), and **507.1m is genuinely assumed**
+   (assumed reads as certain — the live §13 trap). The 587.4m is already **inside** the 61.7%-measured
+   total; the certified data carries it, the viewer just under-shows it. So the gate reads the
+   certified `L4-full.json` (full 61.7%), never the viewer's collapsed geometry; the viewer's display
+   defect does not reduce the gate's input, and it is a separate viewer fix from WU2's gap-recovery. A vertical-clash verdict
    on an assumed top is inferred, not measured, and must be surfaced as such, never rendered as fact
    (§13 discipline). The current extractor is already §13-correct: unknown-height runs carry
    `h=None` (absent stays absent, never a fabricated default) — the gate must preserve that.
