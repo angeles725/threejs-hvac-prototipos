@@ -79,8 +79,24 @@ transition 219, tee 276, cross 70"*. Measured from certified `L4-full.json` @ a2
 Those are the 2132-run figures from the superseded `full-3d` dataset — the same stale baseline
 flagged this morning in `GRADING-viewers-2026-08-26.md`.
 
-**investigador1's size list is partly wrong.** Brief: *"top real sizes: 8x8, 12x8, 10x8, 14x12,
-12x10, 10x10, 12x12, 16x14, 24x24, 60x20, 34x20, 30x18"*. Measured over the 1591 rect runs:
+**investigador1's size list is partly wrong** — and so was my first correction of it, in two ways.
+Both are recorded here rather than edited away.
+
+> **Correction 1 (my denominator).** The counts below are over the **420 size-LABELED rect runs**,
+> not the 1591 rect runs this section originally claimed. 1591 is the rect population; only 420
+> carry a size label. I stated the wrong denominator in the same document where I proposed the rule
+> about always naming it.
+>
+> **Correction 2 (my phrasing).** I wrote that `34x20` and `30x18` "do not appear in the top set".
+> They are present — 4 runs each, ranks 17 and 16 of 35 distinct sizes, just under the 14-row cutoff
+> I showed without naming. investigador1 verified them with run ids (`L4_0857/0858/0869/0896` and
+> `L4_1489/1689/1914/1936`), and `28x20` likewise at rank 18. A reader could reasonably have taken
+> my sentence to mean absent, and a judge working from it could fail a correctly-built 30x18.
+>
+> **Authoritative ladder: 35 distinct rect sizes over 420 size-labeled rect runs**, from
+> `L4-full.json` sha `7533dccb…` (= commit `a29d14d`). Verified independently here.
+
+Top of that ladder by count:
 
 | label | n | | label | n |
 |---|---|---|---|---|
@@ -93,8 +109,9 @@ flagged this morning in `GRADING-viewers-2026-08-26.md`.
 | 12"x12" | 24 | | | |
 | 16"x14" | 11 | | | |
 
-`60"x20"` is 5 runs, not a top size. `34x20` and `30x18` do not appear in the top set at all, while
-`24"x4"` (9) and `14"x14"` (8) do and are missing from the brief.
+`60"x20"` is 5 runs at rank 14 — real, but not a top size. `24"x4"` (9) and `14"x14"` (8) rank
+above it and are missing from the brief. `34x20`, `30x18` and `28x20` sit at ranks 16–18 with 4 runs
+each.
 
 **And the round family is effectively one size.** 442 round runs: **6"Ø ×433**, then 10"Ø ×4,
 4"Ø ×2, 8"Ø ×2, 12"Ø ×1. Building a five-size round family serves nine runs.

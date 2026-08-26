@@ -368,7 +368,10 @@
     };
   };
 
-  /** Round pipe with flanges, for the hydronic side. */
+  /** DEPRECATED — kept so existing callers do not break. `d` here is drawn as
+   *  the OUTSIDE diameter, so `pipeRound({d: IN(4)})` is 4.000" OD where NPS 4
+   *  pipe is 4.500". Use `C.pipeStraight({nps: '4'})`, which reads the OD from
+   *  the B36.10M table. */
   C.pipeRound = ({ d = IN(4), length = 1.2, segments = 20, flange = true }) => {
     const geos = [sweep([frame(0, 0, 0, 1, 0, 0), frame(length, 0, 0, 1, 0, 0)],
                         [ringRound(d, segments), ringRound(d, segments)], true, true)];
@@ -381,6 +384,193 @@
       ports: [P('in', [0, 0, 0], [-1, 0, 0], ROUND(d)),
               P('out', [length, 0, 0], [1, 0, 0], ROUND(d))],
       meta: { kind: 'pipe-round', label: `Tubería Ø${(d / 0.0254).toFixed(0)}" · ${length.toFixed(2)} m` }
+    };
+  };
+
+  /**
+   * Rectangular CROSS — four ports on one plane. Not a tee: `forNode` used to
+   * route 'cross' to teeRect, so all 68 crosses in the certified L4 data
+   * rendered as three-way fittings. A cross has two opposed branches; drawing
+   * one of them is a fitting that does not exist in the drawing.
+   */
+  C.crossRect = ({ w = IN(20), h = IN(12), bw = IN(10), bh = IN(8), length = 0.9, neck = 0.22 }) => {
+    const main = sweep([frame(0, 0, 0, 1, 0, 0), frame(length, 0, 0, 1, 0, 0)],
+                       [ringRect(w, h), ringRect(w, h)], true, true);
+    const cx = length / 2;
+    const arm = sgn => sweep(
+      [{ o: V(cx, 0, sgn * h * 0), x: V(0, 0, sgn), y: V(0, 1, 0) },
+       { o: V(cx, 0, sgn * (w / 2 + neck)), x: V(0, 0, sgn), y: V(0, 1, 0) }],
+      [ringRect(bw, bh), ringRect(bw, bh)], false, true);
+    return {
+      geometry: merge([main, arm(1), arm(-1)]),
+      ports: [P('in',  [0, 0, 0], [-1, 0, 0], RECT(w, h)),
+              P('out', [length, 0, 0], [1, 0, 0], RECT(w, h)),
+              P('b1', [cx, 0,  (w / 2 + neck)], [0, 0,  1], RECT(bw, bh)),
+              P('b2', [cx, 0, -(w / 2 + neck)], [0, 0, -1], RECT(bw, bh))],
+      meta: { kind: 'cross-rect',
+              label: `Cruz ${(w / 0.0254).toFixed(0)}"×${(h / 0.0254).toFixed(0)}" · ramales ${(bw / 0.0254).toFixed(0)}"×${(bh / 0.0254).toFixed(0)}"` }
+    };
+  };
+
+  // ── NPS ladder (hydronic side) ───────────────────────────────────────────
+  /**
+   * ASME B36.10M nominal pipe size → outside diameter and Schedule 40 wall,
+   * both in INCHES. NPS is a LABEL, not a measurement: NPS 4 pipe has an
+   * outside diameter of 4.500", not 4.000". The old `pipeRound({d: IN(4)})`
+   * drew the nominal as if it were the OD — 12.5% under real size at NPS 4,
+   * and worse below NPS 2 where the label diverges further from the metal.
+   * Round DUCT is the opposite convention (nominal IS the diameter), which is
+   * why duct and pipe cannot share one size helper.
+   */
+  const NPS = {
+    '1/2': { od: 0.840, wall: 0.109 }, '3/4': { od: 1.050, wall: 0.113 },
+    '1':   { od: 1.315, wall: 0.133 }, '1-1/4': { od: 1.660, wall: 0.140 },
+    '1-1/2': { od: 1.900, wall: 0.145 }, '2': { od: 2.375, wall: 0.154 },
+    '2-1/2': { od: 2.875, wall: 0.203 }, '3': { od: 3.500, wall: 0.216 },
+    '4':   { od: 4.500, wall: 0.237 }, '5': { od: 5.563, wall: 0.258 },
+    '6':   { od: 6.625, wall: 0.280 }, '8': { od: 8.625, wall: 0.322 },
+    '10':  { od: 10.750, wall: 0.365 }, '12': { od: 12.750, wall: 0.375 },
+  };
+  /** Outside diameter in METRES for an NPS label. Throws on an unknown size —
+   *  a silent fallback would draw a plausible pipe at the wrong diameter. */
+  const npsOD = nps => {
+    const e = NPS[String(nps)];
+    if (!e) throw new Error(`hvac-catalog: NPS ${nps} not in the B36.10M table`);
+    return IN(e.od);
+  };
+
+  /** Raised-face flange pair sized off the OD. Geometry only — bolt circle is
+   *  not modelled, so this is a flange READ, not a flange spec. */
+  const flangeRing = (od, x) => sweep(
+    [frame(x - 0.012, 0, 0, 1, 0, 0), frame(x + 0.012, 0, 0, 1, 0, 0)],
+    [ringRound(od * 1.8, 24), ringRound(od * 1.8, 24)], true, true);
+
+  C.pipeStraight = ({ nps = '4', length = 1.2, segments = 24, flanged = true }) => {
+    const od = npsOD(nps);
+    const geos = [sweep([frame(0, 0, 0, 1, 0, 0), frame(length, 0, 0, 1, 0, 0)],
+                        [ringRound(od, segments), ringRound(od, segments)], true, true)];
+    if (flanged) for (const x of [0.02, length - 0.02]) geos.push(flangeRing(od, x));
+    return {
+      geometry: merge(geos),
+      ports: [P('in', [0, 0, 0], [-1, 0, 0], ROUND(od)),
+              P('out', [length, 0, 0], [1, 0, 0], ROUND(od))],
+      meta: { kind: 'pipe-straight', nps, od_in: NPS[String(nps)].od,
+              label: `Tubo NPS ${nps}" (OD ${NPS[String(nps)].od}") · ${length.toFixed(2)} m` }
+    };
+  };
+
+  C.pipeElbow = ({ nps = '4', angle = 90, arcSegments = 14, segments = 24, legIn = 0.12, legOut = 0.12 }) => {
+    const od = npsOD(nps);
+    // Long-radius elbow: centreline radius = 1.5 x nominal, the LR convention.
+    const R = 1.5 * od;
+    const frames = [], rings = [];
+    frames.push(frame(-legIn, 0, 0, 1, 0, 0)); rings.push(ringRound(od, segments));
+    frames.push(frame(0, 0, 0, 1, 0, 0));      rings.push(ringRound(od, segments));
+    const rad = angle * Math.PI / 180;
+    for (let i = 1; i <= arcSegments; i++) {
+      const a = rad * i / arcSegments;
+      frames.push(frame(R * Math.sin(a), 0, R * (1 - Math.cos(a)),
+                        Math.cos(a), 0, Math.sin(a)));
+      rings.push(ringRound(od, segments));
+    }
+    const e = frames[frames.length - 1];
+    const tx = Math.cos(rad), tz = Math.sin(rad);
+    frames.push(frame(e.o.x + tx * legOut, 0, e.o.z + tz * legOut, tx, 0, tz));
+    rings.push(ringRound(od, segments));
+    const last = frames[frames.length - 1];
+    return {
+      geometry: sweep(frames, rings, true, true),
+      ports: [P('in', [-legIn, 0, 0], [-1, 0, 0], ROUND(od)),
+              P('out', [last.o.x, 0, last.o.z], [tx, 0, tz], ROUND(od))],
+      meta: { kind: 'pipe-elbow', nps, angle, radius_convention: 'long-radius 1.5D',
+              label: `Codo ${angle}° NPS ${nps}" · radio largo` }
+    };
+  };
+
+  C.pipeTee = ({ nps = '4', branch = null, length = 0.6, neck = 0.10, segments = 24 }) => {
+    const od = npsOD(nps), bod = npsOD(branch || nps);
+    const run = sweep([frame(0, 0, 0, 1, 0, 0), frame(length, 0, 0, 1, 0, 0)],
+                      [ringRound(od, segments), ringRound(od, segments)], true, true);
+    const cx = length / 2;
+    const arm = sweep([{ o: V(cx, 0, 0), x: V(0, 0, 1), y: V(0, 1, 0) },
+                       { o: V(cx, 0, od / 2 + neck), x: V(0, 0, 1), y: V(0, 1, 0) }],
+                      [ringRound(bod, segments), ringRound(bod, segments)], false, true);
+    return {
+      geometry: merge([run, arm]),
+      ports: [P('in', [0, 0, 0], [-1, 0, 0], ROUND(od)),
+              P('out', [length, 0, 0], [1, 0, 0], ROUND(od)),
+              P('branch', [cx, 0, od / 2 + neck], [0, 0, 1], ROUND(bod))],
+      meta: { kind: 'pipe-tee', nps, branch: branch || nps,
+              label: `Tee NPS ${nps}"${branch && branch !== nps ? ` × ${branch}"` : ''}` }
+    };
+  };
+
+  /** Concentric or eccentric reducer. Eccentric keeps ONE side flat — that is
+   *  the whole point of the fitting (air pocket control on a pump suction),
+   *  so the two variants are not interchangeable decoration. */
+  C.pipeReducer = ({ nps = '4', to = '3', length = 0.20, segments = 24, eccentric = false }) => {
+    const a = npsOD(nps), b = npsOD(to);
+    const drop = eccentric ? (a - b) / 2 : 0;
+    return {
+      geometry: sweep(
+        [frame(0, 0, 0, 1, 0, 0), frame(length, -drop, 0, 1, 0, 0)],
+        [ringRound(a, segments), ringRound(b, segments)], true, true),
+      ports: [P('in', [0, 0, 0], [-1, 0, 0], ROUND(a)),
+              P('out', [length, -drop, 0], [1, 0, 0], ROUND(b))],
+      meta: { kind: 'pipe-reducer', nps, to, eccentric,
+              label: `Reducción ${eccentric ? 'excéntrica' : 'concéntrica'} NPS ${nps}"→${to}"` }
+    };
+  };
+
+  C.pipeCoupling = ({ nps = '4', length = 0.09, segments = 24 }) => {
+    const od = npsOD(nps);
+    return {
+      geometry: sweep([frame(0, 0, 0, 1, 0, 0), frame(length, 0, 0, 1, 0, 0)],
+                      [ringRound(od * 1.18, segments), ringRound(od * 1.18, segments)], true, true),
+      ports: [P('in', [0, 0, 0], [-1, 0, 0], ROUND(od)),
+              P('out', [length, 0, 0], [1, 0, 0], ROUND(od))],
+      meta: { kind: 'pipe-coupling', nps, label: `Cople NPS ${nps}"` }
+    };
+  };
+
+  C.pipeFlange = ({ nps = '4', segments = 24 }) => {
+    const od = npsOD(nps), t = 0.024;
+    return {
+      geometry: flangeRing(od, t / 2),
+      ports: [P('in', [0, 0, 0], [-1, 0, 0], ROUND(od)),
+              P('out', [t, 0, 0], [1, 0, 0], ROUND(od))],
+      meta: { kind: 'pipe-flange', nps, label: `Brida NPS ${nps}"` }
+    };
+  };
+
+  /** Gate or ball valve: flanged body + bonnet + handwheel/lever stub. The
+   *  STEM is a named node so a viewer can pose open/closed. */
+  C.pipeValve = ({ nps = '4', kind = 'gate', segments = 24 }) => {
+    const od = npsOD(nps), body = od * 1.35, len = od * 2.2;
+    const geos = [
+      sweep([frame(0, 0, 0, 1, 0, 0), frame(len, 0, 0, 1, 0, 0)],
+            [ringRound(body, segments), ringRound(body, segments)], true, true),
+      flangeRing(od, 0.014), flangeRing(od, len - 0.014),
+      // bonnet + stem, up +Y from the body centre
+      sweep([{ o: V(len / 2, body / 2, 0), x: V(0, 1, 0), y: V(1, 0, 0) },
+             { o: V(len / 2, body / 2 + od * 0.9, 0), x: V(0, 1, 0), y: V(1, 0, 0) }],
+            [ringRound(od * 0.34, 16), ringRound(od * 0.34, 16)], true, false),
+    ];
+    // handwheel (gate) reads as a torus-less flat ring; lever (ball) as a bar
+    const topY = body / 2 + od * 0.9;
+    geos.push(kind === 'ball'
+      ? sweep([{ o: V(len / 2, topY, -od * 0.9), x: V(0, 0, 1), y: V(0, 1, 0) },
+               { o: V(len / 2, topY, od * 0.9), x: V(0, 0, 1), y: V(0, 1, 0) }],
+              [ringRect(od * 0.10, od * 0.22), ringRect(od * 0.10, od * 0.22)], true, true)
+      : sweep([{ o: V(len / 2, topY, 0), x: V(0, 1, 0), y: V(1, 0, 0) },
+               { o: V(len / 2, topY + 0.018, 0), x: V(0, 1, 0), y: V(1, 0, 0) }],
+              [ringRound(od * 1.25, 24), ringRound(od * 1.25, 24)], true, true));
+    return {
+      geometry: merge(geos),
+      ports: [P('in', [0, 0, 0], [-1, 0, 0], ROUND(od)),
+              P('out', [len, 0, 0], [1, 0, 0], ROUND(od))],
+      meta: { kind: `pipe-valve-${kind}`, nps, stem_pivot: [len / 2, body / 2, 0],
+              label: `Válvula de ${kind === 'ball' ? 'bola' : 'compuerta'} NPS ${nps}"` }
     };
   };
 
@@ -411,7 +601,7 @@
     switch (kind) {
       case 'elbow':      return C.elbowRect(params);
       case 'tee':        return C.teeRect(params);
-      case 'cross':      return C.teeRect(params);
+      case 'cross':      return C.crossRect(params);
       case 'transition': return C.transitionRect(params);
       case 'terminal':   return C.capRect(params);
       case 'coupling':
@@ -419,9 +609,32 @@
     }
   }
 
+  /**
+   * JSON manifest for one generated component: what it is, the exact params it
+   * was generated from, and where its numbers come from. Emitted per component
+   * so a viewer can instance it and a reviewer can audit it without reading the
+   * generator.
+   */
+  function manifest(comp, params, provenance) {
+    const g = comp.geometry;
+    const pos = g.getAttribute && g.getAttribute('position');
+    return {
+      family: comp.meta.kind,
+      label: comp.meta.label,
+      params: params || {},
+      ports: comp.ports.map(p => ({ id: p.id, p: p.p, dir: p.dir,
+                                    shape: p.shape, w: p.w, h: p.h, d: p.d })),
+      units: 'm',
+      scale: '1 unit = 1 m',
+      triangles: pos ? pos.count / 3 : null,
+      provenance: provenance || null,
+      meta: comp.meta
+    };
+  }
+
   global.HVACCatalog = {
-    IN, ringRect, ringRound, sweep, merge, transform,
-    mateMatrix, portsCompatible, forNode,
+    IN, NPS, npsOD, ringRect, ringRound, sweep, merge, transform,
+    mateMatrix, portsCompatible, forNode, manifest,
     components: C,
     list: Object.keys(C)
   };
