@@ -143,7 +143,15 @@ async function capture(f, suffix, base) {
   const consoleIssues = [];
   page.on('console', (m) => {
     const t = m.type();
-    if (t === 'error' || t === 'warning') consoleIssues.push({ type: t, text: m.text().slice(0, 300) });
+    // "Failed to load resource: ..." is the browser's generic console echo of a failed HTTP
+    // request — WITHOUT the URL, so it cannot be favicon-filtered here. The real signal (with the
+    // URL, and with favicon excluded) is already captured by the requestfailed/response handlers
+    // below. Counting it here double-reports every failure AND turns the browser-automatic
+    // /favicon.ico 404 into a false console_clean:false on a genuinely self-contained page
+    // (COB-IM2 L4 gate, 2026-08-27: proven favicon-only via the server access log). Drop it.
+    if (t !== 'error' && t !== 'warning') return;
+    if (m.text().startsWith('Failed to load resource')) return;
+    consoleIssues.push({ type: t, text: m.text().slice(0, 300) });
   });
   page.on('pageerror', (e) => consoleIssues.push({ type: 'pageerror', text: String(e).slice(0, 300) }));
   // Network blindness fix: console+pageerror alone miss failed/4xx-5xx resource loads (e.g. a

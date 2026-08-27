@@ -42,8 +42,15 @@
     line-height:1.45;display:none;z-index:20;max-width:260px}
   #tip .t{font-weight:600;margin-bottom:3px}
   #tip .m{color:var(--dim)}
-  #legend{bottom:14px;left:14px;padding:10px 14px}
-  #help{bottom:14px;right:14px;padding:8px 12px;color:var(--dim);font-size:11px}
+  /* The legend used to be a bottom-LEFT panel that grew rightwards until it ran
+     under the bottom-right controls pill, which is opaque: the last chips were
+     cut mid-word ("acces…"). A legend that declares a convention is worthless
+     when the declaration is the part that gets clipped. So the legend now owns
+     the full bottom row and wraps, and the controls hint moves to the free
+     top-right corner where nothing can collide with it. */
+  #legend{bottom:14px;left:14px;right:14px;padding:10px 14px;
+    display:flex;flex-wrap:wrap;align-items:center;column-gap:4px;row-gap:2px}
+  #help{top:14px;right:14px;padding:8px 12px;color:var(--dim);font-size:11px}
   .warn{color:var(--infer)}
   .ok{color:var(--cert)}
 </style>
@@ -55014,7 +55021,8 @@ const slab = new T.Mesh(new T.BoxGeometry(FW, 0.30, FD),
 slab.position.set(X((AB[0]+AB[2])/2), -0.16, Z((AB[1]+AB[3])/2));
 slab.receiveShadow = true; scene.add(slab);
 
-// diffuser necks
+// diffuser necks — held in module scope so the bay clip can reach their material
+let necks = null;
 if (DATA.necks && DATA.necks.length){
   const g = new T.CylinderGeometry(1,1,0.10,12);
   const m = new T.MeshStandardMaterial({color:0x2f6f6b, roughness:0.6, metalness:0.2,
@@ -55027,6 +55035,7 @@ if (DATA.necks && DATA.necks.length){
     inst.setMatrixAt(i, d.matrix);
   });
   scene.add(inst);
+  necks = inst;
 }
 
 // ── structural grid: ground ticks at every axis ────────────────────────────
@@ -55183,27 +55192,169 @@ function activeCam(){ return ortho || camera; }
 // one 9.2 m bay, 2 m of height reads as ductwork. So the fix for "it looks flat"
 // is framing, not a bigger multiplier.
 const BAYS = GRID.bays || [];
-const YB = GRID.meta.y_band || [bb[1], bb[3]];
+
+// The DEFAULT view is this bay, and the index is LOOKED UP, never hardcoded:
+// GRID.bays is extracted data, and a reorder upstream must not silently move
+// the default view to another part of the plate. Axes 9-10 is the widest of the
+// seventeen (12.06 m against 9.20 m) and the network crosses it end to end -
+// 124 runs touch it, 117 sit wholly inside, spanning y 9.06-49.67 of the
+// 8.54-50.54 band. -1 means the name is gone; the caller falls back rather than
+// guessing an ordinal.
+const DEFAULT_BAY = BAYS.findIndex(b => b.name === '9\u201310');
+
+// A bay is read more ACROSS than along, so it is looked at from a shallower
+// azimuth than the whole plate. Same vector form as VIEW_DIR so both views can
+// go through one solver.
+const BAY_DIR = (() => {
+  const az = Math.PI * 0.28, el = Math.PI * 0.20;
+  return new T.Vector3(Math.cos(el)*Math.sin(az), Math.sin(el), Math.cos(el)*Math.cos(az));
+})();
+
+// The subject of a bay view is the DUCTWORK INSIDE THAT BAY, read from the live
+// position buffer - so it already carries the current class filter and the
+// current vertical exaggeration, with no second source of truth to drift. The
+// nominal alternative (grid x-slab by the full y band by an assumed height)
+// would frame, and grade, a volume the viewport never shows.
+const _bp = new T.Vector3();
+function bayBox(i){
+  const b = BAYS[i], box = new T.Box3();
+  if (!b) return box;
+  const xa = X(b.x0), xb = X(b.x1);
+  const x0 = Math.min(xa, xb), x1 = Math.max(xa, xb);
+  mesh.updateMatrixWorld(true);
+  const a = geo.getAttribute('position');
+  for (let v = 0; v < a.count; v++){
+    _bp.fromBufferAttribute(a, v);
+    if (_bp.x < x0 || _bp.x > x1) continue;
+    box.expandByPoint(_bp.applyMatrix4(mesh.matrixWorld));
+  }
+  return box;
+}
+
+// What the page PRESENTS - the one subject both the camera solve and the QA
+// hook must agree on. Framing a bay and then grading the whole 153 m plate
+// measures a view nobody is looking at.
+function presentedBox(){
+  if (curBay >= 0 && BAYS[curBay]){
+    const box = bayBox(curBay);
+    if (!box.isEmpty()) return { box, subject: `bay ${BAYS[curBay].name}` };
+    // Degenerate rather than quietly wrong: name the empty bay, then fall back
+    // to the mesh so the probe gets a real box instead of Infinities.
+    return { box: new T.Box3().setFromObject(mesh, true),
+             subject: `mesh (bay ${BAYS[curBay].name} sin geometria)` };
+  }
+  return { box: new T.Box3().setFromObject(mesh, true), subject: 'mesh (vista completa)' };
+}
+
+// Two places in the panel say what is framed - the headline row at the top and
+// the crujia row down in the framing section - and they must never disagree, so
+// one function writes both. Looked up by id instead of closed over: this runs at
+// boot, and a `const` declared further down would be in its temporal dead zone.
+function setFrameLabel(txt){
+  const a = document.getElementById('bayV');  if (a) a.textContent = txt;
+  const b = document.getElementById('viewV'); if (b) b.textContent = txt;
+}
+
+// ── bay isolation ──────────────────────────────────────────────────────────
+// Framing a bay does not SHOW a bay. The camera fits the bay's AABB, but the
+// other sixteen keep rendering — at this azimuth the rest of the plate runs away
+// into the distance INSIDE the frame — so the viewport still read as the whole
+// 153 m carpet, and the panel's claim ("el viewport muestra una crujía") was a
+// statement the render contradicted. The mechanical probe is structurally blind
+// to this: it measures where the subject's AABB lands, never what else is drawn
+// around it. Two independent blind reviewers scored the frame 0.2 and 0.38.
+//
+// THIS WAS TRIED AS A DIMMING PASS FIRST AND IT FAILED TWICE. The colour mix was
+// working — measured, the right two thirds lost 31% of their standard deviation —
+// but brightness was never the problem. A dimmed duct is still MASS: it keeps its
+// silhouette, its occlusion and its shadow, so the frame stayed full of ductwork
+// that merely got darker. Calibrating the dim harder was polishing the symptom.
+//
+// So the mechanism changes from a calibration to an INVARIANT: while a bay is
+// framed, the only ductwork DRAWN is the bay's. Two clipping planes bound the
+// bay's x-slab and are pushed onto every duct material; `Todo` takes them off.
+// Clipping rather than collapsing geometry, because it composes with the two
+// passes that already rewrite the position buffer (the class filter and the
+// vertical exaggeration) instead of fighting them for the same array — and it
+// cuts on the bay boundary, which reads as a deliberate section rather than as
+// ducts that stop for no reason.
+//
+// clipShadows is part of the invariant, not a detail: a hidden duct that still
+// casts a shadow is still telling you the plate is full. It also makes the
+// existing height cut honest, which it was not — sectioned-away material was
+// still shadowing the slab below it.
+const bayLo = new T.Plane(new T.Vector3( 1, 0, 0), 0);   // keeps x >= x0
+const bayHi = new T.Plane(new T.Vector3(-1, 0, 0), 0);   // keeps x <= x1
+const FOCUS_MATS = [mat, matTerm, edges.material].concat(necks ? [necks.material] : []);
+for (const m of FOCUS_MATS) m.clipShadows = true;
+
+// Hiding the other ducts is only half of it. The plan underlay stays at full
+// strength — deliberately, because it is what makes the bay PLACEABLE — but at
+// full strength it is also 153 m of building telling the eye this is a whole
+// plant, and the measured luminance says the underlay and the slab, not the
+// ductwork, are most of what fills the frame. So the bay's own footprint gets
+// drawn ON the plan: the strip the remaining ductwork belongs to. That turns the
+// underlay from evidence of a large building into context that locates a small
+// subject, without giving up either.
+const YBAND = GRID.meta.y_band || [bb[1], bb[3]];
+const bayMark = new T.Group(); bayMark.visible = false; scene.add(bayMark);
+const bayFill = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({
+  color: 0x5aa9ff, transparent: true, opacity: 0.055, depthWrite: false }));
+bayFill.rotation.x = -Math.PI/2;                    // local y becomes world -z
+bayMark.add(bayFill);
+const bayEdgeGeo = new T.BufferGeometry();
+bayEdgeGeo.setAttribute('position', new T.Float32BufferAttribute(new Float32Array(12), 3));
+bayMark.add(new T.LineSegments(bayEdgeGeo, new T.LineBasicMaterial({
+  color: 0x5aa9ff, transparent: true, opacity: 0.38 })));
+
+function applyBayFocus(i){
+  const b = i >= 0 ? BAYS[i] : null;
+  if (b){
+    const xa = X(b.x0), xb = X(b.x1);
+    const x0 = Math.min(xa, xb), x1 = Math.max(xa, xb);
+    bayLo.constant = -x0;
+    bayHi.constant =  x1;
+    // the footprint runs the full structural depth, matching the axis ticks
+    const z0 = Z(YBAND[0] - 2), z1 = Z(YBAND[1] + 2);
+    bayFill.scale.set(x1 - x0, Math.abs(z1 - z0), 1);
+    bayFill.position.set((x0 + x1)/2, 0.02, (z0 + z1)/2);   // over the slab, under the ticks
+    const p = bayEdgeGeo.getAttribute('position');
+    p.setXYZ(0, x0, 0.04, z0); p.setXYZ(1, x0, 0.04, z1);
+    p.setXYZ(2, x1, 0.04, z0); p.setXYZ(3, x1, 0.04, z1);
+    p.needsUpdate = true;
+  }
+  bayMark.visible = !!b;
+  for (const m of FOCUS_MATS){
+    m.clippingPlanes = b ? [clipPlane, bayLo, bayHi] : [clipPlane];
+    m.needsUpdate = true;      // the plane COUNT changed: the shader must recompile
+  }
+  // The legend has to SAY this, and only while it is true. Showing one bay's
+  // ductwork and nothing else is a claim about the data on screen; undeclared,
+  // a reader takes the empty plan for an empty building. That is the same defect
+  // as a panel claiming a view it does not show, one level down. Hidden in
+  // `Todo`, where the whole network is drawn and the sentence would be false.
+  const chip = document.getElementById('dimChip');
+  if (chip) chip.style.display = b ? '' : 'none';
+
+  // Left untouched ON PURPOSE: the architectural underlay and the axis ticks.
+  // They are what says WHERE in the building this bay is — clip them too and the
+  // bay is legible but unplaceable. They are ground-level annotation, not
+  // ductwork, so they do not compete with the subject for what it IS.
+}
+
 function frameBay(i){
   const b = BAYS[i];
   if (!b) return;
-  const cx = X((b.x0 + b.x1)/2), cz = Z((YB[0] + YB[1])/2);
-  const tgt = new T.Vector3(cx, BOD_MED*0.55, cz);
-  // distance to fit roughly 1.8 bay widths, never closer than 16 m
-  const dist = Math.max(b.width * 1.9, 16);
-  const az = Math.PI * 0.28, el = Math.PI * 0.20;
-  const cam = activeCam();
-  cam.position.set(
-    tgt.x + dist*Math.cos(el)*Math.sin(az),
-    tgt.y + dist*Math.sin(el),
-    tgt.z + dist*Math.cos(el)*Math.cos(az));
-  controls.target.copy(tgt);
-  controls.update();
-  // one bay of a flat plate still needs the relief amplified to be legible;
-  // bump it once, and let the label say it is exaggeration
-  if (ZEXAG === 1){ zx.value = 40; zx.oninput(); }
-  bayV.textContent = `ejes ${b.name} · ${b.width.toFixed(2)} m`;
+  // Exaggerate FIRST, then measure. The old order placed the camera and then
+  // bumped the relief - which MOVES the geometry it had just framed, so the
+  // solved view was against a mesh that no longer existed by the time it drew.
+  if (ZEXAG === 1 && !ZEXAG_PINNED){ zx.value = 40; zx.oninput(); }
+  const box = bayBox(i);
+  if (box.isEmpty()) return;      // nothing to look at: leave the view alone
+  fitBox(box, BAY_DIR);
   curBay = i;
+  applyBayFocus(i);
+  setFrameLabel(`ejes ${b.name} · ${b.width.toFixed(2)} m`);
 }
 // Fit the SUBJECT — the duct mesh — from its real AABB and the live aspect,
 // then slide it clear of the HUD. The previous framing was the hardcoded
@@ -55218,7 +55369,21 @@ const _fitBox = new T.Box3(), _fitSphere = new T.Sphere();
 function frameAll(){
   mesh.updateMatrixWorld(true);
   _fitBox.setFromObject(mesh, true);
-  _fitBox.getBoundingSphere(_fitSphere);
+  fitBox(_fitBox, VIEW_DIR);
+  curBay = -1;
+  applyBayFocus(-1);        // `Todo` means everything at full strength
+  setFrameLabel('vista completa');
+}
+
+// The distance solve, the panel clearance and the ortho sync are the SAME
+// problem whatever the subject is, so ONE function does it for both views -
+// only the box and the view direction change. Before this the bay view guessed
+// `max(width * 1.9, 16)` and looked at the middle of the grid: no fill solve, no
+// HUD clearance. The framing the gate measures and the framing a bay actually
+// got were two different pieces of code, which is exactly how a view passes a
+// gate it is not the subject of.
+function fitBox(box, dir){
+  box.getBoundingSphere(_fitSphere);
   const r = _fitSphere.radius, c = _fitSphere.center;
 
   const aspect = innerWidth / innerHeight;
@@ -55231,7 +55396,7 @@ function frameAll(){
   // from the sphere, then converge on the real projected corners — the same 8
   // points the gate measures, so the fit is against the metric itself and not
   // against a proxy for it.
-  const mn = _fitBox.min, mx = _fitBox.max;
+  const mn = box.min, mx = box.max;
   const CORNERS = [
     [mn.x,mn.y,mn.z],[mx.x,mn.y,mn.z],[mn.x,mx.y,mn.z],[mx.x,mx.y,mn.z],
     [mn.x,mn.y,mx.z],[mx.x,mn.y,mx.z],[mn.x,mx.y,mx.z],[mx.x,mx.y,mx.z],
@@ -55253,10 +55418,9 @@ function frameAll(){
   let d = 1.10 * Math.max(r / Math.sin(vFov / 2), r / Math.sin(hFov / 2));
   let ndcx = 0;
   const fwd = new T.Vector3(), right = new T.Vector3(), p = new T.Vector3();
-  let hx = TARGET_FILL;
 
   const place = () => {
-    camera.position.copy(c).addScaledVector(VIEW_DIR, d);
+    camera.position.copy(c).addScaledVector(dir, d);
     controls.target.copy(c);
     fwd.subVectors(controls.target, camera.position);
     right.crossVectors(fwd, camera.up).normalize();
@@ -55272,17 +55436,63 @@ function frameAll(){
       if (p.x < x0) x0 = p.x; if (p.x > x1) x1 = p.x;
       if (p.y < y0) y0 = p.y; if (p.y > y1) y1 = p.y;
     }
-    return { fill: Math.max((x1 - x0) / 2, (y1 - y0) / 2), hx: (x1 - x0) / 2 };
+    return { fill: Math.max((x1 - x0) / 2, (y1 - y0) / 2), x0, x1 };
   };
 
   for (let it = 0; it < 8; it++){
     const m = place();
-    hx = m.hx;
     if (!isFinite(m.fill) || m.fill <= 0) break;
     if (Math.abs(m.fill - TARGET_FILL) < 0.005) break;
     d *= m.fill / TARGET_FILL;       // closer when too small, further when too big
   }
-  ndcx = Math.min(CENTER_CAP, Math.max(0, hudNdc + hx + 0.01));
+
+  // Clear the panel by MEASURING the left edge, not by predicting it.
+  //
+  // This used to be one open-loop line — `ndcx = min(CENTER_CAP, hudNdc + hx +
+  // 0.01)` — which is only correct if the subject sits centred at ndc 0 before
+  // the slide AND translates one-for-one with it. Neither holds in perspective:
+  // the 8 corners are at different depths, the near ones spread wider than the
+  // far ones, so the projected extent is not centred on the target and does not
+  // move by ndcx. For the whole plate the error was ~0.00 and the view cleared
+  // the panel by a hair. For a bay it was 0.134 of NDC: the line asked for a
+  // centre of 0.170 and the probe measured 0.036, so the bay's left-hand
+  // ductwork sat behind an OPAQUE panel while occupancy, centring and
+  // full-visibility all read green. A gate can only catch that if the framing is
+  // solved against the same number it is graded on.
+  const MARGIN = 0.012;                     // ~8 px at 1280 — clear it, don't graze it
+  const LEFT   = hudNdc + MARGIN;
+  const GAIN_PROBE = 0.1;
+  ndcx = 0;            const mA = place();
+  ndcx = GAIN_PROBE;   const mB = place();
+  const gain = (mB.x0 - mA.x0) / GAIN_PROBE;   // NDC the left edge really travels per unit offset
+  ndcx = 0;
+  if (isFinite(gain) && gain > 1e-3){
+    let backoff = 0;
+    for (let it = 0; it < 8; it++){
+      const m = place();
+      const err = LEFT - m.x0;
+      if (err <= 0.002) break;                 // already clear: the plate breaks here on iteration 1
+      // CENTER_CAP bounds the MEASURED CENTRE, which is what the gate grades —
+      // not the offset parameter. Capping `ndcx` itself was the same open-loop
+      // confusion one level up: with a gain below 1 the centre lands well short
+      // of the offset, so the cap bit long before the composition was anywhere
+      // near centerTol and left the subject under the panel.
+      const cx = (m.x0 + m.x1) / 2;
+      const room = CENTER_CAP - cx;            // centring budget still unspent
+      const want = ndcx + Math.min(err, room) / gain;
+      if (want - ndcx > 1e-4){ ndcx = want; continue; }
+      // Offset capped at CENTER_CAP (the gate's centerTol is 0.30) and still
+      // under the panel: the subject is too wide for the free strip, so pull
+      // BACK rather than slide further and fail `centered` instead. Capped at
+      // two steps ON PURPOSE — every step costs fill, occupancy floors at 0.25,
+      // and shrinking the subject until it technically clears would just trade a
+      // HUD overlap the gate can name for a size failure it also names. If two
+      // steps are not enough the view is genuinely too big: leave it measurable
+      // and let the gate say so.
+      if (++backoff > 2) break;
+      d *= 1.05;
+    }
+  }
   place();
 
   camera.updateProjectionMatrix();
@@ -55293,8 +55503,6 @@ function frameAll(){
     ortho.updateProjectionMatrix();
   }
   controls.update();
-  bayV.textContent = 'vista completa';
-  curBay = -1;
 }
 let curBay = -1;
 
@@ -55304,6 +55512,12 @@ const pct = (a,b)=> (100*a/Math.max(b,1)).toFixed(0)+'%';
 document.getElementById('hud').innerHTML = `
   <h1>COB-IM2 · Nivel 4 completo</h1>
   <div class="sub">14A + 14B + 14C · modelo conector a conector · ejes 1–18 verificados</div>
+  <div class="sec">En pantalla</div>
+  <div class="kv"><span>Encuadre</span><b id="viewV" class="ok">—</b></div>
+  <div class="sub" style="margin:4px 0 0">El viewport muestra <b>una crujía</b>,
+    no la planta entera: por defecto ejes 9–10. Todas las cifras de abajo son de
+    la <b>red completa</b> (las 17 crujías), no de lo encuadrado.</div>
+  <div class="sec">Red completa · 17 crujías · 153 × 42 m</div>
   <div class="kv"><span>Ductos</span><b>${s.duct_runs}</b></div>
   <div class="kv"><span>Red acotable (≥8")</span><b>${s.sized_length_m} m</b></div>
   <div class="kv"><span>Elementos &lt;8"</span><b>${s.by_class.small.m} m</b></div>
@@ -55341,7 +55555,7 @@ document.getElementById('hud').innerHTML = `
   <label class="row"><input type="checkbox" id="cGround" checked> Losa y sombra</label>
   <label class="row"><input type="checkbox" id="cOrtho"> Cámara ortográfica</label>
   <div class="sec">Encuadre por crujía</div>
-  <div class="kv"><span>Crujía</span><b id="bayV">vista completa</b></div>
+  <div class="kv"><span>Crujía</span><b id="bayV">—</b></div>
   <div style="display:flex;gap:6px;margin:6px 0">
     <button id="bayPrev" class="btn">◀</button>
     <button id="bayAll"  class="btn" style="flex:1">Todo</button>
@@ -55352,8 +55566,9 @@ document.getElementById('hud').innerHTML = `
     <option value="0">Ejes 1–2 · 4.60 m</option><option value="1">Ejes 2–3 · 9.20 m</option><option value="2">Ejes 3–4 · 9.20 m</option><option value="3">Ejes 4–5 · 9.20 m</option><option value="4">Ejes 5–6 · 9.20 m</option><option value="5">Ejes 6–7 · 9.20 m</option><option value="6">Ejes 7–8 · 9.20 m</option><option value="7">Ejes 8–9 · 9.20 m</option><option value="8">Ejes 9–10 · 12.06 m</option><option value="9">Ejes 10–11 · 9.22 m</option><option value="10">Ejes 11–12 · 9.20 m</option><option value="11">Ejes 12–13 · 9.20 m</option><option value="12">Ejes 13–14 · 9.20 m</option><option value="13">Ejes 14–15 · 9.20 m</option><option value="14">Ejes 15–16 · 9.20 m</option><option value="15">Ejes 16–17 · 9.20 m</option><option value="16">Ejes 17–18 · 4.59 m</option>
   </select>
   <div class="sub" style="margin:4px 0 0">18 ejes medidos del plano,
-    crujías de 9.20 m. Vista completa = 153 × 42 × 2 m: siempre se va a leer
-    plana. Una crujía es la escala a la que esto es ductería.</div>
+    crujías de 9.20 m. La vista de arranque es <b>ejes 9–10</b>, la más ancha
+    (12.06 m). <b>Todo</b> muestra la planta entera: 153 × 42 × 2 m, que siempre
+    se va a leer plana. Una crujía es la escala a la que esto es ductería.</div>
   <div class="sec">Exageración vertical</div>
   <input type="range" id="zexag" min="10" max="80" value="10">
   <div class="kv"><span>Relieve</span><b id="zexagV">×1.0 (real)</b></div>
@@ -55367,7 +55582,8 @@ document.getElementById('hud').innerHTML = `
 document.getElementById('legend').innerHTML = `
   <span class="chip"><i class="dot" style="background:#9fb0bd"></i>alto con cota real</span>
   <span class="chip"><i class="dot" style="background:#d8a03c"></i>alto supuesto — ${mAssumed.toFixed(1)} m de ${mTotal.toFixed(1)} m (${(100*mAssumed/mTotal).toFixed(1)}% de la longitud)</span>
-  <span class="chip"><i class="dot" style="background:#7c8b99"></i>accesorio (${nFit})</span>`;
+  <span class="chip"><i class="dot" style="background:#7c8b99"></i>accesorio (${nFit})</span>
+  <span class="chip" id="dimChip">solo se muestra la ductería de la crujía encuadrada</span>`;
 
 for (const el of document.querySelectorAll('.fcls')){
   el.onchange = () => { SHOW[el.dataset.k] = el.checked; applyFilter(SHOW); };
@@ -55384,9 +55600,14 @@ zx.oninput = () => {
   zxV.textContent = k === 1 ? '×1.0 (real)' : '×'+k.toFixed(1)+' — exageración visual';
 };
 const _q = new URLSearchParams(location.search).get('zexag');
-if (_q){ zx.value = Math.round(parseFloat(_q)*10); zx.oninput(); }
+// An explicitly requested relief is PINNED. frameBay bumps the exaggeration to
+// x4 when it is still at x1, which was harmless while the bay view was opt-in -
+// now it is the default, so without this flag `?zexag=1` would ask for real
+// relief and silently get x4 on the very first frame.
+let ZEXAG_PINNED = false;
+if (_q){ zx.value = Math.round(parseFloat(_q)*10); zx.oninput(); ZEXAG_PINNED = true; }
 
-const bayV = document.getElementById('bayV'), baySel = document.getElementById('baySel');
+const baySel = document.getElementById('baySel');   // the labels go through setFrameLabel
 baySel.onchange = () => { const i = +baySel.value; if (i >= 0) frameBay(i); else frameAll(); };
 document.getElementById('bayAll').onclick  = () => { baySel.value = -1; frameAll(); };
 document.getElementById('bayPrev').onclick = () => {
@@ -55394,7 +55615,17 @@ document.getElementById('bayPrev').onclick = () => {
 document.getElementById('bayNext').onclick = () => {
   const i = (curBay+1) % Math.max(BAYS.length,1); baySel.value = i; frameBay(i); };
 const _b = new URLSearchParams(location.search).get('bay');
-if (_b !== null){ const i = parseInt(_b,10); baySel.value = i; frameBay(i); }
+if (_b !== null){
+  const i = parseInt(_b,10);
+  // Any index that is not a real bay means the full plate — what the panel's
+  // `Todo` button means. It used to reach frameBay and return silently, which
+  // left NO framing applied at all (the boot fallback is skipped whenever ?bay=
+  // is present) and, now that the legend declares the dimming, would have left
+  // the chip claiming a convention that was not in force.
+  const ok = Number.isInteger(i) && i >= 0 && i < BAYS.length;
+  baySel.value = ok ? i : -1;
+  if (ok) frameBay(i); else frameAll();
+}
 
 const clip = document.getElementById('clip'), clipV = document.getElementById('clipV');
 clip.oninput = () => {
@@ -55463,19 +55694,34 @@ addEventListener('resize', ()=>{
 // came back as the whole network under a lying filename. Exactly the
 // GATES.md preflight case — N shots of the default camera under N different
 // names, clean console, green exit.
-if (new URLSearchParams(location.search).get('bay') === null) frameAll();
+//
+// DEFAULT VIEW = ONE BAY. Whole, this network is 153 x 42 x 2 m - 78:1 - and no
+// exaggeration makes a carpet read as ductwork; at the scale of one bay, 2 m of
+// height does. `?bay=` still wins, and `?bay=-1` asks for the full plate
+// explicitly, so the old view stays reachable by URL for a before/after diff.
+if (new URLSearchParams(location.search).get('bay') === null){
+  if (DEFAULT_BAY >= 0){ baySel.value = DEFAULT_BAY; frameBay(DEFAULT_BAY); }
+  else frameAll();     // the name is gone from GRID.bays: fall back, never guess an index
+}
 
 // ── QA framing hook (design3d GATES.md mechanical check) ───────────────────
 // Raw geometry only, never a verdict: the page must not mark its own homework.
-// framing-probe.mjs runs geom-verify's pure core against these numbers. SUBJECT
-// is the duct mesh, deliberately NOT the whole scene — the ground plane and the
-// arch underlay would blow up the AABB and certify a miss as well framed.
+// framing-probe.mjs runs geom-verify's pure core against these numbers.
+//
+// SUBJECT = WHAT IS PRESENTED, via presentedBox(): the ductwork inside the
+// framed bay when a bay is framed (the default, or `?bay=`), the whole duct mesh
+// in `Todo`. It was the whole mesh unconditionally, which meant that the moment
+// the page framed one bay the probe went on grading the 153 m plate - measuring
+// occupancy, centring and HUD overlap for a view nobody was looking at, and
+// certifying it either way. It stays deliberately narrower than the scene: the
+// ground plane and the arch underlay would blow up the AABB and certify a miss
+// as well framed. `subject` is reported so a reader can see which one was used.
 window.__qaFraming = () => {
   const cam = activeCam();
   cam.updateMatrixWorld(); cam.updateProjectionMatrix();
   const mvp = new T.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
-  const b  = new T.Box3().setFromObject(mesh, true);
-  const mn = b.min, mx = b.max;
+  const pres = presentedBox();
+  const mn = pres.box.min, mx = pres.box.max;
   const corners = [
     [mn.x,mn.y,mn.z],[mx.x,mn.y,mn.z],[mn.x,mx.y,mn.z],[mx.x,mx.y,mn.z],
     [mn.x,mn.y,mx.z],[mx.x,mn.y,mx.z],[mn.x,mx.y,mx.z],[mx.x,mx.y,mx.z],
@@ -55484,7 +55730,8 @@ window.__qaFraming = () => {
   const hud = hudEl
     ? (r => ({left:r.left, right:r.right, top:r.top, bottom:r.bottom}))(hudEl.getBoundingClientRect())
     : null;
-  return { mvpElements: Array.from(mvp.elements), corners, W: innerWidth, H: innerHeight, hud };
+  return { mvpElements: Array.from(mvp.elements), corners, W: innerWidth, H: innerHeight, hud,
+           subject: pres.subject, bay: curBay };
 };
 
 // A pinned ?cam= must win over the boot framing, and the panel rects it depends
