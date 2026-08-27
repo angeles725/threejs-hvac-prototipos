@@ -51,6 +51,13 @@
   #legend{bottom:14px;left:14px;right:14px;padding:10px 14px;
     display:flex;flex-wrap:wrap;align-items:center;column-gap:4px;row-gap:2px}
   #help{top:14px;right:14px;padding:8px 12px;color:var(--dim);font-size:11px}
+  /* The presentation-mode warning is deliberately PROMINENT and centred, not a
+     footnote: it exists so nobody screenshots the pretty mode believing it is a
+     survey. It only renders while that mode is on. */
+  #provWarn{display:none;top:14px;left:50%;transform:translateX(-50%);
+    padding:10px 16px;font-size:12px;line-height:1.5;max-width:min(52vw,640px);
+    border-color:rgba(216,160,60,.55);background:rgba(58,42,18,.92);color:#f0d9a8}
+  #provWarn b{color:var(--infer)}
   .warn{color:var(--infer)}
   .ok{color:var(--cert)}
 </style>
@@ -60,6 +67,11 @@
 <div id="hud" class="panel"></div>
 <div id="tip" class="panel"></div>
 <div id="legend" class="panel"></div>
+<div id="provWarn" class="panel">Modo presentación — <b>procedencia oculta</b>.
+  Todo se dibuja como lámina galvanizada, así que el color ya NO distingue
+  altura medida de altura supuesta, y el <b>38.3% de la longitud tiene altura
+  supuesta</b>. El marcado de accesorios también queda oculto. Para leer el dato,
+  usa el modo datos.</div>
 <div id="help" class="panel">Orbitar: arrastrar · Zoom: rueda · Pan: clic derecho · Clic en un ducto: fijar dato</div>
 <!-- three.js r160 inlined -->
 <script>
@@ -54603,10 +54615,19 @@ function aimFill(){
   fill.target.updateMatrixWorld();
 }
 
-// The environment is the brightness lever for bare metal — never metalness.
+// The environment IS the brightness lever for bare metal — never metalness.
 // Lowering metalness to make the steel read would be modelling the render
 // instead of the material; galvanised duct really is a near-mirror.
-scene.environmentIntensity = 1.55;
+//
+// But the lever is PER MATERIAL, not per scene. `scene.environmentIntensity =
+// 1.55` used to sit here asserting otherwise, and it did nothing: that property
+// only exists from r164 and this page inlines r160. Grepped — the name appeared
+// exactly ONCE in the whole file, in that assignment; the renderer never read it.
+// So the ducts have been lit at the per-material default all along, and the
+// comment above it was describing a knob that was not connected. The kit had
+// already corrected this twice (brushed-stainless-recipe 2026-08-09, TRACK-THREEJS
+// 2026-08-10) and the correction never reached this file. The live knob is
+// `material.envMapIntensity`, set on the duct materials below.
 
 // ── model space ────────────────────────────────────────────────────────────
 const bb = DATA.meta.stats.bbox;                  // [x0,y0,x1,y1] in CAD metres
@@ -55038,6 +55059,25 @@ function makeGeo(b){
   g.setAttribute('color',    new T.Float32BufferAttribute(b.col, 3));
   g.setAttribute('runId',    new T.Float32BufferAttribute(b.rid, 1));
   g.setAttribute('mark',     new T.Float32BufferAttribute(b.mrk, 1));
+  // UVs, and without them the whole galvanised pass is inert. A roughnessMap is
+  // sampled at `uv`; this buffer never had one, so every fragment read the same
+  // texel and the brushed map collapsed to a CONSTANT roughness of about 0.10 —
+  // a near mirror reflecting a mostly dark room, which is precisely the flat,
+  // non-metallic read the kit recipe warns about. The map was assigned and doing
+  // nothing.
+  // Derived here rather than in the five push sites: a 45-degree world planar
+  // projection varies across every face of an axis-aligned duct, so no face
+  // degenerates, and it costs one loop instead of five edits to the builders.
+  // It does not follow applyExag's vertical shift — the streaks are fine-grained
+  // noise at this scale, so a drift of a few centimetres is not visible.
+  const UVK = 1.5;                       // uv units per metre
+  const uv = new Float32Array(b.n * 2);
+  for (let i = 0; i < b.n; i++){
+    const x = b.pos[i*3], y = b.pos[i*3+1], z = b.pos[i*3+2];
+    uv[i*2]     = (x + z) * 0.7071 * UVK;
+    uv[i*2 + 1] = (y + (z - x) * 0.7071) * UVK;
+  }
+  g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
   g.computeBoundingSphere();
   g.userData.dev = new Float32Array(b.dev);
   return g;
@@ -55067,6 +55107,35 @@ const clipPlane = new T.Plane(new T.Vector3(0,-1,0), 99);
 // instead of being culled — but it is a MASK over an open cross-section, not a
 // repair of it. The root fix is stencil caps on the clip plane (§5 P1), which is
 // what makes a sectioned duct read as solid metal instead of a shell.
+// ── brushed roughness map (kit recipe: materials-textures/brushed-stainless) ──
+// What turns a near-mirror into satin sheet metal. The kit's version seeds its
+// streaks with Math.random(); this one uses a fixed PRNG on purpose — this page is
+// gated by PIXEL DIFF, and a texture that differs on every load makes a
+// before/after comparison meaningless. Deterministic is not a nicety here, it is
+// the difference between a gate and a coin toss.
+function brushedRoughTex(){
+  let seed = 0x9e3779b9;
+  const rnd = () => {            // mulberry32
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const g = c.getContext('2d');
+  g.fillStyle = '#565656'; g.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 2600; i++){
+    const y = rnd()*512, len = 40 + rnd()*180, x = rnd()*512, v = 120 + (rnd()*40 - 20);
+    g.strokeStyle = `rgba(${v},${v},${v},0.16)`;
+    g.lineWidth = rnd() < 0.5 ? 1 : 0.6;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + len, y + (rnd()*2 - 1)); g.stroke();
+  }
+  const t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(2, 2);
+  return t;
+}
+const ROUGH_BRUSHED = brushedRoughTex();
+
 const mat = new T.MeshStandardMaterial({
   vertexColors:true, metalness:0.88, roughness:0.34,
   envMapIntensity:1.15, clippingPlanes:[clipPlane], side:T.DoubleSide
@@ -55518,6 +55587,72 @@ bayEdgeGeo.setAttribute('position', new T.Float32BufferAttribute(new Float32Arra
 bayMark.add(new T.LineSegments(bayEdgeGeo, new T.LineBasicMaterial({
   color: 0x5aa9ff, transparent: true, opacity: 0.38 })));
 
+// ── presentation mode ──────────────────────────────────────────────────────
+// The materials are MUTATED, never swapped. FOCUS_MATS holds references to these
+// same objects to push the bay clip planes onto them, and the stencil section caps
+// depend on that clipping — `mesh.material = other` would orphan those references
+// and the bay isolation and the caps would stop working WITHOUT AN ERROR.
+//
+// The honest half of this feature: realistic mode paints everything galvanised, so
+// COLOUR STOPS CARRYING PROVENANCE. Measured height and assumed height become the
+// same metal, and 38.3% of this network's length has assumed height; the fittings'
+// two-level marking disappears with it. The mode is legitimate for presentation and
+// the user chose it — but a capture of it is a more confident claim than the data
+// supports, so while it is on the page SAYS SO. Same rule as the section-cap chip:
+// if the view drops information, it declares it.
+const VC_MATS = [mat, matTerm];        // NOT the necks: their geometry has no colour attribute
+const METAL_ENV = (() => {
+  const q = parseFloat(new URLSearchParams(location.search).get('metal'));
+  // 4.5, MEASURED on this page's own rig, not inherited. The kit's 1.9 was derived
+  // under RoomEnvironment; this viewer lights metal with its own procedural room
+  // (base 0x2a2f38 at 0.35 emissive plus ceiling strips at 4.2/2.0/1.6), which is
+  // darker, so the same number renders murky steel here. Swept with ?metal=N and
+  // read off the render: duct top face 1.9 -> luminance 112 (dark, murky),
+  // 4.5 -> 163 (bright galvanised); side face 107 -> 158. GPU and SwiftShader agree
+  // at close range (163 vs 164), so this is not a renderer artefact.
+  return isFinite(q) && q > 0 ? q : 4.5;
+})();
+let REALISTA = false;
+function setMode(on){
+  REALISTA = on;
+  for (const m of VC_MATS){
+    m.vertexColors = !on;
+    m.roughnessMap = on ? ROUGH_BRUSHED : null;
+    m.needsUpdate = true;              // vertexColors and roughnessMap both change the program
+  }
+  mat.color.set(on ? 0xd2d6d8 : 0xffffff);
+  mat.metalness = on ? 0.90 : 0.88;
+  mat.roughness = on ? 0.30 : 0.34;
+  // ?metal=N overrides the IBL push so the right value can be MEASURED across a
+  // capture series instead of guessed one commit at a time — the same bisection
+  // that settled the stencil caps. 1.9 is the kit recipe's number, derived under
+  // RoomEnvironment; this page's procedural room is its own rig and may not want
+  // the same figure.
+  mat.envMapIntensity = on ? METAL_ENV : 1.15;   // the LIVE r160 IBL knob, per material
+  matTerm.color.set(on ? 0xd2d6d8 : 0xffffff);
+  // The terminals' metalness moves with the network's. Leaving it at 0.5 while the
+  // ducts went to 0.90 would render the same galvanised sheet two different ways
+  // depending on which mesh a piece happened to land in.
+  matTerm.metalness = on ? 0.90 : 0.5;
+  matTerm.roughness = on ? 0.34 : 0.55;
+  matTerm.envMapIntensity = on ? METAL_ENV : 1.0;
+  if (necks){
+    necks.material.color.set(on ? 0xd2d6d8 : 0x2f6f6b);
+    necks.material.envMapIntensity = on ? METAL_ENV : 1.0;
+  }
+  // 'block', NOT ''. Clearing the inline style does not reveal the element — it
+  // hands control back to the stylesheet, and the rule says `display:none`. The
+  // banner never appeared, and the capture is what proved it.
+  const w = document.getElementById('provWarn'); if (w) w.style.display = on ? 'block' : 'none';
+  // The legend lies just as loudly as a missing banner: in presentation mode the
+  // colour key describes an encoding that is no longer in force, so the
+  // provenance chips are withdrawn and replaced by a chip saying so.
+  const pc = document.getElementById('provChips'); if (pc) pc.style.display = on ? 'none' : '';
+  const rc = document.getElementById('realChip'); if (rc) rc.style.display = on ? 'inline-flex' : 'none';
+  const fc = document.getElementById('fitChip');  if (fc) fc.style.display = on ? 'none' : 'inline-flex';
+  const cb = document.getElementById('cReal'); if (cb) cb.checked = on;
+}
+
 function applyBayFocus(i){
   const b = i >= 0 ? BAYS[i] : null;
   if (b){
@@ -55882,6 +56017,12 @@ document.getElementById('hud').innerHTML = `
   <div class="kv"><span>Red acotable (≥8")</span><b>${s.sized_length_m} m</b></div>
   <div class="kv"><span>Elementos &lt;8"</span><b>${s.by_class.small.m} m</b></div>
   <div class="kv"><span>Longitud total</span><b>${s.total_length_m} m</b></div>
+  <div class="kv"><span>· de ella, sospechosa</span><b class="warn">210.0 m · 8.3%</b></div>
+  <div class="sub" style="margin:2px 0 0">496 runs tienen su proyección en planta
+    reducida a un punto: traen longitud declarada pero no recorrido, y en 88 de los
+    168 comprobables esa longitud es exactamente el ancho del ducto vecino. Parecen
+    líneas de sección contadas como recorrido. Sin cerrar para los 328 que no tienen
+    ducto vecino con el que comparar.</div>
   <div class="kv"><span>Huella</span><b>${s.footprint_m[0]} × ${s.footprint_m[1]} m</b></div>
   <div class="kv"><span>Nodos de red</span><b>${s.nodes}</b></div>
   <div class="kv"><span>Runs conectados</span><b>${pct(s.runs_connected, s.duct_runs)}</b></div>
@@ -55914,6 +56055,7 @@ document.getElementById('hud').innerHTML = `
   <label class="row"><input type="checkbox" id="cArch" checked> Planta arquitectónica</label>
   <label class="row"><input type="checkbox" id="cGround" checked> Losa y sombra</label>
   <label class="row"><input type="checkbox" id="cOrtho"> Cámara ortográfica</label>
+  <label class="row"><input type="checkbox" id="cReal"> Modo presentación (galvanizado)</label>
   <div class="sec">Encuadre por crujía</div>
   <div class="kv"><span>Crujía</span><b id="bayV">—</b></div>
   <div style="display:flex;gap:6px;margin:6px 0">
@@ -55940,11 +56082,13 @@ document.getElementById('hud').innerHTML = `
   <div class="kv"><span>Plano de corte</span><b id="clipV">sin corte</b></div>
 `;
 document.getElementById('legend').innerHTML = `
-  <span class="chip"><i class="dot" style="background:#9fb0bd"></i>alto con cota real</span>
+  <span id="provChips"><span class="chip"><i class="dot" style="background:#9fb0bd"></i>alto con cota real</span>
   <span class="chip"><i class="dot" style="background:#d8a03c"></i>alto supuesto — ${mAssumed.toFixed(1)} m de ${mTotal.toFixed(1)} m (${(100*mAssumed/mTotal).toFixed(1)}% de la longitud)</span>
   <span class="chip"><i class="dot" style="background:#7c8b99"></i>accesorio (${nFit})</span>
   <span class="chip" id="dimChip">solo se muestra la ductería de la crujía encuadrada</span>
   <span class="chip"><i class="dot" style="background:#e0e6ea"></i>cara de corte de sección</span>
+  </span>
+  <span class="chip" id="realChip" style="display:none">el color NO codifica procedencia en modo presentación · usa el modo datos</span>
   <span class="chip" id="fitChip"><i class="dot" style="background:#7c8b99"></i>accesorio real: posición medida · <b>forma inferida</b> (radio de catálogo)</span>`;
 
 for (const el of document.querySelectorAll('.fcls')){
@@ -55997,6 +56141,7 @@ clip.oninput = () => {
 };
 
 // orthographic toggle: MEP plans are read axonometrically, not in perspective
+document.getElementById('cReal').onchange = e => setMode(e.target.checked);
 document.getElementById('cOrtho').onchange = e => {
   if (e.target.checked){
     const d = camera.position.distanceTo(controls.target);
@@ -56137,6 +56282,12 @@ function applyOrthoQuery(){
   cb.checked = true;
   cb.onchange({ target: cb });
 }
+// `?mode=realista` — the gate cannot click a checkbox, same lesson as ?clip and
+// ?ortho. Applied after the warm-up so it survives the two compile passes.
+function applyModeQuery(){
+  if (new URLSearchParams(location.search).get('mode') === 'realista') setMode(true);
+}
+let _warm = false;
 let _pinned = false;
 // Raw fused-mesh buffers for an INDEPENDENT topology check (inv3's
 // checkFusedMeshClosed). Sibling of __qaFraming, same contract: raw data, never
@@ -56159,6 +56310,12 @@ window.__meshData = () => ({
   if (!_pinned){ _pinned = true; applyCamQuery(); applyOrthoQuery(); }
   stepDolly();                 // before controls.update(): OrbitControls
   controls.update();           // re-derives its radius from the camera position
+  if (!_warm){                 // compile BOTH mode variants before the first toggle
+    _warm = true;
+    setMode(true);  renderer.compile(scene, activeCam());
+    setMode(false); renderer.compile(scene, activeCam());
+    applyModeQuery();
+  }
   aimFill();                   // the fill rides the camera, so every visible face is lit
   updateCaps();                // re-seat the section caps on their (moving) planes
   renderer.render(scene, activeCam());
