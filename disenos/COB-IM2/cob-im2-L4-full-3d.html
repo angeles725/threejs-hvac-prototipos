@@ -54641,6 +54641,20 @@ function pushLoft(c0, w0, h0, c1, w1, h1, ux, uz, color, id){
             [c[0]+vx*-hw, c[1]+hh, c[2]+vz*-hw]];
   };
   const A = ring(c0,w0,h0), B = ring(c1,w1,h1);
+  // End caps. This loft emitted only its four SIDE quads, leaving every
+  // transition open at both ends — the same defect system-3d carried. It has to
+  // be fixed BEFORE the stencil caps go in, because the counting pass reads an
+  // open shell inside the union as a hole. Winding matches pushBox's end faces:
+  // the -u ring in order, the +u ring reversed, so both normals point outward.
+  const capQuad = (q, nx, ny, nz) => {
+    for (const t of [[0,1,2],[0,2,3]]) for (const k of t){
+      pos.push(q[k][0], q[k][1], q[k][2]);
+      nor.push(nx, ny, nz); col.push(color.r, color.g, color.b);
+      rid.push(id); vcount++;
+    }
+  };
+  capQuad([A[0], A[1], A[2], A[3]], -ux, 0, -uz);
+  capQuad([B[0], B[3], B[2], B[1]],  ux, 0,  uz);
   for (let i=0;i<4;i++){
     const j=(i+1)%4;
     const quad=[A[i],A[j],B[j],B[i]];
@@ -54760,7 +54774,8 @@ const ground = new T.Mesh(new T.PlaneGeometry(SPAN*2.2, SPAN*2.2),
 ground.rotation.x = -Math.PI/2; ground.position.y = -0.02;
 ground.receiveShadow = true; scene.add(ground);
 
-// diffuser necks
+// diffuser necks — held in module scope so the section cap can count them
+let necks = null;
 if (DATA.necks && DATA.necks.length){
   const g = new T.CylinderGeometry(1,1,0.10,12);
   const m = new T.MeshStandardMaterial({color:0x2f6f6b, roughness:0.6, metalness:0.2,
@@ -54773,6 +54788,96 @@ if (DATA.necks && DATA.necks.length){
     inst.setMatrixAt(i, d.matrix);
   });
   scene.add(inst);
+  necks = inst;
+}
+
+// ── stencil section cap ────────────────────────────────────────────────────
+// Ported from system-3d (WU-L4-B1). This viewer has ONE clip plane — the height
+// cut — and no DoubleSide on the duct material, so a cut duct does not even get
+// the far wall drawn behind it: you look straight through the opening.
+//
+// The count: render the kept side of the solid twice, back faces incrementing
+// the stencil and front faces decrementing it. For a closed solid the two cancel
+// along every ray except where the clip removed a front face, which is exactly
+// the cut section; then a quad on the plane draws where the count is non-zero.
+// Overlapping runs and fitting bodies need no special case — the count is "how
+// many solids contain this pixel", so the union caps correctly.
+const CAP_SIZE = SPAN * 1.6;
+const capUnits = [];
+// ?capdebug=1 paints the cap magenta (did it draw at all); ?capdebug=2 also
+// turns the stencil TEST off, which bisects placement from counting.
+const CAP_DEBUG = +(new URLSearchParams(location.search).get('capdebug') || 0);
+function makeCapUnit(plane, others, order, active){
+  const group = new T.Group();
+  // renderOrder STAYS 0, and this is the bug that cost B1 a gate round.
+  // `painterSortStable` compares `groupOrder` before `renderOrder`, and
+  // `projectObject` turns a Group's renderOrder into the `groupOrder` of its
+  // whole subtree — so a group at renderOrder 1 draws AFTER every object sitting
+  // directly in the scene, however high that object's own renderOrder. With the
+  // counting passes in such a group and the cap added straight to the scene, the
+  // cap drew first and tested against an all-zero stencil buffer: zero pixels,
+  // identically on D3D12 and SwiftShader. The group is a VISIBILITY container;
+  // ordering lives on each child.
+  group.renderOrder = 0;
+  const base = new T.MeshBasicMaterial({
+    depthWrite:false, depthTest:false, colorWrite:false,
+    stencilWrite:true, stencilFunc: T.AlwaysStencilFunc });
+  const facing = (side, op) => {
+    const m = base.clone();
+    m.side = side;
+    m.clippingPlanes = [plane];
+    m.stencilFail = op; m.stencilZFail = op; m.stencilZPass = op;
+    return m;
+  };
+  const mBack = facing(T.BackSide, T.IncrementWrapStencilOp);
+  const mFront = facing(T.FrontSide, T.DecrementWrapStencilOp);
+  for (const m of [mBack, mFront]){
+    const sm = new T.Mesh(geo, m);
+    sm.renderOrder = order;
+    sm.frustumCulled = false;   // culling a counting pass by its own AABB desyncs the count
+    group.add(sm);
+  }
+  if (necks){
+    for (const m of [mBack, mFront]){
+      const im = new T.InstancedMesh(necks.geometry, m, necks.count);
+      im.instanceMatrix = necks.instanceMatrix;
+      im.renderOrder = order;
+      im.frustumCulled = false;
+      group.add(im);
+    }
+  }
+  scene.add(group);
+
+  const capMat = new T.MeshStandardMaterial({
+    color: CAP_DEBUG ? 0xff00ff : 0x8f9ba7,
+    metalness: CAP_DEBUG ? 0 : 0.55, roughness: CAP_DEBUG ? 1 : 0.42,
+    side: T.DoubleSide,
+    clippingPlanes: others,
+    stencilWrite: true, stencilRef: 0, stencilFunc: T.NotEqualStencilFunc,
+    stencilFail: T.ReplaceStencilOp, stencilZFail: T.ReplaceStencilOp,
+    stencilZPass: T.ReplaceStencilOp });
+  if (CAP_DEBUG >= 2){ capMat.stencilWrite = false; capMat.emissive = new T.Color(0xff00ff); }
+  const cap = new T.Mesh(new T.PlaneGeometry(CAP_SIZE, CAP_SIZE), capMat);
+  cap.renderOrder = order + 1;
+  cap.frustumCulled = false;
+  cap.onAfterRender = (r) => r.clearStencil();
+  scene.add(cap);
+  capUnits.push({ plane, group, cap, active });
+}
+// One plane here, so no `others` to bound the cap with.
+makeCapUnit(clipPlane, [], 1, () => clipPlane.constant < 99);
+mesh.renderOrder = 10;
+
+function updateCaps(){
+  for (const u of capUnits){
+    const on = u.active();
+    u.group.visible = on; u.cap.visible = on;
+    if (!on) continue;
+    u.plane.coplanarPoint(u.cap.position);
+    u.cap.lookAt(u.cap.position.x - u.plane.normal.x,
+                 u.cap.position.y - u.plane.normal.y,
+                 u.cap.position.z - u.plane.normal.z);
+  }
 }
 
 // ── camera ─────────────────────────────────────────────────────────────────
@@ -54841,6 +54946,42 @@ clip.oninput = () => {
   clipV.textContent = v >= 7.99 ? 'sin corte' : v.toFixed(2)+' m';
 };
 
+// `?clip=<metres>` — the height cut is OFF by default, so without this there is
+// no way to reproduce a cut from a URL and nothing for a capture to look into;
+// the alternative is scripting a drag on the slider, which is not a fixture.
+// Driven THROUGH the slider on purpose, so the control and its label stay
+// truthful instead of the plane moving behind their back.
+{
+  const q = new URLSearchParams(location.search).get('clip');
+  const m = q === null ? NaN : parseFloat(q);
+  if (isFinite(m)){
+    clip.value = Math.max(0, Math.min(800, Math.round(m * 100)));
+    clip.oninput();
+  }
+}
+
+// `?cam=x,y,z,tx,ty,tz` pins the camera exactly, so a before/after diff compares
+// the same view instead of two interactively-nudged ones. Applied on the first
+// settled frame rather than at script time, because the panel rects it may
+// depend on are only real once the browser has laid out.
+let _camQ = null;
+{
+  const q = new URLSearchParams(location.search).get('cam');
+  if (q){
+    const n = q.split(',').map(Number);
+    if (n.length === 6 && n.every(isFinite)) _camQ = n;
+  }
+}
+let _pinned = false;
+function applyCamQuery(){
+  if (!_camQ) return;
+  const cam = activeCam();
+  cam.position.set(_camQ[0], _camQ[1], _camQ[2]);
+  controls.target.set(_camQ[3], _camQ[4], _camQ[5]);
+  cam.updateProjectionMatrix();
+  controls.update();
+}
+
 // orthographic toggle: MEP plans are read axonometrically, not in perspective
 let ortho = null;
 document.getElementById('cOrtho').onchange = e => {
@@ -54886,9 +55027,33 @@ addEventListener('resize', ()=>{
 });
 (function tick(){
   requestAnimationFrame(tick);
+  if (!_pinned){ _pinned = true; applyCamQuery(); }
   controls.update();
+  updateCaps();                // re-seat the section cap on its (moving) plane
   renderer.render(scene, activeCam());
 })();
+// Build stamp and the stencil facts, on the console because the capture harness
+// records it. Byte-identical output is what a real no-op looks like AND what
+// serving stale bytes looks like; this line tells the two apart.
+{
+  const gl = renderer.getContext();
+  const attrs = gl.getContextAttributes ? gl.getContextAttributes() : null;
+  console.log('COB-IM2 L4 full build: WU-L4-B2 stencil-cap + loft-caps' +
+              ' | capUnits=' + capUnits.length +
+              ' | ctx.stencil=' + (attrs ? attrs.stencil : 'unknown') +
+              ' | stencilBits=' + (()=>{ try { return gl.getParameter(gl.STENCIL_BITS); }
+                                         catch(e){ return 'query-failed'; } })() +
+              ' | autoClearStencil=' + renderer.autoClearStencil +
+              ' | capdebug=' + CAP_DEBUG +
+              ' | clipConstant=' + clipPlane.constant.toFixed(3));
+  for (const u of capUnits){
+    console.log('  cap unit: active=' + u.active() +
+                ' planeN=' + u.plane.normal.toArray().join(',') +
+                ' planeC=' + u.plane.constant.toFixed(3) +
+                ' capPos=' + u.cap.position.toArray().map(v=>v.toFixed(2)).join(',') +
+                ' capVisible=' + u.cap.visible);
+  }
+}
 console.log('COB-IM2 L4:', DATA.meta.stats);
 </script>
 </body>
