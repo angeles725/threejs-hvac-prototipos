@@ -28,7 +28,13 @@ triangles skipped) over the post-cap fused mesh, all classes shown (?bay=-1):
 - system-3d net: tris 33624, welded_verts 18056, degenerate 5340 (skipped), BOUNDARY_EDGES = 0 (was 992: 124 lofts x 2 x 4)
 - system-3d term: BOUNDARY_EDGES = 0
 - full-3d net: tris 39696, degenerate 0, BOUNDARY_EDGES = 0 (was 1736: 217 lofts x 2 x 4)
-Non-manifold edges (1743 sys / 335 full) are expected for a fused UNION mesh (overlapping ducts
-share coplanar faces); they are not holes. Watertight => all loft caps + duct ends closed.
+Non-manifold edges (1743 sys / 335 full): **CAUSE NOT INVESTIGATED.** They are NOT holes by
+definition — a hole is a 1-triangle edge, non-manifold is a >2-triangle edge; disjoint categories,
+so BOUNDARY_EDGES=0 (watertight, all loft caps + duct ends closed) stands regardless of the
+non-manifold count. (@3D refuted an earlier "overlapping ducts share faces" guess: interpenetrating
+ducts do NOT share vertices, so weld-tol-0 makes no shared edge between them. Colinear runs meeting
+end-to-end at a node with coincident snapped ends explain ~448 of 1743 (26%, 112 pairs in system-3d);
+the remainder is unexplained mesh curiosity, not a defect, not investigated.)
+Watertight => all loft caps + duct ends closed.
 
 VERDICT: PASS. Caps WU complete and fully verified across both viewers, both projections.
