@@ -54724,6 +54724,22 @@ function pushLoft(c0, w0, h0, c1, w1, h1, ux, uz, color, id){
             [c[0]+vx*-hw, c[1]+hh, c[2]+vz*-hw]];
   };
   const A = ring(c0,w0,h0), B = ring(c1,w1,h1);
+  // End caps. The loft used to emit only its four SIDE quads, leaving 124
+  // transitions open at both ends — the one genuinely unclosed family in this
+  // builder (pushBox emits six faces and pushTube has its own cap fan). They sit
+  // buried between the two ducts they join, so it rarely showed, but an open
+  // shell inside a solid is exactly what a stencil count reads as a hole.
+  // Winding matches pushBox's end faces: the -u ring in order, the +u ring
+  // reversed, so both normals point OUT of the loft.
+  const capQuad = (q, nx, ny, nz) => {
+    for (const t of [[0,1,2],[0,2,3]]) for (const k of t){
+      TGT.pos.push(q[k][0], q[k][1], q[k][2]);
+      TGT.nor.push(nx, ny, nz); TGT.col.push(color.r, color.g, color.b);
+      TGT.rid.push(id); TGT.dev.push(CUR_DEV); TGT.n++;
+    }
+  };
+  capQuad([A[0], A[1], A[2], A[3]], -ux, 0, -uz);
+  capQuad([B[0], B[3], B[2], B[1]],  ux, 0,  uz);
   for (let i=0;i<4;i++){
     const j=(i+1)%4;
     const quad=[A[i],A[j],B[j],B[i]];
@@ -55283,10 +55299,21 @@ function setFrameLabel(txt){
 // casts a shadow is still telling you the plate is full. It also makes the
 // existing height cut honest, which it was not — sectioned-away material was
 // still shadowing the slab below it.
-const bayLo = new T.Plane(new T.Vector3( 1, 0, 0), 0);   // keeps x >= x0
-const bayHi = new T.Plane(new T.Vector3(-1, 0, 0), 0);   // keeps x <= x1
+// Born PARKED (see BAY_PARK below): a constant of 0 would clip the model to the
+// single plane x = 0 if anything ever rendered before the first framing call.
+const bayLo = new T.Plane(new T.Vector3( 1, 0, 0), 1e6);   // keeps x >= x0
+const bayHi = new T.Plane(new T.Vector3(-1, 0, 0), 1e6);   // keeps x <= x1
 const FOCUS_MATS = [mat, matTerm, edges.material].concat(necks ? [necks.material] : []);
-for (const m of FOCUS_MATS) m.clipShadows = true;
+// Assigned ONCE. Turning a bay off PARKS its planes out at infinity instead of
+// shortening the array: changing the plane COUNT forces every one of these
+// materials to recompile its shader, and doing that on a button press is a
+// stall the user can feel. A parked plane keeps everything and costs one
+// already-uniform dot product.
+const BAY_PARK = 1e6;
+for (const m of FOCUS_MATS){
+  m.clipShadows = true;
+  m.clippingPlanes = [clipPlane, bayLo, bayHi];
+}
 
 // Hiding the other ducts is only half of it. The plan underlay stays at full
 // strength — deliberately, because it is what makes the bay PLACEABLE — but at
@@ -55324,10 +55351,7 @@ function applyBayFocus(i){
     p.needsUpdate = true;
   }
   bayMark.visible = !!b;
-  for (const m of FOCUS_MATS){
-    m.clippingPlanes = b ? [clipPlane, bayLo, bayHi] : [clipPlane];
-    m.needsUpdate = true;      // the plane COUNT changed: the shader must recompile
-  }
+  if (!b){ bayLo.constant = BAY_PARK; bayHi.constant = BAY_PARK; }
   // The legend has to SAY this, and only while it is true. Showing one bay's
   // ductwork and nothing else is a claim about the data on screen; undeclared,
   // a reader takes the empty plan for an empty building. That is the same defect
@@ -55340,6 +55364,143 @@ function applyBayFocus(i){
   // They are what says WHERE in the building this bay is — clip them too and the
   // bay is legible but unplaceable. They are ground-level annotation, not
   // ductwork, so they do not compete with the subject for what it IS.
+}
+
+// ── stencil section caps ───────────────────────────────────────────────────
+// A clipped duct is an OPEN SHELL. The clip removes the wall it cut through and
+// leaves the interior facing the camera; side:DoubleSide hides that from most
+// angles by drawing the far wall instead, but it is a MASK, not a cap — orbit
+// until you look INTO the cut and the duct is visibly hollow. WU-L4-A moved this
+// from the height slider (which almost nobody touches) to the view everyone
+// loads: the two bay planes cut real ducts on every boot.
+//
+// The fix is a COUNTING argument, not a trick. Render the kept side of the solid
+// twice — back faces incrementing the stencil, front faces decrementing it. For
+// a closed solid the two cancel along every ray, EXCEPT where the clip removed a
+// front face; what is left is exactly the cut section. Then draw a quad on the
+// clip plane wherever the count is non-zero. Overlapping runs and their 2413
+// mitred stubs need no special case: the count is "how many solids contain this
+// pixel", so the union caps correctly. It also depends on the solids being
+// closed, which is why the 124 open lofts were fixed in the builder first — an
+// open shell inside the union reads to this count as a hole.
+//
+// The geometry is SHARED, never duplicated: the stencil meshes point at the same
+// buffers as the visible ducts, so the class filter and the vertical
+// exaggeration move the caps with the ducts for free.
+const CAP_SIZE = SPAN * 1.6;
+const capUnits = [];
+// ?capdebug=1 paints the caps a colour nothing else in this scene uses, so a
+// single capture answers "did the cap draw at all". ?capdebug=2 additionally
+// turns the stencil TEST off on the cap quad, which BISECTS the failure: if 2
+// shows a quad and 1 does not, the geometry and placement are right and the
+// stencil count is empty; if 2 shows nothing either, the quad itself is
+// mis-placed or never reaches the render list, and the stencil is innocent.
+const CAP_DEBUG = +(new URLSearchParams(location.search).get('capdebug') || 0);
+function makeCapUnit(plane, others, order, active){
+  const group = new T.Group();
+  // renderOrder STAYS 0, and this is the whole bug from the first attempt.
+  //
+  // `painterSortStable` compares `groupOrder` BEFORE `renderOrder`, and
+  // `projectObject` turns a Group's own renderOrder into the `groupOrder` of its
+  // entire subtree. So a group at renderOrder 1 does not draw "first" — it
+  // pushes every child AFTER every object sitting directly in the scene,
+  // however high that object's own renderOrder. The counting passes lived in
+  // groups at 1/3/5 while the cap quads were added straight to the scene at
+  // groupOrder 0, so the caps drew BEFORE any counting happened: each one tested
+  // NotEqual against a freshly auto-cleared, all-zero stencil buffer and
+  // discarded every single fragment. Quad correct, placement correct, buffer
+  // empty at read time — which is exactly what the bisection measured, and why
+  // it reproduced identically on D3D12 and SwiftShader.
+  //
+  // This group is a VISIBILITY container, nothing else. Ordering lives on each
+  // child, where it can actually be compared against the caps.
+  group.renderOrder = 0;
+  const base = new T.MeshBasicMaterial({
+    depthWrite:false, depthTest:false, colorWrite:false,
+    stencilWrite:true, stencilFunc: T.AlwaysStencilFunc });
+  const facing = (side, op) => {
+    const m = base.clone();
+    m.side = side;
+    m.clippingPlanes = [plane];   // only THIS plane: the other cuts belong to their own unit
+    m.stencilFail = op; m.stencilZFail = op; m.stencilZPass = op;
+    return m;
+  };
+  const mBack = facing(T.BackSide, T.IncrementWrapStencilOp);
+  const mFront = facing(T.FrontSide, T.DecrementWrapStencilOp);
+  const termMeshes = [];
+  for (const [g, isTerm] of [[geo, false], [geoT, true]]){
+    for (const m of [mBack, mFront]){
+      const sm = new T.Mesh(g, m);
+      sm.renderOrder = order;
+      sm.frustumCulled = false;   // culling a counting pass by its own AABB desyncs the count
+      group.add(sm);
+      if (isTerm) termMeshes.push(sm);
+    }
+  }
+  // The diffuser necks are an InstancedMesh, so they need their own counting
+  // pair sharing BOTH the geometry and the instance matrices. Measured, no neck
+  // straddles any of the 17 bay planes — but the HEIGHT plane is horizontal and
+  // the necks sit in a 0.10 m band at 3.71 m, so the slider can cut them. A gap
+  // that narrow is still a hole when someone finds it.
+  if (necks){
+    for (const m of [mBack, mFront]){
+      const im = new T.InstancedMesh(necks.geometry, m, necks.count);
+      im.instanceMatrix = necks.instanceMatrix;
+      im.renderOrder = order;
+      im.frustumCulled = false;
+      group.add(im);
+    }
+  }
+  scene.add(group);
+
+  const capMat = new T.MeshStandardMaterial({
+      color: CAP_DEBUG ? 0xff00ff : 0x8f9ba7,
+      metalness: CAP_DEBUG ? 0 : 0.55, roughness: CAP_DEBUG ? 1 : 0.42,
+      side: T.DoubleSide,
+      clippingPlanes: others,     // bounded by the OTHER cuts, never by its own
+      stencilWrite: true, stencilRef: 0, stencilFunc: T.NotEqualStencilFunc,
+      stencilFail: T.ReplaceStencilOp, stencilZFail: T.ReplaceStencilOp,
+      stencilZPass: T.ReplaceStencilOp });
+  if (CAP_DEBUG >= 2){
+    // Raw quad, no stencil gate: this is the half of the bisection that proves
+    // whether the quad is where the code thinks it is.
+    capMat.stencilWrite = false;
+    capMat.emissive = new T.Color(0xff00ff);
+  }
+  const cap = new T.Mesh(new T.PlaneGeometry(CAP_SIZE, CAP_SIZE), capMat);
+  cap.renderOrder = order + 1;
+  cap.frustumCulled = false;
+  // Clear after each cap or the next plane inherits this one's count.
+  cap.onAfterRender = (r) => r.clearStencil();
+  scene.add(cap);
+
+  capUnits.push({ plane, group, cap, termMeshes, active });
+}
+makeCapUnit(bayLo,     [clipPlane, bayHi], 1, () => curBay >= 0);
+makeCapUnit(bayHi,     [clipPlane, bayLo], 3, () => curBay >= 0);
+makeCapUnit(clipPlane, [bayLo, bayHi],     5, () => clipPlane.constant < 99);
+
+// The ducts draw AFTER the caps. Each cap is a flat quad sitting exactly on its
+// clip plane; letting the solid depth-test against it is what keeps the
+// silhouette clean where the two meet.
+mesh.renderOrder = 10; meshT.renderOrder = 10;
+
+// Planes move — the bay planes when the framing changes, the height plane on
+// every slider input — so the cap quads are re-seated each frame rather than in
+// three separate handlers that can each forget.
+function updateCaps(){
+  for (const u of capUnits){
+    const on = u.active();
+    u.group.visible = on; u.cap.visible = on;
+    if (!on) continue;
+    // Terminals are their own toggle: counting a hidden mesh would cap ducts
+    // that are not being drawn.
+    for (const sm of u.termMeshes) sm.visible = meshT.visible;
+    u.plane.coplanarPoint(u.cap.position);
+    u.cap.lookAt(u.cap.position.x - u.plane.normal.x,
+                 u.cap.position.y - u.plane.normal.y,
+                 u.cap.position.z - u.plane.normal.z);
+  }
 }
 
 function frameBay(i){
@@ -55768,8 +55929,31 @@ let _pinned = false;
   stepDolly();                 // before controls.update(): OrbitControls
   controls.update();           // re-derives its radius from the camera position
   aimFill();                   // the fill rides the camera, so every visible face is lit
+  updateCaps();                // re-seat the section caps on their (moving) planes
   renderer.render(scene, activeCam());
 })();
+// Build stamp + the stencil question, both on the console because the capture
+// harness already records it. Byte-identical output across two rasterizers is
+// what a real no-op looks like — and it is ALSO what serving stale bytes looks
+// like. This line tells the two apart without anyone having to trust a claim.
+{
+  const gl = renderer.getContext();
+  const attrs = gl.getContextAttributes ? gl.getContextAttributes() : null;
+  console.log('COB-IM2 L4 build: WU-L4-B1 stencil-caps + loft-caps' +
+              ' | capUnits=' + capUnits.length +
+              ' | ctx.stencil=' + (attrs ? attrs.stencil : 'unknown') +
+              ' | stencilBits=' + (()=>{ try { return gl.getParameter(gl.STENCIL_BITS); }
+                                            catch(e){ return 'query-failed'; } })() +
+              ' | autoClearStencil=' + renderer.autoClearStencil +
+              ' | capdebug=' + CAP_DEBUG);
+  for (const u of capUnits){
+    console.log('  cap unit: active=' + u.active() +
+                ' planeN=' + u.plane.normal.toArray().join(',') +
+                ' planeC=' + u.plane.constant.toFixed(3) +
+                ' capPos=' + u.cap.position.toArray().map(v=>v.toFixed(2)).join(',') +
+                ' capVisible=' + u.cap.visible);
+  }
+}
 console.log('COB-IM2 L4:', DATA.meta.stats);
 </script>
 </body>
