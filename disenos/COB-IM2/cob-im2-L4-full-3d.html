@@ -54849,8 +54849,23 @@ function makeCapUnit(plane, others, order, active){
   scene.add(group);
 
   const capMat = new T.MeshStandardMaterial({
-    color: CAP_DEBUG ? 0xff00ff : 0x8f9ba7,
-    metalness: CAP_DEBUG ? 0 : 0.55, roughness: CAP_DEBUG ? 1 : 0.42,
+    // 0xe0e6ea, and it is CHOSEN BY MEASUREMENT. The old 0x8f9ba7 sat BETWEEN
+    // two real classes — CIE76 dE 6.5 to `accesorio` and 7.7 to `medido`,
+    // while those two are 13.9 apart from each other — so a cut through an
+    // ASSUMED-height duct (orange, dE 67 away) showed a face that read as
+    // measured. Colour means provenance in this viewer; the cap was lying
+    // about it, in the default view. This tone is dE 21.0 / 65.3 / 34.5 /
+    // 45.1 from the four class colours across both viewers: no longer a
+    // near-match for any of them, and dE 84 from the background so it still
+    // reads as solid rather than as the hole it is covering.
+    //
+    // metalness 0 and roughness 0.9 are LOAD-BEARING, not taste. At metalness
+    // 0.55 the base colour is the metal's reflectance and the rendered pixel
+    // is dominated by the environment map — the measured separation would
+    // never survive to the screen. A matte face renders the colour that was
+    // actually measured, and a cut section is not a polished surface anyway.
+    color: CAP_DEBUG ? 0xff00ff : 0xe0e6ea,
+    metalness: 0, roughness: CAP_DEBUG ? 1 : 0.9,
     side: T.DoubleSide,
     clippingPlanes: others,
     stencilWrite: true, stencilRef: 0, stencilFunc: T.NotEqualStencilFunc,
@@ -54932,7 +54947,8 @@ document.getElementById('legend').innerHTML = `
   <span class="chip"><i class="dot" style="background:#9fb0bd"></i>alto con cota real</span>
   <span class="chip"><i class="dot" style="background:#d8a03c"></i>alto supuesto (${nAssumed})</span>
   <span class="chip"><i class="dot" style="background:#7c8b99"></i>accesorio (${nFit})</span>
-  <span class="chip"><i class="dot" style="background:#5f7183"></i>&lt;8", el plano no los acota</span>`;
+  <span class="chip"><i class="dot" style="background:#5f7183"></i>&lt;8", el plano no los acota</span>
+  <span class="chip"><i class="dot" style="background:#e0e6ea"></i>cara de corte de sección</span>`;
 
 for (const el of document.querySelectorAll('.fcls')){
   el.onchange = () => { SHOW[el.dataset.k] = el.checked; applyFilter(SHOW); };
@@ -54971,6 +54987,20 @@ let _camQ = null;
     const n = q.split(',').map(Number);
     if (n.length === 6 && n.every(isFinite)) _camQ = n;
   }
+}
+
+// `?ortho=1` — the orthographic toggle is a different PROJECTION, not another
+// orbit angle, so it needs its own gateable path; a capture harness cannot click
+// a checkbox. Driven THROUGH the checkbox so the control keeps telling the truth.
+// Applied AFTER the pinned camera on purpose: the ortho frustum is derived from
+// the perspective camera's current distance, so building it before `?cam=` moves
+// the camera would leave the view at the wrong zoom.
+function applyOrthoQuery(){
+  if (new URLSearchParams(location.search).get('ortho') !== '1') return;
+  const cb = document.getElementById('cOrtho');
+  if (!cb || cb.checked) return;
+  cb.checked = true;
+  cb.onchange({ target: cb });
 }
 let _pinned = false;
 function applyCamQuery(){
@@ -55025,9 +55055,24 @@ addEventListener('resize', ()=>{
   camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight, false);
 });
+// Raw fused-mesh buffers for an INDEPENDENT topology check (inv3's
+// checkFusedMeshClosed). Sibling of __qaFraming, same contract: raw data, never
+// a verdict — the page must not mark its own homework. It turns the loft end
+// caps from verified-by-construction into a measured 992 -> 0.
+//
+// Two caveats the caller MUST honour. (1) These are the LIVE buffers: the class
+// filter collapses hidden runs onto their centroid, so read them with every
+// class shown or the degenerate triangles are counted as real. (2) The buffer
+// is NOT indexed — weld by position (tolerance 0; coincident vertices come from
+// the same expression) before counting boundary edges, or every triangle is an
+// island and every edge is a boundary.
+window.__meshData = () => ({
+  net:  { positions: geo.getAttribute('position').array,  runId: geo.getAttribute('runId').array },
+});
+
 (function tick(){
   requestAnimationFrame(tick);
-  if (!_pinned){ _pinned = true; applyCamQuery(); }
+  if (!_pinned){ _pinned = true; applyCamQuery(); applyOrthoQuery(); }
   controls.update();
   updateCaps();                // re-seat the section cap on its (moving) plane
   renderer.render(scene, activeCam());
