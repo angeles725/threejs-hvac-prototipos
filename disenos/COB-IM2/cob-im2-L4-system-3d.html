@@ -54641,9 +54641,21 @@ for (const f of fittings) nodeKind.set(f.node, f);
 // two independent buffers so the terminal layer can be switched off without
 // touching the network geometry
 const B = {
-  net:  {pos:[], nor:[], col:[], rid:[], dev:[], n:0},
-  term: {pos:[], nor:[], col:[], rid:[], dev:[], n:0},
+  net:  {pos:[], nor:[], col:[], rid:[], dev:[], mrk:[], n:0},
+  term: {pos:[], nor:[], col:[], rid:[], dev:[], mrk:[], n:0},
 };
+// PROVENANCE MARK — its own vertex channel, deliberately NOT runId and NOT colour.
+// runId is spoken for: −1 is the accessory sentinel that inv2/inv3's fused-mesh gate
+// excludes on, and overloading it would break their check in silence. Colour already
+// means provenance OF THE HEIGHT DATA and becomes material in the realistic mode.
+//   bit 0 — the fitting's POSITION is inferred (geometry overrode the declared type)
+//   bit 1 — the fitting's SHAPE is inferred
+// Bit 1 is set on EVERY catalog fitting, always. The drawing dimensions where a duct
+// runs; it never dimensions a bend radius, a gore count or a leg length. A node whose
+// coordinates are measured still gets a shape we assumed — so "CERT" alone would be a
+// claim about a radius we invented, which is exactly the defect this project already
+// shipped once (pipeElbow at 1.5xOD instead of 1.5xnominal).
+let CUR_MARK = 0;
 let TGT = B.net;
 // CUR_DEV is this element's elevation deviation from the floor's median BOD.
 // Exaggeration multiplies THIS, not the vertex Y: scaling Y outright would
@@ -54672,7 +54684,7 @@ function pushBox(cx, cy, cz, ux, uz, len, w, h, color, id){
         TGT.pos.push(v[k][0], v[k][1], v[k][2]);
         TGT.nor.push(nx, ny, nz);
         TGT.col.push(color.r, color.g, color.b);
-        TGT.rid.push(id); TGT.dev.push(CUR_DEV);
+        TGT.rid.push(id); TGT.dev.push(CUR_DEV); TGT.mrk.push(CUR_MARK);
         TGT.n++;
       }
     }
@@ -54692,7 +54704,7 @@ function pushTube(cx, cy, cz, ux, uz, len, d, color, id, sides){
   const P = (t, k) => [cx + ux*t + vx*ring[k][0], cy + ring[k][1], cz + uz*t + vz*ring[k][0]];
   const put = (v, n) => {
     TGT.pos.push(v[0], v[1], v[2]); TGT.nor.push(n[0], n[1], n[2]);
-    TGT.col.push(color.r, color.g, color.b); TGT.rid.push(id); TGT.dev.push(CUR_DEV); TGT.n++;
+    TGT.col.push(color.r, color.g, color.b); TGT.rid.push(id); TGT.dev.push(CUR_DEV); TGT.mrk.push(CUR_MARK); TGT.n++;
   };
   for (let k = 0; k < N; k++){
     const j = (k+1)%N;
@@ -54735,7 +54747,7 @@ function pushLoft(c0, w0, h0, c1, w1, h1, ux, uz, color, id){
     for (const t of [[0,1,2],[0,2,3]]) for (const k of t){
       TGT.pos.push(q[k][0], q[k][1], q[k][2]);
       TGT.nor.push(nx, ny, nz); TGT.col.push(color.r, color.g, color.b);
-      TGT.rid.push(id); TGT.dev.push(CUR_DEV); TGT.n++;
+      TGT.rid.push(id); TGT.dev.push(CUR_DEV); TGT.mrk.push(CUR_MARK); TGT.n++;
     }
   };
   capQuad([A[0], A[1], A[2], A[3]], -ux, 0, -uz);
@@ -54750,7 +54762,7 @@ function pushLoft(c0, w0, h0, c1, w1, h1, ux, uz, color, id){
     for (const t of [[0,1,2],[0,2,3]]) for (const k of t){
       TGT.pos.push(quad[k][0],quad[k][1],quad[k][2]);
       TGT.nor.push(n[0],n[1],n[2]); TGT.col.push(color.r,color.g,color.b);
-      TGT.rid.push(id); TGT.dev.push(CUR_DEV); TGT.n++;
+      TGT.rid.push(id); TGT.dev.push(CUR_DEV); TGT.mrk.push(CUR_MARK); TGT.n++;
     }
   }
 }
@@ -54794,8 +54806,179 @@ runs.forEach((r,i)=>{
 TGT = B.net;
 
 // fitting bodies fill every junction so the network is continuous
-let nFit = 0;
+let nFit = 0, nFitReal = 0;
+// ── REAL FITTINGS from the reconciled topology (WU-L4-REALISTA fase 1) ─────
+// Phase 0 reconciled three disagreeing views of node connectivity against the
+// COORDINATES — the primitive fact — and kept only the nodes where run endpoints
+// actually meet AND no leg is a plan-degenerate run. 71 of the 1157 declared
+// fittings survive that test (6%); the rest keep the mitred stub below and are
+// declared unsupported. An earlier count of 269 was contaminated by the 496
+// degenerate runs, whose zero direction vector normalises to a spurious 90 deg
+// turn. This table is the guarded verdict, embedded because the page is
+// self-contained:
+//   [nodeIndex, familyIndex, positionInferred(0|1), turnDeg|null, [runIndices]]
+const FIT_REAL_RAW = {"fam":["elbowRect","teeRect","transitionRect","transitionRectRound","teeRectRoundBranch","crossRect"],"items":[[1,2,0,0.0,[0,43]],[48,2,1,0.1,[24,355]],[74,2,0,0.0,[37,98]],[83,0,1,90.0,[42,142]],[85,2,0,0.0,[43,95]],[92,0,0,90.0,[47,764]],[128,0,0,90.0,[70,732]],[150,0,0,90.0,[81,759]],[222,1,1,null,[123,158,159]],[237,0,0,90.0,[131,659]],[246,1,0,null,[135,728,751]],[254,1,0,null,[142,719,767]],[269,0,0,90.0,[152,750]],[270,0,1,90.0,[154,637]],[272,0,0,90.0,[156,756]],[277,0,0,90.0,[161,723]],[329,2,1,0.1,[192,279]],[331,2,1,0.0,[193,268]],[346,3,0,90.0,[202,336]],[371,1,0,null,[218,220,266]],[434,0,0,90.0,[271,737]],[448,0,1,90.0,[285,621]],[451,1,0,null,[286,718,766]],[723,0,0,92.2,[500,723]],[934,2,1,0.0,[769,783]],[937,0,0,90.0,[771,1423]],[938,0,0,44.6,[771,1195]],[939,0,0,45.0,[772,1192]],[945,2,0,0.1,[775,777]],[957,3,0,0.0,[783,837]],[966,0,0,45.2,[788,1195]],[967,0,0,45.0,[788,1198]],[1026,0,0,90.0,[823,1446]],[1056,0,0,90.0,[838,1459]],[1072,1,0,null,[847,1432,1469]],[1121,0,0,90.0,[872,1331]],[1124,0,1,44.7,[873,1173]],[1134,0,0,44.8,[880,1196]],[1143,0,0,90.0,[885,1417]],[1150,0,1,90.0,[890,1350]],[1161,0,0,90.0,[897,1454]],[1185,3,0,0.4,[912,1243]],[1247,0,0,90.0,[959,1430]],[1282,3,0,90.0,[981,1005]],[1284,0,0,90.0,[984,1429]],[1285,0,0,90.0,[984,1283]],[1287,0,0,90.0,[986,1435]],[1289,0,0,90.0,[987,1352]],[1294,1,1,null,[989,1229,1258]],[1308,3,0,0.2,[997,1244]],[1403,3,0,90.0,[1048,1244]],[1431,0,0,90.0,[1068,1426]],[1443,0,0,90.0,[1084,1358]],[1666,3,1,90.0,[1264,1344]],[1781,1,0,null,[1432,1469,1888]],[1813,2,1,0.0,[1472,1489]],[1817,0,0,44.9,[1474,1854]],[1826,0,1,90.0,[1479,1621]],[1827,2,1,0.0,[1479,1480]],[1841,0,0,90.0,[1487,1688]],[1891,0,0,45.0,[1518,1858]],[1892,0,0,45.0,[1518,1854]],[1956,0,0,90.0,[1553,1908]],[1969,0,0,90.0,[1560,2004]],[2023,0,1,90.0,[1591,1688]],[2026,2,0,0.0,[1592,1699]],[2044,0,0,90.0,[1604,2029]],[2180,0,0,90.0,[1703,1981]],[2189,2,1,0.0,[1712,1768]],[2442,0,0,91.9,[1884,1981]],[2467,3,0,90.4,[1910,1988]]]};
+const FIT_REAL = new Map(FIT_REAL_RAW.items.map(it => [it[0], it]));
+const FIT_FAM = FIT_REAL_RAW.fam;
+const MARK_DEBUG = new URLSearchParams(location.search).get('markdebug') === '1';
+
+// Rings are built with THIS VIEWER'S cross-section convention — lateral is the
+// horizontal perpendicular of the run, height is world +Y — the same one pushBox
+// uses. That is deliberate: the catalog authors its elbow along +X sweeping about
+// +Y in XZ, and importing it would mean carrying a rotation between two frame
+// conventions and hoping the section still mates. Built natively, the fitting's
+// mouth is the duct's mouth BY CONSTRUCTION, and the axis friction disappears
+// instead of being corrected.
+const ringRectAt = (o, d, w, h) => {
+  const lx = -d[2], lz = d[0], hw = w/2, hh = h/2;
+  return [[o[0]-lx*hw, o[1]-hh, o[2]-lz*hw], [o[0]+lx*hw, o[1]-hh, o[2]+lz*hw],
+          [o[0]+lx*hw, o[1]+hh, o[2]+lz*hw], [o[0]-lx*hw, o[1]+hh, o[2]-lz*hw]];
+};
+function sweepRings(rings, color, id, capStart, capEnd){
+  const tri = (a,b,c) => {
+    const e1=[b[0]-a[0],b[1]-a[1],b[2]-a[2]], e2=[c[0]-a[0],c[1]-a[1],c[2]-a[2]];
+    let n=[e1[1]*e2[2]-e1[2]*e2[1], e1[2]*e2[0]-e1[0]*e2[2], e1[0]*e2[1]-e1[1]*e2[0]];
+    const L=Math.hypot(n[0],n[1],n[2])||1; n=[n[0]/L,n[1]/L,n[2]/L];
+    for (const v of [a,b,c]){
+      TGT.pos.push(v[0],v[1],v[2]); TGT.nor.push(n[0],n[1],n[2]);
+      TGT.col.push(color.r,color.g,color.b); TGT.rid.push(id);
+      TGT.dev.push(CUR_DEV); TGT.mrk.push(CUR_MARK); TGT.n++;
+    }
+  };
+  const N = rings[0].length;
+  for (let i=0;i<rings.length-1;i++)
+    for (let k=0;k<N;k++){
+      const j=(k+1)%N;
+      tri(rings[i][k], rings[i][j], rings[i+1][j]);
+      tri(rings[i][k], rings[i+1][j], rings[i+1][k]);
+    }
+  // Caps close the shell. An open end here would read to the stencil section caps
+  // as a hole, exactly as the 124 open lofts did before WU-L4-B1.
+  const cap = (ring, flip) => {
+    const c = ring.reduce((a,p)=>[a[0]+p[0],a[1]+p[1],a[2]+p[2]],[0,0,0]).map(v=>v/ring.length);
+    for (let k=0;k<ring.length;k++){
+      const j=(k+1)%ring.length;
+      flip ? tri(c, ring[j], ring[k]) : tri(c, ring[k], ring[j]);
+    }
+  };
+  if (capStart) cap(rings[0], true);
+  if (capEnd)   cap(rings[rings.length-1], false);
+}
+const rot = (v, axis, t) => {           // Rodrigues
+  const c=Math.cos(t), s=Math.sin(t);
+  const d=axis[0]*v[0]+axis[1]*v[1]+axis[2]*v[2];
+  const cr=[axis[1]*v[2]-axis[2]*v[1], axis[2]*v[0]-axis[0]*v[2], axis[0]*v[1]-axis[1]*v[0]];
+  return [v[0]*c+cr[0]*s+axis[0]*d*(1-c), v[1]*c+cr[1]*s+axis[1]*d*(1-c), v[2]*c+cr[2]*s+axis[2]*d*(1-c)];
+};
+const GORES = 4;                        // a rectangular duct elbow IS mitred, not smooth
+// BEND RADIUS BASIS, stated because this project already shipped a defect here (an
+// elbow built at 1.5xOD where the standard is 1.5xNOMINAL): centreline R = W, i.e.
+// the SMACNA standard-radius elbow whose throat radius is half the width. W is the
+// dimension IN the plane of the turn, which for this floor's horizontal turns is the
+// duct width. A turn out of the horizontal would need the height instead — those fall
+// back to the stub rather than silently use the wrong basis.
+function emitElbow(p, uIn, uOut, w, h, color){
+  const dot = Math.max(-1, Math.min(1, uIn[0]*uOut[0]+uIn[1]*uOut[1]+uIn[2]*uOut[2]));
+  const a = Math.acos(dot);
+  if (!(a > 0.09 && a < Math.PI-0.09)) return false;
+  let ax=[uIn[1]*uOut[2]-uIn[2]*uOut[1], uIn[2]*uOut[0]-uIn[0]*uOut[2], uIn[0]*uOut[1]-uIn[1]*uOut[0]];
+  const aL=Math.hypot(ax[0],ax[1],ax[2]); if (aL < 1e-6) return false;
+  ax=[ax[0]/aL,ax[1]/aL,ax[2]/aL];
+  if (Math.abs(ax[1]) < 0.99) return false;      // not a horizontal turn: wrong radius basis
+  const R = w, Tn = R*Math.tan(a/2);
+  const pIn = [p[0]-uIn[0]*Tn, p[1]-uIn[1]*Tn, p[2]-uIn[2]*Tn];
+  let nIn=[ax[1]*uIn[2]-ax[2]*uIn[1], ax[2]*uIn[0]-ax[0]*uIn[2], ax[0]*uIn[1]-ax[1]*uIn[0]];
+  const c=[pIn[0]+nIn[0]*R, pIn[1]+nIn[1]*R, pIn[2]+nIn[2]*R];
+  const r0=[pIn[0]-c[0], pIn[1]-c[1], pIn[2]-c[2]];
+  const rings=[];
+  for (let i=0;i<=GORES;i++){
+    const t=a*i/GORES, rv=rot(r0,ax,t), d=rot(uIn,ax,t);
+    rings.push(ringRectAt([c[0]+rv[0], c[1]+rv[1], c[2]+rv[2]], d, w, h));
+  }
+  sweepRings(rings, color, -1, true, true);
+  return true;
+}
+function emitTransition(p, uIn, uOut, w0, h0, w1, h1, color){
+  const L = Math.max(0.12, 1.5*Math.max(Math.abs(w0-w1), Math.abs(h0-h1)), 0.12);
+  const a=[p[0]-uIn[0]*L/2, p[1]-uIn[1]*L/2, p[2]-uIn[2]*L/2];
+  const b=[p[0]+uOut[0]*L/2, p[1]+uOut[1]*L/2, p[2]+uOut[2]*L/2];
+  sweepRings([ringRectAt(a, uIn, w0, h0), ringRectAt(b, uOut, w1, h1)], color, -1, true, true);
+  return true;
+}
+function emitTee(p, legs, color){
+  // The junction BODY plus a collar per branch: the two most collinear legs make the
+  // trunk, every other leg gets a neck out to its own section. Built from the legs'
+  // own directions and sections, so it reads as the tee the data describes.
+  let best=[-2,0,1];
+  for (let i=0;i<legs.length;i++) for (let j=i+1;j<legs.length;j++){
+    const d=legs[i].d, e=legs[j].d, dot=d[0]*e[0]+d[1]*e[1]+d[2]*e[2];
+    if (-dot > best[0]) best=[-dot,i,j];
+  }
+  const A=legs[best[1]], Bl=legs[best[2]];
+  const wT=Math.max(A.w,Bl.w), hT=Math.max(A.h,Bl.h);
+  const half=Math.max(wT,hT)*0.55;
+  const a=[p[0]-A.d[0]*half, p[1]-A.d[1]*half, p[2]-A.d[2]*half];
+  const b=[p[0]+Bl.d[0]*half, p[1]+Bl.d[1]*half, p[2]+Bl.d[2]*half];
+  sweepRings([ringRectAt(a, A.d, wT, hT), ringRectAt(b, Bl.d, wT, hT)], color, -1, true, true);
+  for (let i=0;i<legs.length;i++){
+    if (i===best[1] || i===best[2]) continue;
+    const g=legs[i], reach=Math.max(half, Math.max(g.w,g.h)*0.55);
+    sweepRings([ringRectAt(p, g.d, g.w, g.h),
+                ringRectAt([p[0]+g.d[0]*reach, p[1]+g.d[1]*reach, p[2]+g.d[2]*reach], g.d, g.w, g.h)],
+               color, -1, true, true);
+  }
+  return true;
+}
+// Colour is NOT the marking channel — but in ?markdebug=1 the data-viz meaning is
+// explicitly suspended so a capture can prove the two levels are carried.
+const COL_MARK_CERTPOS = new T.Color(0x3ad6a0);   // position measured
+const COL_MARK_INFERPOS = new T.Color(0xff6b3d);  // position inferred
+function emitRealFitting(node, f){
+  const it = FIT_REAL.get(node); if (!it) return false;
+  const fam = FIT_FAM[it[1]], posInf = it[2] === 1, ks = it[4].filter(k => k < runs.length);
+  if (!ks.length) return false;
+  const p = [X(f.x), 0, Z(f.y)];
+  const legs = ks.map(k => {
+    const r = runs[k];
+    const at0 = Math.hypot(X(r.p0[0])-p[0], Z(r.p0[1])-p[2]) < Math.hypot(X(r.p1[0])-p[0], Z(r.p1[1])-p[2]);
+    const far = at0 ? r.p1 : r.p0;
+    let dx = X(far[0])-p[0], dz = Z(far[1])-p[2];
+    const L = Math.hypot(dx,dz) || 1e-9;
+    return { d:[dx/L, 0, dz/L], w:r.w, h:r.h || H_MED,
+             bod:(r.bod !== null && r.bod !== undefined) ? r.bod : BOD_MED };
+  });
+  // DEGENERACY GUARD, and it is not defensive padding — it is load-bearing.
+  // 496 of the 2033 runs (24%) have p0 EXACTLY equal to p1: their plan projection is
+  // a single point, yet they carry a declared length. For those, `L` falls back to
+  // 1e-9 and the direction normalises to (0,0,0). emitElbow happened to reject them
+  // by accident, through its degenerate-cross test. emitTee did NOT: it fed the zero
+  // vector to ringRectAt, whose lateral is then (0,0), collapsing all four ring
+  // corners onto the centre — 58 tees and crosses were being emitted as zero-area
+  // shells. A node with a directionless leg cannot carry a real fitting, and saying
+  // so once here is better than each generator discovering it differently.
+  if (legs.some(g => !isFinite(g.d[0]) || (Math.abs(g.d[0]) < 1e-6 && Math.abs(g.d[2]) < 1e-6)))
+    return false;
+  const bod = legs[0].bod, hMax = Math.max(...legs.map(g=>g.h));
+  p[1] = bod + hMax/2;
+  CUR_DEV = bod - BOD_MED;
+  CUR_MARK = 2 | (posInf ? 1 : 0);          // bit1 SHAPE inferred, always
+  const col = MARK_DEBUG ? (posInf ? COL_MARK_INFERPOS : COL_MARK_CERTPOS) : COL_FIT;
+  let ok = false;
+  if (fam === 'elbowRect' && legs.length === 2)
+    ok = emitElbow(p, [-legs[0].d[0],0,-legs[0].d[2]], legs[1].d, legs[0].w, legs[0].h, col);
+  else if (fam === 'transitionRect' && legs.length === 2)
+    ok = emitTransition(p, [-legs[0].d[0],0,-legs[0].d[2]], legs[1].d,
+                        legs[0].w, legs[0].h, legs[1].w, legs[1].h, col);
+  else if (fam === 'teeRect' || fam === 'crossRect')
+    ok = emitTee(p, legs, col);
+  CUR_MARK = 0;
+  return ok;
+}
+
 for (const f of fittings){
+  // A node the reconciliation supports gets REAL geometry; everything else keeps the
+  // mitred stub below and is declared unsupported. That split is the whole point.
+  if (FIT_REAL.has(f.node) && emitRealFitting(f.node, f)){ nFitReal++; nFit++; continue; }
   const rs = runs.filter(r => r.n0===f.node || r.n1===f.node);
   if (!rs.length) continue;
   const h = Math.max(...rs.map(r => r.h || H_MED));
@@ -54854,6 +55037,7 @@ function makeGeo(b){
   g.setAttribute('normal',   new T.Float32BufferAttribute(b.nor, 3));
   g.setAttribute('color',    new T.Float32BufferAttribute(b.col, 3));
   g.setAttribute('runId',    new T.Float32BufferAttribute(b.rid, 1));
+  g.setAttribute('mark',     new T.Float32BufferAttribute(b.mrk, 1));
   g.computeBoundingSphere();
   g.userData.dev = new Float32Array(b.dev);
   return g;
@@ -55760,7 +55944,8 @@ document.getElementById('legend').innerHTML = `
   <span class="chip"><i class="dot" style="background:#d8a03c"></i>alto supuesto — ${mAssumed.toFixed(1)} m de ${mTotal.toFixed(1)} m (${(100*mAssumed/mTotal).toFixed(1)}% de la longitud)</span>
   <span class="chip"><i class="dot" style="background:#7c8b99"></i>accesorio (${nFit})</span>
   <span class="chip" id="dimChip">solo se muestra la ductería de la crujía encuadrada</span>
-  <span class="chip"><i class="dot" style="background:#e0e6ea"></i>cara de corte de sección</span>`;
+  <span class="chip"><i class="dot" style="background:#e0e6ea"></i>cara de corte de sección</span>
+  <span class="chip" id="fitChip"><i class="dot" style="background:#7c8b99"></i>accesorio real: posición medida · <b>forma inferida</b> (radio de catálogo)</span>`;
 
 for (const el of document.querySelectorAll('.fcls')){
   el.onchange = () => { SHOW[el.dataset.k] = el.checked; applyFilter(SHOW); };
@@ -56000,6 +56185,11 @@ window.__meshData = () => ({
                 ' capVisible=' + u.cap.visible);
   }
 }
+// The reconciliation verdict, on the console so a gate can read it without a capture.
+console.log('COB-IM2 L4 fittings: ' + nFitReal + ' reales de ' + FIT_REAL.size + ' construibles' +
+            ' | declarados ' + fittings.length +
+            ' | stub (sin soporte topológico) ' + (nFit - nFitReal) +
+            ' | markdebug=' + MARK_DEBUG);
 console.log('COB-IM2 L4:', DATA.meta.stats);
 </script>
 </body>
